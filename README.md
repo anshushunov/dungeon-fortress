@@ -6,9 +6,10 @@ Dungeon Fortress — игра с непрямым управлением, стр
 подземного владения, глубокой симуляцией его обитателей, экономикой и тактическими
 боями с RPG-элементами.
 
-Проект находится на стадии pre-production. Godot .NET и чистое C#-ядро
-проверяются как предлагаемый стек первого прототипа; ADR 0003 пока остаётся
-`Proposed`.
+Проект находится на стадии pre-production. Godot .NET и чистое C#-ядро приняты
+как стек первых прототипов ([ADR 0003](docs/decisions/0003-stack-for-prototypes.md),
+статус `Accepted`). Контракт первого вертикального прототипа зафиксирован в
+[Prototype 1 «Подготовка к набегу»](docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md).
 
 ## Проверка технического spike
 
@@ -32,6 +33,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1
 ## С чего начать
 
 - [Видение игры](docs/product/VISION.md)
+- [Контракт Prototype 1](docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md)
 - [Карта документации](docs/README.md)
 - [Открытые вопросы](docs/OPEN_QUESTIONS.md)
 - [Процесс разработки агентами](docs/engineering/AGENT_WORKFLOW.md)
