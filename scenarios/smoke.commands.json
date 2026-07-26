@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "commands": [
+    {
+      "tick": 0,
+      "agentId": 0,
+      "energyDelta": 20
+    },
+    {
+      "tick": 16,
+      "agentId": 3,
+      "energyDelta": -12
+    },
+    {
+      "tick": 16,
+      "agentId": 3,
+      "energyDelta": 4
+    },
+    {
+      "tick": 64,
+      "agentId": 7,
+      "energyDelta": 100
+    },
+    {
+      "tick": 128,
+      "agentId": 1,
+      "energyDelta": -100
+    }
+  ]
+}

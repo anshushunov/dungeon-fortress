@@ -9,3 +9,11 @@ CLAUDE.local.md
 .claude/settings.local.json
 .claude/worktrees/
 
+# .NET and Godot derived files
+**/bin/
+**/obj/
+**/.godot/
+.artifacts/
+TestResults/
+*.user
+*.userprefs
