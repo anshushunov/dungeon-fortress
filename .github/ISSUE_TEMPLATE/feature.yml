@@ -1,0 +1,77 @@
+name: Игровая или техническая задача
+description: Проверяемый вертикальный срез, механика, инструмент или исправление
+title: ""
+labels: []
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Перед началом работы прочитайте `AGENTS.md` и связанные документы.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Область
+      options:
+        - Product / Game Design
+        - Simulation
+        - Gameplay
+        - Tools / MCP
+        - QA / Testing
+        - Art / Content
+        - Documentation
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Ожидаемый результат
+      description: Что должно стать возможным или измениться?
+    validations:
+      required: true
+
+  - type: textarea
+    id: player_effect
+    attributes:
+      label: Игровой эффект
+      description: Что увидит, поймёт или сможет сделать игрок?
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Контекст
+      description: Ссылки на GDD, ADR, прототипы, ошибки и связанные Issues.
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Ограничения и вне scope
+      description: Что нельзя менять и что намеренно не входит в задачу?
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Критерии готовности
+      description: Проверяемый список условий.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Сценарий проверки
+      description: Команды, seed, входные действия и ожидаемый результат.
+    validations:
+      required: true
+
+  - type: textarea
+    id: decisions
+    attributes:
+      label: Решения и риски
+      description: Нужен ли ADR? Какие вопросы агент не должен решать молча?
+
