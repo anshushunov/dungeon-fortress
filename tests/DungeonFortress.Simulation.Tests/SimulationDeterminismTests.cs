@@ -106,4 +106,33 @@ public sealed class SimulationDeterminismTests
 
         Assert.Contains("cannot be negative", exception.Message);
     }
+
+    [Fact]
+    public void Command_document_parser_preserves_the_cli_contract()
+    {
+        const string json =
+            """
+            {"schemaVersion":1,"commands":[{"tick":0,"agentId":2,"energyDelta":7}]}
+            """;
+
+        var commands = SimulationCommandDocument.Parse(
+            System.Text.Encoding.UTF8.GetBytes(json));
+
+        Assert.Equal([new SimulationCommand(0, 2, 7)], commands);
+    }
+
+    [Fact]
+    public void Command_document_parser_rejects_unknown_fields()
+    {
+        const string json =
+            """
+            {"schemaVersion":1,"commands":[],"source":"untrusted"}
+            """;
+
+        var exception = Assert.Throws<InvalidDataException>(
+            () => SimulationCommandDocument.Parse(
+                System.Text.Encoding.UTF8.GetBytes(json)));
+
+        Assert.Contains("Unknown command document property", exception.Message);
+    }
 }

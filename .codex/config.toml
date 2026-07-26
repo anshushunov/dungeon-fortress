@@ -1,0 +1,30 @@
+[mcp_servers.dungeon_fortress_domain]
+command = "dotnet"
+args = [
+  "run",
+  "--project",
+  "tools/DungeonFortress.DomainMcp/DungeonFortress.DomainMcp.csproj",
+  "--configuration",
+  "Release",
+  "--no-build",
+  "--no-restore",
+  "--",
+  "--root",
+  ".",
+]
+cwd = "."
+enabled_tools = ["bridge_status", "simulation_run"]
+default_tools_approval_mode = "auto"
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+required = false
+
+[mcp_servers.dungeon_fortress_domain.env]
+DOTNET_NOLOGO = "1"
+DOTNET_CLI_TELEMETRY_OPTOUT = "1"
+
+[mcp_servers.dungeon_fortress_editor]
+url = "http://127.0.0.1:29541/mcp"
+startup_timeout_sec = 10
+tool_timeout_sec = 120
+required = false

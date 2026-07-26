@@ -1,5 +1,6 @@
 ; Engine configuration file.
 ; Prefer editing through documented text changes during this spike.
+
 config_version=5
 
 [application]
@@ -19,6 +20,10 @@ window/stretch/mode="canvas_items"
 [dotnet]
 
 project/assembly_name="DungeonFortress.Game"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot_mcp/plugin.cfg")
 
 [rendering]
 

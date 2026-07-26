@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "dungeon-fortress-domain": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "${CLAUDE_PROJECT_DIR:-.}/tools/DungeonFortress.DomainMcp/DungeonFortress.DomainMcp.csproj",
+        "--configuration",
+        "Release",
+        "--no-build",
+        "--no-restore",
+        "--",
+        "--root",
+        "${CLAUDE_PROJECT_DIR:-.}"
+      ],
+      "env": {
+        "DOTNET_NOLOGO": "1",
+        "DOTNET_CLI_TELEMETRY_OPTOUT": "1"
+      }
+    },
+    "dungeon-fortress-editor": {
+      "type": "http",
+      "url": "http://127.0.0.1:29541/mcp"
+    }
+  }
+}
