@@ -16,10 +16,12 @@ $solutionPath = Join-Path $repoRoot "DungeonFortress.sln"
 $scenarioProject = Join-Path $repoRoot "tests\DungeonFortress.Scenarios\DungeonFortress.Scenarios.csproj"
 $scenarioAssembly = Join-Path $repoRoot "tests\DungeonFortress.Scenarios\bin\Release\net8.0\DungeonFortress.Scenarios.dll"
 $testProject = Join-Path $repoRoot "tests\DungeonFortress.Simulation.Tests\DungeonFortress.Simulation.Tests.csproj"
+$domainMcpTestProject = Join-Path $repoRoot "tests\DungeonFortress.DomainMcp.Tests\DungeonFortress.DomainMcp.Tests.csproj"
 $commandsPath = Join-Path $repoRoot "scenarios\smoke.commands.json"
 $gameProjectPath = Join-Path $repoRoot "src\DungeonFortress.Game"
 $gameProjectFile = Join-Path $gameProjectPath "DungeonFortress.Game.csproj"
 $guardTestScript = Join-Path $repoRoot "scripts\test-godot-output-guard.ps1"
+$domainMcpVerificationScript = Join-Path $repoRoot "scripts\verify-domain-mcp.ps1"
 
 $env:DOTNET_CLI_HOME = Join-Path $artifactsRoot "dotnet-home"
 $env:DOTNET_NOLOGO = "1"
@@ -127,10 +129,21 @@ try {
         "restore", $solutionPath
     )
     Invoke-Checked -FilePath "dotnet" -Arguments @(
+        "restore", $domainMcpTestProject, "--locked-mode"
+    )
+    Invoke-Checked -FilePath "dotnet" -Arguments @(
         "build", $solutionPath, "--configuration", "Release", "--no-restore"
     )
     Invoke-Checked -FilePath "dotnet" -Arguments @(
         "test", $testProject, "--configuration", "Release", "--no-build", "--no-restore"
+    )
+    Invoke-Checked -FilePath "dotnet" -Arguments @(
+        "test", $domainMcpTestProject, "--configuration", "Release", "--no-build", "--no-restore"
+    )
+    Invoke-Checked -FilePath "powershell" -Arguments @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+        $domainMcpVerificationScript, "-Seed", $Seed.ToString(
+            [Globalization.CultureInfo]::InvariantCulture), "-NoBuild"
     )
     Invoke-Checked -FilePath "dotnet" -Arguments @(
         "build", $gameProjectFile, "--configuration", "Debug", "--no-restore"

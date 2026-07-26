@@ -13,7 +13,9 @@ internal static class Program
         try
         {
             var options = ScenarioOptions.Parse(args);
-            var commands = CommandFile.Load(options.CommandsPath);
+            var commands = options.CommandsPath is null
+                ? []
+                : SimulationCommandDocument.Load(options.CommandsPath);
             var config = new SimulationConfig(options.Seed, options.AgentCount);
 
             var stopwatch = Stopwatch.StartNew();

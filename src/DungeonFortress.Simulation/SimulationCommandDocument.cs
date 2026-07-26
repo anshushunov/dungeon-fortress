@@ -1,25 +1,46 @@
 using System.Text.Json;
 
-using DungeonFortress.Simulation;
+namespace DungeonFortress.Simulation;
 
-namespace DungeonFortress.Scenarios;
-
-internal static class CommandFile
+public static class SimulationCommandDocument
 {
-    public static IReadOnlyList<SimulationCommand> Load(string? path)
+    public const int SchemaVersion = 1;
+    public const int MaximumDocumentBytes = 1_048_576;
+    public const int MaximumCommandCount = 10_000;
+
+    public static IReadOnlyList<SimulationCommand> Load(string path)
     {
-        if (path is null)
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        var file = new FileInfo(path);
+        if (!file.Exists)
         {
-            return [];
+            throw new FileNotFoundException("The simulation command document does not exist.", path);
         }
 
-        var bytes = File.ReadAllBytes(path);
+        if (file.Length > MaximumDocumentBytes)
+        {
+            throw new InvalidDataException(
+                $"The simulation command document exceeds {MaximumDocumentBytes} bytes.");
+        }
+
+        return Parse(File.ReadAllBytes(file.FullName));
+    }
+
+    public static IReadOnlyList<SimulationCommand> Parse(ReadOnlyMemory<byte> bytes)
+    {
+        if (bytes.Length > MaximumDocumentBytes)
+        {
+            throw new InvalidDataException(
+                $"The simulation command document exceeds {MaximumDocumentBytes} bytes.");
+        }
+
         using var document = JsonDocument.Parse(bytes);
         var root = document.RootElement;
 
         if (root.ValueKind != JsonValueKind.Object)
         {
-            throw new InvalidDataException("Command file root must be a JSON object.");
+            throw new InvalidDataException("Command document root must be a JSON object.");
         }
 
         var allowedRootProperties = new HashSet<string>(StringComparer.Ordinal)
@@ -32,14 +53,16 @@ internal static class CommandFile
         {
             if (!allowedRootProperties.Contains(property.Name))
             {
-                throw new InvalidDataException($"Unknown command file property: {property.Name}");
+                throw new InvalidDataException(
+                    $"Unknown command document property: {property.Name}");
             }
         }
 
         var schemaVersion = root.GetProperty("schemaVersion").GetInt32();
-        if (schemaVersion != 1)
+        if (schemaVersion != SchemaVersion)
         {
-            throw new InvalidDataException($"Unsupported command schema version: {schemaVersion}");
+            throw new InvalidDataException(
+                $"Unsupported command schema version: {schemaVersion}");
         }
 
         var commandsElement = root.GetProperty("commands");
@@ -51,6 +74,12 @@ internal static class CommandFile
         var commands = new List<SimulationCommand>();
         foreach (var commandElement in commandsElement.EnumerateArray())
         {
+            if (commands.Count == MaximumCommandCount)
+            {
+                throw new InvalidDataException(
+                    $"The command document exceeds {MaximumCommandCount} commands.");
+            }
+
             commands.Add(ParseCommand(commandElement));
         }
 

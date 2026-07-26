@@ -21,13 +21,16 @@ jobs:
         with:
           dotnet-version: 8.0.423
 
-      - name: Restore tests and scenario runner
+      - name: Restore tests, domain MCP, and scenario runner
         run: |
           dotnet restore tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj
+          dotnet restore tests/DungeonFortress.DomainMcp.Tests/DungeonFortress.DomainMcp.Tests.csproj --locked-mode
           dotnet restore tests/DungeonFortress.Scenarios/DungeonFortress.Scenarios.csproj
 
-      - name: Build and test simulation
-        run: dotnet test tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj --configuration Release --no-restore
+      - name: Build and test engine-independent projects
+        run: |
+          dotnet test tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj --configuration Release --no-restore
+          dotnet test tests/DungeonFortress.DomainMcp.Tests/DungeonFortress.DomainMcp.Tests.csproj --configuration Release --no-restore
 
       - name: Run deterministic scenario CLI
         run: >-
