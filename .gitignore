@@ -1,0 +1,11 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+secrets/
+
+# Claude Code local state
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/worktrees/
+

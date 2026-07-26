@@ -15,6 +15,7 @@ Dungeon Fortress — игра с непрямым управлением, стр
 - [Карта документации](docs/README.md)
 - [Открытые вопросы](docs/OPEN_QUESTIONS.md)
 - [Процесс разработки агентами](docs/engineering/AGENT_WORKFLOW.md)
+- [Работа с несколькими агентами](docs/engineering/MULTI_AGENT_WORKFLOW.md)
 - [Сравнение технологического стека](docs/engineering/STACK_EVALUATION.md)
 - [Технологический радар](docs/engineering/TECH_RADAR.md)
 - [Журнал архитектурных и продуктовых решений](docs/decisions/README.md)
