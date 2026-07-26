@@ -1,0 +1,294 @@
+Set-StrictMode -Version Latest
+
+function Resolve-GodotExecutable {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [string]$ExplicitPath
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitPath)) {
+        return Resolve-GodotCandidate -Candidate $ExplicitPath -Source "explicit -GodotPath override"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:GODOT4_CONSOLE)) {
+        return Resolve-GodotCandidate -Candidate $env:GODOT4_CONSOLE -Source "GODOT4_CONSOLE"
+    }
+
+    $commandNames = @(
+        "godot4_console",
+        "godot4",
+        "godot",
+        "Godot_v4.7.1-stable_mono_win64_console",
+        "Godot_v4.7.1-stable_mono_win64"
+    )
+
+    foreach ($commandName in $commandNames) {
+        $command = Get-Command $commandName -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($null -ne $command) {
+            return [IO.Path]::GetFullPath($command.Source)
+        }
+    }
+
+    throw @"
+Godot 4.7.1 .NET was not found. Use one of:
+  -GodotPath <console executable>
+  `$env:GODOT4_CONSOLE=<console executable>
+  add godot4_console, godot4, or godot to PATH
+"@
+}
+
+function Assert-GodotVersion {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$GodotPath
+    )
+
+    $versionLines = & $GodotPath --version 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Godot version check failed with exit code $LASTEXITCODE."
+    }
+
+    $version = ($versionLines | Out-String).Trim()
+    if ($version -notmatch '^4\.7\.1(?:\.|$)') {
+        throw "Godot 4.7.1 .NET is required; discovered version '$version'."
+    }
+
+    return $version
+}
+
+function Get-GodotNuGetSource {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$GodotPath
+    )
+
+    $source = Join-Path (Split-Path -Parent $GodotPath) "GodotSharp\Tools\nupkgs"
+    if (-not (Test-Path -LiteralPath $source -PathType Container)) {
+        throw "The selected executable is not a Godot .NET build: missing '$source'."
+    }
+
+    return [IO.Path]::GetFullPath($source)
+}
+
+function Initialize-GodotNuGetEnvironment {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProfileRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$GodotNuGetSource
+    )
+
+    $resolvedProfileRoot = [IO.Path]::GetFullPath($ProfileRoot)
+    $env:APPDATA = Join-Path $resolvedProfileRoot "AppData\Roaming"
+    $env:LOCALAPPDATA = Join-Path $resolvedProfileRoot "AppData\Local"
+    $env:NUGET_PACKAGES = Join-Path $resolvedProfileRoot "NuGetPackages"
+    $env:NUGET_HTTP_CACHE_PATH = Join-Path $resolvedProfileRoot "NuGetHttpCache"
+
+    $nugetConfigDirectory = Join-Path $env:APPDATA "NuGet"
+    $nugetConfigPath = Join-Path $nugetConfigDirectory "NuGet.Config"
+    New-Item -ItemType Directory -Force -Path $nugetConfigDirectory | Out-Null
+    New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA | Out-Null
+    New-Item -ItemType Directory -Force -Path $env:NUGET_PACKAGES | Out-Null
+    New-Item -ItemType Directory -Force -Path $env:NUGET_HTTP_CACHE_PATH | Out-Null
+
+    $settings = [Xml.XmlWriterSettings]::new()
+    $settings.Encoding = [Text.UTF8Encoding]::new($false)
+    $settings.Indent = $true
+
+    $writer = [Xml.XmlWriter]::Create($nugetConfigPath, $settings)
+    try {
+        $writer.WriteStartDocument()
+        $writer.WriteStartElement("configuration")
+        $writer.WriteStartElement("packageSources")
+        $writer.WriteStartElement("clear")
+        $writer.WriteEndElement()
+        $writer.WriteStartElement("add")
+        $writer.WriteAttributeString("key", "godot-local")
+        $writer.WriteAttributeString("value", $GodotNuGetSource)
+        $writer.WriteEndElement()
+        $writer.WriteStartElement("add")
+        $writer.WriteAttributeString("key", "nuget.org")
+        $writer.WriteAttributeString("value", "https://api.nuget.org/v3/index.json")
+        $writer.WriteAttributeString("protocolVersion", "3")
+        $writer.WriteEndElement()
+        $writer.WriteEndElement()
+        $writer.WriteEndElement()
+        $writer.WriteEndDocument()
+    }
+    finally {
+        $writer.Dispose()
+    }
+}
+
+function Get-StablePathHash {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Value
+    )
+
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [Text.Encoding]::UTF8.GetBytes($Value.ToLowerInvariant())
+        $hash = $algorithm.ComputeHash($bytes)
+        $hex = [BitConverter]::ToString($hash) -replace "-", ""
+        return $hex.Substring(0, 8).ToLowerInvariant()
+    }
+    finally {
+        $algorithm.Dispose()
+    }
+}
+
+function Initialize-GodotRuntimeEnvironment {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryRoot
+    )
+
+    $profileName = "df-godot-" + (Get-StablePathHash -Value $RepositoryRoot)
+    $profileRoot = Join-Path ([IO.Path]::GetTempPath()) $profileName
+    $env:APPDATA = Join-Path $profileRoot "Roaming"
+    $env:LOCALAPPDATA = Join-Path $profileRoot "Local"
+
+    New-Item -ItemType Directory -Force -Path $env:APPDATA | Out-Null
+    New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA | Out-Null
+}
+
+function Get-GodotErrorLines {
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [AllowEmptyCollection()]
+        [object[]]$OutputLines = @()
+    )
+
+    $errorLines = @()
+    foreach ($line in $OutputLines) {
+        $text = [string]$line
+        if ($text -match "ERROR:") {
+            $errorLines += $text
+        }
+    }
+
+    return $errorLines
+}
+
+function Invoke-GodotChecked {
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$GodotPath,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments,
+
+        [string]$ExpectedSuccessEvent
+    )
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = @(& $GodotPath @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    $output | ForEach-Object { Write-Host $_ }
+    $errorLines = @(Get-GodotErrorLines -OutputLines $output)
+
+    if ($errorLines.Count -gt 0) {
+        [ordered]@{
+            event = "godot_process_guard"
+            status = "error"
+            reason = "unexpected_engine_error"
+            exitCode = $exitCode
+            engineErrorCount = $errorLines.Count
+            firstEngineError = $errorLines[0]
+        } | ConvertTo-Json -Compress | Write-Host
+
+        throw "Godot emitted $($errorLines.Count) unexpected ERROR line(s)."
+    }
+
+    if ($exitCode -ne 0) {
+        [ordered]@{
+            event = "godot_process_guard"
+            status = "error"
+            reason = "nonzero_exit"
+            exitCode = $exitCode
+            engineErrorCount = 0
+        } | ConvertTo-Json -Compress | Write-Host
+
+        throw "Godot failed with exit code $exitCode."
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedSuccessEvent)) {
+        $escapedEvent = [Regex]::Escape($ExpectedSuccessEvent)
+        $successEvent = $output | Where-Object {
+            $_ -match ('"event":"' + $escapedEvent + '"') -and $_ -match '"status":"ok"'
+        } | Select-Object -Last 1
+
+        if ($null -eq $successEvent) {
+            [ordered]@{
+                event = "godot_process_guard"
+                status = "error"
+                reason = "missing_success_event"
+                exitCode = $exitCode
+                engineErrorCount = 0
+                expectedEvent = $ExpectedSuccessEvent
+            } | ConvertTo-Json -Compress | Write-Host
+
+            throw "Godot did not emit the expected '$ExpectedSuccessEvent' success event."
+        }
+    }
+
+    [ordered]@{
+        event = "godot_process_guard"
+        status = "ok"
+        exitCode = $exitCode
+        engineErrorCount = 0
+        expectedEvent = $ExpectedSuccessEvent
+    } | ConvertTo-Json -Compress | Write-Host
+
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Output = $output
+        EngineErrorCount = 0
+    }
+}
+
+function Resolve-GodotCandidate {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Candidate,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Source
+    )
+
+    if (Test-Path -LiteralPath $Candidate -PathType Leaf) {
+        return [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $Candidate).Path)
+    }
+
+    $command = Get-Command $Candidate -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($null -ne $command) {
+        return [IO.Path]::GetFullPath($command.Source)
+    }
+
+    throw "Godot path from $Source does not resolve to an executable: '$Candidate'."
+}

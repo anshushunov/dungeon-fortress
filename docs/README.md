@@ -15,6 +15,9 @@ Git-репозиторий — долговременная память про�
 `engineering/STACK_EVALUATION.md`, а порядок поиска и принятия новых технологий —
 в `engineering/TECH_RADAR.md`.
 
+Воспроизводимая настройка проверяемого Godot/.NET spike описана в
+`engineering/ENVIRONMENT_SETUP.md`.
+
 Правила работы Codex, Claude Code и других агентов находятся в
 `engineering/MULTI_AGENT_WORKFLOW.md`.
 

@@ -39,8 +39,11 @@
 Изометрическое представление проверяется позже заменой слоя визуализации. Модель
 мира не должна использовать экранные координаты как доменные.
 
-На текущей машине уже установлен .NET SDK 8.0.423. Godot и Unity в `PATH` пока не
-обнаружены.
+Версии bootstrap-spike закреплены как .NET SDK 8.0.423 и Godot 4.7.1 .NET.
+Godot не обязан находиться в `PATH`: локальные скрипты также поддерживают
+`GODOT4_CONSOLE` и явный override. Настройка описана в
+`ENVIRONMENT_SETUP.md`; абсолютный путь конкретной машины в репозитории не
+хранится.
 
 ## Предлагаемая структура
 
@@ -109,6 +112,37 @@ data-oriented layout без смены движка и продукта.
 Если пункты 2, 3, 6 или 7 нестабильны, повторить тот же spike на Unity 6.3 LTS и
 сравнить полное время итерации, а не только число MCP-инструментов.
 
+### Результат bootstrap-spike
+
+Issue #3 проверяет engine-independent контур без выбора или установки MCP.
+Реализованы пункты 1–5:
+
+- pure C#/.NET 8 simulation core не ссылается на `Godot.*`;
+- Godot 4.7.1 .NET запускает ту же модель headless и в обычном окне;
+- сцена остаётся тонкой проекцией канонического состояния;
+- runner принимает seed, число агентов, число fixed ticks и JSON-команды;
+- canonical JSON строится с фиксированным порядком полей и получает SHA-256.
+
+Локальная полная проверка 2026-07-26 с seed `424242` дала:
+
+- 32 агента × 256 тиков:
+  `e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f`;
+- seed `424243`:
+  `cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2`;
+- 1 000 агентов × 10 000 тиков:
+  `7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045`,
+  два последовательных запуска заняли 222,431 и 226,973 мс.
+
+Время — измерение harness на одной машине, а не performance target. Пункты 6–7
+относятся к отдельному MCP-spike, поэтому ADR 0003 остаётся `Proposed`.
+
+Review visible smoke также подтвердил, что runtime нельзя наследовать длинный
+NuGet `APPDATA` из worktree: Windows path к GLES3 shader cache достигал 255
+символов и Godot возвращал ошибку создания каталога. Скрипты теперь используют
+короткий отдельный runtime profile и считают любую строку `ERROR:` провалом даже
+при process exit code 0. Детали и upstream-ссылки находятся в
+`ENVIRONMENT_SETUP.md`.
+
 ## Источники
 
 - [Архив релизов Godot — 4.7.1 stable](https://godotengine.org/download/archive/)
@@ -123,4 +157,3 @@ data-oriented layout без смены движка и продукта.
 - [Godot-MCP на C#](https://github.com/IvanMurzak/Godot-MCP)
 - [Godot MCP Python/TCP bridge](https://github.com/slangwald/godot-mcp)
 - [Релизы Bevy](https://bevy.org/news/)
-

@@ -1,0 +1,42 @@
+name: Pure .NET
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.423
+
+      - name: Restore tests and scenario runner
+        run: |
+          dotnet restore tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj
+          dotnet restore tests/DungeonFortress.Scenarios/DungeonFortress.Scenarios.csproj
+
+      - name: Build and test simulation
+        run: dotnet test tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj --configuration Release --no-restore
+
+      - name: Run deterministic scenario CLI
+        run: >-
+          dotnet run
+          --project tests/DungeonFortress.Scenarios/DungeonFortress.Scenarios.csproj
+          --configuration Release
+          --no-restore
+          --
+          --seed 424242
+          --agents 32
+          --ticks 256
+          --commands scenarios/smoke.commands.json
