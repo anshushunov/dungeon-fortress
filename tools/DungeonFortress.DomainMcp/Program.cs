@@ -30,6 +30,7 @@ builder.Services
     .WithTools(
     [
         DomainMcpTool.CreateBridgeStatus(domainTools),
+        DomainMcpTool.CreatePrototypeRun(domainTools),
         DomainMcpTool.CreateSimulationRun(domainTools),
     ]);
 

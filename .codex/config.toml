@@ -13,7 +13,7 @@ args = [
   ".",
 ]
 cwd = "."
-enabled_tools = ["bridge_status", "simulation_run"]
+enabled_tools = ["bridge_status", "prototype_run", "simulation_run"]
 default_tools_approval_mode = "auto"
 startup_timeout_sec = 20
 tool_timeout_sec = 120

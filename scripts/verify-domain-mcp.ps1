@@ -176,9 +176,38 @@ try {
         )
         $toolList = Read-ProtocolMessage -Process $process
         $toolNames = @($toolList.result.tools | ForEach-Object { $_.name } | Sort-Object)
-        if (($toolNames -join ",") -ne "bridge_status,simulation_run") {
+        if (($toolNames -join ",") -ne "bridge_status,prototype_run,simulation_run") {
             throw "Domain MCP exposed an unexpected tool surface: $($toolNames -join ', ')."
         }
+
+        $prototypeRequest = [ordered]@{
+            jsonrpc = "2.0"
+            id = 8
+            method = "tools/call"
+            params = [ordered]@{
+                name = "prototype_run"
+                arguments = [ordered]@{
+                    commandsPath = "scenarios/prototype1/prepared.commands.v2.json"
+                    ticks = 1501
+                }
+            }
+        } | ConvertTo-Json -Compress -Depth 6
+        Write-ProtocolMessage -Process $process -Json $prototypeRequest
+        $prototypeResponse = Read-ProtocolMessage -Process $process
+        $prototypeIsErrorProperty =
+            $prototypeResponse.result.PSObject.Properties["isError"]
+        if ($prototypeResponse.id -ne 8 -or
+            ($null -ne $prototypeIsErrorProperty -and
+                $prototypeIsErrorProperty.Value -eq $true)) {
+            throw "Prototype MCP call failed."
+        }
+        $prototypeContent = $prototypeResponse.result.structuredContent
+        if ($prototypeContent.creatureCount -ne 9 -or
+            $prototypeContent.commandsApplied -ne 6 -or
+            $prototypeContent.averageReadinessAtRaid -le 0) {
+            throw "Prototype MCP observations violate the gameplay-v2 contract."
+        }
+        $prototypeChecksum = [string]$prototypeContent.checksum
 
         $changedSeedRequest = [ordered]@{
             jsonrpc = "2.0"
@@ -310,8 +339,9 @@ try {
         maximumMilliseconds = $maximum
         checksum = $referenceChecksum
         changedSeedChecksum = $changedSeedChecksum
+        prototypeChecksum = $prototypeChecksum
         canonicalBytes = $cliBytes.Length
-        toolCount = 2
+        toolCount = 3
         cleanShutdown = $true
         stderrLines = @($stderr -split "\r?\n" | Where-Object {
             -not [string]::IsNullOrWhiteSpace($_)

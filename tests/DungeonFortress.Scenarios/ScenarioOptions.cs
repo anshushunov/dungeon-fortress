@@ -8,7 +8,8 @@ internal sealed record ScenarioOptions(
     int TickCount,
     string? CommandsPath,
     string? SnapshotPath,
-    bool PrintSnapshot)
+    bool PrintSnapshot,
+    bool Prototype)
 {
     public const ulong DefaultSeed = 424_242UL;
     public const int DefaultAgentCount = 32;
@@ -22,6 +23,7 @@ internal sealed record ScenarioOptions(
         string? commandsPath = null;
         string? snapshotPath = null;
         var printSnapshot = false;
+        var prototype = false;
 
         for (var index = 0; index < args.Length; index++)
         {
@@ -54,6 +56,9 @@ internal sealed record ScenarioOptions(
                 case "--print-snapshot":
                     printSnapshot = true;
                     break;
+                case "--prototype":
+                    prototype = true;
+                    break;
                 case "--help":
                 case "-h":
                     throw new HelpRequestedException();
@@ -73,7 +78,8 @@ internal sealed record ScenarioOptions(
             tickCount,
             commandsPath,
             snapshotPath,
-            printSnapshot);
+            printSnapshot,
+            prototype);
     }
 
     public static string Usage =>
@@ -88,6 +94,7 @@ internal sealed record ScenarioOptions(
           --commands <path>    Ordered JSON command sequence
           --snapshot <path>    Write canonical UTF-8 JSON snapshot
           --print-snapshot     Print canonical JSON before the result event
+          --prototype          Run gameplay schema v2; --commands is required
           --help               Show this help
         """;
 

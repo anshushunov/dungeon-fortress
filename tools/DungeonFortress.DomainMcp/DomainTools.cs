@@ -17,6 +17,12 @@ public sealed class DomainTools(ProjectRoot projectRoot)
         "commandsPath",
     ];
 
+    private static readonly HashSet<string> PrototypeRunArgumentNames =
+    [
+        "commandsPath",
+        "ticks",
+    ];
+
     public CallToolResult BridgeStatus(IDictionary<string, JsonElement>? arguments)
     {
         if (arguments is { Count: > 0 })
@@ -30,10 +36,85 @@ public sealed class DomainTools(ProjectRoot projectRoot)
             DomainBridgeInfo.Version,
             CanonicalSnapshot.SchemaVersion,
             SimulationCommandDocument.SchemaVersion,
+            PrototypeCommandDocument.SchemaVersion,
             projectRoot.Sentinels,
-            ["bridge_status", "simulation_run"]);
+            ["bridge_status", "prototype_run", "simulation_run"]);
 
         return Success(response);
+    }
+
+    public CallToolResult PrototypeRun(IDictionary<string, JsonElement>? arguments)
+    {
+        if (arguments is null)
+        {
+            return Error("prototype_run requires commandsPath and ticks.");
+        }
+
+        var unknownArguments = arguments.Keys
+            .Where(name => !PrototypeRunArgumentNames.Contains(name))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (unknownArguments.Length > 0)
+        {
+            return Error(
+                $"prototype_run rejected unknown argument(s): {string.Join(", ", unknownArguments)}.");
+        }
+
+        if (!arguments.TryGetValue("commandsPath", out var commandsPathElement) ||
+            commandsPathElement.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(commandsPathElement.GetString()) ||
+            !TryReadInt32(arguments, "ticks", out var ticks))
+        {
+            return Error("prototype_run requires string commandsPath and integer ticks.");
+        }
+
+        if (ticks is < 0 or > PrototypeTuning.SessionTicks)
+        {
+            return Error($"ticks must be between 0 and {PrototypeTuning.SessionTicks}.");
+        }
+
+        try
+        {
+            var commandLog = PrototypeCommandDocument.Load(
+                projectRoot.ResolveCommandDocument(commandsPathElement.GetString()!));
+            var result = PrototypeScenario.Run(commandLog, ticks);
+            var creatures = result.State.Creatures;
+            var readiness = creatures.All(creature => creature.ReadinessAtRaid is not null)
+                ? (int?)creatures.Average(creature => creature.ReadinessAtRaid!.Value)
+                : null;
+            var response = new PrototypeRunResponse(
+                "prototype_result",
+                "ok",
+                commandLog.Scenario,
+                commandLog.Seed,
+                result.Tick,
+                result.CommandsApplied,
+                result.Checksum,
+                Encoding.UTF8.GetString(result.CanonicalJson),
+                Encoding.UTF8.GetString(result.CanonicalEventLog),
+                result.State.Stocks.MealsProduced,
+                result.State.Stocks.MealsEaten,
+                result.State.Stocks.Meals,
+                result.State.Stocks.RawMushroom,
+                (int)creatures.Average(creature => creature.Satiety),
+                (int)creatures.Average(creature => creature.Fatigue),
+                (int)creatures.Average(creature => creature.MartialForm),
+                readiness,
+                creatures.Count,
+                result.State.Jobs.Count,
+                result.State.Events.Count);
+            return Success(response);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+            or FormatException
+            or InvalidDataException
+            or IOException
+            or JsonException
+            or OverflowException)
+        {
+            return Error($"Prototype request rejected: {exception.Message}");
+        }
     }
 
     public CallToolResult SimulationRun(IDictionary<string, JsonElement>? arguments)
@@ -180,8 +261,31 @@ public sealed record BridgeStatusResponse(
     [property: JsonPropertyName("bridgeVersion")] string BridgeVersion,
     [property: JsonPropertyName("canonicalSchemaVersion")] int CanonicalSchemaVersion,
     [property: JsonPropertyName("commandSchemaVersion")] int CommandSchemaVersion,
+    [property: JsonPropertyName("prototypeCommandSchemaVersion")] int PrototypeCommandSchemaVersion,
     [property: JsonPropertyName("validatedSentinels")] string[] ValidatedSentinels,
     [property: JsonPropertyName("tools")] string[] Tools);
+
+public sealed record PrototypeRunResponse(
+    [property: JsonPropertyName("event")] string Event,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("scenario")] string Scenario,
+    [property: JsonPropertyName("seed")] ulong Seed,
+    [property: JsonPropertyName("ticks")] int Ticks,
+    [property: JsonPropertyName("commandsApplied")] int CommandsApplied,
+    [property: JsonPropertyName("checksum")] string Checksum,
+    [property: JsonPropertyName("canonicalJson")] string CanonicalJson,
+    [property: JsonPropertyName("canonicalEventLog")] string CanonicalEventLog,
+    [property: JsonPropertyName("mealsProduced")] int MealsProduced,
+    [property: JsonPropertyName("mealsEaten")] int MealsEaten,
+    [property: JsonPropertyName("meals")] int Meals,
+    [property: JsonPropertyName("rawMushroom")] int RawMushroom,
+    [property: JsonPropertyName("averageSatiety")] int AverageSatiety,
+    [property: JsonPropertyName("averageFatigue")] int AverageFatigue,
+    [property: JsonPropertyName("averageMartialForm")] int AverageMartialForm,
+    [property: JsonPropertyName("averageReadinessAtRaid")] int? AverageReadinessAtRaid,
+    [property: JsonPropertyName("creatureCount")] int CreatureCount,
+    [property: JsonPropertyName("jobCount")] int JobCount,
+    [property: JsonPropertyName("eventCount")] int EventCount);
 
 public sealed record SimulationRunResponse(
     [property: JsonPropertyName("event")] string Event,

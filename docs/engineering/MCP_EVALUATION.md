@@ -53,17 +53,19 @@ Read-only сравнение дало следующий порядок:
 
 ### Контракт
 
-Отдельный `net8.0` stdio process публикует ровно два инструмента:
+Отдельный `net8.0` stdio process после Issue #9 публикует ровно три инструмента:
 
 - `bridge_status` — версия bridge, версии canonical/command schemas,
   проверенные root sentinels и точный список tools;
 - `simulation_run` — bounded seed/agent/tick input, необязательный
   repository-relative command document, canonical UTF-8 JSON и SHA-256.
+- `prototype_run` — gameplay schema v2, repository-relative fixture, bounded
+  `0..1800` ticks, canonical state/event log и предбоевые observations.
 
 `simulation_snapshot` не добавлен: `simulation_run` уже возвращает canonical
 snapshot и checksum, поэтому отдельное имя не имело бы отличимой семантики.
 
-Оба инструмента объявлены read-only, non-destructive, idempotent и closed-world.
+Все инструменты объявлены read-only, non-destructive, idempotent и closed-world.
 Server не принимает command line, имя метода, source или arbitrary path через
 MCP. Допустимы:
 
@@ -109,12 +111,13 @@ CI-проверку. Upstream repository `LICENSE` описывает перех
 
 `.codex/config.toml` использует текущую stdio-форму
 `[mcp_servers.<name>]`, project working directory, exact
-`enabled_tools = ["bridge_status", "simulation_run"]` и не передаёт секреты.
+`enabled_tools = ["bridge_status", "prototype_run", "simulation_run"]` и не
+передаёт секреты.
 Codex загружает project config только для trusted repository.
 
 `.mcp.json` использует project-scoped `mcpServers`, transport `stdio` и
 `${CLAUDE_PROJECT_DIR:-.}` из актуальной документации Claude Code. Server-side
-surface всё равно ограничена двумя tools; client allowlist Codex является
+surface всё равно ограничена тремя tools; client allowlist Codex является
 дополнительной защитой.
 
 Обе конфигурации требуют предварительной Release-сборки:

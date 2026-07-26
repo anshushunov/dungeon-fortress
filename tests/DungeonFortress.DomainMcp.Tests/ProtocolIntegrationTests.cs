@@ -31,7 +31,7 @@ public sealed class ProtocolIntegrationTests
         var tools = await client.ListToolsAsync();
 
         Assert.Equal(
-            ["bridge_status", "simulation_run"],
+            ["bridge_status", "prototype_run", "simulation_run"],
             tools.Select(tool => tool.Name).Order(StringComparer.Ordinal).ToArray());
 
         var result = await client.CallToolAsync(
@@ -91,7 +91,7 @@ public sealed class ProtocolIntegrationTests
             .GetProperty("tools")
             .EnumerateArray()
             .ToArray();
-        Assert.Equal(2, tools.Length);
+        Assert.Equal(3, tools.Length);
         Assert.All(tools, tool =>
         {
             Assert.True(tool.GetProperty("annotations").GetProperty("readOnlyHint").GetBoolean());
@@ -144,6 +144,29 @@ public sealed class ProtocolIntegrationTests
             DomainBridgeInfo.MaximumTickCount,
             properties.GetProperty("ticks").GetProperty("maximum").GetInt32());
 
+        var prototypeRunTool = Assert.Single(
+            tools,
+            tool => tool.GetProperty("name").GetString() == "prototype_run");
+        var prototypeSchema = prototypeRunTool.GetProperty("inputSchema");
+        AssertClosedWorldSchema(
+            prototypeSchema,
+            ["commandsPath", "ticks"]);
+        Assert.Equal(
+            ["commandsPath", "ticks"],
+            prototypeSchema
+                .GetProperty("required")
+                .EnumerateArray()
+                .Select(value => value.GetString())
+                .Order(StringComparer.Ordinal)
+                .ToArray());
+        Assert.Equal(
+            PrototypeTuning.SessionTicks,
+            prototypeSchema
+                .GetProperty("properties")
+                .GetProperty("ticks")
+                .GetProperty("maximum")
+                .GetInt32());
+
         await WriteMessageAsync(
             process,
             """
@@ -177,6 +200,22 @@ public sealed class ProtocolIntegrationTests
         await WriteMessageAsync(
             process,
             """
+            {"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"prototype_run","arguments":{"ticks":1501,"commandsPath":"scenarios/prototype1/prepared.commands.v2.json"}}}
+            """);
+        var prototype = await ReadMessageAsync(process);
+        var prototypeResult = prototype.RootElement
+            .GetProperty("result")
+            .GetProperty("structuredContent");
+        Assert.Equal("prototype_result", prototypeResult.GetProperty("event").GetString());
+        Assert.Equal(9, prototypeResult.GetProperty("creatureCount").GetInt32());
+        Assert.Equal(6, prototypeResult.GetProperty("commandsApplied").GetInt32());
+        Assert.True(prototypeResult.GetProperty("averageReadinessAtRaid").GetInt32() > 0);
+        Assert.False(string.IsNullOrWhiteSpace(
+            prototypeResult.GetProperty("canonicalJson").GetString()));
+
+        await WriteMessageAsync(
+            process,
+            """
             {"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"bridge_status","arguments":{}}}
             """);
         var bridgeStatus = await ReadMessageAsync(process);
@@ -186,7 +225,7 @@ public sealed class ProtocolIntegrationTests
         Assert.Equal("bridge_status", bridgeStatusResult.GetProperty("event").GetString());
         Assert.Equal("ok", bridgeStatusResult.GetProperty("status").GetString());
         Assert.Equal(
-            ["bridge_status", "simulation_run"],
+            ["bridge_status", "prototype_run", "simulation_run"],
             bridgeStatusResult
                 .GetProperty("tools")
                 .EnumerateArray()

@@ -170,7 +170,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-domain-mcp.
 После Release build trusted Codex project читает `.codex/config.toml`, а Claude
 Code предлагает одноразово подтвердить project-scoped `.mcp.json`. Эти файлы не
 содержат секретов и абсолютных путей. Server публикует только
-`bridge_status` и `simulation_run`; подробный контракт, pins, hashes, security
+`bridge_status`, legacy `simulation_run` и gameplay-v2 `prototype_run`; запуск
+fixtures Prototype 1 описан в `PROTOTYPE_HEADLESS.md`, а подробный контракт,
+pins, hashes и security
 guards и rollback находятся в `MCP_EVALUATION.md`.
 
 Чтобы отключить domain MCP без удаления user-scope данных:
