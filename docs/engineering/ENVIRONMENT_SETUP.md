@@ -186,3 +186,49 @@ guards и rollback находятся в `MCP_EVALUATION.md`.
 Конфигурация не создаёт listener, credential или внешнее соединение. Editor
 adapter оценивается отдельно и не входит в production/runtime dependency graph
 domain MCP.
+
+## Dev-only Ivan-MCP для редактора
+
+ADR 0004 принимает Ivan-MCP как доверенный локальный инструмент для тестовой
+игры. Это не production dependency и не security sandbox: локальный MCP client
+получает широкие editor/source/filesystem/reflection возможности. Не запускайте
+его в worktree с секретами или недоверенным кодом.
+
+Установка и запуск с Godot 4.7.1 .NET:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ivan-mcp.ps1 `
+  -Action Install `
+  -GodotPath C:\path\to\Godot_v4.7.1-stable_mono_win64_console.exe
+
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ivan-mcp.ps1 `
+  -Action Open `
+  -GodotPath C:\path\to\Godot_v4.7.1-stable_mono_win64_console.exe
+```
+
+`Open -Headless` подходит для handshake/tree/log/play проверок, но screenshot
+требует обычного оконного редактора. После исправления C# compile error
+перезапустите tracked процессы: hot reload Godot может не выгрузить Ivan
+assemblies.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ivan-mcp.ps1 -Action Status
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ivan-mcp.ps1 -Action Stop
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ivan-mcp.ps1 -Action Open -Headless
+```
+
+Server слушает только `127.0.0.1:29541`/`::1`; cloud и credentials не
+используются. Project configs Codex и Claude содержат
+`http://127.0.0.1:29541/mcp`, но не запускают server автоматически.
+
+Перед export и для полного отката удалите только candidate-owned локальную
+установку:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ivan-mcp.ps1 -Action Uninstall
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
+```
+
+`Uninstall` не меняет глобальные настройки и user-scope конфиги. Exact pins,
+hashes, лицензии, измерения и принятое исключение security gate находятся в
+`MCP_EVALUATION.md` и ADR 0004.

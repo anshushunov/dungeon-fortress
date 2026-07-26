@@ -1,6 +1,6 @@
 # Оценка MCP и editor bridge
 
-Статус: Phase B, блок 1 завершён; блок 2 остановлен на security escalation
+Статус: Phase B завершён; принят dev-only Ivan-MCP по ADR 0004
 Дата проверки: 2026-07-26
 Issue: [#4](https://github.com/anshushunov/dungeon-fortress/issues/4)
 
@@ -348,3 +348,80 @@ trigger Issue #4 работа останавливается с decision brief: 
 добавлять proxy/firewall/fork/auth boundary или начинать owned editor fallback,
 пока пользователь не выберет новую архитектурную границу. Domain MCP из блока
 1 остаётся отдельным и не зависит от этого решения.
+
+## Блок 3: решение владельца и dev-only adoption
+
+После escalation владелец проекта явно изменил границу решения: для текущей
+тестовой игры broad Ivan surface принимается как доверенная dev-only
+автоматизация. Собственный editor bridge не создаётся. Исторический провал
+server-side minimum-surface gate выше сохраняется и не переименовывается в
+успех; исключение оформлено ADR 0004.
+
+Project-local launcher `scripts/ivan-mcp.ps1` выполняет пять действий:
+`Install`, `Open`, `Status`, `Stop`, `Uninstall`. Addon и server извлекаются
+только в игнорируемые производные каталоги, release archives проверяются по
+SHA-256, а NuGet graph закреплён в
+`config/ivan-mcp/packages.lock.json` (SHA-256
+`9034d794d1938e87b3831644f50a8b13da3e74d7a1d122ba42b5b91a681da49e`
+для нормализованного LF-содержимого Git).
+Generated props импортируется Godot project только когда локальная установка
+существует. Clean checkout, CI и обычная сборка не получают Ivan packages.
+
+Запуск использует только `http://127.0.0.1:29541`/`::1`, `--auth none`,
+пустой cloud URL и отдельный temp profile. Отсутствие auth допустимо только
+потому, что loopback process считается доверенным и в репозитории нет секретов.
+Codex и Claude project configs содержат только loopback URL; server нужно
+предварительно явно запустить.
+
+### Проверки принятого варианта
+
+| Gate | Результат | Evidence |
+|---|---|---|
+| exact pins, hashes, licenses | pass | addon `0.19.1`, server `9.2.0`, packages `7.3.0`/`5.3.2`; hashes и Apache-2.0 сохранены выше |
+| locked install/build | pass | locked restore; Godot 4.7.1 compile: 3 upstream `CS0618`, 0 errors; повторный build: 0 warnings/errors |
+| protocol handshake | pass | MCP initialize `2025-03-26`, server `9.2.0.0`, session id получен; `tools/list` вернул 39 tools |
+| editor handshake | pass | compatible API handshake; Godot `4.7.1-stable (official)`; `[Godot-MCP] connected` |
+| scene/tree/log | pass | `Main.tscn`, root `Main`/`Node2D`, `res://Main.cs`; structured editor logs получены |
+| lifecycle | pass | три последовательных Open/Stop цикла завершены; exact tracked PIDs; после stop listener отсутствует, кроме ожидаемого `TIME_WAIT` |
+| play control | pass | main scene перешла `false → true → false`; running scene `res://Main.tscn` |
+| screenshot | pass | оконный `screenshot-viewport` вернул PNG; headless предсказуемо вернул structured error об отсутствии GPU render |
+| C# compile-error recovery | pass with restart | intentional `CS1026`/`CS1002` обнаружены; hot reload не выгрузил assemblies; после исправления `Stop` → `Open` восстановил build, handshake и tool call |
+| runtime error buffer | known limitation | `runtime-errors-get` доступен, но game runtime не включает `WithRuntimeErrorCapture`; доменные ошибки остаются в structured simulation/CLI/MCP output |
+| server-side minimum surface | waived by owner | все 39 tools считаются доверенной dev surface; `enabled:false` не является security boundary |
+| loopback/no cloud/no secret | pass | server listeners `127.0.0.1` и `::1`; editor/server connections только loopback; cloud URL/token пусты |
+| uninstall | pass | addon, generated props, server artifacts, temp profile, tracked processes и listener удалены; Windows long-path shader cache обработан |
+| clean full verification | pass | solution build 0 warnings/errors; simulation tests 8/8; domain MCP tests 8/8; protocol observations 5/5; deterministic/load/Godot gates green |
+
+### Независимый review loop
+
+Read-only reviewers сначала вернули `request changes`. Launcher был исправлен
+по их замечаниям:
+
+- занятый `29541` теперь отклоняется до запуска, а readiness проверяет MCP
+  identity/version порождённого server;
+- server и editor получают очищенное allowlisted environment без ambient
+  tokens, cloud/Redis/non-loopback overrides; poisoned-environment runtime
+  сохранил только loopback listeners/connections;
+- process state хранит PID, executable path и start time, поэтому PID reuse
+  приводит к fail-closed, а не к остановке чужого Godot;
+- любой частичный `Open` откатывает только созданные этим вызовом editor/server;
+- `Open` завершается успешно только после bounded editor tool handshake;
+- Ivan MSBuild props импортируется только для `Debug`; проверенный установленный
+  `Release` graph содержит только Godot `4.7.1` packages.
+
+После исправлений повторены compile-error → `Stop` → `Open`, poisoned environment,
+`Open` → `Status` → `Uninstall` и полный clean `scripts/verify.ps1`.
+
+### Использование и ограничение
+
+Ivan разрешён только в отдельном trusted worktree без секретов. Перед export
+или передачей рабочей копии выполняется:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ivan-mcp.ps1 -Action Uninstall
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
+```
+
+Возврат к строгой security-модели потребует нового ADR и отдельной границы
+(upstream authorization fix, sandbox/proxy или owned bridge). Такой bridge в
+Phase B намеренно не реализован.

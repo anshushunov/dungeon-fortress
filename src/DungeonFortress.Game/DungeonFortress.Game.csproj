@@ -7,4 +7,6 @@
   <ItemGroup>
     <ProjectReference Include="..\DungeonFortress.Simulation\DungeonFortress.Simulation.csproj" />
   </ItemGroup>
+  <Import Project="DungeonFortress.Game.IvanMcp.props"
+          Condition="Exists('DungeonFortress.Game.IvanMcp.props') And '$(Configuration)' == 'Debug'" />
 </Project>
