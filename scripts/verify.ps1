@@ -19,6 +19,7 @@ $testProject = Join-Path $repoRoot "tests\DungeonFortress.Simulation.Tests\Dunge
 $commandsPath = Join-Path $repoRoot "scenarios\smoke.commands.json"
 $gameProjectPath = Join-Path $repoRoot "src\DungeonFortress.Game"
 $gameProjectFile = Join-Path $gameProjectPath "DungeonFortress.Game.csproj"
+$guardTestScript = Join-Path $repoRoot "scripts\test-godot-output-guard.ps1"
 
 $env:DOTNET_CLI_HOME = Join-Path $artifactsRoot "dotnet-home"
 $env:DOTNET_NOLOGO = "1"
@@ -117,6 +118,10 @@ try {
         -ProfileRoot (Join-Path $artifactsRoot "tool-profile") `
         -GodotNuGetSource $godotNuGetSource
 
+    Invoke-Checked -FilePath "powershell" -Arguments @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $guardTestScript
+    )
+
     Write-Host "Restoring and building the .NET 8 solution..."
     Invoke-Checked -FilePath "dotnet" -Arguments @(
         "restore", $solutionPath
@@ -161,26 +166,15 @@ try {
     Assert-FilesEqual -ExpectedPath $loadAPath -ActualPath $loadBPath -Description "Load scenario snapshots"
 
     Write-Host "Running Godot headless smoke..."
-    $previousErrorActionPreference = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try {
-        $godotOutput = & $godot --headless --path $gameProjectPath -- --smoke --seed $Seed 2>&1
-        $godotExitCode = $LASTEXITCODE
-    }
-    finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-    $godotOutput | ForEach-Object { Write-Host $_ }
-    if ($godotExitCode -ne 0) {
-        throw "Godot headless smoke failed with exit code $godotExitCode."
-    }
-
-    $successEvent = $godotOutput | Where-Object {
-        $_ -match '"event":"godot_headless_smoke"' -and $_ -match '"status":"ok"'
-    } | Select-Object -Last 1
-    if ($null -eq $successEvent) {
-        throw "Godot exited successfully but did not emit a structured success event."
-    }
+    Initialize-GodotRuntimeEnvironment -RepositoryRoot $repoRoot
+    $godotResult = Invoke-GodotChecked `
+        -GodotPath $godot `
+        -Arguments @(
+            "--headless", "--path", $gameProjectPath,
+            "--", "--smoke", "--seed", $Seed
+        ) `
+        -ExpectedSuccessEvent "godot_headless_smoke"
+    $godotExitCode = $godotResult.ExitCode
 
     [ordered]@{
         event = "verification_result"

@@ -39,6 +39,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "Godot project build failed with exit code $LASTEXITCODE."
 }
 
+Initialize-GodotRuntimeEnvironment -RepositoryRoot $repoRoot
+
 $arguments = @(
     "--path", $projectPath,
     "--",
@@ -48,5 +50,15 @@ if ($VisibleSmoke) {
     $arguments += "--visible-smoke"
 }
 
-& $godot @arguments
-exit $LASTEXITCODE
+$expectedEvent = if ($VisibleSmoke) { "godot_visible_smoke" } else { $null }
+try {
+    $result = Invoke-GodotChecked `
+        -GodotPath $godot `
+        -Arguments $arguments `
+        -ExpectedSuccessEvent $expectedEvent
+    exit $result.ExitCode
+}
+catch {
+    [Console]::Error.WriteLine($_.Exception.Message)
+    exit 1
+}

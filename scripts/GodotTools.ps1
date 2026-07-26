@@ -128,6 +128,147 @@ function Initialize-GodotNuGetEnvironment {
     }
 }
 
+function Get-StablePathHash {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Value
+    )
+
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [Text.Encoding]::UTF8.GetBytes($Value.ToLowerInvariant())
+        $hash = $algorithm.ComputeHash($bytes)
+        $hex = [BitConverter]::ToString($hash) -replace "-", ""
+        return $hex.Substring(0, 8).ToLowerInvariant()
+    }
+    finally {
+        $algorithm.Dispose()
+    }
+}
+
+function Initialize-GodotRuntimeEnvironment {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryRoot
+    )
+
+    $profileName = "df-godot-" + (Get-StablePathHash -Value $RepositoryRoot)
+    $profileRoot = Join-Path ([IO.Path]::GetTempPath()) $profileName
+    $env:APPDATA = Join-Path $profileRoot "Roaming"
+    $env:LOCALAPPDATA = Join-Path $profileRoot "Local"
+
+    New-Item -ItemType Directory -Force -Path $env:APPDATA | Out-Null
+    New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA | Out-Null
+}
+
+function Get-GodotErrorLines {
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [AllowEmptyCollection()]
+        [object[]]$OutputLines = @()
+    )
+
+    $errorLines = @()
+    foreach ($line in $OutputLines) {
+        $text = [string]$line
+        if ($text -match "ERROR:") {
+            $errorLines += $text
+        }
+    }
+
+    return $errorLines
+}
+
+function Invoke-GodotChecked {
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$GodotPath,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments,
+
+        [string]$ExpectedSuccessEvent
+    )
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = @(& $GodotPath @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    $output | ForEach-Object { Write-Host $_ }
+    $errorLines = @(Get-GodotErrorLines -OutputLines $output)
+
+    if ($errorLines.Count -gt 0) {
+        [ordered]@{
+            event = "godot_process_guard"
+            status = "error"
+            reason = "unexpected_engine_error"
+            exitCode = $exitCode
+            engineErrorCount = $errorLines.Count
+            firstEngineError = $errorLines[0]
+        } | ConvertTo-Json -Compress | Write-Host
+
+        throw "Godot emitted $($errorLines.Count) unexpected ERROR line(s)."
+    }
+
+    if ($exitCode -ne 0) {
+        [ordered]@{
+            event = "godot_process_guard"
+            status = "error"
+            reason = "nonzero_exit"
+            exitCode = $exitCode
+            engineErrorCount = 0
+        } | ConvertTo-Json -Compress | Write-Host
+
+        throw "Godot failed with exit code $exitCode."
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedSuccessEvent)) {
+        $escapedEvent = [Regex]::Escape($ExpectedSuccessEvent)
+        $successEvent = $output | Where-Object {
+            $_ -match ('"event":"' + $escapedEvent + '"') -and $_ -match '"status":"ok"'
+        } | Select-Object -Last 1
+
+        if ($null -eq $successEvent) {
+            [ordered]@{
+                event = "godot_process_guard"
+                status = "error"
+                reason = "missing_success_event"
+                exitCode = $exitCode
+                engineErrorCount = 0
+                expectedEvent = $ExpectedSuccessEvent
+            } | ConvertTo-Json -Compress | Write-Host
+
+            throw "Godot did not emit the expected '$ExpectedSuccessEvent' success event."
+        }
+    }
+
+    [ordered]@{
+        event = "godot_process_guard"
+        status = "ok"
+        exitCode = $exitCode
+        engineErrorCount = 0
+        expectedEvent = $ExpectedSuccessEvent
+    } | ConvertTo-Json -Compress | Write-Host
+
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Output = $output
+        EngineErrorCount = 0
+    }
+}
+
 function Resolve-GodotCandidate {
     [CmdletBinding()]
     [OutputType([string])]

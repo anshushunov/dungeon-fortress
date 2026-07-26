@@ -66,11 +66,46 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -GodotP
 4. запуск с другим seed и проверку изменения checksum;
 5. два измерения 1 000 лёгких агентов × 10 000 fixed ticks;
 6. `Debug` build Godot-host и headless smoke;
-7. проверку structured success event и process exit code.
+7. проверку structured success event, process exit code и отсутствие любых
+   строк `ERROR:` в выводе Godot.
 
 Временные NuGet-настройки, пакеты и результаты создаются под `.artifacts/`,
 который игнорируется Git. При первом запуске нужен доступ к NuGet.org для
-тестовых пакетов; Godot packages берутся из выбранного движка.
+тестовых пакетов; Godot packages берутся из выбранного движка. Runtime Godot
+получает отдельный короткий профиль под системным temporary directory, чтобы
+NuGet tool-profile из длинного worktree path не становился его `APPDATA`.
+
+### Проверка вывода Godot
+
+`run-game.ps1` и `verify.ps1` не считают exit code 0 достаточным условием успеха.
+Общий guard завершает команду с code 1 при любой строке `ERROR:`, при ненулевом
+exit code или при отсутствии ожидаемого structured success event. Широкого
+whitelist нет.
+
+Guard имеет отдельный dependency-free тест:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-godot-output-guard.ps1
+```
+
+Во время review PR #5 исходный `run-game.ps1` воспроизводимо давал:
+
+```text
+ERROR: Condition "err != OK" is true.
+   at: initialize (drivers/gles3/shader_gles3.cpp:802)
+```
+
+Причиной оказался не shader проекта и не NVIDIA driver. NuGet bootstrap временно
+переназначал `APPDATA` внутрь worktree и оставлял его таким для Godot runtime.
+Путь cache entry `CanvasOcclusionShaderGLES3/<sha256>` достигал 255 символов.
+В [Godot 4.7.1 строка 802](https://github.com/godotengine/godot/blob/4.7.1-stable/drivers/gles3/shader_gles3.cpp#L800-L803)
+проверяет ошибку создания именно каталога SHA-256. Windows документирует
+ограничение `CreateDirectory` в 248 символов без long-path opt-in:
+[Microsoft Learn](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createdirectory).
+
+Исправление разделяет длинный NuGet tool-profile и короткий Godot runtime
+profile. Контрольный verbose-запуск после этого успешно инициализирует
+`CanvasOcclusionShaderGLES3` без `ERROR:`.
 
 ## Отдельные команды
 

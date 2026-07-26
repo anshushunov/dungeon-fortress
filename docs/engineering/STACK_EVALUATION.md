@@ -136,6 +136,13 @@ Issue #3 проверяет engine-independent контур без выбора 
 Время — измерение harness на одной машине, а не performance target. Пункты 6–7
 относятся к отдельному MCP-spike, поэтому ADR 0003 остаётся `Proposed`.
 
+Review visible smoke также подтвердил, что runtime нельзя наследовать длинный
+NuGet `APPDATA` из worktree: Windows path к GLES3 shader cache достигал 255
+символов и Godot возвращал ошибку создания каталога. Скрипты теперь используют
+короткий отдельный runtime profile и считают любую строку `ERROR:` провалом даже
+при process exit code 0. Детали и upstream-ссылки находятся в
+`ENVIRONMENT_SETUP.md`.
+
 ## Источники
 
 - [Архив релизов Godot — 4.7.1 stable](https://godotengine.org/download/archive/)
