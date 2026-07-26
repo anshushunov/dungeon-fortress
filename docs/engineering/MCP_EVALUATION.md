@@ -1,7 +1,7 @@
 # Оценка MCP и editor bridge
 
 Статус: Phase B завершён; принят dev-only Ivan-MCP по ADR 0004
-Дата проверки: 2026-07-26
+Дата проверки: 2026-07-27
 Issue: [#4](https://github.com/anshushunov/dungeon-fortress/issues/4)
 
 ## Цель и границы
@@ -132,6 +132,10 @@ dotnet build .\DungeonFortress.sln -c Release --no-restore
 
 ### Проверки и измерения блока 1
 
+Ниже сохранён исторический снимок блока 1 до Issue #9. Указанные в таблице
+число tools, размеры, checksum и результаты относятся к контракту того блока и
+не описывают текущую поверхность MCP.
+
 Сценарий: seed `424242`, 32 агента, 256 ticks,
 `scenarios/smoke.commands.json`.
 
@@ -148,6 +152,19 @@ dotnet build .\DungeonFortress.sln -c Release --no-restore
 `gpt-5.6-sol` не дошёл до tool call: установленный CLI 0.142.5 потребовал
 обновление. Повтор на поддерживаемом `gpt-5.4` прошёл; это client-version
 ограничение, а не отказ MCP server.
+
+### Текущее состояние после Issue #9
+
+Текущий server публикует три инструмента: `bridge_status`, legacy
+`simulation_run` и gameplay-v2 `prototype_run`. `prototype_run` до создания мира
+валидирует весь command document, включая семантику будущих команд, и возвращает
+canonical snapshot вместе с `economy`, `labor` и `stations`. Исторические
+результаты блоков ниже остаются point-in-time evidence и намеренно не
+переписываются под текущий контракт.
+
+Чистый verification Issue #9: solution build без warnings/errors, simulation
+tests 44/44, domain MCP tests 8/8, raw protocol observations 5/5,
+`toolCount=3`, deterministic/load gates и Godot 4.7.1 headless smoke — green.
 
 Автоматические проверки:
 

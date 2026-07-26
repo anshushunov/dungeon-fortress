@@ -14,5 +14,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\DungeonFortress.Simulation\DungeonFortress.Simulation.csproj" />
+    <ProjectReference Include="..\DungeonFortress.Scenarios\DungeonFortress.Scenarios.csproj" />
   </ItemGroup>
 </Project>

@@ -6,7 +6,7 @@ using DungeonFortress.Simulation;
 
 namespace DungeonFortress.Scenarios;
 
-internal static class Program
+public static class Program
 {
     public static int Main(string[] args)
     {
@@ -96,6 +96,13 @@ internal static class Program
             throw new ArgumentException("--prototype requires --commands with a gameplay-v2 document.");
         }
 
+        if (options.SeedSpecified || options.AgentCountSpecified)
+        {
+            throw new ArgumentException(
+                "--prototype reads seed and creature count from the gameplay-v2 document; " +
+                "--seed and --agents are not accepted.");
+        }
+
         var commandLog = PrototypeCommandDocument.Load(options.CommandsPath);
         var stopwatch = Stopwatch.StartNew();
         var result = PrototypeScenario.Run(commandLog, options.TickCount);
@@ -136,6 +143,9 @@ internal static class Program
             creatureCount = creatures.Count,
             jobCount = result.State.Jobs.Count,
             eventCount = result.State.Events.Count,
+            economy = result.State.Economy,
+            labor = result.State.Labor,
+            stations = result.State.Stations,
             elapsedMilliseconds = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3),
         }));
         return 0;

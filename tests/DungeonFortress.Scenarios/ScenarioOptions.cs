@@ -2,9 +2,11 @@ using System.Globalization;
 
 namespace DungeonFortress.Scenarios;
 
-internal sealed record ScenarioOptions(
+public sealed record ScenarioOptions(
     ulong Seed,
+    bool SeedSpecified,
     int AgentCount,
+    bool AgentCountSpecified,
     int TickCount,
     string? CommandsPath,
     string? SnapshotPath,
@@ -18,7 +20,9 @@ internal sealed record ScenarioOptions(
     public static ScenarioOptions Parse(string[] args)
     {
         var seed = DefaultSeed;
+        var seedSpecified = false;
         var agentCount = DefaultAgentCount;
+        var agentCountSpecified = false;
         var tickCount = DefaultTickCount;
         string? commandsPath = null;
         string? snapshotPath = null;
@@ -30,12 +34,14 @@ internal sealed record ScenarioOptions(
             switch (args[index])
             {
                 case "--seed":
+                    seedSpecified = true;
                     seed = ulong.Parse(
                         RequireValue(args, ref index, "--seed"),
                         NumberStyles.None,
                         CultureInfo.InvariantCulture);
                     break;
                 case "--agents":
+                    agentCountSpecified = true;
                     agentCount = int.Parse(
                         RequireValue(args, ref index, "--agents"),
                         NumberStyles.Integer,
@@ -74,7 +80,9 @@ internal sealed record ScenarioOptions(
 
         return new ScenarioOptions(
             seed,
+            seedSpecified,
             agentCount,
+            agentCountSpecified,
             tickCount,
             commandsPath,
             snapshotPath,
@@ -88,13 +96,13 @@ internal sealed record ScenarioOptions(
           dotnet run --project tests/DungeonFortress.Scenarios -- [options]
 
         Options:
-          --seed <ulong>       Deterministic seed (default: 424242)
-          --agents <int>       Number of lightweight agents (default: 32)
+          --seed <ulong>       Legacy simulation seed; rejected with --prototype
+          --agents <int>       Legacy agent count; rejected with --prototype
           --ticks <int>        Number of explicit fixed ticks (default: 256)
           --commands <path>    Ordered JSON command sequence
           --snapshot <path>    Write canonical UTF-8 JSON snapshot
           --print-snapshot     Print canonical JSON before the result event
-          --prototype          Run gameplay schema v2; --commands is required
+          --prototype          Run gameplay schema v2; commands supplies seed/population
           --help               Show this help
         """;
 

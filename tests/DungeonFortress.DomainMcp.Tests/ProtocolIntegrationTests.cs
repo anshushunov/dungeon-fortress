@@ -212,6 +212,36 @@ public sealed class ProtocolIntegrationTests
         Assert.True(prototypeResult.GetProperty("averageReadinessAtRaid").GetInt32() > 0);
         Assert.False(string.IsNullOrWhiteSpace(
             prototypeResult.GetProperty("canonicalJson").GetString()));
+        Assert.True(
+            prototypeResult
+                .GetProperty("economy")
+                .GetProperty("cookBatchesCompleted")
+                .GetInt32() > 0);
+        Assert.InRange(
+            prototypeResult
+                .GetProperty("labor")
+                .GetProperty("foodWorkPercent")
+                .GetInt32(),
+            30,
+            70);
+        Assert.Equal(
+            6,
+            prototypeResult.GetProperty("stations").GetArrayLength());
+
+        await WriteMessageAsync(
+            process,
+            """
+            {"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"prototype_run","arguments":{"ticks":0,"commandsPath":"scenarios/prototype1/invalid-semantic.commands.v2.json"}}}
+            """);
+        var invalidPrototype = await ReadMessageAsync(process);
+        var invalidPrototypeResult = invalidPrototype.RootElement.GetProperty("result");
+        Assert.True(invalidPrototypeResult.GetProperty("isError").GetBoolean());
+        Assert.Contains(
+            "final larder feature",
+            invalidPrototypeResult
+                .GetProperty("content")[0]
+                .GetProperty("text")
+                .GetString());
 
         await WriteMessageAsync(
             process,

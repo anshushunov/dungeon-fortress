@@ -5,6 +5,7 @@ public static class PrototypeTuning
     public const int SessionTicks = 1_800;
     public const int ThreatAnnounceTick = 300;
     public const int RaidTick = 1_500;
+    public const int RaiderCount = 4;
     public const ulong DefaultSeed = 20_260_726UL;
 
     public const int MapWidth = 28;
@@ -43,7 +44,7 @@ public static class PrototypeTuning
     public const int AffinitySpeedDenominator = 4;
 
     public const int DrillTicks = 30;
-    public const int DrillGain = 7;
+    public const int DrillGain = 12;
     public const int DrillFatigue = 6;
     public const int DrillSatietyCost = 3;
     public const int WatchSlots = 2;
@@ -78,6 +79,9 @@ public static class PrototypeTuning
     public const int DefaultDrillPriority = 0;
     public const int DefaultWatchPriority = 0;
     public const int RationReserveMaximum = 20;
+    public const int RationReserveDefault = 0;
     public const int DrillMinimumSatietyMaximum = 100;
+    public const int DrillMinimumSatietyDefault = 40;
     public const int MusterLeadMaximum = 300;
+    public const int MusterLeadDefault = 0;
 }

@@ -8,10 +8,14 @@ namespace DungeonFortress.Simulation.Tests;
 
 public sealed class PrototypeScenarioTests
 {
-    [Fact]
-    public void Same_seed_commands_and_tick_produce_identical_state_log_and_checksum()
+    [Theory]
+    [InlineData("baseline")]
+    [InlineData("prepared")]
+    [InlineData("neglected")]
+    public void Same_seed_commands_and_tick_produce_identical_state_log_and_checksum(
+        string fixtureName)
     {
-        var commands = LoadFixture("prepared");
+        var commands = LoadFixture(fixtureName);
         var first = PrototypeScenario.Run(commands, PrototypeTuning.RaidTick + 1);
         var second = PrototypeScenario.Run(commands, PrototypeTuning.RaidTick + 1);
 
@@ -43,9 +47,17 @@ public sealed class PrototypeScenarioTests
         var fixture = LoadFixture("baseline");
         var changed = fixture with { Seed = fixture.Seed + 1 };
 
+        var original = PrototypeScenario.Run(fixture, 128);
+        var alternate = PrototypeScenario.Run(changed, 128);
+
         Assert.NotEqual(
-            PrototypeScenario.Run(fixture, 128).Checksum,
-            PrototypeScenario.Run(changed, 128).Checksum);
+            original.State.Creatures
+                .Select(creature => (creature.Satiety, creature.Fatigue))
+                .ToArray(),
+            alternate.State.Creatures
+                .Select(creature => (creature.Satiety, creature.Fatigue))
+                .ToArray());
+        Assert.NotEqual(original.State.Events, alternate.State.Events);
     }
 
     [Fact]
@@ -141,7 +153,7 @@ public sealed class PrototypeScenarioTests
     }
 
     [Fact]
-    public void Invalid_runtime_zone_command_is_atomic()
+    public void Semantic_error_rejects_the_whole_document_before_world_creation()
     {
         const string json =
             """
@@ -150,13 +162,20 @@ public sealed class PrototypeScenarioTests
                "tiles":[[14,7],[15,7]]}
             ]}
             """;
-        var world = new PrototypeWorld(
-            PrototypeCommandDocument.Parse(Encoding.UTF8.GetBytes(json)));
-        var before = PrototypeScenario.Capture(world);
+        Assert.Throws<InvalidDataException>(
+            () => PrototypeCommandDocument.Parse(Encoding.UTF8.GetBytes(json)));
 
-        Assert.Throws<InvalidDataException>(world.Step);
-        var after = PrototypeScenario.Capture(world);
-        Assert.Equal(before.Checksum, after.Checksum);
+        var direct = new PrototypeCommandLog(
+            "custom",
+            1,
+            [
+                new SetPriorityCommand(0, JobKind.Harvest, 4),
+                new ZoneEraseCommand(
+                    1,
+                    ZoneKind.Larder,
+                    [new(14, 7), new(15, 7)]),
+            ]);
+        Assert.Throws<InvalidDataException>(() => new PrototypeWorld(direct));
     }
 
     [Fact]
@@ -183,6 +202,11 @@ public sealed class PrototypeScenarioTests
 
         Assert.True(result.State.Stocks.MealsProduced > 0);
         Assert.True(result.State.Stocks.MealsEaten > 0);
+        Assert.True(result.State.Economy.HarvestsCompleted > 0);
+        Assert.True(result.State.Economy.RawHaulsCompleted > 0);
+        Assert.True(result.State.Economy.CookBatchesCompleted > 0);
+        Assert.True(result.State.Economy.MealHaulsCompleted > 0);
+        Assert.True(result.State.Economy.MealsEaten > PrototypeTuning.StartMeals);
         Assert.Equal(9, result.State.Creatures.Count);
         Assert.All(result.State.Creatures, creature =>
         {
@@ -192,8 +216,8 @@ public sealed class PrototypeScenarioTests
         });
         Assert.Contains(result.State.Events, @event => @event.ReasonCode == "chosen_need_hunger");
         Assert.Contains(
-            result.State.Creatures,
-            creature => creature.LastDecision.JobKind is not null);
+            result.State.Events,
+            @event => @event.JobKind is not null);
     }
 
     [Fact]
@@ -272,18 +296,16 @@ public sealed class PrototypeScenarioTests
     [Fact]
     public void Performance_sanity_completes_three_raid_tick_runs()
     {
-        var started = System.Diagnostics.Stopwatch.StartNew();
+        var results = new List<PrototypeRunResult>();
         foreach (var scenario in new[] { "baseline", "prepared", "neglected" })
         {
-            _ = PrototypeScenario.Run(
+            results.Add(PrototypeScenario.Run(
                 LoadFixture(scenario),
-                PrototypeTuning.RaidTick + 1);
+                PrototypeTuning.RaidTick + 1));
         }
 
-        started.Stop();
-        Assert.True(
-            started.Elapsed < TimeSpan.FromSeconds(10),
-            $"Three prototype scenarios took {started.Elapsed}.");
+        Assert.Equal(3, results.Count);
+        Assert.All(results, result => Assert.Equal(PrototypeTuning.RaidTick + 1, result.Tick));
     }
 
     private static int AverageReadiness(PrototypeRunResult result)

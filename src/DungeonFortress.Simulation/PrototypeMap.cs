@@ -182,11 +182,42 @@ internal sealed class PrototypeMap
         }
     }
 
+    public static Dictionary<ZoneKind, SortedSet<GridPoint>> CreateDefaultZones(
+        PrototypeMap map)
+    {
+        var zones = Enum.GetValues<ZoneKind>()
+            .ToDictionary(kind => kind, _ => new SortedSet<GridPoint>());
+        PaintRectangle(map, zones[ZoneKind.Farm], new(1, 1), new(6, 7));
+        PaintRectangle(map, zones[ZoneKind.Kitchen], new(9, 6), new(12, 8));
+        PaintRectangle(map, zones[ZoneKind.Larder], new(13, 6), new(16, 8));
+        PaintRectangle(map, zones[ZoneKind.Quarters], new(19, 2), new(23, 5));
+        return zones;
+    }
+
     public static IEnumerable<GridPoint> Neighbors(GridPoint point)
     {
         foreach (var offset in NeighborOffsets)
         {
             yield return new GridPoint(point.X + offset.X, point.Y + offset.Y);
+        }
+    }
+
+    private static void PaintRectangle(
+        PrototypeMap map,
+        SortedSet<GridPoint> zone,
+        GridPoint start,
+        GridPoint end)
+    {
+        for (var y = start.Y; y <= end.Y; y++)
+        {
+            for (var x = start.X; x <= end.X; x++)
+            {
+                var point = new GridPoint(x, y);
+                if (map.IsPassable(point) && map[point] != TileKind.Gate)
+                {
+                    zone.Add(point);
+                }
+            }
         }
     }
 

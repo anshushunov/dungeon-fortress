@@ -60,7 +60,8 @@ public static class PrototypeCommandDocument
             throw new InvalidDataException($"Unknown scenario label: {scenario}");
         }
 
-        if (!root.GetProperty("seed").TryGetUInt64(out var seed))
+        if (!root.TryGetProperty("seed", out var seedElement) ||
+            !seedElement.TryGetUInt64(out var seed))
         {
             throw new InvalidDataException("seed must be an unsigned 64-bit integer.");
         }
@@ -91,7 +92,9 @@ public static class PrototypeCommandDocument
             commands.Add(command);
         }
 
-        return new PrototypeCommandLog(scenario, seed, commands);
+        var commandLog = new PrototypeCommandLog(scenario, seed, commands);
+        PrototypeCommandValidator.Validate(commandLog);
+        return commandLog;
     }
 
     private static PrototypeCommand ParseCommand(JsonElement element)
@@ -246,7 +249,8 @@ public static class PrototypeCommandDocument
 
     private static int ReadInt32(JsonElement element, string name)
     {
-        if (!element.GetProperty(name).TryGetInt32(out var value))
+        if (!element.TryGetProperty(name, out var property) ||
+            !property.TryGetInt32(out var value))
         {
             throw new InvalidDataException($"{name} must be a 32-bit integer.");
         }
@@ -256,8 +260,9 @@ public static class PrototypeCommandDocument
 
     private static string ReadString(JsonElement element, string name)
     {
-        var property = element.GetProperty(name);
-        if (property.ValueKind != JsonValueKind.String || property.GetString() is not { } value)
+        if (!element.TryGetProperty(name, out var property) ||
+            property.ValueKind != JsonValueKind.String ||
+            property.GetString() is not { } value)
         {
             throw new InvalidDataException($"{name} must be a string.");
         }

@@ -14,18 +14,38 @@ public sealed class PrototypeWorld
     private readonly Dictionary<GridPoint, BedState> _beds;
     private readonly Dictionary<(GridPoint Point, ResourceKind Resource), int> _loose = [];
     private readonly List<EventState> _events = [];
+    private readonly Dictionary<GridPoint, int> _stationOccupiedTicks =
+        PrototypeMap.KitchenTiles
+            .Concat(PrototypeMap.PostTiles)
+            .ToDictionary(point => point, _ => 0);
+    private readonly HashSet<GridPoint> _yieldReservations = [];
     private long _nextJobId = 1;
     private int _nextCommandIndex;
     private int _stockRaw;
     private int _stockMeals = PrototypeTuning.StartMeals;
+    private int _harvestsCompleted;
+    private int _rawHaulsCompleted;
+    private int _cookBatchesCompleted;
+    private int _mealHaulsCompleted;
+    private int _totalCreatureTicks;
+    private int _foodWorkTicks;
+    private int _restTicks;
+    private int _eatTicks;
+    private int _drillTicks;
+    private int _watchTicks;
+    private int _musterTicks;
+    private int _idleTicks;
+    private int _postCapacityTicks;
 
     public PrototypeWorld(PrototypeCommandLog commandLog)
     {
         ArgumentNullException.ThrowIfNull(commandLog);
+        PrototypeCommandValidator.Validate(commandLog);
         Seed = commandLog.Seed;
-        _commands = [.. commandLog.Commands];
-        ValidateCommandOrder(_commands);
-        _zones = CreateDefaultZones();
+        _commands = commandLog.Commands
+            .Select(CloneCommand)
+            .ToArray();
+        _zones = PrototypeMap.CreateDefaultZones(_map);
         _priorities = new()
         {
             [JobKind.Harvest] = PrototypeTuning.DefaultHarvestPriority,
@@ -37,9 +57,9 @@ public sealed class PrototypeWorld
         };
         _rules = new(StringComparer.Ordinal)
         {
-            ["ration_reserve"] = 0,
-            ["drill_min_satiety"] = 40,
-            ["muster_lead_ticks"] = 0,
+            ["ration_reserve"] = PrototypeTuning.RationReserveDefault,
+            ["drill_min_satiety"] = PrototypeTuning.DrillMinimumSatietyDefault,
+            ["muster_lead_ticks"] = PrototypeTuning.MusterLeadDefault,
         };
         _beds = PrototypeMap.BedTiles
             .Select((point, index) => new BedState(point, index * PrototypeTuning.BedRipenessOffset))
@@ -91,11 +111,13 @@ public sealed class PrototypeWorld
         }
 
         CancelInvalidJobs();
-        GenerateJobs();
         DecideNeedsAndMuster();
-        ClearIdleLarderAccess();
+        GenerateJobs();
         MatchJobs();
+        PlanTrafficActions();
+        CountLaborForTick();
         ActCreatures();
+        CountPostOccupancyForTick();
         ApplyPassiveProcesses();
         CurrentTick++;
     }
@@ -117,29 +139,72 @@ public sealed class PrototypeWorld
             .OrderBy(creature => creature.Id)
             .Select(ToSnapshot)
             .ToArray();
+        var pendingCommands = _commands
+            .Skip(_nextCommandIndex)
+            .Select(ToSnapshot)
+            .ToArray();
         var jobs = _jobs
             .OrderBy(job => job.Id)
             .Select(job => new PrototypeJobSnapshot(
                 job.Id,
+                job.Key,
                 job.Kind,
+                job.Origin,
                 job.Target,
                 job.Resource,
+                job.Quantity,
+                job.PersonalCreatureId,
                 job.ReservedBy,
-                job.RemainingTicks))
+                job.RemainingTicks,
+                job.ProgressTicks,
+                job.PickedUp))
+            .ToArray();
+        var beds = _beds.Values
+            .OrderBy(bed => bed.Position)
+            .Select(bed => new PrototypeBedSnapshot(
+                bed.Position,
+                bed.Growth,
+                bed.IsRipe))
+            .ToArray();
+        var looseItems = _loose
+            .Where(pair => pair.Value > 0)
+            .OrderBy(pair => pair.Key.Point)
+            .ThenBy(pair => pair.Key.Resource)
+            .Select(pair => new PrototypeLooseItemSnapshot(
+                pair.Key.Point,
+                pair.Key.Resource,
+                pair.Value))
+            .ToArray();
+        var stations = PrototypeMap.KitchenTiles
+            .Concat(PrototypeMap.PostTiles)
+            .OrderBy(point => _map[point])
+            .ThenBy(point => point)
+            .Select(point => new PrototypeStationSnapshot(
+                point,
+                _map[point],
+                _creatures
+                    .Where(creature => IsUsingStation(creature, point))
+                    .Select(creature => (int?)creature.Id)
+                    .SingleOrDefault(),
+                _stationOccupiedTicks[point]))
             .ToArray();
         var events = _events
             .Select(ToSnapshot)
             .ToArray();
 
         return new PrototypeSnapshot(
-            1,
+            PrototypeCanonical.SchemaVersion,
+            _nextJobId,
             Seed,
             CurrentTick,
             CommandsApplied,
+            pendingCommands,
             creatures,
             zones,
             priorities,
             rules,
+            beds,
+            looseItems,
             new PrototypeStockSnapshot(
                 _stockRaw,
                 _stockMeals,
@@ -149,18 +214,54 @@ public sealed class PrototypeWorld
                 MealsProduced,
                 MealsEaten),
             jobs,
+            new PrototypeEconomyCountersSnapshot(
+                _harvestsCompleted,
+                _rawHaulsCompleted,
+                _cookBatchesCompleted,
+                _mealHaulsCompleted,
+                MealsProduced,
+                MealsEaten),
+            new PrototypeLaborSnapshot(
+                _totalCreatureTicks,
+                _foodWorkTicks,
+                _restTicks,
+                _eatTicks,
+                _drillTicks,
+                _watchTicks,
+                _musterTicks,
+                _idleTicks,
+                Percentage(_foodWorkTicks, _totalCreatureTicks),
+                PrototypeMap.PostTiles.Sum(point => _stationOccupiedTicks[point]),
+                _postCapacityTicks,
+                Percentage(
+                    PrototypeMap.PostTiles.Sum(point => _stationOccupiedTicks[point]),
+                    _postCapacityTicks)),
+            stations,
             events,
             new PrototypeThreatSnapshot(
                 CurrentTick > PrototypeTuning.ThreatAnnounceTick,
                 PrototypeTuning.ThreatAnnounceTick,
                 PrototypeTuning.RaidTick,
-                4,
+                PrototypeTuning.RaiderCount,
                 Math.Max(0, PrototypeTuning.RaidTick - CurrentTick)));
     }
 
     private static IReadOnlyDictionary<JobKind, int> Affinities(params (JobKind Kind, int Value)[] values)
     {
         return values.OrderBy(value => value.Kind).ToDictionary(value => value.Kind, value => value.Value);
+    }
+
+    private static PrototypeCommand CloneCommand(PrototypeCommand command)
+    {
+        return command switch
+        {
+            ZonePaintCommand paint => paint with { Tiles = paint.Tiles.ToArray() },
+            ZoneEraseCommand erase => erase with { Tiles = erase.Tiles.ToArray() },
+            SetPriorityCommand priority => priority,
+            SetRuleCommand rule => rule,
+            _ => throw new InvalidDataException(
+                $"Unsupported prototype command: {command.GetType().Name}"),
+        };
     }
 
     private static List<CreatureState> CreateCreatures(ulong seed)
@@ -195,32 +296,6 @@ public sealed class PrototypeWorld
                     new Dictionary<string, int>()),
             };
         }).ToList();
-    }
-
-    private Dictionary<ZoneKind, SortedSet<GridPoint>> CreateDefaultZones()
-    {
-        var zones = Enum.GetValues<ZoneKind>()
-            .ToDictionary(kind => kind, _ => new SortedSet<GridPoint>());
-        PaintRectangle(zones[ZoneKind.Farm], new(1, 1), new(6, 7));
-        PaintRectangle(zones[ZoneKind.Kitchen], new(9, 6), new(12, 8));
-        PaintRectangle(zones[ZoneKind.Larder], new(13, 6), new(16, 8));
-        PaintRectangle(zones[ZoneKind.Quarters], new(19, 2), new(23, 5));
-        return zones;
-    }
-
-    private void PaintRectangle(SortedSet<GridPoint> zone, GridPoint start, GridPoint end)
-    {
-        for (var y = start.Y; y <= end.Y; y++)
-        {
-            for (var x = start.X; x <= end.X; x++)
-            {
-                var point = new GridPoint(x, y);
-                if (_map.IsPassable(point) && _map[point] != TileKind.Gate)
-                {
-                    zone.Add(point);
-                }
-            }
-        }
     }
 
     private void ApplyCommands()
@@ -345,7 +420,6 @@ public sealed class PrototypeWorld
     private void GenerateJobs()
     {
         var desired = new HashSet<string>(StringComparer.Ordinal);
-        var ripeCount = _beds.Values.Count(bed => bed.IsRipe);
         if (_priorities[JobKind.Harvest] > 0 &&
             ZoneCoversFeature(ZoneKind.Farm, TileKind.Bed) &&
             _stockRaw < PrototypeTuning.RawTarget)
@@ -410,20 +484,34 @@ public sealed class PrototypeWorld
         }
 
         if (_priorities[JobKind.Rest] > 0 &&
-            ZoneCoversFeature(ZoneKind.Quarters, TileKind.Bunk) &&
-            _creatures.Any(creature => creature.Fatigue >= PrototypeTuning.RestSeekThreshold))
+            ZoneCoversFeature(ZoneKind.Quarters, TileKind.Bunk))
         {
-            foreach (var bunk in PrototypeMap.BunkTiles
-                         .Where(tile => _zones[ZoneKind.Quarters].Contains(tile))
-                         .Order())
+            var claimed = _jobs
+                .Where(job => job.Kind == JobKind.Rest && job.ReservedBy is not null)
+                .Select(job => job.Origin)
+                .ToHashSet();
+            foreach (var creature in _creatures
+                         .Where(creature =>
+                             creature.Fatigue >= PrototypeTuning.RestSeekThreshold &&
+                             !creature.IsMustering &&
+                             creature.Mode != CreatureMode.Eating &&
+                             creature.Satiety >= PrototypeTuning.CollapseThreshold)
+                         .OrderBy(creature => creature.Id))
             {
+                if (!TryNearestRestTarget(creature, claimed, out var bunk))
+                {
+                    continue;
+                }
+
+                claimed.Add(bunk);
                 EnsureJob(
-                    $"rest:{bunk.X}:{bunk.Y}",
+                    $"rest:{creature.Id}",
                     JobKind.Rest,
                     bunk,
                     null,
                     0,
-                    desired);
+                    desired,
+                    creature.Id);
             }
         }
 
@@ -459,7 +547,6 @@ public sealed class PrototypeWorld
         }
 
         _jobs.RemoveAll(job => job.ReservedBy is null && !desired.Contains(job.Key));
-        _ = ripeCount;
     }
 
     private void EnsureJob(
@@ -531,6 +618,23 @@ public sealed class PrototypeWorld
                     }
                 }
 
+                if (!creature.MusterNeedsRation &&
+                    !creature.MealReserved &&
+                    creature.Satiety < PrototypeTuning.RationSatietyGate &&
+                    AvailableMealsForReservation() > 0)
+                {
+                    creature.MusterNeedsRation = true;
+                    creature.MealReserved = true;
+                    RecordDecision(
+                        creature,
+                        "chosen_ration",
+                        new Dictionary<string, int>
+                        {
+                            ["satiety"] = creature.Satiety,
+                            ["gate"] = PrototypeTuning.RationSatietyGate,
+                        });
+                }
+
                 continue;
             }
 
@@ -584,17 +688,45 @@ public sealed class PrototypeWorld
             }
 
             if (creature.Fatigue > PrototypeTuning.RestThreshold &&
-                _priorities[JobKind.Rest] == 0)
+                !creature.IsMustering)
             {
-                RecordDecision(
+                creature.NeedsRest = TryNearestRestTarget(
                     creature,
-                    "refused_priority_zero",
-                    new Dictionary<string, int>
-                    {
-                        ["fatigue"] = creature.Fatigue,
-                        ["threshold"] = PrototypeTuning.RestThreshold,
-                    },
-                    JobKind.Rest);
+                    new HashSet<GridPoint>(),
+                    out _);
+                if (creature.NeedsRest &&
+                    creature.CurrentJob is { Kind: not JobKind.Rest })
+                {
+                    CancelJob(creature, "chosen_need_fatigue");
+                }
+                else if (!creature.NeedsRest && _priorities[JobKind.Rest] == 0)
+                {
+                    RecordDecision(
+                        creature,
+                        "refused_priority_zero",
+                        new Dictionary<string, int>
+                        {
+                            ["fatigue"] = creature.Fatigue,
+                            ["threshold"] = PrototypeTuning.RestThreshold,
+                        },
+                        JobKind.Rest);
+                }
+            }
+            else
+            {
+                creature.NeedsRest = false;
+            }
+        }
+
+        if (musterActive)
+        {
+            foreach (var creature in _creatures
+                         .Where(creature => creature.MusterNeedsRation)
+                         .OrderBy(creature => creature.Id))
+            {
+                creature.SpecialTarget = CanAdvanceMealQueue(creature, out var target)
+                    ? target
+                    : null;
             }
         }
     }
@@ -604,6 +736,12 @@ public sealed class PrototypeWorld
         if (creature.Mode == CreatureMode.Eating)
         {
             return true;
+        }
+
+        if (!ignoreReserve &&
+            ReservedMeals() >= ActiveLarderTiles().Count())
+        {
+            return false;
         }
 
         var available = AvailableMealsForReservation();
@@ -618,6 +756,21 @@ public sealed class PrototypeWorld
             return false;
         }
 
+        if (!TryFindLarderTarget(
+                creature,
+                out var larder,
+                out _))
+        {
+            RecordDecision(
+                creature,
+                "refused_zone_unreachable",
+                new Dictionary<string, int>
+                {
+                    ["zoneKind"] = (int)ZoneKind.Larder,
+                });
+            return false;
+        }
+
         if (creature.CurrentJob is not null)
         {
             CancelJob(creature, reason);
@@ -625,7 +778,7 @@ public sealed class PrototypeWorld
 
         creature.MealReserved = true;
         creature.Mode = CreatureMode.Eating;
-        creature.SpecialTarget = NearestAvailableLarder(creature);
+        creature.SpecialTarget = larder;
         creature.SpecialTicks = PrototypeTuning.EatTicks;
         RecordDecision(
             creature,
@@ -639,36 +792,227 @@ public sealed class PrototypeWorld
         return true;
     }
 
-    private void ClearIdleLarderAccess()
+    private void PlanTrafficActions()
     {
-        foreach (var creature in _creatures
-                     .Where(creature =>
-                         DistanceToLarder(creature.Position) <= 1 &&
-                         creature.CurrentJob is null &&
-                         !creature.MealReserved &&
-                         !creature.IsMustering)
-                     .OrderBy(creature => creature.Id))
+        _yieldReservations.Clear();
+        foreach (var creature in _creatures)
         {
-            var exit = PrototypeMap.Neighbors(creature.Position)
-                .Where(point =>
-                    _map.IsPassable(point) &&
-                    _map[point] != TileKind.Larder &&
-                    !_zones[ZoneKind.Forbidden].Contains(point) &&
-                    !_creatures.Any(other => other != creature && other.Position == point) &&
-                    DistanceToLarder(point) > DistanceToLarder(creature.Position))
-                .Order()
-                .FirstOrDefault();
-            if (exit != default)
+            creature.TrafficTarget = null;
+            creature.WaitThisTick = false;
+        }
+
+        var intents = _creatures
+            .Select(CreateMovementIntent)
+            .Where(intent => intent is not null)
+            .Cast<MovementIntent>()
+            .ToArray();
+        foreach (var contenders in intents.GroupBy(intent => intent.Next))
+        {
+            var ordered = contenders
+                .OrderByDescending(intent => IsUrgentMover(intent.Creature))
+                .ThenByDescending(intent => intent.Creature.BlockedTicks)
+                .ThenBy(intent => FairnessKey(intent.Creature))
+                .ThenBy(intent => intent.Creature.Id)
+                .ToArray();
+            foreach (var loser in ordered.Skip(1))
             {
-                Move(creature, exit);
+                loser.Creature.WaitThisTick = true;
+            }
+        }
+
+        var active = intents
+            .Where(intent => !intent.Creature.WaitThisTick)
+            .ToDictionary(intent => intent.Creature);
+        var occupants = _creatures.ToDictionary(creature => creature.Position);
+        var requested = active.Values.Select(intent => intent.Next).ToHashSet();
+        var handledCycles = new HashSet<int>();
+
+        foreach (var root in active.Keys.OrderBy(creature => creature.Id))
+        {
+            var chain = new List<CreatureState>();
+            var indices = new Dictionary<CreatureState, int>();
+            var current = root;
+            while (active.TryGetValue(current, out var intent) &&
+                   occupants.TryGetValue(intent.Next, out var occupant) &&
+                   occupant != current)
+            {
+                indices[current] = chain.Count;
+                chain.Add(current);
+                if (!active.ContainsKey(occupant))
+                {
+                    _ = TryPlanYield(
+                        occupant,
+                        root,
+                        intent.Destination,
+                        requested,
+                        dependencyCycle: false);
+                    break;
+                }
+
+                if (indices.TryGetValue(occupant, out var cycleStart))
+                {
+                    var cycle = chain.Skip(cycleStart).ToArray();
+                    var cycleKey = cycle.Min(creature => creature.Id);
+                    if (handledCycles.Add(cycleKey))
+                    {
+                        var yielder = cycle
+                            .OrderBy(creature => IsUrgentMover(creature))
+                            .ThenBy(creature => creature.YieldCount)
+                            .ThenBy(creature => FairnessKey(creature))
+                            .ThenBy(creature => creature.Id)
+                            .First();
+                        _ = TryPlanYield(
+                            yielder,
+                            root,
+                            intent.Destination,
+                            requested,
+                            dependencyCycle: true);
+                    }
+
+                    break;
+                }
+
+                current = occupant;
             }
         }
     }
 
-    private static int DistanceToLarder(GridPoint point)
+    private MovementIntent? CreateMovementIntent(CreatureState creature)
     {
-        return PrototypeMap.LarderTiles.Min(
-            larder => Math.Abs(point.X - larder.X) + Math.Abs(point.Y - larder.Y));
+        var destination = PrimaryDestination(creature);
+        if (destination is not { } target || creature.Position == target)
+        {
+            return null;
+        }
+
+        var next = _map.NextStep(
+            creature.Position,
+            target,
+            _zones[ZoneKind.Forbidden]);
+        return next is null || next == creature.Position
+            ? null
+            : new MovementIntent(creature, target, next.Value);
+    }
+
+    private static GridPoint? PrimaryDestination(CreatureState creature)
+    {
+        if (creature.IsMustering)
+        {
+            return creature.MusterNeedsRation
+                ? creature.SpecialTarget
+                : creature.MusterTarget;
+        }
+
+        if (creature.MealReserved)
+        {
+            return creature.SpecialTarget;
+        }
+
+        return creature.CurrentJob?.Target;
+    }
+
+    private bool TryPlanYield(
+        CreatureState blocker,
+        CreatureState beneficiary,
+        GridPoint beneficiaryTarget,
+        IReadOnlySet<GridPoint> requested,
+        bool dependencyCycle)
+    {
+        if (!CanYield(blocker, allowUrgent: dependencyCycle))
+        {
+            return false;
+        }
+
+        var occupants = _creatures.ToDictionary(creature => creature.Position);
+        var beneficiaryUrgent = IsUrgentMover(beneficiary);
+        var queue = new Queue<GridPoint>();
+        var previous = new Dictionary<GridPoint, GridPoint?>();
+        queue.Enqueue(blocker.Position);
+        previous[blocker.Position] = null;
+        GridPoint? openTarget = null;
+
+        while (queue.TryDequeue(out var current) && openTarget is null)
+        {
+            foreach (var neighbor in PrototypeMap.Neighbors(current))
+            {
+                if (previous.ContainsKey(neighbor) ||
+                    !_map.IsPassable(neighbor) ||
+                    _map[neighbor] == TileKind.Larder ||
+                    neighbor == PrototypeMap.Gate ||
+                    _zones[ZoneKind.Forbidden].Contains(neighbor) ||
+                    (!beneficiaryUrgent && requested.Contains(neighbor)) ||
+                    _yieldReservations.Contains(neighbor))
+                {
+                    continue;
+                }
+
+                previous[neighbor] = current;
+                if (!occupants.TryGetValue(neighbor, out var occupant))
+                {
+                    openTarget = neighbor;
+                    break;
+                }
+
+                if (CanYield(occupant, allowUrgent: false))
+                {
+                    queue.Enqueue(neighbor);
+                }
+            }
+        }
+
+        if (openTarget is null)
+        {
+            return false;
+        }
+
+        var path = new List<GridPoint>();
+        for (GridPoint? point = openTarget; point is { } value; point = previous[value])
+        {
+            path.Add(value);
+        }
+
+        path.Reverse();
+        for (var index = path.Count - 2; index >= 0; index--)
+        {
+            var actor = occupants[path[index]];
+            var target = path[index + 1];
+            actor.TrafficTarget = target;
+            actor.WaitThisTick = false;
+            _yieldReservations.Add(target);
+            RecordDecision(
+                actor,
+                "chosen_traffic_yield",
+                new Dictionary<string, int>
+                {
+                    ["beneficiaryId"] = beneficiary.Id,
+                    ["dependencyCycle"] = dependencyCycle ? 1 : 0,
+                    ["targetX"] = target.X,
+                    ["targetY"] = target.Y,
+                },
+                actor.CurrentJob?.Kind,
+                target);
+        }
+
+        return true;
+    }
+
+    private static bool CanYield(CreatureState creature, bool allowUrgent)
+    {
+        return creature.TrafficTarget is null &&
+            (allowUrgent ||
+             (!creature.MealReserved && !creature.IsMustering)) &&
+            PrimaryDestination(creature) != creature.Position;
+    }
+
+    private static bool IsUrgentMover(CreatureState creature)
+    {
+        return creature.MealReserved || creature.MusterNeedsRation;
+    }
+
+    private int FairnessKey(CreatureState creature)
+    {
+        var count = _creatures.Count;
+        return (creature.Id - CurrentTick % count + count) % count;
     }
 
     private void MatchJobs()
@@ -677,6 +1021,7 @@ public sealed class PrototypeWorld
             .Where(creature =>
                 creature.CurrentJob is null &&
                 !creature.IsMustering &&
+                creature.TrafficTarget is null &&
                 creature.Mode != CreatureMode.Eating &&
                 creature.Satiety >= PrototypeTuning.CollapseThreshold)
             .OrderBy(creature => creature.Id)
@@ -691,12 +1036,6 @@ public sealed class PrototypeWorld
         {
             foreach (var job in jobs)
             {
-                if (ReservedMeals() > 0 &&
-                    job.Kind is JobKind.Cook or JobKind.Haul)
-                {
-                    continue;
-                }
-
                 if (job.PersonalCreatureId is { } personal && personal != creature.Id)
                 {
                     continue;
@@ -708,7 +1047,22 @@ public sealed class PrototypeWorld
                     continue;
                 }
 
-                var target = InitialTarget(creature, job);
+                if (job.Kind == JobKind.Rest &&
+                    creature.Fatigue < PrototypeTuning.RestSeekThreshold)
+                {
+                    continue;
+                }
+
+                if (creature.NeedsRest && job.Kind != JobKind.Rest)
+                {
+                    continue;
+                }
+
+                if (!TryInitialTarget(creature, job, out var target))
+                {
+                    continue;
+                }
+
                 var targetOccupant = _creatures.FirstOrDefault(
                     other => other != creature && other.Position == target);
                 if (targetOccupant is not null && targetOccupant.CurrentJob is null)
@@ -753,7 +1107,10 @@ public sealed class PrototypeWorld
 
             Assign(selected, competitors.FirstOrDefault());
             pairs.RemoveAll(pair =>
-                pair.Creature == selected.Creature || pair.Job == selected.Job);
+                pair.Creature == selected.Creature ||
+                pair.Job == selected.Job ||
+                (ActiveLarderTiles().Contains(selected.InitialTarget) &&
+                 pair.InitialTarget == selected.InitialTarget));
         }
 
         foreach (var creature in candidates.Where(creature => creature.CurrentJob is null))
@@ -918,6 +1275,18 @@ public sealed class PrototypeWorld
     {
         foreach (var creature in _creatures.OrderBy(creature => creature.Id))
         {
+            if (creature.TrafficTarget is { } trafficTarget)
+            {
+                if (Move(creature, trafficTarget))
+                {
+                    creature.YieldCount++;
+                    creature.LastYieldTick = CurrentTick;
+                }
+
+                creature.TrafficTarget = null;
+                continue;
+            }
+
             if (creature.IsMustering)
             {
                 ActMuster(creature);
@@ -937,6 +1306,78 @@ public sealed class PrototypeWorld
         }
     }
 
+    private void CountLaborForTick()
+    {
+        _totalCreatureTicks += _creatures.Count;
+        foreach (var creature in _creatures)
+        {
+            if (creature.Mode == CreatureMode.Eating ||
+                (creature.IsMustering && creature.MusterNeedsRation))
+            {
+                _eatTicks++;
+            }
+            else if (creature.IsMustering)
+            {
+                _musterTicks++;
+            }
+            else
+            {
+                switch (creature.CurrentJob?.Kind)
+                {
+                    case JobKind.Harvest:
+                    case JobKind.Haul:
+                    case JobKind.Cook:
+                        _foodWorkTicks++;
+                        break;
+                    case JobKind.Rest:
+                        _restTicks++;
+                        break;
+                    case JobKind.Drill:
+                        _drillTicks++;
+                        break;
+                    case JobKind.Watch:
+                        _watchTicks++;
+                        break;
+                    default:
+                        _idleTicks++;
+                        break;
+                }
+            }
+        }
+    }
+
+    private void CountPostOccupancyForTick()
+    {
+        foreach (var station in _stationOccupiedTicks.Keys.ToArray())
+        {
+            if (_creatures.Any(creature => IsUsingStation(creature, station)))
+            {
+                _stationOccupiedTicks[station]++;
+            }
+        }
+
+        if (CurrentTick >= PrototypeTuning.RaidTick)
+        {
+            return;
+        }
+
+        var activePosts = PrototypeMap.PostTiles
+            .Where(point => _zones[ZoneKind.TrainingGround].Contains(point))
+            .ToArray();
+        _postCapacityTicks += activePosts.Length;
+    }
+
+    private bool IsUsingStation(CreatureState creature, GridPoint point)
+    {
+        return creature.Position == point &&
+            (creature.CurrentJob?.Kind, _map[point]) switch
+            {
+                (JobKind.Cook, TileKind.Kitchen) => true,
+                (JobKind.Drill, TileKind.Post) => true,
+                _ => false,
+            };
+    }
+
     private void ActMuster(CreatureState creature)
     {
         if (creature.MusterNeedsRation)
@@ -948,11 +1389,7 @@ public sealed class PrototypeWorld
 
             if (creature.Position != larder)
             {
-                if (!Move(creature, larder))
-                {
-                    RecordMovementBlocked(creature, larder);
-                }
-
+                _ = Move(creature, larder);
                 return;
             }
 
@@ -976,10 +1413,7 @@ public sealed class PrototypeWorld
         creature.Mode = CreatureMode.Mustering;
         if (creature.MusterTarget is { } target && creature.Position != target)
         {
-            if (!Move(creature, target))
-            {
-                RecordMovementBlocked(creature, target);
-            }
+            _ = Move(creature, target);
         }
     }
 
@@ -1000,11 +1434,7 @@ public sealed class PrototypeWorld
 
         if (creature.Position != target)
         {
-            if (!Move(creature, target))
-            {
-                RecordMovementBlocked(creature, target);
-            }
-
+            _ = Move(creature, target);
             return;
         }
 
@@ -1019,23 +1449,40 @@ public sealed class PrototypeWorld
 
     private void ActJob(CreatureState creature, JobState job)
     {
-        if (creature.Position != job.Target)
+        if (job.Kind == JobKind.Haul &&
+            job.PickedUp &&
+            job.Target == job.Origin)
         {
-            creature.Mode = CreatureMode.Moving;
-            if (!Move(creature, job.Target))
+            if (!TryFindLarderTarget(
+                    creature,
+                    out var retryTarget,
+                    out var retryAvailability))
             {
                 RecordDecision(
                     creature,
-                    "waiting_blocked_by_other",
+                    "refused_zone_unreachable",
                     new Dictionary<string, int>
                     {
-                        ["targetX"] = job.Target.X,
-                        ["targetY"] = job.Target.Y,
+                        ["jobId"] = checked((int)job.Id),
                     },
                     job.Kind,
-                    job.Target);
+                    job.Origin);
+                return;
             }
 
+            if (retryAvailability == LarderAvailability.Occupied)
+            {
+                RecordMovementBlocked(creature, retryTarget);
+                return;
+            }
+
+            job.Target = retryTarget;
+        }
+
+        if (creature.Position != job.Target)
+        {
+            creature.Mode = CreatureMode.Moving;
+            _ = Move(creature, job.Target);
             return;
         }
 
@@ -1060,7 +1507,32 @@ public sealed class PrototypeWorld
             creature.CarryAmount = quantity;
             job.Quantity = quantity;
             job.PickedUp = true;
-            job.Target = NearestAvailableLarder(creature);
+            if (!TryFindLarderTarget(
+                    creature,
+                    out var larder,
+                    out var availability))
+            {
+                job.Target = job.Origin;
+                RecordDecision(
+                    creature,
+                    "refused_zone_unreachable",
+                    new Dictionary<string, int>
+                    {
+                        ["jobId"] = checked((int)job.Id),
+                    },
+                    job.Kind,
+                    job.Origin);
+                return;
+            }
+
+            if (availability == LarderAvailability.Occupied)
+            {
+                job.Target = job.Origin;
+                RecordMovementBlocked(creature, larder);
+                return;
+            }
+
+            job.Target = larder;
             return;
         }
 
@@ -1098,8 +1570,8 @@ public sealed class PrototypeWorld
 
         if (job.Kind == JobKind.Watch)
         {
-            creature.ActiveTicks++;
-            if (creature.ActiveTicks % PrototypeTuning.WatchFatiguePeriod == 0)
+            creature.WatchTicks++;
+            if (creature.WatchTicks % PrototypeTuning.WatchFatiguePeriod == 0)
             {
                 creature.Fatigue = Math.Min(100, creature.Fatigue + 1);
             }
@@ -1107,8 +1579,8 @@ public sealed class PrototypeWorld
             return;
         }
 
-        creature.ActiveTicks++;
-        if (creature.ActiveTicks % PrototypeTuning.FatigueGainPeriod == 0)
+        creature.WorkTicks++;
+        if (creature.WorkTicks % PrototypeTuning.FatigueGainPeriod == 0)
         {
             creature.Fatigue = Math.Min(100, creature.Fatigue + 1);
         }
@@ -1129,6 +1601,7 @@ public sealed class PrototypeWorld
             case JobKind.Harvest:
                 _beds[job.Origin].Growth = 0;
                 AddLoose(job.Origin, ResourceKind.RawMushroom, PrototypeTuning.HarvestOutput);
+                _harvestsCompleted++;
                 break;
             case JobKind.Haul:
                 var free = PrototypeTuning.LarderCapacity - _stockRaw - _stockMeals;
@@ -1136,10 +1609,18 @@ public sealed class PrototypeWorld
                 if (creature.Carrying == ResourceKind.RawMushroom)
                 {
                     _stockRaw += delivered;
+                    if (delivered > 0)
+                    {
+                        _rawHaulsCompleted++;
+                    }
                 }
                 else
                 {
                     _stockMeals += delivered;
+                    if (delivered > 0)
+                    {
+                        _mealHaulsCompleted++;
+                    }
                 }
 
                 if (delivered < creature.CarryAmount)
@@ -1158,6 +1639,7 @@ public sealed class PrototypeWorld
                 creature.CarryAmount = 0;
                 AddLoose(job.Origin, ResourceKind.Meal, PrototypeTuning.CookOutput);
                 MealsProduced += PrototypeTuning.CookOutput;
+                _cookBatchesCompleted++;
                 break;
             case JobKind.Drill:
                 creature.MartialForm = Math.Min(
@@ -1180,7 +1662,6 @@ public sealed class PrototypeWorld
         _jobs.Remove(job);
         creature.CurrentJob = null;
         creature.Mode = CreatureMode.Waiting;
-        creature.ActiveTicks = 0;
     }
 
     private void CancelJob(CreatureState creature, string reason)
@@ -1216,20 +1697,62 @@ public sealed class PrototypeWorld
 
     private bool Move(CreatureState creature, GridPoint target)
     {
-        var blocked = PathBlocks(creature, includeCreatures: true);
-        blocked.Remove(target);
-        var next = _map.NextStep(creature.Position, target, blocked);
-        if (next is null || next == creature.Position)
-        {
-            return next == creature.Position;
-        }
-
-        if (_creatures.Any(other => other != creature && other.Position == next))
+        if (creature.LastMoveTick == CurrentTick)
         {
             return false;
         }
 
+        if (creature.WaitThisTick)
+        {
+            creature.BlockedTicks++;
+            RecordMovementBlocked(creature, target);
+            return false;
+        }
+
+        var next = _map.NextStep(
+            creature.Position,
+            target,
+            _zones[ZoneKind.Forbidden]);
+        if (next is null)
+        {
+            RecordDecision(
+                creature,
+                "refused_zone_unreachable",
+                new Dictionary<string, int>
+                {
+                    ["targetX"] = target.X,
+                    ["targetY"] = target.Y,
+                },
+                creature.CurrentJob?.Kind,
+                target);
+            return false;
+        }
+
+        if (next == creature.Position)
+        {
+            creature.BlockedTicks = 0;
+            return true;
+        }
+
+        if (_yieldReservations.Contains(next.Value) &&
+            creature.TrafficTarget != next)
+        {
+            creature.BlockedTicks++;
+            RecordMovementBlocked(creature, target);
+            return false;
+        }
+
+        if (_creatures.Any(other => other != creature && other.Position == next))
+        {
+            creature.BlockedTicks++;
+            RecordMovementBlocked(creature, target);
+            return false;
+        }
+
         creature.Position = next.Value;
+        creature.MoveCount++;
+        creature.LastMoveTick = CurrentTick;
+        creature.BlockedTicks = 0;
         return true;
     }
 
@@ -1243,11 +1766,26 @@ public sealed class PrototypeWorld
                 ["targetX"] = target.X,
                 ["targetY"] = target.Y,
             },
+            creature.CurrentJob?.Kind,
             target: target);
     }
 
     private bool CanAdvanceMealQueue(CreatureState creature, out GridPoint target)
     {
+        var larderTiles = ActiveLarderTiles().ToArray();
+        if (larderTiles.Length == 0)
+        {
+            target = default;
+            RecordDecision(
+                creature,
+                "refused_zone_unreachable",
+                new Dictionary<string, int>
+                {
+                    ["zoneKind"] = (int)ZoneKind.Larder,
+                });
+            return false;
+        }
+
         var reserved = _creatures
             .Where(candidate => candidate.MealReserved)
             .ToArray();
@@ -1256,20 +1794,21 @@ public sealed class PrototypeWorld
             ? reserved.OrderBy(candidate => candidate.Id).ToArray()
             : reserved
                 .OrderBy(candidate =>
-                    PrototypeMap.LarderTiles.Contains(candidate.Position) ? 0 : 1)
+                    larderTiles.Contains(candidate.Position) ? 0 : 1)
                 .ThenBy(candidate => candidate.Position)
                 .ThenBy(candidate => candidate.Id)
                 .ToArray();
         var index = Array.IndexOf(queue, creature);
-        if (index is < 0 or >= 2)
+        var activeCount = Math.Min(queue.Length, larderTiles.Length);
+        if (index < 0 || index >= activeCount)
         {
             target = default;
             return false;
         }
 
-        var active = queue.Take(2).ToArray();
+        var active = queue.Take(activeCount).ToArray();
         var occupiedAssignment = active
-            .Where(candidate => PrototypeMap.LarderTiles.Contains(candidate.Position))
+            .Where(candidate => larderTiles.Contains(candidate.Position))
             .ToDictionary(candidate => candidate.Id, candidate => candidate.Position);
         if (occupiedAssignment.TryGetValue(creature.Id, out target))
         {
@@ -1277,56 +1816,62 @@ public sealed class PrototypeWorld
         }
 
         var claimed = occupiedAssignment.Values.ToHashSet();
-        var remainingTargets = PrototypeMap.LarderTiles
-            .Where(tile => !claimed.Contains(tile))
-            .ToArray();
-        var remainingCreatures = active
-            .Where(candidate => !occupiedAssignment.ContainsKey(candidate.Id))
-            .ToArray();
-        if (remainingCreatures.Length == 1)
+        foreach (var candidate in active
+                     .Where(candidate => !occupiedAssignment.ContainsKey(candidate.Id)))
         {
-            target = remainingTargets[0];
-        }
-        else
-        {
-            var directCost = QueueDistance(remainingCreatures[0], remainingTargets[0]) +
-                QueueDistance(remainingCreatures[1], remainingTargets[1]);
-            var swappedCost = QueueDistance(remainingCreatures[0], remainingTargets[1]) +
-                QueueDistance(remainingCreatures[1], remainingTargets[0]);
-            var swap = swappedCost < directCost;
-            var remainingIndex = Array.IndexOf(remainingCreatures, creature);
-            target = swap
-                ? remainingTargets[1 - remainingIndex]
-                : remainingTargets[remainingIndex];
-        }
-
-        return !_creatures.Any(other =>
-            other != creature &&
-            PrototypeMap.LarderTiles.Contains(other.Position) &&
-            other.CurrentJob is not null);
-    }
-
-    private int QueueDistance(CreatureState creature, GridPoint target)
-    {
-        return _map.Distance(creature.Position, target, _zones[ZoneKind.Forbidden]) ??
-            int.MaxValue / 4;
-    }
-
-    private HashSet<GridPoint> PathBlocks(CreatureState creature, bool includeCreatures)
-    {
-        var blocked = new HashSet<GridPoint>(_zones[ZoneKind.Forbidden]);
-        if (includeCreatures)
-        {
-            foreach (var other in _creatures)
-            {
-                if (other != creature)
+            var assignment = larderTiles
+                .Where(tile => !claimed.Contains(tile))
+                .Select(tile => new
                 {
-                    blocked.Add(other.Position);
+                    Tile = tile,
+                    Distance = _map.Distance(
+                        candidate.Position,
+                        tile,
+                        _zones[ZoneKind.Forbidden]),
+                })
+                .Where(item => item.Distance is not null)
+                .OrderBy(item => item.Distance)
+                .ThenBy(item => item.Tile)
+                .FirstOrDefault();
+            if (assignment is null)
+            {
+                if (candidate == creature)
+                {
+                    target = default;
+                    RecordDecision(
+                        creature,
+                        "refused_zone_unreachable",
+                        new Dictionary<string, int>
+                        {
+                            ["zoneKind"] = (int)ZoneKind.Larder,
+                        });
+                    return false;
                 }
+
+                continue;
             }
+
+            occupiedAssignment[candidate.Id] = assignment.Tile;
+            claimed.Add(assignment.Tile);
         }
 
-        return blocked;
+        if (!occupiedAssignment.TryGetValue(creature.Id, out target))
+        {
+            return false;
+        }
+
+        var assignedTarget = target;
+        var laneOccupied = _creatures.Any(other =>
+            other != creature &&
+            other.CurrentJob is not null &&
+            other.Position == assignedTarget);
+        if (laneOccupied)
+        {
+            RecordMovementBlocked(creature, target);
+            return false;
+        }
+
+        return true;
     }
 
     private void ApplyPassiveProcesses()
@@ -1418,38 +1963,117 @@ public sealed class PrototypeWorld
             .Tile;
     }
 
-    private GridPoint InitialTarget(CreatureState creature, JobState job)
+    private bool TryInitialTarget(
+        CreatureState creature,
+        JobState job,
+        out GridPoint target)
     {
-        return job.Kind == JobKind.Cook
-            ? NearestAvailableLarder(creature)
-            : job.Origin;
+        if (job.Kind != JobKind.Cook)
+        {
+            target = job.Origin;
+            return true;
+        }
+
+        return TryFindLarderTarget(creature, out target, out var availability) &&
+            availability == LarderAvailability.Available;
     }
 
-    private GridPoint NearestAvailableLarder(CreatureState creature)
+    private bool TryFindLarderTarget(
+        CreatureState creature,
+        out GridPoint target,
+        out LarderAvailability availability)
     {
-        var available = PrototypeMap.LarderTiles
-            .Where(target =>
-                !_creatures.Any(other => other != creature && other.Position == target))
-            .ToArray();
-        return NearestReachable(
-            creature.Position,
-            available.Length > 0 ? available : PrototypeMap.LarderTiles);
-    }
-
-    private GridPoint NearestReachable(GridPoint start, IEnumerable<GridPoint> targets)
-    {
-        return targets
-            .Where(target => _zones[ZoneKind.Larder].Contains(target) || _map[target] != TileKind.Larder)
-            .Select(target => new
+        var reachable = ActiveLarderTiles()
+            .Select(candidate => new
             {
-                Target = target,
-                Distance = _map.Distance(start, target, _zones[ZoneKind.Forbidden]),
+                Target = candidate,
+                Distance = _map.Distance(
+                    creature.Position,
+                    candidate,
+                    _zones[ZoneKind.Forbidden]),
+                Claims = _creatures.Count(other =>
+                    other != creature &&
+                    (other.CurrentJob?.Target == candidate ||
+                     (other.MealReserved &&
+                      other.SpecialTarget == candidate))),
+            })
+            .Where(item => item.Distance is not null)
+            .OrderBy(item => item.Claims)
+            .ThenBy(item => item.Distance)
+            .ThenBy(item => item.Target)
+            .ToArray();
+        if (reachable.Length == 0)
+        {
+            target = default;
+            availability = LarderAvailability.Unreachable;
+            return false;
+        }
+
+        var available = reachable.FirstOrDefault(item =>
+            !_creatures.Any(other =>
+                other != creature &&
+                other.Position == item.Target));
+        if (available is not null)
+        {
+            target = available.Target;
+            availability = LarderAvailability.Available;
+            return true;
+        }
+
+        target = reachable[0].Target;
+        availability = LarderAvailability.Occupied;
+        return true;
+    }
+
+    private IEnumerable<GridPoint> ActiveLarderTiles()
+    {
+        return PrototypeMap.LarderTiles
+            .Where(tile => _zones[ZoneKind.Larder].Contains(tile))
+            .Order();
+    }
+
+    private bool TryNearestRestTarget(
+        CreatureState creature,
+        IReadOnlySet<GridPoint> claimed,
+        out GridPoint target)
+    {
+        if (_priorities[JobKind.Rest] == 0)
+        {
+            target = default;
+            return false;
+        }
+
+        var candidate = PrototypeMap.BunkTiles
+            .Where(tile =>
+                _zones[ZoneKind.Quarters].Contains(tile) &&
+                !_zones[ZoneKind.Forbidden].Contains(tile) &&
+                !claimed.Contains(tile) &&
+                !_creatures.Any(other =>
+                    other != creature && other.Position == tile) &&
+                !_jobs.Any(job =>
+                    job.Kind == JobKind.Rest &&
+                    job.Origin == tile &&
+                    job.PersonalCreatureId != creature.Id))
+            .Select(tile => new
+            {
+                Target = tile,
+                Distance = _map.Distance(
+                    creature.Position,
+                    tile,
+                    _zones[ZoneKind.Forbidden]),
             })
             .Where(item => item.Distance is not null)
             .OrderBy(item => item.Distance)
             .ThenBy(item => item.Target)
-            .FirstOrDefault()?.Target ??
-            throw new InvalidOperationException("No reachable target exists.");
+            .FirstOrDefault();
+        if (candidate is null)
+        {
+            target = default;
+            return false;
+        }
+
+        target = candidate.Target;
+        return true;
     }
 
     private int WorkDuration(CreatureState creature, JobKind kind)
@@ -1469,8 +2093,10 @@ public sealed class PrototypeWorld
         }
 
         var exhausted = creature.Fatigue > PrototypeTuning.RestThreshold &&
-            (_priorities[JobKind.Rest] == 0 ||
-             !_jobs.Any(job => job.Kind == JobKind.Rest && job.ReservedBy is null));
+            !TryNearestRestTarget(
+                creature,
+                new HashSet<GridPoint>(),
+                out _);
         var multiplier = exhausted ? PrototypeTuning.ExhaustedSpeedMultiplier : 1;
         return Math.Max(
             1,
@@ -1497,22 +2123,49 @@ public sealed class PrototypeWorld
 
     private int DiagnosticUrgency(JobKind kind)
     {
-        return Urgency(kind, kind == JobKind.Haul ? ResourceKind.Meal : null);
+        return _jobs
+            .Where(job => job.Kind == kind && job.ReservedBy is null)
+            .Select(job => Urgency(job.Kind, job.Resource))
+            .DefaultIfEmpty(0)
+            .Max();
     }
 
     private bool AnyReachableTarget(CreatureState creature, JobKind kind)
     {
-        var targets = kind switch
+        bool Reachable(GridPoint target)
         {
-            JobKind.Harvest => PrototypeMap.BedTiles,
-            JobKind.Haul or JobKind.Cook => PrototypeMap.LarderTiles,
-            JobKind.Rest => PrototypeMap.BunkTiles,
-            JobKind.Drill => PrototypeMap.PostTiles,
-            JobKind.Watch => [.. _zones[ZoneKind.Watch]],
-            _ => [],
+            return _map.Distance(
+                creature.Position,
+                target,
+                _zones[ZoneKind.Forbidden]) is not null;
+        }
+
+        return kind switch
+        {
+            JobKind.Harvest => PrototypeMap.BedTiles.Any(tile =>
+                _zones[ZoneKind.Farm].Contains(tile) && Reachable(tile)),
+            JobKind.Haul => _jobs.Any(job =>
+                    job.Kind == JobKind.Haul &&
+                    job.ReservedBy is null &&
+                    Reachable(job.Origin)) &&
+                ActiveLarderTiles().Any(Reachable),
+            JobKind.Cook => PrototypeMap.KitchenTiles.Any(tile =>
+                    _zones[ZoneKind.Kitchen].Contains(tile) && Reachable(tile)) &&
+                ActiveLarderTiles().Any(Reachable),
+            JobKind.Rest => PrototypeMap.BunkTiles.Any(tile =>
+                _zones[ZoneKind.Quarters].Contains(tile) && Reachable(tile)),
+            JobKind.Drill => PrototypeMap.PostTiles.Any(tile =>
+                _zones[ZoneKind.TrainingGround].Contains(tile) && Reachable(tile)),
+            JobKind.Watch => _zones[ZoneKind.Watch].Any(Reachable),
+            _ => false,
         };
-        return targets.Any(target =>
-            _map.Distance(creature.Position, target, _zones[ZoneKind.Forbidden]) is not null);
+    }
+
+    private static int Percentage(int numerator, int denominator)
+    {
+        return denominator == 0
+            ? 0
+            : numerator * 100 / denominator;
     }
 
     private bool ZoneCoversFeature(ZoneKind zone, TileKind feature)
@@ -1571,6 +2224,8 @@ public sealed class PrototypeWorld
         var previous = _events.LastOrDefault(@event => @event.CreatureId == creature.Id);
         if (previous is not null &&
             previous.ReasonCode == reason &&
+            previous.JobKind == kind &&
+            previous.Target == target &&
             DetailsEqual(previous.Details, details))
         {
             previous.LastTick = CurrentTick;
@@ -1578,7 +2233,13 @@ public sealed class PrototypeWorld
             return;
         }
 
-        _events.Add(new EventState(CurrentTick, creature.Id, reason, details));
+        _events.Add(new EventState(
+            CurrentTick,
+            creature.Id,
+            reason,
+            details,
+            kind,
+            target));
     }
 
     private static bool DetailsEqual(
@@ -1604,9 +2265,65 @@ public sealed class PrototypeWorld
             creature.Position,
             creature.Mode,
             creature.CurrentJob?.Id,
+            creature.Carrying,
+            creature.CarryAmount,
+            creature.MealReserved,
+            creature.SpecialTarget,
+            creature.SpecialTicks,
+            creature.IsMustering,
+            creature.MusterNeedsRation,
+            creature.MusterTarget,
+            creature.WorkTicks,
+            creature.WatchTicks,
+            creature.MoveCount,
+            creature.LastMoveTick < 0 ? null : creature.LastMoveTick,
+            creature.BlockedTicks,
+            creature.YieldCount,
+            creature.LastYieldTick < 0 ? null : creature.LastYieldTick,
             creature.LastDecision,
             ComputeReadiness(creature),
             creature.ReadinessAtRaid);
+    }
+
+    private static PrototypePendingCommandSnapshot ToSnapshot(PrototypeCommand command)
+    {
+        return command switch
+        {
+            ZonePaintCommand paint => new(
+                paint.Tick,
+                "zone_paint",
+                paint.ZoneKind,
+                paint.Tiles.ToArray(),
+                null,
+                null,
+                null),
+            ZoneEraseCommand erase => new(
+                erase.Tick,
+                "zone_erase",
+                erase.ZoneKind,
+                erase.Tiles.ToArray(),
+                null,
+                null,
+                null),
+            SetPriorityCommand priority => new(
+                priority.Tick,
+                "set_priority",
+                null,
+                [],
+                priority.JobKind,
+                null,
+                priority.Value),
+            SetRuleCommand rule => new(
+                rule.Tick,
+                "set_rule",
+                null,
+                [],
+                null,
+                rule.RuleId,
+                rule.Value),
+            _ => throw new InvalidDataException(
+                $"Unsupported prototype command: {command.GetType().Name}"),
+        };
     }
 
     private static PrototypeEvent ToSnapshot(EventState @event)
@@ -1617,7 +2334,9 @@ public sealed class PrototypeWorld
             @event.CreatureId,
             @event.ReasonCode,
             @event.Details,
-            @event.Repeats);
+            @event.Repeats,
+            @event.JobKind,
+            @event.Target);
     }
 
     private static int ComputeReadiness(CreatureState creature)
@@ -1637,22 +2356,6 @@ public sealed class PrototypeWorld
             (100 - creature.Fatigue) / PrototypeTuning.ReadinessRestDenominator -
             injuryPenalty;
         return Math.Clamp(readiness, 0, 100);
-    }
-
-    private static void ValidateCommandOrder(IReadOnlyList<PrototypeCommand> commands)
-    {
-        var previous = -1;
-        foreach (var command in commands)
-        {
-            if (command.Tick < previous)
-            {
-                throw new ArgumentException(
-                    "Commands must be ordered by non-decreasing tick.",
-                    nameof(commands));
-            }
-
-            previous = command.Tick;
-        }
     }
 
     private sealed record CreatureDefinition(
@@ -1681,13 +2384,22 @@ public sealed class PrototypeWorld
         public int? ReadinessAtRaid { get; set; }
         public ResourceKind? Carrying { get; set; }
         public int CarryAmount { get; set; }
-        public int ActiveTicks { get; set; }
         public bool MealReserved { get; set; }
         public GridPoint? SpecialTarget { get; set; }
         public int SpecialTicks { get; set; }
         public bool IsMustering { get; set; }
         public bool MusterNeedsRation { get; set; }
         public GridPoint? MusterTarget { get; set; }
+        public bool NeedsRest { get; set; }
+        public GridPoint? TrafficTarget { get; set; }
+        public int WorkTicks { get; set; }
+        public int WatchTicks { get; set; }
+        public int MoveCount { get; set; }
+        public int LastMoveTick { get; set; } = -1;
+        public int BlockedTicks { get; set; }
+        public int YieldCount { get; set; }
+        public int LastYieldTick { get; set; } = -1;
+        public bool WaitThisTick { get; set; }
 
         public int Affinity(JobKind kind)
         {
@@ -1729,7 +2441,9 @@ public sealed class PrototypeWorld
         int tick,
         int creatureId,
         string reasonCode,
-        Dictionary<string, int> details)
+        Dictionary<string, int> details,
+        JobKind? jobKind,
+        GridPoint? target)
     {
         public int FirstTick { get; } = tick;
         public int LastTick { get; set; } = tick;
@@ -1739,6 +2453,8 @@ public sealed class PrototypeWorld
             details.OrderBy(pair => pair.Key, StringComparer.Ordinal)
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
         public int Repeats { get; set; } = 1;
+        public JobKind? JobKind { get; } = jobKind;
+        public GridPoint? Target { get; } = target;
     }
 
     private sealed record MatchPair(
@@ -1749,4 +2465,16 @@ public sealed class PrototypeWorld
         int Urgency,
         int Affinity,
         int Distance);
+
+    private sealed record MovementIntent(
+        CreatureState Creature,
+        GridPoint Destination,
+        GridPoint Next);
+
+    private enum LarderAvailability
+    {
+        Available,
+        Occupied,
+        Unreachable,
+    }
 }

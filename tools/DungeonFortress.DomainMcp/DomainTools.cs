@@ -102,7 +102,10 @@ public sealed class DomainTools(ProjectRoot projectRoot)
                 readiness,
                 creatures.Count,
                 result.State.Jobs.Count,
-                result.State.Events.Count);
+                result.State.Events.Count,
+                result.State.Economy,
+                result.State.Labor,
+                result.State.Stations);
             return Success(response);
         }
         catch (Exception exception) when (
@@ -285,7 +288,10 @@ public sealed record PrototypeRunResponse(
     [property: JsonPropertyName("averageReadinessAtRaid")] int? AverageReadinessAtRaid,
     [property: JsonPropertyName("creatureCount")] int CreatureCount,
     [property: JsonPropertyName("jobCount")] int JobCount,
-    [property: JsonPropertyName("eventCount")] int EventCount);
+    [property: JsonPropertyName("eventCount")] int EventCount,
+    [property: JsonPropertyName("economy")] PrototypeEconomyCountersSnapshot Economy,
+    [property: JsonPropertyName("labor")] PrototypeLaborSnapshot Labor,
+    [property: JsonPropertyName("stations")] IReadOnlyList<PrototypeStationSnapshot> Stations);
 
 public sealed record SimulationRunResponse(
     [property: JsonPropertyName("event")] string Event,
