@@ -596,7 +596,15 @@ public partial class Main : Node2D
             DrawCircle(center, 9, new Color("#7f1d1d"));
             DrawGoblin(center, RaiderSpriteKey(raider));
             DrawHpBar(center + new Vector2(-7, 9), raider.Hp, PrototypeTuning.RaiderHp, new Color("#fb7185"));
-            DrawString(ThemeDB.FallbackFont, center + new Vector2(-9, -10), raider.Mode == RaiderMode.Downed ? "DOWN" : "R", HorizontalAlignment.Left, -1, 7, new Color("#fecaca"));
+            if (raider.Mode == RaiderMode.Downed)
+            {
+                DrawLine(center + new Vector2(-5, -5), center + new Vector2(5, 5), new Color("#f8fafc"), 2);
+                DrawLine(center + new Vector2(5, -5), center + new Vector2(-5, 5), new Color("#f8fafc"), 2);
+            }
+            else
+            {
+                DrawCircle(center + new Vector2(6, -6), 2, new Color("#fecaca"));
+            }
         }
 
         DrawZoneLabels();

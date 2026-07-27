@@ -54,12 +54,11 @@ if ($LASTEXITCODE -ne 0) {
 
 Initialize-GodotRuntimeEnvironment -RepositoryRoot $repoRoot
 
-$arguments = @(
-    "--path", $projectPath,
-    $(if (-not [string]::IsNullOrWhiteSpace($WindowSize)) { @("--resolution", $WindowSize) }),
-    "--",
-    "--fixture", $Fixture
-)
+$arguments = @("--path", $projectPath)
+if (-not [string]::IsNullOrWhiteSpace($WindowSize)) {
+    $arguments += "--resolution", $WindowSize
+}
+$arguments += "--", "--fixture", $Fixture
 if ($VisibleSmoke) {
     $arguments += "--visible-smoke"
 }
