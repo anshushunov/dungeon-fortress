@@ -326,7 +326,7 @@ public partial class Main : Node2D
 
         _summary = MakeLabel(new Vector2(18, 42), new Vector2(620, 45), 13, new Color("#bfdbfe"));
         _inspector = MakeLabel(new Vector2(664, 92), new Vector2(278, 278), 14, new Color("#e2e8f0"));
-        _feedback = MakeLabel(new Vector2(664, 388), new Vector2(278, 140), 12, new Color("#94a3b8"));
+        _feedback = MakeLabel(new Vector2(664, 396), new Vector2(278, 132), 12, new Color("#94a3b8"));
         _roster = MakeLabel(new Vector2(18, 474), new Vector2(620, 60), 10, new Color("#cbd5e1"));
     }
 
@@ -612,10 +612,29 @@ public partial class Main : Node2D
             {
                 var cell = new GridPoint(x, y);
                 var rect = new Rect2(CellTopLeft(cell), new Vector2(TileSize - 1, TileSize - 1));
-                DrawRect(rect, BaseTileColor(cell));
-                foreach (var zone in _state!.Zones.Where(pair => pair.Value.Contains(cell)).Select(pair => pair.Key))
+                if (_state!.Map.RockTiles.Contains(cell))
+                {
+                    // Rock fills the grid gap as well, so a wall reads as one
+                    // solid mass. Colour alone did not separate it from floor.
+                    DrawRect(
+                        new Rect2(CellTopLeft(cell), new Vector2(TileSize, TileSize)),
+                        BaseTileColor(cell));
+                }
+                else
+                {
+                    DrawRect(rect, BaseTileColor(cell));
+                }
+
+                foreach (var zone in _state.Zones.Where(pair => pair.Value.Contains(cell)).Select(pair => pair.Key))
                 {
                     DrawRect(rect.Grow(-3), ZoneColor(zone), false, 1.5f);
+                }
+
+                // While the dig brush is active every legal target is outlined,
+                // so the player never has to guess where a stroke would land.
+                if (_editMode == EditMode.Dig && _state.Map.DiggableTiles.Contains(cell))
+                {
+                    DrawRect(rect.Grow(-2), new Color("#fbbf24") with { A = 0.75f }, false, 1.0f);
                 }
 
                 if (_selectedCell == cell)
@@ -795,9 +814,10 @@ public partial class Main : Node2D
         DrawString(ThemeDB.FallbackFont, new Vector2(664, 332), "LEGEND", HorizontalAlignment.Left, -1, 9, new Color("#cbd5e1"));
         DrawString(ThemeDB.FallbackFont, new Vector2(664, 343), "teal crew / red-ring goblin / bar = HP / white X = downed", HorizontalAlignment.Left, -1, 7, new Color("#cbd5e1"));
         DrawString(ThemeDB.FallbackFont, new Vector2(664, 353), "purple QUARTERS: rest at fatigue 50+", HorizontalAlignment.Left, -1, 7, new Color("#c4b5fd"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 363), "amber X = dig mark / yellow bar = dig progress", HorizontalAlignment.Left, -1, 7, new Color("#fcd34d"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 373), "red X = unreachable / pale tile = new floor / gray dot = stone", HorizontalAlignment.Left, -1, 7, new Color("#fca5a5"));
-        DrawLine(new Vector2(664, 381), new Vector2(934, 381), new Color("#334155"), 1);
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 363), "light warm block = diggable rock / dark = map edge", HorizontalAlignment.Left, -1, 7, new Color("#d6d3d1"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 373), "amber X = dig mark / yellow bar = dig progress", HorizontalAlignment.Left, -1, 7, new Color("#fcd34d"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 383), "red X = unreachable / pale tile = new floor / gray dot = stone", HorizontalAlignment.Left, -1, 7, new Color("#fca5a5"));
+        DrawLine(new Vector2(664, 391), new Vector2(934, 391), new Color("#334155"), 1);
     }
 
     private bool TryHandleToolbarClick(Vector2 position)
@@ -1114,7 +1134,9 @@ public partial class Main : Node2D
         Advance(1);
         _editMode = EditMode.CancelDig;
         ApplyCancelDigBrush(new GridPoint(26, 3));
-        _editMode = EditMode.Inspect;
+        // Left holding the dig brush on purpose: the capture then also shows the
+        // outline every still-diggable tile gets while the brush is active.
+        _editMode = EditMode.Dig;
         _selectedCell = new GridPoint(25, 3);
         _selectedCreatureId = null;
         _controlFeedback =
@@ -1391,15 +1413,19 @@ public partial class Main : Node2D
     {
         // Rock is read from the snapshot, never from a hardcoded list: the map is
         // mutable canonical state and Godot only projects it.
+        //
+        // Rock is deliberately a warm stone grey, well above the cool blue floor
+        // in both hue and brightness: the earlier near-black rock was reported as
+        // indistinguishable from floor on the owner's display.
         if (_state!.Map.RockTiles.Contains(cell))
         {
             return _state.Map.DiggableTiles.Contains(cell)
-                ? new Color("#1f2937")
-                : new Color("#0b1220");
+                ? new Color("#6b6157")
+                : new Color("#2a2522");
         }
 
         // Freshly excavated ground reads as new: brighter than the original floor.
-        if (_state.Map.ExcavatedTiles.Contains(cell)) return new Color("#3d5570");
+        if (_state.Map.ExcavatedTiles.Contains(cell)) return new Color("#3b5a7a");
 
         if (_state!.Beds.Any(bed => bed.Position == cell)) return new Color("#31572c");
         if (_state.Stations.Any(station => station.Position == cell && station.Kind == TileKind.Kitchen)) return new Color("#7c4a22");

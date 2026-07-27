@@ -82,13 +82,20 @@ Reading the map without the log:
 
 | Reading | What it means |
 |---|---|
-| dark tile, no marks | plain rock |
+| light warm block filling the whole cell, no grid gap | diggable internal rock |
+| dark warm block | the map boundary; it is never diggable |
+| amber outline on every rock cell | shown only while the `DIG` brush is active: these are the legal targets of a stroke |
 | amber tile with an X | designated and reachable, or reserved by a worker |
 | amber fill rising from the bottom plus a yellow bar | excavation in progress |
 | red tile with an X | designated but no free neighbouring floor to work from |
 | gray tile with an X | designated while the `Dig` priority is 0 |
 | pale blue tile | floor created by excavation |
 | gray dot with a dark rim | loose stone left by a finished dig |
+
+Rock is drawn as a gapless warm block, well above the cool blue floor in both
+hue and brightness, and it fills the 1px grid gap so a wall reads as one solid
+mass. The first attempt used a near-black rock that owner playtest reported as
+indistinguishable from floor.
 
 The cell inspector states whether the tile is diggable, why it is not, who chose
 the job, which neighbouring tile they work from, the tick progress, and the
@@ -106,8 +113,9 @@ consumption yet; that is the next step of Issue #23.
 
 `--demo-dig` replays a fixed brush session through the same code path a human
 uses: `DIG` marks `(25,1) (25,2) (25,3) (26,1)`, then `CANCEL DIG` withdraws
-`(26,3)`. Combined with `--screenshot-ticks` it captures the before, during and
-after frames:
+`(26,3)`. It deliberately ends holding the `DIG` brush, so the capture also shows
+the outline every still-diggable tile gets. Combined with `--screenshot-ticks` it
+captures the before, during and after frames:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
