@@ -1,11 +1,10 @@
-# Godot graybox — Phase A
+# Godot graybox — Prototype 1
 
 Status: active
-Source: Issue #10, Phase A
+Source: Issues #10–#12
 
-The Phase A graybox is the visual, top-down projection of the headless
-Prototype 1 economy. It starts with the `baseline` gameplay-v2 fixture and is
-intentionally a small visual checkpoint before zone painting and command-log UI.
+The graybox is the visual, top-down projection of the headless Prototype 1
+economy and raid. It starts with the `baseline` gameplay-v2 fixture.
 
 ## Run
 
@@ -93,7 +92,6 @@ automation.
 rules, jobs, creatures, economy, event log and canonical checksum. Godot reads
 only `GetSnapshot()` and owns only rendering, hit-testing selection and the
 non-canonical time controls. No Node stores an alternative job, creature or
-economy state, and no Phase A input sends a direct creature command.
-
-Phase A deliberately does not include zone painting, priority/rule editing,
-replay UI, combat, art assets, animation or Ivan runtime integration.
+economy state, and no input sends a direct creature command. It remains a
+graybox: art assets, animation, production onboarding and Ivan runtime
+integration are outside Prototype 1.
