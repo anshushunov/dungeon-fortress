@@ -2241,7 +2241,10 @@ public sealed class PrototypeWorld
         }
 
         var available = LooseAt(job.Origin, ResourceKind.Stone);
-        var quantity = Math.Min(job.Quantity, available);
+        // Never lift more than the destination is holding room for. A replan can
+        // shrink the booking below the quantity the job was created with, and
+        // lifting the old quantity would let this job over-book the new cell.
+        var quantity = Math.Min(Math.Min(job.Quantity, available), job.StoreReserved);
         if (quantity <= 0)
         {
             ReleaseStoreReservation(job);
@@ -2282,7 +2285,10 @@ public sealed class PrototypeWorld
             _zones[ZoneKind.MaterialStockpile].Contains(target)
                 ? Math.Max(0, PrototypeTuning.StockpileCellCapacity - StoredStoneAt(target))
                 : 0;
-        var delivered = Math.Min(free, carried);
+        // Bounded by the booking as well as by the room: a carrier whose booking
+        // was shrunk by a replan must not spend the slot another job is holding.
+        // Whatever it cannot put away is set down here, so nothing is lost.
+        var delivered = Math.Min(Math.Min(free, carried), job.StoreReserved);
         if (delivered > 0)
         {
             var cell = job.StoreCell!.Value;
@@ -2958,6 +2964,12 @@ public sealed class PrototypeWorld
                 if (job.PickedUp)
                 {
                     job.Target = replacement;
+                }
+                else
+                {
+                    // Keep the job's intent equal to what it may actually deliver,
+                    // so the pile is not half-lifted and then put straight back.
+                    job.Quantity = amount;
                 }
 
                 if (carrier is not null)

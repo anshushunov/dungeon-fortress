@@ -496,6 +496,122 @@ public sealed class PrototypeStoneHaulTests
         Assert.All(final.StockpileCells, cell => Assert.Equal("stockpile_full", cell.StatusCode));
     }
 
+    /// <summary>
+    /// The capacity test above never loses a destination, so it cannot reach the
+    /// replan path. This one churns the zone — erase a full cell, repaint it, then
+    /// take a booked destination away under a live carrier and give it back — and
+    /// holds the booking invariants on every tick of a full session.
+    ///
+    /// It guards the replan path found in review, where a shrunken booking used to
+    /// let a job lift or deposit its original quantity and over-book a cell. The
+    /// shrink itself needs a two-stone load meeting a cell with exactly one free
+    /// slot; that combination is not reachable from any command log this step can
+    /// write, so the clamps in PickUpStone/StoreCarriedStone stay defensive and
+    /// only their consequence — the capacity invariant — is asserted here.
+    /// </summary>
+    [Fact]
+    public void Bookings_survive_zone_churn_without_oversubscribing_a_cell()
+    {
+        // Erasing a filled cell spills a pile bigger than any single dig produces,
+        // which is the only way a job's quantity can exceed one cell's capacity.
+        var fullTick = -1;
+        var filled = default(GridPoint);
+        var fillScout = new PrototypeWorld(FullChain());
+        while (!fillScout.IsComplete && fullTick < 0)
+        {
+            fillScout.Step();
+            var cell = fillScout.GetSnapshot().StockpileCells.FirstOrDefault(
+                item => item.Stored >= PrototypeTuning.StockpileCellCapacity);
+            if (cell is not null)
+            {
+                fullTick = fillScout.CurrentTick;
+                filled = cell.Position;
+            }
+        }
+
+        Assert.True(fullTick > 0, "No stockpile cell ever filled up.");
+        var churn = Log(
+            new DigDesignateCommand(0, Pocket),
+            new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [StockLeft, StockRight]),
+            new ZoneEraseCommand(fullTick, ZoneKind.MaterialStockpile, [filled]),
+            new ZonePaintCommand(fullTick + 8, ZoneKind.MaterialStockpile, [filled]));
+
+        // Scouted rather than guessed: taking the destination away at a tick where
+        // nothing is booked would leave the replan path untested.
+        var bookedTick = -1;
+        var doomed = default(GridPoint);
+        var scout = new PrototypeWorld(churn);
+        while (!scout.IsComplete && bookedTick < 0)
+        {
+            scout.Step();
+            var state = scout.GetSnapshot();
+            if (state.Tick <= fullTick + 8)
+            {
+                continue;
+            }
+
+            var booking = StoneJobs(state).FirstOrDefault(job => job.StoreCell is not null);
+            if (booking is not null)
+            {
+                bookedTick = state.Tick;
+                doomed = booking.StoreCell!.Value;
+            }
+        }
+
+        Assert.True(bookedTick > 0, "No stone haul ever booked a cell after the churn.");
+
+        var world = new PrototypeWorld(
+            Log(
+                new DigDesignateCommand(0, Pocket),
+                new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [StockLeft, StockRight]),
+                new ZoneEraseCommand(fullTick, ZoneKind.MaterialStockpile, [filled]),
+                new ZonePaintCommand(fullTick + 8, ZoneKind.MaterialStockpile, [filled]),
+                new ZonePaintCommand(bookedTick, ZoneKind.Forbidden, [doomed]),
+                new ZoneEraseCommand(bookedTick + 40, ZoneKind.Forbidden, [doomed])));
+        var sawReplan = false;
+        var sawBooking = false;
+
+        while (!world.IsComplete)
+        {
+            world.Step();
+            var state = world.GetSnapshot();
+
+            foreach (var cell in state.StockpileCells)
+            {
+                Assert.True(
+                    cell.Stored + cell.IncomingReserved <= cell.Capacity,
+                    $"t{state.Tick} cell ({cell.Position.X},{cell.Position.Y}) " +
+                    $"stored={cell.Stored} incoming={cell.IncomingReserved} " +
+                    $"capacity={cell.Capacity}");
+            }
+
+            foreach (var job in StoneJobs(state).Where(job => job.PickedUp))
+            {
+                var carrier = state.Creatures.Single(
+                    creature => creature.Id == job.ReservedBy);
+                // A carrier may hold more than it can still put away after a
+                // replan, but it must never hold a booking bigger than its load.
+                Assert.True(
+                    job.StoreReserved <= carrier.CarryAmount,
+                    $"t{state.Tick} job #{job.JobId} booked {job.StoreReserved} " +
+                    $"while carrying {carrier.CarryAmount}");
+            }
+
+            Assert.Equal(
+                state.Economy.StoneProduced,
+                state.Stocks.LooseStone + state.Stocks.CarriedStone + state.Stocks.StoredStone);
+
+            sawBooking |= StoneJobs(state).Any(job => job.StoreReserved > 0);
+            sawReplan |= state.Events.Any(
+                @event => @event.ReasonCode == "stone_target_replanned");
+        }
+
+        // Without these the test would pass while protecting nothing.
+        Assert.True(sawBooking, "The churn never produced a booked stockpile slot.");
+        Assert.True(sawReplan, "The churn never forced a haul to replan its destination.");
+        Assert.Equal(Pocket.Length, world.GetSnapshot().Economy.StoneProduced);
+    }
+
     [Fact]
     public void A_stockpile_smaller_than_the_stone_leaves_the_remainder_loose_and_explains_why()
     {
