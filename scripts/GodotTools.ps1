@@ -164,6 +164,35 @@ function Initialize-GodotRuntimeEnvironment {
     New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA | Out-Null
 }
 
+function Import-GodotProjectAssets {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$GodotPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ProjectPath
+    )
+
+    $resolvedProjectPath = [IO.Path]::GetFullPath($ProjectPath)
+    $projectFile = Join-Path $resolvedProjectPath "project.godot"
+    if (-not (Test-Path -LiteralPath $projectFile -PathType Leaf)) {
+        throw "Godot asset import preflight requires project.godot at '$resolvedProjectPath'."
+    }
+
+    # Godot's editor import pass is incremental: on an up-to-date project this
+    # exits without rebuilding assets, while a fresh checkout gets its required
+    # .godot/imported entries before ResourceLoader is used at runtime.
+    Write-Host "Importing Godot project assets (incremental)..."
+    $result = Invoke-GodotChecked `
+        -GodotPath $GodotPath `
+        -Arguments @("--headless", "--editor", "--quit", "--path", $resolvedProjectPath)
+
+    if ($result.ExitCode -ne 0) {
+        throw "Godot asset import preflight failed for '$resolvedProjectPath'. Run the command above with --editor output and fix the reported import error."
+    }
+}
+
 function Resolve-RepositoryArtifactPath {
     [CmdletBinding()]
     [OutputType([string])]
@@ -296,6 +325,35 @@ function Invoke-GodotChecked {
         ExitCode = $exitCode
         Output = $output
         EngineErrorCount = 0
+    }
+}
+
+function Assert-GoblinSpriteDiagnostics {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$OutputLines,
+
+        [Parameter(Mandatory = $true)]
+        [string]$EventName
+    )
+
+    $eventPattern = '"event":"' + [Regex]::Escape($EventName) + '"'
+    $resultLine = $OutputLines | Where-Object {
+        $_ -match $eventPattern -and $_ -match '"status":"ok"'
+    } | Select-Object -Last 1
+    if ($null -eq $resultLine) {
+        throw "Cannot validate goblin sprite diagnostics: '$EventName' success output is missing."
+    }
+
+    $result = ([string]$resultLine | ConvertFrom-Json)
+    $loaded = @($result.loadedSpriteStates)
+    $missing = @($result.missingSpriteStates)
+    $fallbacks = [int]$result.fallbackSpriteDraws
+    $required = @("idle", "work", "combat", "downed")
+    $missingRequired = @($required | Where-Object { $_ -notin $loaded })
+    if ($missingRequired.Count -gt 0 -or $missing.Count -gt 0 -or $fallbacks -ne 0) {
+        throw "Goblin sprite diagnostics failed: loaded=[$($loaded -join ',')], missing=[$($missing -join ',')], fallbackSpriteDraws=$fallbacks."
     }
 }
 

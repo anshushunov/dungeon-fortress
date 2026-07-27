@@ -15,6 +15,11 @@ Godot 4.7.1 .NET is required as described in
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1
 ```
 
+The launcher first runs Godot's incremental headless asset-import pass. This is
+automatic and creates the worktree-local `.godot/imported` cache required for
+generated goblin sprites in a clean checkout; it is a no-op when that cache is
+current.
+
 The default is `baseline`. To contrast the starvation-prone setup:
 
 ```powershell
@@ -80,9 +85,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -ScreenshotPath visual\graybox-baseline-t180.png
 ```
 
-The result includes fixture, seed, tick, canonical checksum and PNG path. The
-path must be relative and is always resolved below `.artifacts/`; rooted and
-traversal paths are rejected. Do not commit the image. `--smoke` and
+The result includes fixture, seed, tick, canonical checksum, PNG path,
+`loadedSpriteStates` and `fallbackSpriteDraws`. Visual smoke requires all four
+goblin states and zero fallback draws. The path must be relative and is always
+resolved below `.artifacts/`; rooted and traversal paths are rejected. Do not
+commit the image. `--smoke` and
 `--visible-smoke` continue to report structured runtime diagnostics for
 automation.
 

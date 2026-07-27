@@ -22,6 +22,7 @@ $gameProjectPath = Join-Path $repoRoot "src\DungeonFortress.Game"
 $gameProjectFile = Join-Path $gameProjectPath "DungeonFortress.Game.csproj"
 $guardTestScript = Join-Path $repoRoot "scripts\test-godot-output-guard.ps1"
 $screenshotOutputPathTestScript = Join-Path $repoRoot "scripts\test-screenshot-output-path.ps1"
+$goblinImportTestScript = Join-Path $repoRoot "scripts\test-goblin-sprite-import.ps1"
 $ivanMcpConfigTestScript = Join-Path $repoRoot "scripts\test-ivan-mcp-config.ps1"
 $domainMcpVerificationScript = Join-Path $repoRoot "scripts\verify-domain-mcp.ps1"
 
@@ -157,6 +158,11 @@ try {
         "build", $gameProjectFile, "--configuration", "Debug", "--no-restore"
     )
 
+    Invoke-Checked -FilePath "powershell" -Arguments @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $goblinImportTestScript,
+        "-GodotPath", $godot
+    )
+
     if (-not (Test-Path -LiteralPath $scenarioAssembly -PathType Leaf)) {
         Invoke-Checked -FilePath "dotnet" -Arguments @(
             "build", $scenarioProject, "--configuration", "Release", "--no-restore"
@@ -188,6 +194,7 @@ try {
 
     Write-Host "Running Godot headless smoke..."
     Initialize-GodotRuntimeEnvironment -RepositoryRoot $repoRoot
+    Import-GodotProjectAssets -GodotPath $godot -ProjectPath $gameProjectPath
     $godotResult = Invoke-GodotChecked `
         -GodotPath $godot `
         -Arguments @(
@@ -204,6 +211,18 @@ try {
         ) `
         -ExpectedSuccessEvent "godot_controls_smoke"
     $raidScreenshot = Join-Path $verifyRoot "prepared-raid.png"
+    $baselineScreenshot = Join-Path $verifyRoot "baseline-t1.png"
+    $baselineResult = Invoke-GodotChecked `
+        -GodotPath $godot `
+        -Arguments @(
+            "--path", $gameProjectPath,
+            "--", "--fixture", "baseline", "--screenshot", $baselineScreenshot, "--screenshot-ticks", "1"
+        ) `
+        -ExpectedSuccessEvent "godot_graybox_screenshot"
+    Assert-GoblinSpriteDiagnostics -OutputLines $baselineResult.Output -EventName "godot_graybox_screenshot"
+    if (-not (Test-Path -LiteralPath $baselineScreenshot -PathType Leaf)) {
+        throw "Baseline visual smoke did not write its screenshot."
+    }
     $raidResult = Invoke-GodotChecked `
         -GodotPath $godot `
         -Arguments @(
@@ -211,6 +230,7 @@ try {
             "--", "--fixture", "prepared", "--screenshot", $raidScreenshot, "--screenshot-ticks", "1540"
         ) `
         -ExpectedSuccessEvent "godot_graybox_screenshot"
+    Assert-GoblinSpriteDiagnostics -OutputLines $raidResult.Output -EventName "godot_graybox_screenshot"
     if (-not (Test-Path -LiteralPath $raidScreenshot -PathType Leaf)) {
         throw "Prepared raid smoke did not write its screenshot."
     }

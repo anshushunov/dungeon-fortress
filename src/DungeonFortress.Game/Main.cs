@@ -25,6 +25,8 @@ public partial class Main : Node2D
     private readonly List<RuntimeDiagnostic> _diagnostics = [];
     private readonly Dictionary<int, Label> _nameLabels = [];
     private readonly Dictionary<string, Texture2D> _goblinSprites = [];
+    private readonly List<string> _loadedSpriteStates = [];
+    private readonly List<string> _missingSpriteStates = [];
     private PrototypeWorld? _world;
     private PrototypeSnapshot? _state;
     private Label? _summary;
@@ -54,6 +56,7 @@ public partial class Main : Node2D
     private double _tickAccumulator;
     private string _checksum = string.Empty;
     private int _screenshotFramesRemaining;
+    private int _fallbackSpriteDraws;
 
     public override void _Ready()
     {
@@ -69,9 +72,14 @@ public partial class Main : Node2D
             var visibleSmoke = arguments.Contains("--visible-smoke", StringComparer.Ordinal);
             var controlsSmoke = arguments.Contains("--smoke-controls", StringComparer.Ordinal);
             var demoControls = arguments.Contains("--demo-controls", StringComparer.Ordinal);
+            var requiresSprites = !headlessSmoke && !controlsSmoke;
 
             CreateHud();
             LoadGoblinSprites();
+            if (requiresSprites)
+            {
+                AssertRequiredSpritesLoaded();
+            }
             LoadFixture(fixture, demoControls || controlsSmoke || _screenshotPath is null ? 1 : screenshotTicks);
             if (demoControls || controlsSmoke)
             {
@@ -312,8 +320,25 @@ public partial class Main : Node2D
             if (ResourceLoader.Exists(path) && GD.Load<Texture2D>(path) is { } texture)
             {
                 _goblinSprites.Add(state, texture);
+                _loadedSpriteStates.Add(state);
+            }
+            else
+            {
+                _missingSpriteStates.Add(state);
             }
         }
+    }
+
+    private void AssertRequiredSpritesLoaded()
+    {
+        if (_missingSpriteStates.Count == 0)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            "Required goblin sprites could not be loaded: " + string.Join(", ", _missingSpriteStates) +
+            ". Run scripts/run-game.ps1 so its Godot asset-import preflight can create the local .godot/import cache.");
     }
 
     private Label MakeLabel(Vector2 position, Vector2 size, int fontSize, Color color)
@@ -883,6 +908,9 @@ public partial class Main : Node2D
                 tick = _state!.Tick,
                 checksum = _checksum,
                 path = resolved,
+                loadedSpriteStates = _loadedSpriteStates,
+                missingSpriteStates = _missingSpriteStates,
+                fallbackSpriteDraws = _fallbackSpriteDraws,
                 runtimeDiagnostics = _diagnostics,
             }));
         }
@@ -915,6 +943,9 @@ public partial class Main : Node2D
             tick = _state?.Tick,
             checksum = _checksum,
             canonicalStateOwner = "DungeonFortress.Simulation.PrototypeWorld",
+            loadedSpriteStates = _loadedSpriteStates,
+            missingSpriteStates = _missingSpriteStates,
+            fallbackSpriteDraws = _fallbackSpriteDraws,
             runtimeDiagnostics = _diagnostics,
             errorType = exception?.GetType().Name,
             message = exception?.Message,
@@ -1124,6 +1155,7 @@ public partial class Main : Node2D
         }
 
         // Missing exploratory art must not prevent a deterministic playable build.
+        _fallbackSpriteDraws++;
         DrawCircle(center, 6, new Color("#84cc16"));
     }
 
