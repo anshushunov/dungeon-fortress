@@ -8,7 +8,9 @@ param(
     [int]$ScreenshotTicks = 180,
     [int]$SelectCreature = -1,
     [switch]$DemoControls,
-    [switch]$VisibleSmoke
+    [switch]$VisibleSmoke,
+    [ValidatePattern("^\d{3,5}x\d{3,5}$")]
+    [string]$WindowSize
 )
 
 Set-StrictMode -Version Latest
@@ -54,6 +56,7 @@ Initialize-GodotRuntimeEnvironment -RepositoryRoot $repoRoot
 
 $arguments = @(
     "--path", $projectPath,
+    $(if (-not [string]::IsNullOrWhiteSpace($WindowSize)) { @("--resolution", $WindowSize) }),
     "--",
     "--fixture", $Fixture
 )

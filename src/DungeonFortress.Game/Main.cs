@@ -24,6 +24,7 @@ public partial class Main : Node2D
 
     private readonly List<RuntimeDiagnostic> _diagnostics = [];
     private readonly Dictionary<int, Label> _nameLabels = [];
+    private readonly Dictionary<string, Texture2D> _goblinSprites = [];
     private PrototypeWorld? _world;
     private PrototypeSnapshot? _state;
     private Label? _summary;
@@ -42,6 +43,10 @@ public partial class Main : Node2D
     private string? _screenshotPath;
     private int? _selectedCreatureId;
     private GridPoint? _selectedCell;
+    private int? _hoverCreatureId;
+    private GridPoint? _hoverCell;
+    private GridPoint? _lastBrushCell;
+    private bool _brushPointerDown;
     private bool _paused = true;
     private bool _visibleSmoke;
     private double _visibleSmokeElapsed;
@@ -66,6 +71,7 @@ public partial class Main : Node2D
             var demoControls = arguments.Contains("--demo-controls", StringComparer.Ordinal);
 
             CreateHud();
+            LoadGoblinSprites();
             LoadFixture(fixture, demoControls || controlsSmoke || _screenshotPath is null ? 1 : screenshotTicks);
             if (demoControls || controlsSmoke)
             {
@@ -159,37 +165,43 @@ public partial class Main : Node2D
 
     public override void _Input(InputEvent @event)
     {
-        if (@event is not InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } click)
+        switch (@event)
         {
-            return;
-        }
+            case InputEventMouseMotion motion:
+                UpdatePointer(motion.Position);
+                if (_brushPointerDown && _editMode != EditMode.Inspect)
+                {
+                    ApplyBrushAt(motion.Position);
+                }
+                break;
 
-        if (TryHandleToolbarClick(click.Position))
-        {
-            return;
-        }
+            case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true }:
+                CancelBrush("right-click");
+                break;
 
-        var cell = ToCell(click.Position);
-        if (cell is not { } selected || !IsMapCell(selected))
-        {
-            return;
-        }
+            case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
+                _brushPointerDown = false;
+                _lastBrushCell = null;
+                break;
 
-        if (_editMode != EditMode.Inspect)
-        {
-            TryApplyPlayerCommand(_editMode == EditMode.Paint
-                ? new ZonePaintCommand(_state!.Tick, _brushZone, [selected])
-                : new ZoneEraseCommand(_state!.Tick, _brushZone, [selected]));
-            return;
-        }
+            case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click:
+                UpdatePointer(click.Position);
+                if (TryHandleToolbarClick(click.Position))
+                {
+                    return;
+                }
 
-        _selectedCell = selected;
-        _selectedCreatureId = _state!.Creatures
-            .Where(creature => creature.Position == selected)
-            .Select(creature => (int?)creature.Id)
-            .FirstOrDefault();
-        UpdateHud();
-        QueueRedraw();
+                if (_editMode == EditMode.Inspect)
+                {
+                    SelectAt(click.Position);
+                    return;
+                }
+
+                _brushPointerDown = true;
+                _lastBrushCell = null;
+                ApplyBrushAt(click.Position);
+                break;
+        }
     }
 
     public override void _UnhandledKeyInput(InputEvent @event)
@@ -227,8 +239,7 @@ public partial class Main : Node2D
                 LoadFixture("neglected", 1);
                 break;
             case Key.I:
-                _editMode = EditMode.Inspect;
-                RefreshState();
+                CancelBrush("I");
                 break;
             case Key.B:
                 _editMode = EditMode.Paint;
@@ -262,6 +273,9 @@ public partial class Main : Node2D
             case Key.Y:
                 ReplayCurrentLog();
                 break;
+            case Key.Escape:
+                CancelBrush("Esc");
+                break;
         }
     }
 
@@ -288,6 +302,18 @@ public partial class Main : Node2D
         _inspector = MakeLabel(new Vector2(664, 92), new Vector2(278, 278), 14, new Color("#e2e8f0"));
         _feedback = MakeLabel(new Vector2(664, 388), new Vector2(278, 140), 12, new Color("#94a3b8"));
         _roster = MakeLabel(new Vector2(18, 474), new Vector2(620, 60), 10, new Color("#cbd5e1"));
+    }
+
+    private void LoadGoblinSprites()
+    {
+        foreach (var state in new[] { "idle", "work", "combat", "downed" })
+        {
+            var path = $"res://assets/generated/goblins/goblin_{state}_v1.png";
+            if (ResourceLoader.Exists(path) && GD.Load<Texture2D>(path) is { } texture)
+            {
+                _goblinSprites.Add(state, texture);
+            }
+        }
     }
 
     private Label MakeLabel(Vector2 position, Vector2 size, int fontSize, Color color)
@@ -355,8 +381,17 @@ public partial class Main : Node2D
                 _nameLabels.Add(creature.Id, label);
             }
 
-            label.Text = creature.Name;
-            label.Position = CellTopLeft(creature.Position) + new Vector2(8, 13);
+            // A name per overlapping creature made the economy unreadable. Names are
+            // now an intentional inspection affordance: selected or hovered only.
+            var visible = creature.Id == _selectedCreatureId || creature.Id == _hoverCreatureId;
+            label.Visible = visible;
+            if (!visible)
+            {
+                continue;
+            }
+
+            label.Text = $"{creature.Name} {CreatureStateShort(creature)}";
+            label.Position = CellTopLeft(creature.Position) + new Vector2(2, -14);
         }
     }
 
@@ -370,6 +405,12 @@ public partial class Main : Node2D
             $"  ·  meals {stock.Meals}+{stock.LooseMeals}  ·  jobs {_state.Jobs.Count}  ·  checksum {_checksum[..12]}…";
 
         _inspector!.Text = BuildInspectorText();
+        // Keep the top line deliberately short: this remains legible at both
+        // supported capture sizes instead of flowing into the control strip.
+        _summary.Text =
+            $"{_fixture.ToUpperInvariant()}  •  t{_state.Tick}  •  {(_paused ? "PAUSED" : $"{_speed:0.#}x")}" +
+            $"\n{RaidPhase()}  •  food {stock.Meals}+{stock.LooseMeals}  •  raw {stock.RawMushroom}+{stock.LooseRawMushroom}" +
+            $"  •  jobs {_state.Jobs.Count}  •  {_checksum[..8]}";
         var eventText = _state.Events.Count == 0
             ? "EVENT FEEDBACK\nNo events yet. Step or unpause to watch autonomous choices."
             : string.Join(
@@ -382,6 +423,9 @@ public partial class Main : Node2D
         _roster!.Text = "CREW · " + string.Join("   ·   ", _state.Creatures.Select(creature => creature.Name));
         _roster.Text += "\nINDIRECT: " + _controlFeedback;
         _roster.Text += "\nLOG " + (_playerCommands.Count == 0 ? "empty" : string.Join(" | ", _playerCommands.TakeLast(2).Select(DescribeCommand)));
+        _roster.Text = "CREW  " + string.Join("  •  ", _state.Creatures.Select(creature => $"{creature.Name} {CreatureStateShort(creature)}")) +
+            "\n" + _controlFeedback +
+            "\nLOG " + (_playerCommands.Count == 0 ? "empty" : string.Join(" | ", _playerCommands.TakeLast(2).Select(DescribeCommand)));
     }
 
     private string BuildInspectorText()
@@ -389,12 +433,17 @@ public partial class Main : Node2D
         if (_selectedCreatureId is { } creatureId)
         {
             var creature = _state!.Creatures.Single(item => item.Id == creatureId);
+            creature = creature with
+            {
+                Name = $"{creature.Name} — {CreatureLifeState(creature)} HP {creature.Hp}/{creature.MaxHp}",
+            };
             var job = creature.CurrentJobId is { } jobId
                 ? _state.Jobs.SingleOrDefault(item => item.JobId == jobId)
                 : null;
             var details = creature.LastDecision.Details.Count == 0
                 ? "none"
                 : string.Join(", ", creature.LastDecision.Details.Select(pair => $"{pair.Key}={pair.Value}"));
+            details = $"STATUS {CreatureLifeState(creature)} • HP {creature.Hp}/{creature.MaxHp}\n" + details;
             return
                 $"CREATURE #{creature.Id} · {creature.Name}\n\n" +
                 $"satiety {creature.Satiety}   fatigue {creature.Fatigue}\n" +
@@ -412,6 +461,10 @@ public partial class Main : Node2D
                 .Where(pair => pair.Value.Contains(cell))
                 .Select(pair => pair.Key.ToString())
                 .ToArray();
+            if (zones.Contains(nameof(ZoneKind.Quarters), StringComparer.Ordinal))
+            {
+                zones = zones.Append("QUARTERS: rest only at fatigue 50+, free bunk").ToArray();
+            }
             var jobs = _state.Jobs.Where(job => job.Origin == cell || job.Target == cell).ToArray();
             return
                 $"CELL ({cell.X}, {cell.Y})\n\n" +
@@ -458,6 +511,14 @@ public partial class Main : Node2D
         DrawRect(new Rect2(18, 96, 626, 20), new Color("#102338"));
         var text = $"{_editMode.ToString().ToUpperInvariant()} [I/B/E]  zone={_brushZone} [Z]  job={_selectedJob} {_state!.Priorities[_selectedJob]} [J +/-]  rule={RuleIds[_selectedRule]}={_state.Rules[RuleIds[_selectedRule]]} [K +/-]  replay [Y]";
         DrawString(ThemeDB.FallbackFont, new Vector2(22, 110), text, HorizontalAlignment.Left, -1, 10, new Color("#bae6fd"));
+        DrawRect(new Rect2(18, 96, 626, 20), new Color("#102338"));
+        var mode = _editMode switch
+        {
+            EditMode.Paint => $"PAINT {_brushZone} — click/drag map • Esc/right-click: Inspect",
+            EditMode.Erase => $"ERASE {_brushZone} — click/drag map • Esc/right-click: Inspect",
+            _ => "INSPECT — hover for name, click creature/cell • B paint • E erase",
+        };
+        DrawString(ThemeDB.FallbackFont, new Vector2(22, 110), mode, HorizontalAlignment.Left, -1, 10, _editMode == EditMode.Inspect ? new Color("#bae6fd") : new Color("#fef08a"));
     }
 
     private void DrawMap()
@@ -503,15 +564,21 @@ public partial class Main : Node2D
         foreach (var creature in _state.Creatures)
         {
             var center = CellCenter(creature.Position);
-            var color = CreatureColors[creature.Id];
-            if (creature.Id % 2 == 0)
+            var color = DefenderColor(creature);
+            if (creature.Mode == CreatureMode.Downed)
             {
-                DrawCircle(center, 7, color);
+                DrawCircle(center, 8, new Color("#475569"));
+                DrawLine(center + new Vector2(-5, -5), center + new Vector2(5, 5), new Color("#f8fafc"), 2);
+                DrawLine(center + new Vector2(5, -5), center + new Vector2(-5, 5), new Color("#f8fafc"), 2);
             }
             else
             {
-                DrawRect(new Rect2(center - new Vector2(6, 6), new Vector2(12, 12)), color);
+                DrawCircle(center, 6, color);
+                DrawCircle(center + new Vector2(0, -2), 2, new Color("#e0f2fe"));
             }
+
+            DrawHpBar(center + new Vector2(-7, 8), creature.Hp, creature.MaxHp, color);
+            DrawCircle(center + new Vector2(7, -7), 2.25f, CreatureStateColor(creature));
 
             if (_selectedCreatureId == creature.Id)
             {
@@ -526,12 +593,20 @@ public partial class Main : Node2D
 
         foreach (var raider in _state.Raiders)
         {
-            if (raider.Mode is RaiderMode.Downed or RaiderMode.Escaped) continue;
+            if (raider.Mode == RaiderMode.Escaped) continue;
             var center = CellCenter(raider.Position);
-            DrawCircle(center, 8, new Color("#ef4444"));
-            DrawString(ThemeDB.FallbackFont, center + new Vector2(-7, -10), $"R{raider.Id}", HorizontalAlignment.Left, -1, 9, new Color("#fecaca"));
-            DrawRect(new Rect2(center + new Vector2(-7, 9), new Vector2(14, 3)), new Color("#450a0a"));
-            DrawRect(new Rect2(center + new Vector2(-7, 9), new Vector2(14 * raider.Hp / PrototypeTuning.RaiderHp, 3)), new Color("#f87171"));
+            DrawCircle(center, 9, new Color("#7f1d1d"));
+            DrawGoblin(center, RaiderSpriteKey(raider));
+            DrawHpBar(center + new Vector2(-7, 9), raider.Hp, PrototypeTuning.RaiderHp, new Color("#fb7185"));
+            DrawString(ThemeDB.FallbackFont, center + new Vector2(-9, -10), raider.Mode == RaiderMode.Downed ? "DOWN" : "R", HorizontalAlignment.Left, -1, 7, new Color("#fecaca"));
+        }
+
+        DrawZoneLabels();
+        if (_editMode != EditMode.Inspect && _hoverCell is { } brushCell && IsMapCell(brushCell))
+        {
+            var preview = new Rect2(CellTopLeft(brushCell), new Vector2(TileSize - 1, TileSize - 1));
+            DrawRect(preview.Grow(-1), ZoneColor(_brushZone) with { A = 0.32f });
+            DrawRect(preview.Grow(-1), new Color("#f8fafc"), false, 1.5f);
         }
     }
 
@@ -540,6 +615,10 @@ public partial class Main : Node2D
         DrawRect(new Rect2(654, 74, 290, 456), new Color("#0f1d2d"));
         DrawRect(new Rect2(654, 74, 290, 456), new Color("#334155"), false, 1);
         DrawString(ThemeDB.FallbackFont, new Vector2(664, 88), "STATE / WHY", HorizontalAlignment.Left, -1, 13, new Color("#93c5fd"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 334), "BATTLE", HorizontalAlignment.Left, -1, 9, new Color("#cbd5e1"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 345), "teal crew  /  red-ring goblin", HorizontalAlignment.Left, -1, 8, new Color("#cbd5e1"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 356), "bar = HP  /  white X = downed", HorizontalAlignment.Left, -1, 8, new Color("#cbd5e1"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 367), "purple QUARTERS: rest at fatigue 50+", HorizontalAlignment.Left, -1, 7, new Color("#c4b5fd"));
         DrawLine(new Vector2(664, 377), new Vector2(934, 377), new Color("#334155"), 1);
     }
 
@@ -573,6 +652,63 @@ public partial class Main : Node2D
         else if (position.X is >= 518 and < 644) LoadFixture("neglected", 1);
         else return false;
         return true;
+    }
+
+    private void UpdatePointer(Vector2 position)
+    {
+        _hoverCell = ToCell(position) is { } cell && IsMapCell(cell) ? cell : null;
+        _hoverCreatureId = _hoverCell is { } hovered
+            ? _state!.Creatures.FirstOrDefault(creature => creature.Position == hovered)?.Id
+            : null;
+        UpdateCreatureLabels();
+        QueueRedraw();
+    }
+
+    private void SelectAt(Vector2 position)
+    {
+        var cell = ToCell(position);
+        if (cell is not { } selected || !IsMapCell(selected))
+        {
+            return;
+        }
+
+        _selectedCell = selected;
+        _selectedCreatureId = _state!.Creatures
+            .Where(creature => creature.Position == selected)
+            .Select(creature => (int?)creature.Id)
+            .FirstOrDefault();
+        UpdateHud();
+        UpdateCreatureLabels();
+        QueueRedraw();
+    }
+
+    private void ApplyBrushAt(Vector2 position)
+    {
+        var cell = ToCell(position);
+        if (cell is not { } selected || !IsMapCell(selected))
+        {
+            return;
+        }
+
+        if (_lastBrushCell == selected)
+        {
+            return;
+        }
+
+        _lastBrushCell = selected;
+
+        TryApplyPlayerCommand(_editMode == EditMode.Paint
+            ? new ZonePaintCommand(_state!.Tick, _brushZone, [selected])
+            : new ZoneEraseCommand(_state!.Tick, _brushZone, [selected]));
+    }
+
+    private void CancelBrush(string source)
+    {
+        _editMode = EditMode.Inspect;
+        _brushPointerDown = false;
+        _lastBrushCell = null;
+        _controlFeedback = $"Inspect mode ({source}); brush cancelled.";
+        RefreshState();
     }
 
     private void TogglePause()
@@ -671,6 +807,26 @@ public partial class Main : Node2D
 
     private void VerifyControlsSmoke()
     {
+        // This is an input seam rather than a simulation test: it asserts that a
+        // brush stroke accepts multiple cells and that cancelling never leaves
+        // the UI in a mouse-capturing edit mode.
+        var strokeStart = _playerCommands.Count;
+        _editMode = EditMode.Paint;
+        TryApplyPlayerCommand(new ZonePaintCommand(_state!.Tick, ZoneKind.TrainingGround, [new GridPoint(10, 11)]));
+        TryApplyPlayerCommand(new ZonePaintCommand(_state!.Tick, ZoneKind.TrainingGround, [new GridPoint(11, 11)]));
+        Advance(1); // Commands at the current tick become visible on the next simulation tick.
+        if (_playerCommands.Count != strokeStart + 2 ||
+            !_state!.Zones[ZoneKind.TrainingGround].Contains(new GridPoint(10, 11)) ||
+            !_state.Zones[ZoneKind.TrainingGround].Contains(new GridPoint(11, 11)))
+        {
+            throw new InvalidOperationException("Brush smoke did not apply two independent cells.");
+        }
+        CancelBrush("smoke");
+        if (_editMode != EditMode.Inspect || _brushPointerDown)
+        {
+            throw new InvalidOperationException("Brush smoke did not return to inspect mode.");
+        }
+
         var beforeChecksum = _checksum;
         var beforeCount = _playerCommands.Count;
         TryApplyPlayerCommand(new ZonePaintCommand(_state!.Tick, ZoneKind.Forbidden, [new GridPoint(14, 7)]));
@@ -876,6 +1032,115 @@ public partial class Main : Node2D
         JobKind.Watch => new Color("#f472b6"),
         _ => new Color("#ffffff"),
     };
+
+    private string RaidPhase()
+    {
+        if (_state!.SessionResult.Outcome is { } outcome)
+        {
+            return $"RAID RESULT: {outcome}";
+        }
+
+        if (_state.Raiders.Count > 0)
+        {
+            return "RAID ACTIVE: teal crew vs red-ring goblins";
+        }
+
+        return _state.Threat.Announced
+            ? $"RAID WARNING: {_state.Threat.TicksRemaining} ticks"
+            : "RAID QUIET: warning begins at t300";
+    }
+
+    private string RaidLegend() =>
+        "BATTLE LEGEND\n" +
+        "teal = crew  •  red ring = raider\n" +
+        "bar = HP  •  white X = DOWNED\n" +
+        "dot: green work, amber combat,\n" +
+        "gray downed, pink fled";
+
+    private static string CreatureLifeState(PrototypeCreatureSnapshot creature) => creature.Mode switch
+    {
+        CreatureMode.Downed => "DOWNED",
+        CreatureMode.Fled => "FLED",
+        CreatureMode.Fighting => "ALIVE / FIGHTING",
+        _ => "ALIVE",
+    };
+
+    private static string CreatureStateShort(PrototypeCreatureSnapshot creature) => creature.Mode switch
+    {
+        CreatureMode.Downed => "DOWN",
+        CreatureMode.Fled => "FLED",
+        CreatureMode.Fighting => "FIGHT",
+        CreatureMode.Working => "WORK",
+        CreatureMode.Moving => "MOVE",
+        _ => "READY",
+    };
+
+    private static Color DefenderColor(PrototypeCreatureSnapshot creature) => creature.Mode switch
+    {
+        CreatureMode.Fighting => new Color("#fbbf24"),
+        CreatureMode.Fled => new Color("#f472b6"),
+        CreatureMode.Downed => new Color("#64748b"),
+        CreatureMode.Working => new Color("#22d3ee"),
+        _ => new Color("#38bdf8"),
+    };
+
+    private static Color CreatureStateColor(PrototypeCreatureSnapshot creature) => creature.Mode switch
+    {
+        CreatureMode.Downed => new Color("#94a3b8"),
+        CreatureMode.Fled => new Color("#f472b6"),
+        CreatureMode.Fighting => new Color("#fbbf24"),
+        CreatureMode.Working => new Color("#4ade80"),
+        _ => new Color("#bfdbfe"),
+    };
+
+    private static string RaiderSpriteKey(PrototypeRaiderSnapshot raider) => raider.Mode switch
+    {
+        RaiderMode.Downed => "downed",
+        RaiderMode.Raiding when raider.ReturningToGate => "work",
+        RaiderMode.Raiding => "combat",
+        _ => "idle",
+    };
+
+    private void DrawGoblin(Vector2 center, string key)
+    {
+        if (_goblinSprites.TryGetValue(key, out var sprite))
+        {
+            DrawTextureRect(sprite, new Rect2(center - new Vector2(10, 10), new Vector2(20, 20)), false);
+            return;
+        }
+
+        // Missing exploratory art must not prevent a deterministic playable build.
+        DrawCircle(center, 6, new Color("#84cc16"));
+    }
+
+    private void DrawHpBar(Vector2 topLeft, int hp, int maxHp, Color color)
+    {
+        const float width = 14;
+        DrawRect(new Rect2(topLeft, new Vector2(width, 3)), new Color("#0f172a"));
+        DrawRect(new Rect2(topLeft, new Vector2(width * Math.Clamp(hp / (float)maxHp, 0, 1), 3)), color);
+    }
+
+    private void DrawZoneLabels()
+    {
+        DrawZoneLabel(ZoneKind.Farm, new GridPoint(1, 1), "FARM");
+        DrawZoneLabel(ZoneKind.Kitchen, new GridPoint(9, 6), "KITCHEN");
+        DrawZoneLabel(ZoneKind.Larder, new GridPoint(13, 6), "LARDER");
+        DrawZoneLabel(ZoneKind.Quarters, new GridPoint(19, 2), "QUARTERS");
+        if (_state!.Zones[ZoneKind.TrainingGround].Count > 0)
+        {
+            DrawZoneLabel(ZoneKind.TrainingGround, new GridPoint(7, 11), "TRAIN");
+        }
+    }
+
+    private void DrawZoneLabel(ZoneKind zone, GridPoint anchor, string text)
+    {
+        if (!_state!.Zones[zone].Contains(anchor))
+        {
+            return;
+        }
+
+        DrawString(ThemeDB.FallbackFont, CellTopLeft(anchor) + new Vector2(2, 10), text, HorizontalAlignment.Left, -1, 7, ZoneColor(zone));
+    }
 
     private string CreatureName(int id) => _state!.Creatures.SingleOrDefault(creature => creature.Id == id)?.Name ?? $"#{id}";
 

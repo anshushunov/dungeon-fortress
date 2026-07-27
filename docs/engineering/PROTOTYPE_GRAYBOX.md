@@ -86,6 +86,27 @@ traversal paths are rejected. Do not commit the image. `--smoke` and
 `--visible-smoke` continue to report structured runtime diagnostics for
 automation.
 
+## Readability pass
+
+`B` starts painting and `E` starts erasing the selected zone. A bright preview
+follows the cursor; click or drag to edit cells. `Esc`, `I`, or right-click
+returns to Inspect immediately, so painting never captures the cursor after the
+button is released. The current mode and its cancel key are shown in the second
+control strip.
+
+The purple room is `Quarters`: it contains bunks and is visited only when a
+creature has fatigue at least 50 and a bunk is free. Its empty early-economy
+state is expected by the Prototype 1 contract, not a routing failure. The map
+labels it as `QUARTERS • REST`, and selecting it repeats this condition.
+
+During a raid, teal circles are crew and red-ring goblins are raiders. HP bars
+appear under both. Crew dots show working (green), fighting (amber), fled
+(pink), or downed (gray); a white X is a downed body. The battle legend is in
+the side panel and selected-creature inspection states `ALIVE`, `DOWNED`, or
+`FLED` with HP. Raider sprites are exploratory generated art with provenance in
+[`goblin-v1-provenance.md`](../art/goblin-v1-provenance.md); they are not a
+commitment to production art direction.
+
 ## Boundary
 
 `DungeonFortress.Simulation.PrototypeWorld` owns the fixture, commands, map
