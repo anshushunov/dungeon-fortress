@@ -10,6 +10,11 @@ public static class Program
 {
     public static int Main(string[] args)
     {
+        if (args.Contains("--evaluate-prototype", StringComparer.Ordinal))
+        {
+            return PrototypeEvaluation.Run(args);
+        }
+
         try
         {
             var options = ScenarioOptions.Parse(args);

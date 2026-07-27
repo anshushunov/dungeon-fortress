@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 2,
+  "scenario": "prepared-ration-zero",
+  "seed": 20260726,
+  "commands": [
+    {
+      "tick": 0,
+      "kind": "zone_paint",
+      "zoneKind": "TrainingGround",
+      "tiles": [[7,11],[8,11],[9,11],[10,11],[7,12],[8,12],[9,12],[10,12],[7,13],[8,13],[9,13],[10,13]]
+    },
+    {
+      "tick": 0,
+      "kind": "set_priority",
+      "jobKind": "Drill",
+      "value": 3
+    },
+    {
+      "tick": 320,
+      "kind": "zone_paint",
+      "zoneKind": "Watch",
+      "tiles": [[22,12],[23,12],[24,12],[25,12],[26,12],[22,13],[23,13],[24,13],[25,13],[26,13]]
+    },
+    {
+      "tick": 320,
+      "kind": "set_rule",
+      "ruleId": "ration_reserve",
+      "value": 0
+    },
+    {
+      "tick": 900,
+      "kind": "set_priority",
+      "jobKind": "Watch",
+      "value": 3
+    },
+    {
+      "tick": 1380,
+      "kind": "set_rule",
+      "ruleId": "muster_lead_ticks",
+      "value": 120
+    }
+  ]
+}

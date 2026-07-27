@@ -16,7 +16,7 @@ its own hypothesis or threshold retroactively.
   commands (ADR 0005)
 - evaluator: deterministic headless `DungeonFortress.Scenarios` runner
 - planned evidence output: `docs/playtests/data/prototype-01-agent-batch.json`
-- methodology commit: pending
+- methodology commit: `48491da`
 - evidence commit: pending
 
 ## Questions and pre-registered hypotheses
@@ -81,17 +81,103 @@ interesting to its owner. The only permitted conclusion before owner feedback is
 
 ## Automated evidence
 
-Pending the committed batch run.
+Run from the implementation baseline with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\evaluate-prototype.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\evaluate-prototype.ps1 -Verify
+```
+
+The committed raw compact output is
+[`data/prototype-01-agent-batch.json`](data/prototype-01-agent-batch.json). It
+contains 15 scenario/seed rows, a byte-for-byte repeated checksum for each row,
+and six causal-pair rows. The script is a single in-process batch over the
+existing headless runner; it changes only the v2 document root seed per seed.
+
+| Hypothesis | Result | Evidence |
+|---|---|---|
+| H1 | **supported** | Prepared readiness is `56/52/56` vs baseline `39/39/40`: +17, +13, +16; all three seeds clear the +5 threshold (median +16). |
+| H2 | **contradicted by its pre-registered loss threshold** | Prepared repels all three raids (`repelled_costly`), neglected is overrun in all three; however neglected records zero defender downed/fled because its defenders do not engage. Prepared therefore has numerically more losses, so the stated "no worse defender loss" threshold is not met. This is a metric/feedback ambiguity, not evidence that prepared play is worse. |
+| H3 | **contradicted** | Baseline and prepared complete the full food chain in every seed; neglected intentionally has zero harvest/raw-haul/cook/meal-haul after its Harvest priority is set to zero. Reason-code coverage remains present (`13` distinct codes in neglected, `21–22` baseline, `27–28` prepared). |
+| H4 | **supported as observability only** | Every row exposes the same nine names and per-creature mode, health/injury, readiness and last reason. This does not establish a memorable human story or social-memory evidence. |
+
+The raw output also records throughput, meals, labor allocation, station use,
+creature state, session outcome, losses and reason-code occurrences; no hidden
+outcome flag is used to derive the table.
+
+### Causal-pair facts
+
+- **CP1 — ration reserve 6 → 0:** the canonical checksum changes for all three
+  seeds. Observable deltas are unchanged in seed `20260726`, while seeds
+  `20260727`/`20260728` change readiness by `+7`/`+2` and change creature-loss
+  or food state. Classification: **different in 2/3, same observed metrics in
+  1/3**.
+- **CP2 — Watch priority 3 → 0:** Watch labor falls by `862`, `850`, `813`
+  ticks in the three seeds; other recorded deltas differ by seed. Classification:
+  **different in 3/3**. This verifies the intended indirect lever, not an
+  optimum priority.
+
+### Classified observations — no follow-up created
+
+| Type / severity | Evidence | Next action |
+|---|---|---|
+| Missing feedback / metric ambiguity, P2 | H2's defender-loss metric reads "better" for an overrun because the neglected defenders do not engage. The outcome itself is visible, but the comparison needs owner interpretation. | Hold for owner decision; do not tune or add a system in this block. |
+| Human-readability risk, P2 | The graybox presents command controls, timeline, event log, selected creature reason and raid summary simultaneously. Agent inspection can read it; a human must judge density and clarity. | Ask the owner questions below; no UI change before that answer. |
+
+No run was blocked: all 15 sessions reached an outcome, every repeated checksum
+matched, and no gameplay defect prevented a completed session.
 
 ## Agent readability pass
 
-Pending the completed graybox/state/log inspection.
+Completed with the prepared graybox at tick `1540` (uncommitted evidence:
+`.artifacts/visual/prototype-01-evaluation-raid.png`, checksum
+`57ca…b3ae2`). The visual pass verified that one screen exposes:
+
+- the phase/countdown, `raid repelled_costly`, defenders `6+42`, meals `0+8`,
+  jobs and checksum in the HUD;
+- four visible raiders, named creature markers and a selected `Смола` inspector
+  with satiety, fatigue, martial form, readiness, mode, injury and health;
+- a concrete causal reason: `combat_downed`, `raiderId=2`, `damage=1`, plus the
+  recent event log (`combat_raider_downed`, `waiting_input_missing` and traffic
+  feedback);
+- the v2-only control summary and accepted log entries, without a direct
+  creature command.
+
+This is an agent readability observation, not a substitute for the owner’s
+clarity or enjoyment judgement.
 
 ## Owner playtest (10–15 minutes)
 
-Pending implementation of the final launch command and spoiler-light checklist.
+From a clean checkout with the documented Godot .NET installation, open the
+actual interactive graybox:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 -Fixture baseline
+```
+
+Spoiler-light checklist (do not read the command fixtures or source first):
+
+1. Resume the simulation and spend the opening moment reading the map, threat
+   countdown and one creature inspector.
+2. Before the raid, make at least two changes using any combination of a zone,
+   a global work priority and a rule. Do not try to select a creature as a unit.
+3. Watch for one visible autonomous response; inspect it if you want to know
+   why it happened.
+4. Use time speed only to skip quiet waiting, then watch the raid and its final
+   summary. No manual combat orders are expected.
+5. Stop after the outcome screen; a single ordinary pass should fit 10–15
+   minutes. Do not look for an optimal solution.
+
+Answer in a few sentences or ratings:
+
+1. What did you think the available levers were, and was that clear?
+2. Did your changes feel like they influenced what happened? Why or why not?
+3. What, if anything, was the first small story you noticed about a creature?
+4. What was most irritating, confusing or slow?
+5. Would you want one more run to try something different? What would you try?
 
 ## Owner feedback and decision gate
 
-Pending owner playtest. Do not record `iterate`, `pivot` or `discard` until the
-owner has answered the playtest questions.
+**Pending owner playtest.** Do not record `iterate`, `pivot` or `discard` until
+the owner has answered the five questions. No art, content, tuning or next
+prototype initiative follows automatically from this report.

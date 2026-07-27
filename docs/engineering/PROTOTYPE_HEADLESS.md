@@ -102,5 +102,7 @@ dotnet test .\tests\DungeonFortress.DomainMcp.Tests
 цепочки, трудовой бюджет, занятость станций, движение не более чем на один тайл,
 отсутствие swap/overlap и коридоры раздела 13.4 контракта. Wall-clock время
 наблюдается в CLI/MCP output, но не используется как flaky correctness gate.
-Бой, налётчики, кража и outcomes появятся в Issue
-#11 и не подделываются текущим ядром.
+Налёт, бой, кража и `sessionResult` входят в текущий headless-срез. Для
+воспроизводимой полной оценочной матрицы и её повторной проверки используйте
+`scripts/evaluate-prototype.ps1`; компактный зафиксированный результат и
+методика находятся в `docs/playtests/PROTOTYPE_01_EVALUATION.md`.
