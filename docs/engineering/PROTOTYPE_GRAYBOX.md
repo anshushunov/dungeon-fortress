@@ -59,6 +59,14 @@ current job, carried item, last reason and its structured numeric details. Cell
 inspection shows its zones and relevant jobs. Colored lines/dots are jobs;
 colored circle/square pairs and name labels distinguish all nine creatures.
 
+## Raid checkpoint
+
+At tick 300 the HUD announces the fixed raid countdown. From tick 1500 it shows
+the live raid outcome and draws red `R0`–`R3` raiders with health bars. The
+projection reads `raiders` and `sessionResult` from the same `PrototypeWorld`
+snapshot as the economy; it never owns combat state. Capture a deterministic
+raid frame with `-ScreenshotTicks 1540` (or a later resolved outcome).
+
 ## Deterministic visual evidence
 
 This writes an ignored PNG, advances the same fixture a fixed number of ticks,

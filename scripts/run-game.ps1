@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$GodotPath,
-    [ValidateSet("baseline", "neglected")]
+    [ValidateSet("baseline", "prepared", "neglected")]
     [string]$Fixture = "baseline",
     [string]$ScreenshotPath,
     [ValidateRange(0, 1800)]

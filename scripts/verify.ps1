@@ -203,6 +203,17 @@ try {
             "--", "--smoke-controls"
         ) `
         -ExpectedSuccessEvent "godot_controls_smoke"
+    $raidScreenshot = Join-Path $verifyRoot "prepared-raid.png"
+    $raidResult = Invoke-GodotChecked `
+        -GodotPath $godot `
+        -Arguments @(
+            "--path", $gameProjectPath,
+            "--", "--fixture", "prepared", "--screenshot", $raidScreenshot, "--screenshot-ticks", "1540"
+        ) `
+        -ExpectedSuccessEvent "godot_graybox_screenshot"
+    if (-not (Test-Path -LiteralPath $raidScreenshot -PathType Leaf)) {
+        throw "Prepared raid smoke did not write its screenshot."
+    }
 
     [ordered]@{
         event = "verification_result"
@@ -218,6 +229,7 @@ try {
         godotVersion = $godotVersion
         godotExitCode = $godotExitCode
         godotControlsExitCode = $controlsResult.ExitCode
+        godotRaidExitCode = $raidResult.ExitCode
     } | ConvertTo-Json -Compress | Write-Host
 }
 finally {

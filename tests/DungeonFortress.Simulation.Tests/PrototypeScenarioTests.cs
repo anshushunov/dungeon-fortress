@@ -308,6 +308,110 @@ public sealed class PrototypeScenarioTests
         Assert.All(results, result => Assert.Equal(PrototypeTuning.RaidTick + 1, result.Tick));
     }
 
+    [Fact]
+    public void Preparation_changes_the_deterministic_raid_result_without_direct_orders()
+    {
+        var prepared = PrototypeScenario.Run(LoadFixture("prepared"), PrototypeTuning.SessionTicks);
+        var neglected = PrototypeScenario.Run(LoadFixture("neglected"), PrototypeTuning.SessionTicks);
+        var preparedReplay = PrototypeScenario.Run(LoadFixture("prepared"), PrototypeTuning.SessionTicks);
+
+        Assert.Equal(PrototypeTuning.RaiderCount, prepared.State.Raiders.Count);
+        Assert.Equal(PrototypeTuning.RaiderCount, neglected.State.Raiders.Count);
+        Assert.NotNull(prepared.State.SessionResult.Outcome);
+        Assert.NotNull(neglected.State.SessionResult.Outcome);
+        Assert.NotEqual(prepared.State.SessionResult.Outcome, neglected.State.SessionResult.Outcome);
+        Assert.True(
+            prepared.State.Creatures.Average(creature => creature.ReadinessAtRaid!.Value) >
+            neglected.State.Creatures.Average(creature => creature.ReadinessAtRaid!.Value));
+        Assert.Equal(prepared.Checksum, preparedReplay.Checksum);
+    }
+
+    [Fact]
+    public void Raid_steals_one_meal_per_period_and_preserves_meal_accounting()
+    {
+        var world = new PrototypeWorld(LoadFixture("baseline"));
+        var theftTicks = new Dictionary<int, List<int>>();
+        var previousCarrying = new Dictionary<int, int>();
+
+        while (!world.IsComplete)
+        {
+            world.Step();
+            var state = world.GetSnapshot();
+            foreach (var raider in state.Raiders)
+            {
+                var before = previousCarrying.GetValueOrDefault(raider.Id);
+                if (raider.CarryingMeals > before)
+                {
+                    Assert.Equal(before + 1, raider.CarryingMeals);
+                    Assert.Equal(0, raider.StealTicks);
+                    if (!theftTicks.TryGetValue(raider.Id, out var ticks))
+                    {
+                        ticks = [];
+                        theftTicks.Add(raider.Id, ticks);
+                    }
+                    ticks.Add(state.Tick);
+                }
+
+                previousCarrying[raider.Id] = raider.CarryingMeals;
+            }
+        }
+
+        Assert.NotEmpty(theftTicks.SelectMany(pair => pair.Value));
+        Assert.All(theftTicks.Values, ticks =>
+            Assert.All(ticks.Zip(ticks.Skip(1)), pair =>
+                Assert.True(pair.Second - pair.First >= PrototypeTuning.StealPeriod)));
+
+        var result = world.GetSnapshot();
+        var looseMeals = result.LooseItems
+            .Where(item => item.Resource == ResourceKind.Meal)
+            .Sum(item => item.Quantity);
+        Assert.Equal(
+            PrototypeTuning.StartMeals + result.Stocks.MealsProduced,
+            result.Stocks.Meals + looseMeals + result.Stocks.MealsEaten + result.SessionResult.MealsStolen);
+        Assert.NotNull(result.SessionResult.Outcome);
+    }
+
+    [Fact]
+    public void Defender_max_hp_comes_from_might_tuning()
+    {
+        var state = PrototypeScenario.Run(LoadFixture("prepared"), PrototypeTuning.RaidTick).State;
+        Assert.All(state.Creatures, creature =>
+            Assert.Equal(
+                PrototypeTuning.DefenderHpBase + creature.Might * PrototypeTuning.DefenderHpPerMight,
+                creature.MaxHp));
+    }
+
+    [Fact]
+    public void Empty_larder_raider_returns_to_gate_before_escape_and_theft_accounting()
+    {
+        var world = new PrototypeWorld(LoadFixture("neglected"));
+        var observedReturn = false;
+
+        while (!world.IsComplete && !observedReturn)
+        {
+            world.Step();
+            var beforeReturn = world.GetSnapshot();
+            var raider = beforeReturn.Raiders.FirstOrDefault(item =>
+                item.Mode == RaiderMode.Raiding &&
+                item.Position == new GridPoint(14, 7) &&
+                beforeReturn.Stocks.Meals == 0);
+            if (raider is null)
+            {
+                continue;
+            }
+
+            world.Step();
+            var afterReturn = world.GetSnapshot();
+            var moved = afterReturn.Raiders.Single(item => item.Id == raider.Id);
+            Assert.Equal(RaiderMode.Raiding, moved.Mode);
+            Assert.NotEqual(new GridPoint(27, 13), moved.Position);
+            Assert.Equal(0, afterReturn.SessionResult.MealsStolen);
+            observedReturn = true;
+        }
+
+        Assert.True(observedReturn, "Neglected fixture did not reach the empty-larder return branch.");
+    }
+
     private static int AverageReadiness(PrototypeRunResult result)
     {
         return (int)result.State.Creatures.Average(creature => creature.ReadinessAtRaid!.Value);
