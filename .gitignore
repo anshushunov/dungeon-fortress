@@ -13,6 +13,7 @@ CLAUDE.local.md
 **/bin/
 **/obj/
 **/.godot/
+*.import
 .artifacts/
 src/DungeonFortress.Game/addons/godot_mcp/
 src/DungeonFortress.Game/DungeonFortress.Game.IvanMcp.props

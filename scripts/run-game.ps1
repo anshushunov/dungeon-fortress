@@ -53,6 +53,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Initialize-GodotRuntimeEnvironment -RepositoryRoot $repoRoot
+Import-GodotProjectAssets -GodotPath $godot -ProjectPath $projectPath
 
 $arguments = @("--path", $projectPath)
 if (-not [string]::IsNullOrWhiteSpace($WindowSize)) {
@@ -88,6 +89,9 @@ try {
         -GodotPath $godot `
         -Arguments $arguments `
         -ExpectedSuccessEvent $expectedEvent
+    if ($expectedEvent -in @("godot_visible_smoke", "godot_graybox_screenshot")) {
+        Assert-GoblinSpriteDiagnostics -OutputLines $result.Output -EventName $expectedEvent
+    }
     exit $result.ExitCode
 }
 catch {
