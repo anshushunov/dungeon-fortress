@@ -4,8 +4,8 @@ Status: prototype-only; this is **not** the final art direction.
 
 Runtime files live in `src/DungeonFortress.Game/assets/generated/goblins/`:
 `goblin_idle_v1.png`, `goblin_work_v1.png`, `goblin_combat_v1.png`, and
-`goblin_downed_v1.png`. They are transparent 96×96 PNGs used for raider
-readability in the Godot projection.
+`goblin_downed_v1.png`. They are transparent 96×96 PNGs used for crew and
+raider character readability in the Godot projection.
 
 ## Reproduction record
 

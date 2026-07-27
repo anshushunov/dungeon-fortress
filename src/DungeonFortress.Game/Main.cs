@@ -565,16 +565,14 @@ public partial class Main : Node2D
         {
             var center = CellCenter(creature.Position);
             var color = DefenderColor(creature);
+            // The generated character states serve both factions; the outline is
+            // the stable team cue (teal crew, red-raider ring).
+            DrawCircle(center, 9, color);
+            DrawGoblin(center, CrewSpriteKey(creature));
             if (creature.Mode == CreatureMode.Downed)
             {
-                DrawCircle(center, 8, new Color("#475569"));
                 DrawLine(center + new Vector2(-5, -5), center + new Vector2(5, 5), new Color("#f8fafc"), 2);
                 DrawLine(center + new Vector2(5, -5), center + new Vector2(-5, 5), new Color("#f8fafc"), 2);
-            }
-            else
-            {
-                DrawCircle(center, 6, color);
-                DrawCircle(center + new Vector2(0, -2), 2, new Color("#e0f2fe"));
             }
 
             DrawHpBar(center + new Vector2(-7, 8), creature.Hp, creature.MaxHp, color);
@@ -1098,6 +1096,14 @@ public partial class Main : Node2D
         RaiderMode.Downed => "downed",
         RaiderMode.Raiding when raider.ReturningToGate => "work",
         RaiderMode.Raiding => "combat",
+        _ => "idle",
+    };
+
+    private static string CrewSpriteKey(PrototypeCreatureSnapshot creature) => creature.Mode switch
+    {
+        CreatureMode.Working => "work",
+        CreatureMode.Fighting => "combat",
+        CreatureMode.Downed => "downed",
         _ => "idle",
     };
 

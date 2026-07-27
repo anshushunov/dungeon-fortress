@@ -103,7 +103,7 @@ During a raid, teal circles are crew and red-ring goblins are raiders. HP bars
 appear under both. Crew dots show working (green), fighting (amber), fled
 (pink), or downed (gray); a white X is a downed body. The battle legend is in
 the side panel and selected-creature inspection states `ALIVE`, `DOWNED`, or
-`FLED` with HP. Raider sprites are exploratory generated art with provenance in
+`FLED` with HP. Crew and raider sprites are exploratory generated art with provenance in
 [`goblin-v1-provenance.md`](../art/goblin-v1-provenance.md); they are not a
 commitment to production art direction.
 
