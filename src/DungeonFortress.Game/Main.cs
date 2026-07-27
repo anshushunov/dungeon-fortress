@@ -40,7 +40,8 @@ public partial class Main : Node2D
     private JobKind _selectedJob = JobKind.Harvest;
     private int _selectedRule;
     private bool _editingPriorities = true;
-    private string _controlFeedback = "Select PAINT or ERASE, then click a passable map cell.";
+    private string _controlFeedback =
+        "PAINT/ERASE [B/E] shape zones; DIG/CANCEL DIG [D/X] mark rock for excavation.";
     private string _fixture = "baseline";
     private string? _screenshotPath;
     private int? _selectedCreatureId;
@@ -72,6 +73,7 @@ public partial class Main : Node2D
             var visibleSmoke = arguments.Contains("--visible-smoke", StringComparer.Ordinal);
             var controlsSmoke = arguments.Contains("--smoke-controls", StringComparer.Ordinal);
             var demoControls = arguments.Contains("--demo-controls", StringComparer.Ordinal);
+            var demoDig = arguments.Contains("--demo-dig", StringComparer.Ordinal);
             var requiresSprites = !headlessSmoke && !controlsSmoke;
 
             CreateHud();
@@ -80,7 +82,11 @@ public partial class Main : Node2D
             {
                 AssertRequiredSpritesLoaded();
             }
-            LoadFixture(fixture, demoControls || controlsSmoke || _screenshotPath is null ? 1 : screenshotTicks);
+            LoadFixture(
+                fixture,
+                demoControls || demoDig || controlsSmoke || _screenshotPath is null
+                    ? 1
+                    : screenshotTicks);
             if (demoControls || controlsSmoke)
             {
                 ApplyDemoControls();
@@ -88,6 +94,12 @@ public partial class Main : Node2D
                 {
                     Advance(Math.Max(0, screenshotTicks - _state!.Tick));
                 }
+            }
+
+            if (demoDig)
+            {
+                ApplyDemoDig();
+                Advance(Math.Max(0, screenshotTicks - _state!.Tick));
             }
             if (selectCreature is { } creatureId)
             {
@@ -256,6 +268,12 @@ public partial class Main : Node2D
             case Key.E:
                 _editMode = EditMode.Erase;
                 RefreshState();
+                break;
+            case Key.D:
+                SelectEditMode(EditMode.Dig);
+                break;
+            case Key.X:
+                SelectEditMode(EditMode.CancelDig);
                 break;
             case Key.Z:
                 _brushZone = (ZoneKind)(((int)_brushZone + 1) % Enum.GetValues<ZoneKind>().Length);
@@ -435,7 +453,8 @@ public partial class Main : Node2D
         _summary.Text =
             $"{_fixture.ToUpperInvariant()}  •  t{_state.Tick}  •  {(_paused ? "PAUSED" : $"{_speed:0.#}x")}" +
             $"\n{RaidPhase()}  •  food {stock.Meals}+{stock.LooseMeals}  •  raw {stock.RawMushroom}+{stock.LooseRawMushroom}" +
-            $"  •  jobs {_state.Jobs.Count}  •  {_checksum[..8]}";
+            $"  •  stone {stock.LooseStone}  •  dug {_state.Economy.DigsCompleted}" +
+            $"  •  marks {_state.DigDesignations.Count}  •  jobs {_state.Jobs.Count}  •  {_checksum[..8]}";
         var eventText = _state.Events.Count == 0
             ? "EVENT FEEDBACK\nNo events yet. Step or unpause to watch autonomous choices."
             : string.Join(
@@ -496,7 +515,7 @@ public partial class Main : Node2D
                 $"tile {TileDescription(cell)}\n" +
                 $"zones {(zones.Length == 0 ? "none" : string.Join(", ", zones))}\n" +
                 $"jobs {(jobs.Length == 0 ? "none" : string.Join(", ", jobs.Select(job => $"#{job.JobId} {job.Kind}")))}\n\n" +
-                "Click a named creature to inspect its autonomous decision.";
+                $"DIG\n{BuildDigExplanation(cell)}";
         }
 
         return
@@ -531,19 +550,57 @@ public partial class Main : Node2D
         }
     }
 
+    /// <summary>
+    /// One description of the control strip drives both drawing and hit testing,
+    /// so a visible button and its click zone cannot drift apart.
+    /// </summary>
+    private (string Label, int X, int Width, bool Active)[] ControlButtons() =>
+    [
+        ("INSPECT [I]", 18, 62, _editMode == EditMode.Inspect),
+        ("PAINT [B]", 80, 50, _editMode == EditMode.Paint),
+        ("ERASE [E]", 130, 50, _editMode == EditMode.Erase),
+        ("DIG [D]", 180, 42, _editMode == EditMode.Dig),
+        ("CANCEL DIG [X]", 222, 78, _editMode == EditMode.CancelDig),
+        ($"zone {ShortZone(_brushZone)} [Z]", 300, 76, false),
+        ($"job {_selectedJob} {_state!.Priorities[_selectedJob]} [J]", 376, 100, false),
+        ($"{ShortRuleId(RuleIds[_selectedRule])} {_state.Rules[RuleIds[_selectedRule]]} [K]",
+            476, 94, false),
+        ("REPLAY [Y]", 570, 62, false),
+    ];
+
+    private static string ShortZone(ZoneKind zone) => zone switch
+    {
+        ZoneKind.Kitchen => "Kitch",
+        ZoneKind.Quarters => "Quart",
+        ZoneKind.TrainingGround => "Train",
+        ZoneKind.Forbidden => "Forbid",
+        _ => zone.ToString(),
+    };
+
+    private static string ShortRuleId(string ruleId) => ruleId switch
+    {
+        "ration_reserve" => "ration",
+        "drill_min_satiety" => "drillSat",
+        _ => "muster",
+    };
+
     private void DrawControlToolbar()
     {
         DrawRect(new Rect2(18, 96, 626, 20), new Color("#102338"));
-        var text = $"{_editMode.ToString().ToUpperInvariant()} [I/B/E]  zone={_brushZone} [Z]  job={_selectedJob} {_state!.Priorities[_selectedJob]} [J +/-]  rule={RuleIds[_selectedRule]}={_state.Rules[RuleIds[_selectedRule]]} [K +/-]  replay [Y]";
-        DrawString(ThemeDB.FallbackFont, new Vector2(22, 110), text, HorizontalAlignment.Left, -1, 10, new Color("#bae6fd"));
-        DrawRect(new Rect2(18, 96, 626, 20), new Color("#102338"));
-        var mode = _editMode switch
+        foreach (var (label, x, width, active) in ControlButtons())
         {
-            EditMode.Paint => $"PAINT {_brushZone} — click/drag map • Esc/right-click: Inspect",
-            EditMode.Erase => $"ERASE {_brushZone} — click/drag map • Esc/right-click: Inspect",
-            _ => "INSPECT — hover for name, click creature/cell • B paint • E erase",
-        };
-        DrawString(ThemeDB.FallbackFont, new Vector2(22, 110), mode, HorizontalAlignment.Left, -1, 10, _editMode == EditMode.Inspect ? new Color("#bae6fd") : new Color("#fef08a"));
+            DrawRect(
+                new Rect2(x, 97, width - 3, 18),
+                active ? new Color("#b45309") : new Color("#1b2f45"));
+            DrawString(
+                ThemeDB.FallbackFont,
+                new Vector2(x + 3, 110),
+                label,
+                HorizontalAlignment.Left,
+                width - 6,
+                9,
+                active ? new Color("#fef3c7") : new Color("#bae6fd"));
+        }
     }
 
     private void DrawMap()
@@ -568,6 +625,8 @@ public partial class Main : Node2D
             }
         }
 
+        DrawDigDesignations();
+
         foreach (var bed in _state!.Beds)
         {
             DrawCircle(CellCenter(bed.Position), 5, bed.IsRipe ? new Color("#bef264") : new Color("#4d7c0f"));
@@ -575,8 +634,19 @@ public partial class Main : Node2D
 
         foreach (var loose in _state.LooseItems)
         {
-            var color = loose.Resource == ResourceKind.Meal ? new Color("#fde68a") : new Color("#a3e635");
-            DrawCircle(CellCenter(loose.Position), 3 + Math.Min(3, loose.Quantity), color);
+            var color = loose.Resource switch
+            {
+                ResourceKind.Meal => new Color("#fde68a"),
+                ResourceKind.Stone => new Color("#cbd5e1"),
+                _ => new Color("#a3e635"),
+            };
+            var center = CellCenter(loose.Position);
+            DrawCircle(center, 3 + Math.Min(3, loose.Quantity), color);
+            if (loose.Resource == ResourceKind.Stone)
+            {
+                // A dark rim separates loose stone from a pale meal at a glance.
+                DrawArc(center, 4.5f, 0, Mathf.Tau, 12, new Color("#475569"), 1.5f);
+            }
         }
 
         foreach (var job in _state.Jobs)
@@ -636,8 +706,84 @@ public partial class Main : Node2D
         if (_editMode != EditMode.Inspect && _hoverCell is { } brushCell && IsMapCell(brushCell))
         {
             var preview = new Rect2(CellTopLeft(brushCell), new Vector2(TileSize - 1, TileSize - 1));
-            DrawRect(preview.Grow(-1), ZoneColor(_brushZone) with { A = 0.32f });
+            var previewColor = _editMode switch
+            {
+                EditMode.Dig => _state.Map.DiggableTiles.Contains(brushCell) &&
+                    !_state.DigDesignations.Any(item => item.Tile == brushCell)
+                        ? new Color("#f59e0b")
+                        : new Color("#ef4444"),
+                EditMode.CancelDig => _state.DigDesignations.Any(item => item.Tile == brushCell)
+                    ? new Color("#38bdf8")
+                    : new Color("#ef4444"),
+                _ => ZoneColor(_brushZone),
+            };
+            DrawRect(preview.Grow(-1), previewColor with { A = 0.32f });
             DrawRect(preview.Grow(-1), new Color("#f8fafc"), false, 1.5f);
+        }
+    }
+
+    /// <summary>
+    /// Three distinct readings the player must get without opening the log: an
+    /// intention that is waiting, an intention nobody can reach, and work in
+    /// progress with how far along it is.
+    /// </summary>
+    private void DrawDigDesignations()
+    {
+        foreach (var designation in _state!.DigDesignations)
+        {
+            var rect = new Rect2(
+                CellTopLeft(designation.Tile),
+                new Vector2(TileSize - 1, TileSize - 1));
+            var accent = designation.StatusCode switch
+            {
+                "dig_in_progress" => new Color("#fbbf24"),
+                "dig_unreachable" => new Color("#f87171"),
+                "dig_blocked_priority" => new Color("#94a3b8"),
+                _ => new Color("#f59e0b"),
+            };
+
+            DrawRect(rect.Grow(-1), accent with { A = 0.26f });
+            DrawRect(rect.Grow(-1), accent, false, 1.5f);
+
+            // The crossed pick reads as "marked for excavation" at tile size.
+            var center = CellCenter(designation.Tile);
+            DrawLine(center + new Vector2(-5, -5), center + new Vector2(5, 5), accent, 1.5f);
+            DrawLine(center + new Vector2(5, -5), center + new Vector2(-5, 5), accent, 1.5f);
+
+            if (designation.StatusCode == "dig_unreachable")
+            {
+                continue;
+            }
+
+            if (designation.WorkTile is { } workTile)
+            {
+                DrawLine(CellCenter(workTile), center, accent with { A = 0.55f }, 1.0f);
+            }
+
+            if (designation.ProgressTicks <= 0 || designation.RequiredTicks <= 0)
+            {
+                continue;
+            }
+
+            var fraction = Math.Clamp(
+                designation.ProgressTicks / (float)designation.RequiredTicks,
+                0f,
+                1f);
+
+            // The rock is eaten away from the bottom up, so progress is readable
+            // at tile size without hunting for a thin bar.
+            var eaten = (TileSize - 3) * fraction;
+            DrawRect(
+                new Rect2(
+                    CellTopLeft(designation.Tile) + new Vector2(1, TileSize - 2 - eaten),
+                    new Vector2(TileSize - 3, eaten)),
+                new Color("#fbbf24") with { A = 0.6f });
+
+            var barTopLeft = CellTopLeft(designation.Tile) + new Vector2(2, TileSize - 7);
+            DrawRect(new Rect2(barTopLeft, new Vector2(TileSize - 5, 4)), new Color("#0f172a"));
+            DrawRect(
+                new Rect2(barTopLeft, new Vector2((TileSize - 5) * fraction, 4)),
+                new Color("#fde047"));
         }
     }
 
@@ -646,25 +792,54 @@ public partial class Main : Node2D
         DrawRect(new Rect2(654, 74, 290, 456), new Color("#0f1d2d"));
         DrawRect(new Rect2(654, 74, 290, 456), new Color("#334155"), false, 1);
         DrawString(ThemeDB.FallbackFont, new Vector2(664, 88), "STATE / WHY", HorizontalAlignment.Left, -1, 13, new Color("#93c5fd"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 334), "BATTLE", HorizontalAlignment.Left, -1, 9, new Color("#cbd5e1"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 345), "teal crew  /  red-ring goblin", HorizontalAlignment.Left, -1, 8, new Color("#cbd5e1"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 356), "bar = HP  /  white X = downed", HorizontalAlignment.Left, -1, 8, new Color("#cbd5e1"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 367), "purple QUARTERS: rest at fatigue 50+", HorizontalAlignment.Left, -1, 7, new Color("#c4b5fd"));
-        DrawLine(new Vector2(664, 377), new Vector2(934, 377), new Color("#334155"), 1);
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 332), "LEGEND", HorizontalAlignment.Left, -1, 9, new Color("#cbd5e1"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 343), "teal crew / red-ring goblin / bar = HP / white X = downed", HorizontalAlignment.Left, -1, 7, new Color("#cbd5e1"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 353), "purple QUARTERS: rest at fatigue 50+", HorizontalAlignment.Left, -1, 7, new Color("#c4b5fd"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 363), "amber X = dig mark / yellow bar = dig progress", HorizontalAlignment.Left, -1, 7, new Color("#fcd34d"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 373), "red X = unreachable / pale tile = new floor / gray dot = stone", HorizontalAlignment.Left, -1, 7, new Color("#fca5a5"));
+        DrawLine(new Vector2(664, 381), new Vector2(934, 381), new Color("#334155"), 1);
     }
 
     private bool TryHandleToolbarClick(Vector2 position)
     {
         if (position.Y is >= 96 and <= 116)
         {
-            if (position.X < 80) _editMode = EditMode.Inspect;
-            else if (position.X < 150) _editMode = EditMode.Paint;
-            else if (position.X < 220) _editMode = EditMode.Erase;
-            else if (position.X < 360) _brushZone = (ZoneKind)(((int)_brushZone + 1) % Enum.GetValues<ZoneKind>().Length);
-            else if (position.X < 480) { _selectedJob = (JobKind)(((int)_selectedJob + 1) % Enum.GetValues<JobKind>().Length); _editingPriorities = true; }
-            else if (position.X < 560) { _selectedRule = (_selectedRule + 1) % RuleIds.Length; _editingPriorities = false; }
-            else ReplayCurrentLog();
-            RefreshState();
+            var buttons = ControlButtons();
+            for (var index = 0; index < buttons.Length; index++)
+            {
+                var (_, x, width, _) = buttons[index];
+                if (position.X < x || position.X >= x + width)
+                {
+                    continue;
+                }
+
+                switch (index)
+                {
+                    case 0: SelectEditMode(EditMode.Inspect); return true;
+                    case 1: SelectEditMode(EditMode.Paint); return true;
+                    case 2: SelectEditMode(EditMode.Erase); return true;
+                    case 3: SelectEditMode(EditMode.Dig); return true;
+                    case 4: SelectEditMode(EditMode.CancelDig); return true;
+                    case 5:
+                        _brushZone = (ZoneKind)(((int)_brushZone + 1) % Enum.GetValues<ZoneKind>().Length);
+                        break;
+                    case 6:
+                        _selectedJob = (JobKind)(((int)_selectedJob + 1) % Enum.GetValues<JobKind>().Length);
+                        _editingPriorities = true;
+                        break;
+                    case 7:
+                        _selectedRule = (_selectedRule + 1) % RuleIds.Length;
+                        _editingPriorities = false;
+                        break;
+                    default:
+                        ReplayCurrentLog();
+                        break;
+                }
+
+                RefreshState();
+                return true;
+            }
+
             return true;
         }
 
@@ -728,9 +903,91 @@ public partial class Main : Node2D
 
         _lastBrushCell = selected;
 
-        TryApplyPlayerCommand(_editMode == EditMode.Paint
-            ? new ZonePaintCommand(_state!.Tick, _brushZone, [selected])
-            : new ZoneEraseCommand(_state!.Tick, _brushZone, [selected]));
+        switch (_editMode)
+        {
+            case EditMode.Paint:
+                TryApplyPlayerCommand(new ZonePaintCommand(_state!.Tick, _brushZone, [selected]));
+                break;
+            case EditMode.Erase:
+                TryApplyPlayerCommand(new ZoneEraseCommand(_state!.Tick, _brushZone, [selected]));
+                break;
+            case EditMode.Dig:
+                ApplyDigBrush(selected);
+                break;
+            case EditMode.CancelDig:
+                ApplyCancelDigBrush(selected);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// A dragged stroke crosses tiles the player never meant to designate, so the
+    /// brush only emits a command for a tile the simulation would accept. Refusals
+    /// are explained in the feedback line instead of becoming rejected commands.
+    /// </summary>
+    private void ApplyDigBrush(GridPoint cell)
+    {
+        if (_state!.DigDesignations.Any(item => item.Tile == cell))
+        {
+            _controlFeedback = $"({cell.X},{cell.Y}) is already designated for digging.";
+            UpdateHud();
+            QueueRedraw();
+            return;
+        }
+
+        if (!_state.Map.DiggableTiles.Contains(cell))
+        {
+            _controlFeedback =
+                $"({cell.X},{cell.Y}) cannot be dug: {UndiggableReason(cell)}.";
+            UpdateHud();
+            QueueRedraw();
+            return;
+        }
+
+        TryApplyPlayerCommand(new DigDesignateCommand(_state.Tick, [cell]));
+    }
+
+    private void ApplyCancelDigBrush(GridPoint cell)
+    {
+        if (!_state!.DigDesignations.Any(item => item.Tile == cell))
+        {
+            _controlFeedback = $"({cell.X},{cell.Y}) carries no dig designation.";
+            UpdateHud();
+            QueueRedraw();
+            return;
+        }
+
+        TryApplyPlayerCommand(new DigCancelCommand(_state.Tick, [cell]));
+    }
+
+    private string UndiggableReason(GridPoint cell)
+    {
+        if (!_state!.Map.RockTiles.Contains(cell))
+        {
+            return _state.Map.ExcavatedTiles.Contains(cell)
+                ? "it has already been excavated"
+                : "it is floor, a feature or the gate, not rock";
+        }
+
+        return "the map boundary holds the dungeon in";
+    }
+
+    private void SelectEditMode(EditMode mode)
+    {
+        _editMode = mode;
+        _brushPointerDown = false;
+        _lastBrushCell = null;
+        _controlFeedback = mode switch
+        {
+            EditMode.Dig =>
+                "DIG: click or drag rock to mark it for excavation. A free creature " +
+                "chooses the job on its own. Esc/right-click returns to Inspect.",
+            EditMode.CancelDig =>
+                "CANCEL DIG: click or drag a designation to withdraw it. " +
+                "Esc/right-click returns to Inspect.",
+            _ => _controlFeedback,
+        };
+        RefreshState();
     }
 
     private void CancelBrush(string source)
@@ -836,6 +1093,36 @@ public partial class Main : Node2D
         TryApplyPlayerCommand(new SetRuleCommand(_state!.Tick, "ration_reserve", 4));
     }
 
+    /// <summary>
+    /// The reproducible excavation capture: mark four rock tiles with the DIG
+    /// brush, withdraw one with CANCEL DIG, then let --screenshot-ticks pick the
+    /// before/during/after moment. It uses the same brush path as a human.
+    /// </summary>
+    private void ApplyDemoDig()
+    {
+        _editMode = EditMode.Dig;
+        foreach (var tile in new GridPoint[]
+                 {
+                     new(25, 1), new(25, 2), new(25, 3), new(26, 1), new(26, 3),
+                 })
+        {
+            ApplyDigBrush(tile);
+        }
+
+        // A command issued at tick T is applied at the start of tick T, so the
+        // designations only become visible to the brush after one step.
+        Advance(1);
+        _editMode = EditMode.CancelDig;
+        ApplyCancelDigBrush(new GridPoint(26, 3));
+        _editMode = EditMode.Inspect;
+        _selectedCell = new GridPoint(25, 3);
+        _selectedCreatureId = null;
+        _controlFeedback =
+            "Demo: DIG marked (25,1) (25,2) (25,3) (26,1); CANCEL DIG withdrew (26,3). " +
+            "(26,1) is walled in until a neighbour is dug.";
+        RefreshState();
+    }
+
     private void VerifyControlsSmoke()
     {
         // This is an input seam rather than a simulation test: it asserts that a
@@ -866,6 +1153,8 @@ public partial class Main : Node2D
             throw new InvalidOperationException("Invalid indirect command changed the world or log.");
         }
 
+        VerifyDigBrushSmoke();
+
         Advance(40);
         var first = PrototypeScenario.Capture(_world!).Checksum;
         var replay = new PrototypeWorld(BuildFullLog(_playerCommands));
@@ -879,10 +1168,85 @@ public partial class Main : Node2D
         }
     }
 
+    /// <summary>
+    /// An input-seam check for the excavation brushes: a stroke marks several
+    /// tiles, a stroke over floor and over the map boundary changes nothing, the
+    /// cancel brush withdraws exactly one mark, and Esc leaves edit mode.
+    /// </summary>
+    private void VerifyDigBrushSmoke()
+    {
+        var strokeStart = _playerCommands.Count;
+        _editMode = EditMode.Dig;
+        foreach (var tile in new GridPoint[] { new(25, 1), new(26, 1), new(25, 2) })
+        {
+            ApplyDigBrush(tile);
+        }
+
+        Advance(1);
+        if (_playerCommands.Count != strokeStart + 3)
+        {
+            throw new InvalidOperationException("The dig brush did not mark three tiles.");
+        }
+
+        foreach (var tile in new GridPoint[] { new(25, 1), new(26, 1), new(25, 2) })
+        {
+            if (!_state!.DigDesignations.Any(item => item.Tile == tile))
+            {
+                throw new InvalidOperationException(
+                    $"The dig brush did not designate ({tile.X},{tile.Y}).");
+            }
+        }
+
+        var guardedChecksum = _checksum;
+        var guardedCount = _playerCommands.Count;
+        ApplyDigBrush(new GridPoint(12, 12));
+        ApplyDigBrush(new GridPoint(0, 0));
+        ApplyDigBrush(PrototypeMapGate);
+        ApplyDigBrush(new GridPoint(25, 1));
+        if (_playerCommands.Count != guardedCount || _checksum != guardedChecksum)
+        {
+            throw new InvalidOperationException(
+                "The dig brush emitted a command for a tile the simulation forbids.");
+        }
+
+        _editMode = EditMode.CancelDig;
+        ApplyCancelDigBrush(new GridPoint(26, 1));
+        ApplyCancelDigBrush(new GridPoint(12, 12));
+        Advance(1);
+        if (_playerCommands.Count != guardedCount + 1 ||
+            _state!.DigDesignations.Any(item => item.Tile == new GridPoint(26, 1)) ||
+            _state.DigDesignations.Count != 2)
+        {
+            throw new InvalidOperationException("The cancel-dig brush did not withdraw one mark.");
+        }
+
+        CancelBrush("dig smoke");
+        if (_editMode != EditMode.Inspect || _brushPointerDown)
+        {
+            throw new InvalidOperationException("The dig brush did not return to inspect mode.");
+        }
+
+        // The whole point of the step: nobody was ordered, yet the rock changes.
+        for (var guard = 0; guard < 400 && _state!.Economy.DigsCompleted == 0; guard++)
+        {
+            Advance(1);
+        }
+
+        if (_state!.Economy.DigsCompleted == 0 || _state.Stocks.LooseStone == 0)
+        {
+            throw new InvalidOperationException(
+                "No designation was excavated autonomously inside the smoke budget.");
+        }
+    }
+
+    private static GridPoint PrototypeMapGate => new(27, 13);
+
     private static string DescribeCommand(PrototypeCommand command) => command switch
     {
         ZonePaintCommand paint => $"t{paint.Tick} paint {paint.ZoneKind} ({paint.Tiles.Count})",
         ZoneEraseCommand erase => $"t{erase.Tick} erase {erase.ZoneKind} ({erase.Tiles.Count})",
+        DigDesignateCommand designate => $"t{designate.Tick} dig_designate ({designate.Tiles.Count})",
+        DigCancelCommand cancel => $"t{cancel.Tick} dig_cancel ({cancel.Tiles.Count})",
         SetPriorityCommand priority => $"t{priority.Tick} priority {priority.JobKind}={priority.Value}",
         SetRuleCommand rule => $"t{rule.Tick} rule {rule.RuleId}={rule.Value}",
         _ => command.GetType().Name,
@@ -1025,11 +1389,17 @@ public partial class Main : Node2D
 
     private Color BaseTileColor(GridPoint cell)
     {
-        if (cell.X is 0 or PrototypeTuning.MapWidth - 1 || cell.Y is 0 or PrototypeTuning.MapHeight - 1 ||
-            cell is { X: 9, Y: 4 or 5 } or { X: 18, Y: 4 or 5 } or { X: 9 or 18, Y: 10 })
+        // Rock is read from the snapshot, never from a hardcoded list: the map is
+        // mutable canonical state and Godot only projects it.
+        if (_state!.Map.RockTiles.Contains(cell))
         {
-            return new Color("#111827");
+            return _state.Map.DiggableTiles.Contains(cell)
+                ? new Color("#1f2937")
+                : new Color("#0b1220");
         }
+
+        // Freshly excavated ground reads as new: brighter than the original floor.
+        if (_state.Map.ExcavatedTiles.Contains(cell)) return new Color("#3d5570");
 
         if (_state!.Beds.Any(bed => bed.Position == cell)) return new Color("#31572c");
         if (_state.Stations.Any(station => station.Position == cell && station.Kind == TileKind.Kitchen)) return new Color("#7c4a22");
@@ -1041,10 +1411,59 @@ public partial class Main : Node2D
 
     private string TileDescription(GridPoint cell)
     {
-        if (_state!.Beds.Any(bed => bed.Position == cell)) return "mushroom bed";
+        if (_state!.Map.RockTiles.Contains(cell))
+        {
+            return _state.Map.DiggableTiles.Contains(cell)
+                ? "rock (internal)"
+                : "rock (map boundary)";
+        }
+
+        if (_state.Map.ExcavatedTiles.Contains(cell)) return "floor (excavated)";
+        if (_state.Beds.Any(bed => bed.Position == cell)) return "mushroom bed";
         if (_state.Stations.Any(station => station.Position == cell)) return _state.Stations.Single(station => station.Position == cell).Kind.ToString();
         if (cell == new GridPoint(27, 13)) return "gate";
-        return "floor / rock projection";
+        return "floor";
+    }
+
+    /// <summary>
+    /// The player must be able to answer "why is nobody digging this?" from the
+    /// inspector alone. Every branch reports simulation state, not a UI guess.
+    /// </summary>
+    private string BuildDigExplanation(GridPoint cell)
+    {
+        if (_state!.DigDesignations.FirstOrDefault(item => item.Tile == cell) is { } designation)
+        {
+            var result =
+                $"\nresult → floor + {PrototypeTuning.DigStoneYield} loose stone";
+            return designation.StatusCode switch
+            {
+                "dig_unreachable" =>
+                    "designated, but no free neighbouring floor to work from.\n" +
+                    "Dig an adjacent tile first; nobody is teleported into rock." + result,
+                "dig_blocked_priority" =>
+                    $"designated, but the Dig priority is {_state.Priorities[JobKind.Dig]}.\n" +
+                    "Raise it with [J] and +/- to let creatures take the job." + result,
+                "dig_in_progress" =>
+                    $"digging {designation.ProgressTicks}/{designation.RequiredTicks} ticks by " +
+                    $"{CreatureName(designation.ReservedBy!.Value)} from " +
+                    $"({designation.WorkTile!.Value.X},{designation.WorkTile.Value.Y})." + result,
+                "dig_reserved" =>
+                    $"{CreatureName(designation.ReservedBy!.Value)} chose this job and is walking to " +
+                    $"({designation.WorkTile!.Value.X},{designation.WorkTile.Value.Y})." + result,
+                _ =>
+                    "designated and reachable; waiting for a creature to be free.\n" +
+                    "You mark intent, the crew decides who goes." + result,
+            };
+        }
+
+        if (_state.Map.DiggableTiles.Contains(cell))
+        {
+            return
+                "diggable internal rock. Press [D] and click or drag to designate.\n" +
+                $"result → floor + {PrototypeTuning.DigStoneYield} loose stone";
+        }
+
+        return $"not diggable: {UndiggableReason(cell)}.";
     }
 
     private static Color ZoneColor(ZoneKind zone) => zone switch
@@ -1067,24 +1486,27 @@ public partial class Main : Node2D
         JobKind.Rest => new Color("#a78bfa"),
         JobKind.Drill => new Color("#22d3ee"),
         JobKind.Watch => new Color("#f472b6"),
+        JobKind.Dig => new Color("#f59e0b"),
         _ => new Color("#ffffff"),
     };
 
+    // Kept short on purpose: the excavation counters share this line, and the
+    // battle wording lives in the side-panel legend.
     private string RaidPhase()
     {
         if (_state!.SessionResult.Outcome is { } outcome)
         {
-            return $"RAID RESULT: {outcome}";
+            return $"RAID {outcome}";
         }
 
         if (_state.Raiders.Count > 0)
         {
-            return "RAID ACTIVE: teal crew vs red-ring goblins";
+            return "RAID ACTIVE";
         }
 
         return _state.Threat.Announced
-            ? $"RAID WARNING: {_state.Threat.TicksRemaining} ticks"
-            : "RAID QUIET: warning begins at t300";
+            ? $"RAID IN {_state.Threat.TicksRemaining}t"
+            : "RAID QUIET · warn t300";
     }
 
     private string RaidLegend() =>
@@ -1190,7 +1612,7 @@ public partial class Main : Node2D
 
     private string CreatureName(int id) => _state!.Creatures.SingleOrDefault(creature => creature.Id == id)?.Name ?? $"#{id}";
 
-    private enum EditMode { Inspect, Paint, Erase }
+    private enum EditMode { Inspect, Paint, Erase, Dig, CancelDig }
 
     private sealed record RuntimeDiagnostic(string Scope, string Type, string Message);
 }

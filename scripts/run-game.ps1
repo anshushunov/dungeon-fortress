@@ -8,6 +8,7 @@ param(
     [int]$ScreenshotTicks = 180,
     [int]$SelectCreature = -1,
     [switch]$DemoControls,
+    [switch]$DemoDig,
     [switch]$VisibleSmoke,
     [ValidatePattern("^\d{3,5}x\d{3,5}$")]
     [string]$WindowSize
@@ -71,6 +72,9 @@ if ($SelectCreature -ge 0) {
 }
 if ($DemoControls) {
     $arguments += "--demo-controls"
+}
+if ($DemoDig) {
+    $arguments += "--demo-dig"
 }
 
 if ($VisibleSmoke -and -not [string]::IsNullOrWhiteSpace($ScreenshotPath)) {

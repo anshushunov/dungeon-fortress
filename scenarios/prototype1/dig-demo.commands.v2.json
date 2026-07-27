@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 2,
+  "scenario": "custom",
+  "seed": 20260726,
+  "commands": [
+    {
+      "tick": 0,
+      "kind": "dig_designate",
+      "tiles": [[25,1],[26,1],[25,2],[25,3],[26,3]]
+    },
+    {
+      "tick": 1,
+      "kind": "dig_cancel",
+      "tiles": [[26,3]]
+    }
+  ]
+}

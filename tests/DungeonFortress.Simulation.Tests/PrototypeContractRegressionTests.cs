@@ -107,6 +107,8 @@ public sealed class PrototypeContractRegressionTests
             Assert.True(job.TryGetProperty(property, out _), property);
         }
 
+        Assert.True(root.TryGetProperty("map", out _));
+        Assert.True(root.TryGetProperty("digDesignations", out _));
         Assert.True(root.TryGetProperty("beds", out _));
         Assert.True(root.TryGetProperty("looseItems", out _));
         Assert.True(root.TryGetProperty("economy", out _));
@@ -173,6 +175,7 @@ public sealed class PrototypeContractRegressionTests
             state.Labor.EatTicks +
             state.Labor.DrillTicks +
             state.Labor.WatchTicks +
+            state.Labor.DigTicks +
             state.Labor.MusterTicks +
             state.Labor.IdleTicks);
         Assert.InRange(state.Labor.FoodWorkPercent, 30, 70);

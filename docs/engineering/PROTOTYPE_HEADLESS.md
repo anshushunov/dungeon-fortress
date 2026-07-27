@@ -62,6 +62,21 @@ dotnet run --project .\tests\DungeonFortress.Scenarios -- `
 `--snapshot .\.artifacts\prepared.json`, чтобы записать его в файл. Параметры
 скорости воспроизведения не входят в игровой журнал.
 
+Раскопка наблюдается тем же способом. Fixture `dig-demo` обозначает пять тайлов
+внутреннего массива скалы и снимает одно обозначение на следующем тике:
+
+```powershell
+dotnet run --project .\tests\DungeonFortress.Scenarios -- `
+  --prototype `
+  --commands .\scenarios\prototype1\dig-demo.commands.v2.json `
+  --ticks 200
+```
+
+Результат содержит `digsCompleted`, `looseStone`, `excavatedTiles` и
+`digDesignations` со `statusCode` каждого обозначения, поэтому состояние
+раскопки читается без анализа изображения. Тайл `(26,2)` замурован границей
+карты и остаётся в состоянии `dig_unreachable`, пока не будет выкопан сосед.
+
 В режиме `--prototype` seed берётся только из gameplay-v2 документа, а
 фиксированная популяция — из контракта Prototype 1. Явные `--seed` и `--agents`
 отклоняются, чтобы CLI не создавал второй источник истины. Эти флаги остаются

@@ -62,6 +62,12 @@ public static class PrototypeCommandValidator
 
                     zones[erase.ZoneKind] = remaining;
                     break;
+                case DigDesignateCommand designate:
+                    ValidateDigTiles(designate.Tiles, requireDiggable: true);
+                    break;
+                case DigCancelCommand cancel:
+                    ValidateDigTiles(cancel.Tiles, requireDiggable: false);
+                    break;
                 case SetPriorityCommand priority:
                     if (!Enum.IsDefined(priority.JobKind) ||
                         priority.Value is < PrototypeTuning.PriorityMinimum or
@@ -127,6 +133,51 @@ public static class PrototypeCommandValidator
             if (painting && zoneKind == ZoneKind.Forbidden && map[tile] == TileKind.Larder)
             {
                 throw new InvalidDataException("A larder feature cannot be Forbidden.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// A static pre-flight over the <em>initial</em> layout. A tile that is not
+    /// rock at the start can never become diggable, so rejecting it here is sound.
+    /// The live map in <see cref="PrototypeWorld"/> stays the runtime authority for
+    /// tiles that have already been excavated during the session.
+    /// </summary>
+    private static void ValidateDigTiles(
+        IReadOnlyList<GridPoint> tiles,
+        bool requireDiggable)
+    {
+        if (tiles is null)
+        {
+            throw new InvalidDataException("tiles must be an array.");
+        }
+
+        if (tiles.Count is < 1 or > PrototypeTuning.MaximumTilesPerCommand)
+        {
+            throw new InvalidDataException(
+                $"tiles must contain between 1 and {PrototypeTuning.MaximumTilesPerCommand} entries.");
+        }
+
+        var distinct = new HashSet<GridPoint>();
+        foreach (var tile in tiles)
+        {
+            if (!distinct.Add(tile))
+            {
+                throw new InvalidDataException(
+                    $"Duplicate tile ({tile.X},{tile.Y}) is not allowed.");
+            }
+
+            if (!PrototypeMap.IsInside(tile))
+            {
+                throw new InvalidDataException(
+                    $"Dig tile ({tile.X},{tile.Y}) is outside the map.");
+            }
+
+            if (requireDiggable && !PrototypeMap.IsDiggableInInitialLayout(tile))
+            {
+                throw new InvalidDataException(
+                    $"Dig tile ({tile.X},{tile.Y}) is not internal rock. " +
+                    "Floor, features, the gate and the map boundary cannot be designated.");
             }
         }
     }
