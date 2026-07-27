@@ -19,6 +19,11 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $artifactsRoot = Join-Path $repoRoot ".artifacts"
 $projectPath = Join-Path $repoRoot "src\DungeonFortress.Game"
 $projectFile = Join-Path $projectPath "DungeonFortress.Game.csproj"
+$resolvedScreenshotPath = if ([string]::IsNullOrWhiteSpace($ScreenshotPath)) {
+    $null
+} else {
+    Resolve-RepositoryArtifactPath -RepositoryRoot $repoRoot -RelativePath $ScreenshotPath
+}
 
 $env:DOTNET_CLI_HOME = Join-Path $artifactsRoot "dotnet-home"
 $env:DOTNET_NOLOGO = "1"
@@ -54,12 +59,7 @@ $arguments = @(
 if ($VisibleSmoke) {
     $arguments += "--visible-smoke"
 }
-if (-not [string]::IsNullOrWhiteSpace($ScreenshotPath)) {
-    $resolvedScreenshotPath = if ([IO.Path]::IsPathRooted($ScreenshotPath)) {
-        [IO.Path]::GetFullPath($ScreenshotPath)
-    } else {
-        [IO.Path]::GetFullPath((Join-Path $repoRoot $ScreenshotPath))
-    }
+if ($null -ne $resolvedScreenshotPath) {
     $arguments += "--screenshot", $resolvedScreenshotPath, "--screenshot-ticks", $ScreenshotTicks.ToString([Globalization.CultureInfo]::InvariantCulture)
 }
 if ($SelectCreature -ge 0) {
@@ -72,7 +72,7 @@ if ($VisibleSmoke -and -not [string]::IsNullOrWhiteSpace($ScreenshotPath)) {
 
 $expectedEvent = if ($VisibleSmoke) {
     "godot_visible_smoke"
-} elseif (-not [string]::IsNullOrWhiteSpace($ScreenshotPath)) {
+} elseif ($null -ne $resolvedScreenshotPath) {
     "godot_graybox_screenshot"
 } else {
     $null

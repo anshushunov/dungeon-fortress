@@ -164,6 +164,36 @@ function Initialize-GodotRuntimeEnvironment {
     New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA | Out-Null
 }
 
+function Resolve-RepositoryArtifactPath {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$RelativePath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($RelativePath) -or
+        [IO.Path]::IsPathRooted($RelativePath) -or
+        $RelativePath -match '^[A-Za-z]:') {
+        throw "ScreenshotPath must be a non-empty relative path inside repository .artifacts."
+    }
+
+    $artifactsRoot = [IO.Path]::GetFullPath((Join-Path $RepositoryRoot ".artifacts"))
+    $artifactsPrefix = $artifactsRoot.TrimEnd(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $candidate = [IO.Path]::GetFullPath((Join-Path $artifactsRoot $RelativePath))
+
+    if (-not $candidate.StartsWith($artifactsPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "ScreenshotPath resolves outside repository .artifacts."
+    }
+
+    return $candidate
+}
+
 function Get-GodotErrorLines {
     [CmdletBinding()]
     [OutputType([string[]])]

@@ -54,12 +54,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -Fixture baseline `
   -ScreenshotTicks 180 `
   -SelectCreature 3 `
-  -ScreenshotPath .\.artifacts\graybox-baseline-t180.png
+  -ScreenshotPath visual\graybox-baseline-t180.png
 ```
 
-The result includes fixture, seed, tick, canonical checksum and PNG path. Do
-not commit the image; `.artifacts/` is ignored. `--smoke` and `--visible-smoke`
-continue to report structured runtime diagnostics for automation.
+The result includes fixture, seed, tick, canonical checksum and PNG path. The
+path must be relative and is always resolved below `.artifacts/`; rooted and
+traversal paths are rejected. Do not commit the image. `--smoke` and
+`--visible-smoke` continue to report structured runtime diagnostics for
+automation.
 
 ## Boundary
 
