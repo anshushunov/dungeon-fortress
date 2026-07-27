@@ -35,6 +35,21 @@ visible and keeps initial inspection repeatable.
 | Reset fixture | `BASE`, `NEGLECT` | `R`, `N` |
 | Inspect | click creature or cell | — |
 
+## Indirect controls (Phase B)
+
+The second control strip is deliberately compact: select `INSPECT`, `PAINT` or
+`ERASE` with the mouse (or `I`, `B`, `E`), choose the active zone with `Z`, and
+click a map cell. This produces a `zone_paint` or `zone_erase` v2 command; it
+does not address a creature. `J` selects a global job priority and `K` selects
+one of `ration_reserve`, `drill_min_satiety` or `muster_lead_ticks`; `+` / `-`
+changes the selected bounded value. `Y` rebuilds and replays the current log.
+
+Every accepted edit is appended to the visible in-memory log, fully validated,
+then replayed from the fixture to the current tick before replacing the Godot
+projection. Invalid edits leave both world and log unchanged and appear in the
+feedback/diagnostic buffer. A command applied at the current tick becomes active
+on the next simulation tick.
+
 Speed, pause and stepping are presentation controls only. They only choose how
 often the adapter calls `PrototypeWorld.RunTicks`; they are not gameplay
 commands and never enter canonical state or a command log.
@@ -54,6 +69,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -Fixture baseline `
   -ScreenshotTicks 180 `
   -SelectCreature 3 `
+  -DemoControls `
   -ScreenshotPath visual\graybox-baseline-t180.png
 ```
 

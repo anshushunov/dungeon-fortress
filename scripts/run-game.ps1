@@ -7,6 +7,7 @@ param(
     [ValidateRange(0, 1800)]
     [int]$ScreenshotTicks = 180,
     [int]$SelectCreature = -1,
+    [switch]$DemoControls,
     [switch]$VisibleSmoke
 )
 
@@ -64,6 +65,9 @@ if ($null -ne $resolvedScreenshotPath) {
 }
 if ($SelectCreature -ge 0) {
     $arguments += "--select-creature", $SelectCreature.ToString([Globalization.CultureInfo]::InvariantCulture)
+}
+if ($DemoControls) {
+    $arguments += "--demo-controls"
 }
 
 if ($VisibleSmoke -and -not [string]::IsNullOrWhiteSpace($ScreenshotPath)) {

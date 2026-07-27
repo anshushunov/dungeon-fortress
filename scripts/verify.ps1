@@ -196,6 +196,13 @@ try {
         ) `
         -ExpectedSuccessEvent "godot_headless_smoke"
     $godotExitCode = $godotResult.ExitCode
+    $controlsResult = Invoke-GodotChecked `
+        -GodotPath $godot `
+        -Arguments @(
+            "--headless", "--path", $gameProjectPath,
+            "--", "--smoke-controls"
+        ) `
+        -ExpectedSuccessEvent "godot_controls_smoke"
 
     [ordered]@{
         event = "verification_result"
@@ -210,6 +217,7 @@ try {
         )
         godotVersion = $godotVersion
         godotExitCode = $godotExitCode
+        godotControlsExitCode = $controlsResult.ExitCode
     } | ConvertTo-Json -Compress | Write-Host
 }
 finally {
