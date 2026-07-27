@@ -1,7 +1,12 @@
 [CmdletBinding()]
 param(
     [string]$GodotPath,
-    [UInt64]$Seed = 424242,
+    [ValidateSet("baseline", "neglected")]
+    [string]$Fixture = "baseline",
+    [string]$ScreenshotPath,
+    [ValidateRange(0, 1800)]
+    [int]$ScreenshotTicks = 180,
+    [int]$SelectCreature = -1,
     [switch]$VisibleSmoke
 )
 
@@ -44,13 +49,34 @@ Initialize-GodotRuntimeEnvironment -RepositoryRoot $repoRoot
 $arguments = @(
     "--path", $projectPath,
     "--",
-    "--seed", $Seed.ToString([Globalization.CultureInfo]::InvariantCulture)
+    "--fixture", $Fixture
 )
 if ($VisibleSmoke) {
     $arguments += "--visible-smoke"
 }
+if (-not [string]::IsNullOrWhiteSpace($ScreenshotPath)) {
+    $resolvedScreenshotPath = if ([IO.Path]::IsPathRooted($ScreenshotPath)) {
+        [IO.Path]::GetFullPath($ScreenshotPath)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $repoRoot $ScreenshotPath))
+    }
+    $arguments += "--screenshot", $resolvedScreenshotPath, "--screenshot-ticks", $ScreenshotTicks.ToString([Globalization.CultureInfo]::InvariantCulture)
+}
+if ($SelectCreature -ge 0) {
+    $arguments += "--select-creature", $SelectCreature.ToString([Globalization.CultureInfo]::InvariantCulture)
+}
 
-$expectedEvent = if ($VisibleSmoke) { "godot_visible_smoke" } else { $null }
+if ($VisibleSmoke -and -not [string]::IsNullOrWhiteSpace($ScreenshotPath)) {
+    throw "-VisibleSmoke and -ScreenshotPath are separate deterministic run modes."
+}
+
+$expectedEvent = if ($VisibleSmoke) {
+    "godot_visible_smoke"
+} elseif (-not [string]::IsNullOrWhiteSpace($ScreenshotPath)) {
+    "godot_graybox_screenshot"
+} else {
+    $null
+}
 try {
     $result = Invoke-GodotChecked `
         -GodotPath $godot `
