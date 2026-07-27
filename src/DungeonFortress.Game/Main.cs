@@ -14,7 +14,7 @@ public partial class Main : Node2D
 {
     private const int TileSize = 22;
     private const double TicksPerSecond = 6.0;
-    private static readonly Vector2 MapOrigin = new(18, 98);
+    private static readonly Vector2 MapOrigin = new(18, 118);
     private static readonly Color[] CreatureColors =
     [
         new("#fb7185"), new("#f59e0b"), new("#eab308"),
@@ -30,6 +30,14 @@ public partial class Main : Node2D
     private Label? _inspector;
     private Label? _feedback;
     private Label? _roster;
+    private PrototypeCommandLog? _fixtureLog;
+    private readonly List<PrototypeCommand> _playerCommands = [];
+    private ZoneKind _brushZone = ZoneKind.Farm;
+    private EditMode _editMode = EditMode.Inspect;
+    private JobKind _selectedJob = JobKind.Harvest;
+    private int _selectedRule;
+    private bool _editingPriorities = true;
+    private string _controlFeedback = "Select PAINT or ERASE, then click a passable map cell.";
     private string _fixture = "baseline";
     private string? _screenshotPath;
     private int? _selectedCreatureId;
@@ -54,9 +62,19 @@ public partial class Main : Node2D
             var selectCreature = ReadIntArgument(arguments, "--select-creature");
             var headlessSmoke = arguments.Contains("--smoke", StringComparer.Ordinal);
             var visibleSmoke = arguments.Contains("--visible-smoke", StringComparer.Ordinal);
+            var controlsSmoke = arguments.Contains("--smoke-controls", StringComparer.Ordinal);
+            var demoControls = arguments.Contains("--demo-controls", StringComparer.Ordinal);
 
             CreateHud();
-            LoadFixture(fixture, _screenshotPath is null ? 1 : screenshotTicks);
+            LoadFixture(fixture, demoControls || controlsSmoke || _screenshotPath is null ? 1 : screenshotTicks);
+            if (demoControls || controlsSmoke)
+            {
+                ApplyDemoControls();
+                if (_screenshotPath is not null)
+                {
+                    Advance(Math.Max(0, screenshotTicks - _state!.Tick));
+                }
+            }
             if (selectCreature is { } creatureId)
             {
                 if (!_state!.Creatures.Any(creature => creature.Id == creatureId))
@@ -84,6 +102,12 @@ public partial class Main : Node2D
                 {
                     _visibleSmoke = true;
                 }
+            }
+            if (controlsSmoke)
+            {
+                VerifyControlsSmoke();
+                PrintResult("godot_controls_smoke", "ok", null);
+                GetTree().Quit();
             }
         }
         catch (Exception exception)
@@ -151,6 +175,14 @@ public partial class Main : Node2D
             return;
         }
 
+        if (_editMode != EditMode.Inspect)
+        {
+            TryApplyPlayerCommand(_editMode == EditMode.Paint
+                ? new ZonePaintCommand(_state!.Tick, _brushZone, [selected])
+                : new ZoneEraseCommand(_state!.Tick, _brushZone, [selected]));
+            return;
+        }
+
         _selectedCell = selected;
         _selectedCreatureId = _state!.Creatures
             .Where(creature => creature.Position == selected)
@@ -194,6 +226,42 @@ public partial class Main : Node2D
             case Key.N:
                 LoadFixture("neglected", 1);
                 break;
+            case Key.I:
+                _editMode = EditMode.Inspect;
+                RefreshState();
+                break;
+            case Key.B:
+                _editMode = EditMode.Paint;
+                RefreshState();
+                break;
+            case Key.E:
+                _editMode = EditMode.Erase;
+                RefreshState();
+                break;
+            case Key.Z:
+                _brushZone = (ZoneKind)(((int)_brushZone + 1) % Enum.GetValues<ZoneKind>().Length);
+                RefreshState();
+                break;
+            case Key.J:
+                _selectedJob = (JobKind)(((int)_selectedJob + 1) % Enum.GetValues<JobKind>().Length);
+                _editingPriorities = true;
+                RefreshState();
+                break;
+            case Key.K:
+                _selectedRule = (_selectedRule + 1) % RuleIds.Length;
+                _editingPriorities = false;
+                RefreshState();
+                break;
+            case Key.Plus:
+            case Key.Equal:
+                AdjustSelectedControl(1);
+                break;
+            case Key.Minus:
+                AdjustSelectedControl(-1);
+                break;
+            case Key.Y:
+                ReplayCurrentLog();
+                break;
         }
     }
 
@@ -206,6 +274,7 @@ public partial class Main : Node2D
 
         DrawRect(new Rect2(0, 0, 960, 540), new Color("#07111d"));
         DrawToolbar();
+        DrawControlToolbar();
         DrawMap();
         DrawSidePanel();
     }
@@ -218,7 +287,7 @@ public partial class Main : Node2D
         _summary = MakeLabel(new Vector2(18, 42), new Vector2(620, 45), 13, new Color("#bfdbfe"));
         _inspector = MakeLabel(new Vector2(664, 92), new Vector2(278, 278), 14, new Color("#e2e8f0"));
         _feedback = MakeLabel(new Vector2(664, 388), new Vector2(278, 140), 12, new Color("#94a3b8"));
-        _roster = MakeLabel(new Vector2(18, 458), new Vector2(620, 70), 12, new Color("#cbd5e1"));
+        _roster = MakeLabel(new Vector2(18, 474), new Vector2(620, 60), 10, new Color("#cbd5e1"));
     }
 
     private Label MakeLabel(Vector2 position, Vector2 size, int fontSize, Color color)
@@ -243,7 +312,9 @@ public partial class Main : Node2D
             throw new ArgumentException("Fixture must be baseline or neglected.", nameof(fixture));
         }
 
-        var world = new PrototypeWorld(PrototypeCommandDocument.Load(FixturePath(fixture)));
+        _fixtureLog = PrototypeCommandDocument.Load(FixturePath(fixture));
+        _playerCommands.Clear();
+        var world = new PrototypeWorld(_fixtureLog);
         world.RunTicks(Math.Clamp(ticks, 0, PrototypeTuning.SessionTicks));
         _world = world;
         _fixture = fixture;
@@ -308,6 +379,8 @@ public partial class Main : Node2D
             "EVENT FEEDBACK\n" + eventText +
             $"\n\nDiagnostics: {_diagnostics.Count} (structured JSON is emitted by smoke/capture).";
         _roster!.Text = "CREW · " + string.Join("   ·   ", _state.Creatures.Select(creature => creature.Name));
+        _roster.Text += "\nINDIRECT: " + _controlFeedback;
+        _roster.Text += "\nLOG " + (_playerCommands.Count == 0 ? "empty" : string.Join(" | ", _playerCommands.TakeLast(2).Select(DescribeCommand)));
     }
 
     private string BuildInspectorText()
@@ -377,6 +450,13 @@ public partial class Main : Node2D
             DrawRect(new Rect2(x, 74, width - 3, 18), active ? new Color("#1d4ed8") : new Color("#24364b"));
             DrawString(ThemeDB.FallbackFont, new Vector2(x + 4, 88), text, HorizontalAlignment.Left, -1, 10, new Color("#dbeafe"));
         }
+    }
+
+    private void DrawControlToolbar()
+    {
+        DrawRect(new Rect2(18, 96, 626, 20), new Color("#102338"));
+        var text = $"{_editMode.ToString().ToUpperInvariant()} [I/B/E]  zone={_brushZone} [Z]  job={_selectedJob} {_state!.Priorities[_selectedJob]} [J +/-]  rule={RuleIds[_selectedRule]}={_state.Rules[RuleIds[_selectedRule]]} [K +/-]  replay [Y]";
+        DrawString(ThemeDB.FallbackFont, new Vector2(22, 110), text, HorizontalAlignment.Left, -1, 10, new Color("#bae6fd"));
     }
 
     private void DrawMap()
@@ -454,6 +534,19 @@ public partial class Main : Node2D
 
     private bool TryHandleToolbarClick(Vector2 position)
     {
+        if (position.Y is >= 96 and <= 116)
+        {
+            if (position.X < 80) _editMode = EditMode.Inspect;
+            else if (position.X < 150) _editMode = EditMode.Paint;
+            else if (position.X < 220) _editMode = EditMode.Erase;
+            else if (position.X < 360) _brushZone = (ZoneKind)(((int)_brushZone + 1) % Enum.GetValues<ZoneKind>().Length);
+            else if (position.X < 480) { _selectedJob = (JobKind)(((int)_selectedJob + 1) % Enum.GetValues<JobKind>().Length); _editingPriorities = true; }
+            else if (position.X < 560) { _selectedRule = (_selectedRule + 1) % RuleIds.Length; _editingPriorities = false; }
+            else ReplayCurrentLog();
+            RefreshState();
+            return true;
+        }
+
         if (position.Y is < 74 or > 94)
         {
             return false;
@@ -485,6 +578,117 @@ public partial class Main : Node2D
         UpdateHud();
         QueueRedraw();
     }
+
+    private static readonly string[] RuleIds = ["ration_reserve", "drill_min_satiety", "muster_lead_ticks"];
+
+    private void AdjustSelectedControl(int delta)
+    {
+        if (_editingPriorities)
+        {
+            var priorityValue = Math.Clamp(_state!.Priorities[_selectedJob] + delta, PrototypeTuning.PriorityMinimum, PrototypeTuning.PriorityMaximum);
+            TryApplyPlayerCommand(new SetPriorityCommand(_state.Tick, _selectedJob, priorityValue));
+            return;
+        }
+
+        var ruleId = RuleIds[_selectedRule];
+        var maximum = ruleId switch
+        {
+            "ration_reserve" => PrototypeTuning.RationReserveMaximum,
+            "drill_min_satiety" => PrototypeTuning.DrillMinimumSatietyMaximum,
+            _ => PrototypeTuning.MusterLeadMaximum,
+        };
+        var value = Math.Clamp(_state!.Rules[ruleId] + delta, 0, maximum);
+        TryApplyPlayerCommand(new SetRuleCommand(_state.Tick, ruleId, value));
+    }
+
+    private void TryApplyPlayerCommand(PrototypeCommand command)
+    {
+        try
+        {
+            var candidateCommands = _playerCommands.Append(command).ToArray();
+            var candidateLog = BuildFullLog(candidateCommands);
+            PrototypeCommandValidator.Validate(candidateLog);
+            var candidateWorld = new PrototypeWorld(candidateLog);
+            candidateWorld.RunTicks(_state!.Tick);
+            _playerCommands.Add(command);
+            _world = candidateWorld;
+            _controlFeedback = $"accepted {DescribeCommand(command)}; activates on next tick";
+            RefreshState();
+        }
+        catch (Exception exception) when (exception is InvalidDataException or ArgumentException)
+        {
+            RecordDiagnostic("indirect_command", exception);
+            _controlFeedback = $"rejected {command.GetType().Name}: {exception.Message}";
+            UpdateHud();
+            QueueRedraw();
+        }
+    }
+
+    private PrototypeCommandLog BuildFullLog(IEnumerable<PrototypeCommand> playerCommands)
+    {
+        var ordered = _fixtureLog!.Commands
+            .Concat(playerCommands)
+            .OrderBy(command => command.Tick)
+            .ToArray();
+        return new PrototypeCommandLog(_fixtureLog.Scenario, _fixtureLog.Seed, ordered);
+    }
+
+    private void ReplayCurrentLog()
+    {
+        var replay = new PrototypeWorld(BuildFullLog(_playerCommands));
+        replay.RunTicks(_state!.Tick);
+        var checksum = PrototypeScenario.Capture(replay).Checksum;
+        _controlFeedback = checksum == _checksum ? "replay checksum matches" : "replay checksum MISMATCH";
+        if (checksum == _checksum)
+        {
+            _world = replay;
+            RefreshState();
+        }
+        else
+        {
+            RecordDiagnostic("replay", new InvalidOperationException(_controlFeedback));
+            UpdateHud();
+        }
+    }
+
+    private void ApplyDemoControls()
+    {
+        TryApplyPlayerCommand(new ZonePaintCommand(_state!.Tick, ZoneKind.TrainingGround, [new GridPoint(7, 11)]));
+        TryApplyPlayerCommand(new SetPriorityCommand(_state!.Tick, JobKind.Drill, 4));
+        TryApplyPlayerCommand(new SetRuleCommand(_state!.Tick, "ration_reserve", 4));
+    }
+
+    private void VerifyControlsSmoke()
+    {
+        var beforeChecksum = _checksum;
+        var beforeCount = _playerCommands.Count;
+        TryApplyPlayerCommand(new ZonePaintCommand(_state!.Tick, ZoneKind.Forbidden, [new GridPoint(14, 7)]));
+        if (_playerCommands.Count != beforeCount || _checksum != beforeChecksum)
+        {
+            throw new InvalidOperationException("Invalid indirect command changed the world or log.");
+        }
+
+        Advance(40);
+        var first = PrototypeScenario.Capture(_world!).Checksum;
+        var replay = new PrototypeWorld(BuildFullLog(_playerCommands));
+        for (var index = 0; index < _state!.Tick; index += 3)
+        {
+            replay.RunTicks(Math.Min(3, _state.Tick - replay.CurrentTick));
+        }
+        if (PrototypeScenario.Capture(replay).Checksum != first)
+        {
+            throw new InvalidOperationException("Command replay differs across update pacing.");
+        }
+    }
+
+    private static string DescribeCommand(PrototypeCommand command) => command switch
+    {
+        ZonePaintCommand paint => $"t{paint.Tick} paint {paint.ZoneKind} ({paint.Tiles.Count})",
+        ZoneEraseCommand erase => $"t{erase.Tick} erase {erase.ZoneKind} ({erase.Tiles.Count})",
+        SetPriorityCommand priority => $"t{priority.Tick} priority {priority.JobKind}={priority.Value}",
+        SetRuleCommand rule => $"t{rule.Tick} rule {rule.RuleId}={rule.Value}",
+        _ => command.GetType().Name,
+    };
 
     private void CaptureScreenshot(string path)
     {
@@ -663,6 +867,8 @@ public partial class Main : Node2D
     };
 
     private string CreatureName(int id) => _state!.Creatures.SingleOrDefault(creature => creature.Id == id)?.Name ?? $"#{id}";
+
+    private enum EditMode { Inspect, Paint, Erase }
 
     private sealed record RuntimeDiagnostic(string Scope, string Type, string Message);
 }
