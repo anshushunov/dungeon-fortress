@@ -13,6 +13,11 @@ public sealed class PrototypeWorld
     private readonly List<JobState> _jobs = [];
     private readonly Dictionary<GridPoint, BedState> _beds;
     private readonly Dictionary<(GridPoint Point, ResourceKind Resource), int> _loose = [];
+
+    // Stored stone is canonical per-cell state, deliberately separate from the
+    // loose pile on the same tile: "lying on the floor" and "put away in the
+    // stockpile" are different game facts and must stay distinguishable.
+    private readonly Dictionary<GridPoint, int> _storedStone = [];
     private readonly List<EventState> _events = [];
     private readonly List<RaiderState> _raiders = [];
     private readonly DeterministicRandom _combatRandom;
@@ -37,8 +42,12 @@ public sealed class PrototypeWorld
     private int _drillTicks;
     private int _watchTicks;
     private int _digTicks;
+    private int _stoneHaulTicks;
     private int _digsCompleted;
     private int _stoneProduced;
+    private int _stoneHaulsCompleted;
+    private int _stoneStored;
+    private int _stoneSpilled;
     private int _musterTicks;
     private int _idleTicks;
     private int _postCapacityTicks;
@@ -123,6 +132,7 @@ public sealed class PrototypeWorld
 
         UpdateCombatParticipation();
 
+        RevalidateStoneHauls();
         CancelInvalidJobs();
         DecideNeedsAndMuster();
         GenerateJobs();
@@ -171,7 +181,9 @@ public sealed class PrototypeWorld
                 job.ReservedBy,
                 job.RemainingTicks,
                 job.ProgressTicks,
-                job.PickedUp))
+                job.PickedUp,
+                job.StoreCell,
+                job.StoreReserved))
             .ToArray();
         var beds = _beds.Values
             .OrderBy(bed => bed.Position)
@@ -188,6 +200,10 @@ public sealed class PrototypeWorld
                 pair.Key.Point,
                 pair.Key.Resource,
                 pair.Value))
+            .ToArray();
+        var stockpileCells = _zones[ZoneKind.MaterialStockpile]
+            .Order()
+            .Select(ToStockpileSnapshot)
             .ToArray();
         var stations = PrototypeMap.KitchenTiles
             .Concat(PrototypeMap.PostTiles)
@@ -210,7 +226,8 @@ public sealed class PrototypeWorld
         var map = new PrototypeMapSnapshot(
             [.. _map.RockTiles()],
             [.. _map.RockTiles().Where(_map.IsDiggable)],
-            [.. _map.ExcavatedTiles]);
+            [.. _map.ExcavatedTiles],
+            [.. _map.StockpileFloorTiles()]);
         var designations = _digDesignations
             .Select(ToSnapshot)
             .ToArray();
@@ -230,12 +247,17 @@ public sealed class PrototypeWorld
             designations,
             beds,
             looseItems,
+            stockpileCells,
             new PrototypeStockSnapshot(
                 _stockRaw,
                 _stockMeals,
                 LooseCount(ResourceKind.RawMushroom),
                 LooseCount(ResourceKind.Meal),
                 LooseCount(ResourceKind.Stone),
+                CarriedStoneTotal(),
+                StoredStoneTotal(),
+                ReservedStoneTotal(),
+                _zones[ZoneKind.MaterialStockpile].Count * PrototypeTuning.StockpileCellCapacity,
                 PrototypeTuning.LarderCapacity,
                 MealsProduced,
                 MealsEaten),
@@ -248,7 +270,10 @@ public sealed class PrototypeWorld
                 MealsProduced,
                 MealsEaten,
                 _digsCompleted,
-                _stoneProduced),
+                _stoneProduced,
+                _stoneHaulsCompleted,
+                _stoneStored,
+                _stoneSpilled),
             new PrototypeLaborSnapshot(
                 _totalCreatureTicks,
                 _foodWorkTicks,
@@ -257,6 +282,7 @@ public sealed class PrototypeWorld
                 _drillTicks,
                 _watchTicks,
                 _digTicks,
+                _stoneHaulTicks,
                 _musterTicks,
                 _idleTicks,
                 Percentage(_foodWorkTicks, _totalCreatureTicks),
@@ -379,7 +405,15 @@ public sealed class PrototypeWorld
 
                 foreach (var tile in erase.Tiles)
                 {
-                    _zones[erase.ZoneKind].Remove(tile);
+                    if (!_zones[erase.ZoneKind].Remove(tile))
+                    {
+                        continue;
+                    }
+
+                    if (erase.ZoneKind == ZoneKind.MaterialStockpile)
+                    {
+                        SpillStoredStone(tile);
+                    }
                 }
 
                 break;
@@ -531,7 +565,38 @@ public sealed class PrototypeWorld
             {
                 throw new InvalidDataException("A larder feature cannot be Forbidden.");
             }
+
+            // Material may only be stored on floor that was already floor when the
+            // session began; zoning freshly excavated ground is step 3. Unlike a
+            // dig designation, the initial layout answers this completely, so the
+            // pre-flight is already sufficient and this stays a guard: it keeps the
+            // rule attached to the mutation it protects.
+            if (painting && zoneKind == ZoneKind.MaterialStockpile &&
+                !_map.StockpileFloorTiles().Contains(tile))
+            {
+                throw new InvalidDataException(
+                    $"MaterialStockpile tile ({tile.X},{tile.Y}) is not pre-existing plain floor. " +
+                    "Map features and freshly excavated ground cannot store material yet.");
+            }
         }
+    }
+
+    /// <summary>
+    /// Erasing a stockpile cell must never destroy what it held. The stone stops
+    /// being stored and becomes a loose pile on the very same tile, so the total
+    /// amount of stone in the world is unchanged by the command.
+    /// </summary>
+    private void SpillStoredStone(GridPoint tile)
+    {
+        var stored = _storedStone.GetValueOrDefault(tile);
+        if (stored <= 0)
+        {
+            return;
+        }
+
+        _storedStone.Remove(tile);
+        AddLoose(tile, ResourceKind.Stone, stored);
+        _stoneSpilled += stored;
     }
 
     private void CancelInvalidJobs()
@@ -601,16 +666,40 @@ public sealed class PrototypeWorld
             }
         }
 
-        if (_priorities[JobKind.Haul] > 0 && ZoneCoversFeature(ZoneKind.Larder, TileKind.Larder))
+        if (_priorities[JobKind.Haul] > 0)
         {
-            // Stone is deliberately excluded: hauling and storing it is the next
-            // step of the construction experiment, not this one. Excavated stone
-            // stays loose on the floor so the player can see the result.
+            // One Haul kind, two destinations. Food goes to the larder and needs a
+            // larder feature in the zone; stone goes to a material stockpile cell
+            // and needs free capacity there. Neither gate affects the other.
+            var larderReady = ZoneCoversFeature(ZoneKind.Larder, TileKind.Larder);
+            var stoneCapacity = AvailableStoneCapacity();
             foreach (var entry in _loose
-                         .Where(pair => pair.Value > 0 && pair.Key.Resource != ResourceKind.Stone)
+                         .Where(pair => pair.Value > 0)
                          .OrderBy(pair => pair.Key.Point)
                          .ThenBy(pair => pair.Key.Resource))
             {
+                if (entry.Key.Resource == ResourceKind.Stone)
+                {
+                    if (stoneCapacity <= 0)
+                    {
+                        continue;
+                    }
+
+                    EnsureJob(
+                        $"haul:{entry.Key.Point.X}:{entry.Key.Point.Y}:{entry.Key.Resource}",
+                        JobKind.Haul,
+                        entry.Key.Point,
+                        entry.Key.Resource,
+                        Math.Min(PrototypeTuning.StoneCarryCapacity, entry.Value),
+                        desired);
+                    continue;
+                }
+
+                if (!larderReady)
+                {
+                    continue;
+                }
+
                 EnsureJob(
                     $"haul:{entry.Key.Point.X}:{entry.Key.Point.Y}:{entry.Key.Resource}",
                     JobKind.Haul,
@@ -1242,6 +1331,16 @@ public sealed class PrototypeWorld
                     continue;
                 }
 
+                // Nobody picks stone up without a place to put it down. The
+                // destination is planned from the pile, so the carry leg is the
+                // short one and the choice does not depend on who volunteers.
+                if (job.Kind == JobKind.Haul &&
+                    job.Resource == ResourceKind.Stone &&
+                    !TryPlanStoreCell(job.Origin, job.Quantity, out _, out _))
+                {
+                    continue;
+                }
+
                 if (!TryInitialTarget(creature, job, out var target))
                 {
                     continue;
@@ -1289,7 +1388,14 @@ public sealed class PrototypeWorld
                 .ThenBy(pair => pair.Job.Id)
                 .ToArray();
 
-            Assign(selected, competitors.FirstOrDefault());
+            if (!Assign(selected, competitors.FirstOrDefault()))
+            {
+                // Capacity is a property of the job, not of the volunteer: if the
+                // booking failed once it fails for everyone this tick.
+                pairs.RemoveAll(pair => pair.Job == selected.Job);
+                continue;
+            }
+
             pairs.RemoveAll(pair =>
                 pair.Creature == selected.Creature ||
                 pair.Job == selected.Job ||
@@ -1303,10 +1409,25 @@ public sealed class PrototypeWorld
         }
     }
 
-    private void Assign(MatchPair selected, MatchPair? competitor)
+    private bool Assign(MatchPair selected, MatchPair? competitor)
     {
         var creature = selected.Creature;
         var job = selected.Job;
+        if (job.Kind == JobKind.Haul && job.Resource == ResourceKind.Stone)
+        {
+            // Book the destination before anything else mutates, so a failed
+            // booking leaves both the creature and the job untouched.
+            if (!TryPlanStoreCell(job.Origin, job.Quantity, out var cell, out var amount) ||
+                amount <= 0)
+            {
+                return false;
+            }
+
+            job.StoreCell = cell;
+            job.StoreReserved = amount;
+            job.Quantity = amount;
+        }
+
         job.ReservedBy = creature.Id;
         creature.CurrentJob = job;
         creature.Mode = CreatureMode.Moving;
@@ -1326,6 +1447,7 @@ public sealed class PrototypeWorld
             },
             job.Kind,
             selected.InitialTarget);
+        return true;
     }
 
     private string ExplainChoice(MatchPair selected, MatchPair competitor)
@@ -1403,6 +1525,13 @@ public sealed class PrototypeWorld
                 : "dig_unreachable";
         }
 
+        // A blocked stone chain has a better answer than the generic haul ladder,
+        // and it is only consulted when stone is actually lying on the floor.
+        if (kind == JobKind.Haul && TryExplainStoneHaulWait(creature, out var stoneReason))
+        {
+            return stoneReason;
+        }
+
         var requiredZone = kind switch
         {
             JobKind.Harvest => (ZoneKind.Farm, TileKind.Bed),
@@ -1440,6 +1569,43 @@ public sealed class PrototypeWorld
         };
     }
 
+    /// <summary>
+    /// Answers "why is that stone still lying there?" without the player opening
+    /// the log. Returns false when stone hauling is in fact possible, so the
+    /// established food explanations stay untouched in a session without stone.
+    /// </summary>
+    private bool TryExplainStoneHaulWait(CreatureState creature, out string reason)
+    {
+        reason = string.Empty;
+        if (LooseCount(ResourceKind.Stone) <= 0)
+        {
+            return false;
+        }
+
+        if (_zones[ZoneKind.MaterialStockpile].Count == 0)
+        {
+            reason = "waiting_no_stockpile";
+            return true;
+        }
+
+        var usable = UsableStockpileCells().ToArray();
+        if (usable.Length == 0 ||
+            !usable.Any(cell =>
+                _map.Distance(creature.Position, cell, _zones[ZoneKind.Forbidden]) is not null))
+        {
+            reason = "stone_unreachable";
+            return true;
+        }
+
+        if (AvailableStoneCapacity() == 0)
+        {
+            reason = "waiting_stockpile_full";
+            return true;
+        }
+
+        return false;
+    }
+
     private Dictionary<string, int> DiagnosticDetails(CreatureState creature, JobKind? kind)
     {
         return kind switch
@@ -1463,6 +1629,10 @@ public sealed class PrototypeWorld
             {
                 ["looseItems"] = _loose.Values.Sum(),
                 ["freeCapacity"] = PrototypeTuning.LarderCapacity - _stockRaw - _stockMeals,
+                ["looseStone"] = LooseCount(ResourceKind.Stone),
+                ["storedStone"] = StoredStoneTotal(),
+                ["stockpileCells"] = _zones[ZoneKind.MaterialStockpile].Count,
+                ["stockpileFree"] = AvailableStoneCapacity(),
             },
             JobKind.Dig => new()
             {
@@ -1742,6 +1912,15 @@ public sealed class PrototypeWorld
             }
             else
             {
+                // Stone logistics is construction labour, not food labour: folding
+                // it into foodWorkTicks would silently inflate the food share the
+                // contract corridors are measured against.
+                if (creature.CurrentJob is { Kind: JobKind.Haul, Resource: ResourceKind.Stone })
+                {
+                    _stoneHaulTicks++;
+                    continue;
+                }
+
                 switch (creature.CurrentJob?.Kind)
                 {
                     case JobKind.Harvest:
@@ -1872,7 +2051,11 @@ public sealed class PrototypeWorld
 
     private void ActJob(CreatureState creature, JobState job)
     {
+        // The larder retry below uses "target == origin" to mean "no lane found".
+        // A stone haul never borrows that sentinel: its destination lives in
+        // StoreCell and may legitimately be the pile's own tile.
         if (job.Kind == JobKind.Haul &&
+            job.Resource != ResourceKind.Stone &&
             job.PickedUp &&
             job.Target == job.Origin)
         {
@@ -1914,6 +2097,13 @@ public sealed class PrototypeWorld
             JobKind.Rest => CreatureMode.Resting,
             _ => CreatureMode.Working,
         };
+
+        if (job.Kind == JobKind.Haul && !job.PickedUp &&
+            job.Resource == ResourceKind.Stone)
+        {
+            PickUpStone(creature, job);
+            return;
+        }
 
         if (job.Kind == JobKind.Haul && !job.PickedUp)
         {
@@ -2037,6 +2227,106 @@ public sealed class PrototypeWorld
         CompleteJob(creature, job);
     }
 
+    /// <summary>
+    /// The moment loose stone becomes carried stone. The booking shrinks to the
+    /// amount actually lifted, so a pile that shrank in the meantime does not keep
+    /// holding stockpile space it will never use.
+    /// </summary>
+    private void PickUpStone(CreatureState creature, JobState job)
+    {
+        if (job.StoreCell is not { } cell)
+        {
+            FinishJob(creature, job);
+            return;
+        }
+
+        var available = LooseAt(job.Origin, ResourceKind.Stone);
+        var quantity = Math.Min(job.Quantity, available);
+        if (quantity <= 0)
+        {
+            ReleaseStoreReservation(job);
+            FinishJob(creature, job);
+            return;
+        }
+
+        RemoveLoose(job.Origin, ResourceKind.Stone, quantity);
+        creature.Carrying = ResourceKind.Stone;
+        creature.CarryAmount = quantity;
+        job.Quantity = quantity;
+        job.StoreReserved = quantity;
+        job.PickedUp = true;
+        job.Target = cell;
+        RecordDecision(
+            creature,
+            "stone_picked_up",
+            new Dictionary<string, int>
+            {
+                ["quantity"] = quantity,
+                ["cellX"] = cell.X,
+                ["cellY"] = cell.Y,
+            },
+            JobKind.Haul,
+            cell);
+    }
+
+    /// <summary>
+    /// The moment carried stone becomes stored stone. Anything the cell cannot
+    /// take is put down as a loose pile instead of vanishing, which is what keeps
+    /// produced stone equal to loose plus carried plus stored at every tick.
+    /// </summary>
+    private void StoreCarriedStone(CreatureState creature, JobState job)
+    {
+        var carried = creature.CarryAmount;
+        var free = job.StoreCell is { } target &&
+            creature.Position == target &&
+            _zones[ZoneKind.MaterialStockpile].Contains(target)
+                ? Math.Max(0, PrototypeTuning.StockpileCellCapacity - StoredStoneAt(target))
+                : 0;
+        var delivered = Math.Min(free, carried);
+        if (delivered > 0)
+        {
+            var cell = job.StoreCell!.Value;
+            _storedStone[cell] = StoredStoneAt(cell) + delivered;
+            _stoneStored += delivered;
+            _stoneHaulsCompleted++;
+            RecordDecision(
+                creature,
+                "stone_stored",
+                new Dictionary<string, int>
+                {
+                    ["quantity"] = delivered,
+                    ["cellX"] = cell.X,
+                    ["cellY"] = cell.Y,
+                    ["stored"] = StoredStoneAt(cell),
+                    ["capacity"] = PrototypeTuning.StockpileCellCapacity,
+                },
+                JobKind.Haul,
+                cell);
+        }
+
+        var spilled = carried - delivered;
+        if (spilled > 0)
+        {
+            AddLoose(creature.Position, ResourceKind.Stone, spilled);
+            _stoneSpilled += spilled;
+            RecordDecision(
+                creature,
+                "stone_spilled",
+                new Dictionary<string, int>
+                {
+                    ["quantity"] = spilled,
+                    ["tileX"] = creature.Position.X,
+                    ["tileY"] = creature.Position.Y,
+                },
+                JobKind.Haul,
+                creature.Position);
+        }
+
+        ReleaseStoreReservation(job);
+        creature.Carrying = null;
+        creature.CarryAmount = 0;
+    }
+
     private void CompleteJob(CreatureState creature, JobState job)
     {
         switch (job.Kind)
@@ -2045,6 +2335,9 @@ public sealed class PrototypeWorld
                 _beds[job.Origin].Growth = 0;
                 AddLoose(job.Origin, ResourceKind.RawMushroom, PrototypeTuning.HarvestOutput);
                 _harvestsCompleted++;
+                break;
+            case JobKind.Haul when job.Resource == ResourceKind.Stone:
+                StoreCarriedStone(creature, job);
                 break;
             case JobKind.Haul:
                 var free = PrototypeTuning.LarderCapacity - _stockRaw - _stockMeals;
@@ -2135,6 +2428,14 @@ public sealed class PrototypeWorld
         if (creature.Carrying is { } resource && creature.CarryAmount > 0)
         {
             AddLoose(creature.Position, resource, creature.CarryAmount);
+            if (resource == ResourceKind.Stone)
+            {
+                // Counted here too, so stoneSpilled means one thing everywhere:
+                // stone that went back onto the floor after being picked up or
+                // stored, whatever interrupted it.
+                _stoneSpilled += creature.CarryAmount;
+            }
+
             creature.Carrying = null;
             creature.CarryAmount = 0;
         }
@@ -2143,6 +2444,9 @@ public sealed class PrototypeWorld
         job.PickedUp = false;
         job.Target = job.Origin;
         job.RemainingTicks = 0;
+        // A cancelled carrier must not keep holding stockpile space; the stone it
+        // was carrying has just been dropped as a loose pile above.
+        ReleaseStoreReservation(job);
         if (job.Kind == JobKind.Dig)
         {
             // Excavation has no partial result: an interrupted tile is untouched
@@ -2506,6 +2810,211 @@ public sealed class PrototypeWorld
             .Order();
     }
 
+    /// <summary>
+    /// Stockpile cells a creature could actually use. A cell inside
+    /// <see cref="ZoneKind.Forbidden"/> keeps whatever it already stores but stops
+    /// being a destination, because nobody is allowed to walk onto it.
+    /// </summary>
+    private IEnumerable<GridPoint> UsableStockpileCells()
+    {
+        return _zones[ZoneKind.MaterialStockpile]
+            .Where(tile =>
+                _map.IsPassable(tile) &&
+                !_zones[ZoneKind.Forbidden].Contains(tile))
+            .Order();
+    }
+
+    private int StoredStoneAt(GridPoint tile) => _storedStone.GetValueOrDefault(tile);
+
+    /// <summary>
+    /// Stone already booked by a live Haul job for this cell. Counting it is what
+    /// prevents two creatures from filling the same last free slot.
+    /// </summary>
+    private int IncomingStoneAt(GridPoint tile)
+    {
+        return _jobs
+            .Where(job => job.StoreCell == tile)
+            .Sum(job => job.StoreReserved);
+    }
+
+    private int FreeStoneCapacityAt(GridPoint tile)
+    {
+        return Math.Max(
+            0,
+            PrototypeTuning.StockpileCellCapacity - StoredStoneAt(tile) - IncomingStoneAt(tile));
+    }
+
+    private int AvailableStoneCapacity()
+    {
+        return UsableStockpileCells().Sum(FreeStoneCapacityAt);
+    }
+
+    private int StoredStoneTotal() => _storedStone.Values.Sum();
+
+    private int CarriedStoneTotal()
+    {
+        return _creatures
+            .Where(creature => creature.Carrying == ResourceKind.Stone)
+            .Sum(creature => creature.CarryAmount);
+    }
+
+    private int ReservedStoneTotal()
+    {
+        return _jobs.Sum(job => job.StoreReserved);
+    }
+
+    /// <summary>
+    /// Picks the stockpile cell a load of stone should go to: nearest to
+    /// <paramref name="from"/>, ties broken by tile order. It is a pure function of
+    /// canonical state, so the same log always produces the same destination.
+    /// </summary>
+    private bool TryPlanStoreCell(
+        GridPoint from,
+        int quantity,
+        out GridPoint cell,
+        out int amount)
+    {
+        var candidate = UsableStockpileCells()
+            .Where(tile => FreeStoneCapacityAt(tile) > 0)
+            .Select(tile => new
+            {
+                Tile = tile,
+                Distance = _map.Distance(from, tile, _zones[ZoneKind.Forbidden]),
+            })
+            .Where(item => item.Distance is not null)
+            .OrderBy(item => item.Distance)
+            .ThenBy(item => item.Tile)
+            .FirstOrDefault();
+        if (candidate is null)
+        {
+            cell = default;
+            amount = 0;
+            return false;
+        }
+
+        cell = candidate.Tile;
+        amount = Math.Min(quantity, FreeStoneCapacityAt(cell));
+        return true;
+    }
+
+    private void ReleaseStoreReservation(JobState job)
+    {
+        job.StoreCell = null;
+        job.StoreReserved = 0;
+    }
+
+    /// <summary>
+    /// A destination stays valid only while it is still a usable stockpile cell
+    /// with room for the booked load. Erase, Forbidden and a full cell all
+    /// invalidate it, and the carrier is re-planned rather than left walking to a
+    /// place that can no longer accept the stone.
+    /// </summary>
+    private bool IsStoreCellStillValid(JobState job, GridPoint from)
+    {
+        if (job.StoreCell is not { } cell)
+        {
+            return false;
+        }
+
+        return _zones[ZoneKind.MaterialStockpile].Contains(cell) &&
+            _map.IsPassable(cell) &&
+            !_zones[ZoneKind.Forbidden].Contains(cell) &&
+            StoredStoneAt(cell) + job.StoreReserved <= PrototypeTuning.StockpileCellCapacity &&
+            _map.Distance(from, cell, _zones[ZoneKind.Forbidden]) is not null;
+    }
+
+    /// <summary>
+    /// Runs before job cancellation each tick. Stone that is already on a
+    /// creature's back is never deleted here: it is either re-routed to another
+    /// cell or put down as a loose pile on the tile the carrier stands on.
+    /// </summary>
+    private void RevalidateStoneHauls()
+    {
+        foreach (var job in _jobs
+                     .Where(item =>
+                         item.Kind == JobKind.Haul &&
+                         item.Resource == ResourceKind.Stone &&
+                         item.StoreCell is not null)
+                     .OrderBy(item => item.Id)
+                     .ToArray())
+        {
+            var carrier = _creatures.FirstOrDefault(creature => creature.CurrentJob == job);
+            var from = carrier?.Position ?? job.Origin;
+            if (IsStoreCellStillValid(job, from))
+            {
+                continue;
+            }
+
+            var previous = job.StoreCell!.Value;
+            var wanted = job.PickedUp && carrier is not null
+                ? carrier.CarryAmount
+                : job.Quantity;
+            ReleaseStoreReservation(job);
+            if (TryPlanStoreCell(from, wanted, out var replacement, out var amount) &&
+                amount > 0)
+            {
+                job.StoreCell = replacement;
+                job.StoreReserved = amount;
+                if (job.PickedUp)
+                {
+                    job.Target = replacement;
+                }
+
+                if (carrier is not null)
+                {
+                    RecordDecision(
+                        carrier,
+                        "stone_target_replanned",
+                        new Dictionary<string, int>
+                        {
+                            ["fromX"] = previous.X,
+                            ["fromY"] = previous.Y,
+                            ["toX"] = replacement.X,
+                            ["toY"] = replacement.Y,
+                            ["quantity"] = amount,
+                        },
+                        JobKind.Haul,
+                        replacement);
+                }
+
+                continue;
+            }
+
+            // Nowhere left to put it. Dropping the load where the carrier stands is
+            // the only conserving answer; teleporting it back would be a lie.
+            if (carrier is null)
+            {
+                _jobs.Remove(job);
+                continue;
+            }
+
+            var dropped = carrier.CarryAmount;
+            if (job.PickedUp && dropped > 0)
+            {
+                AddLoose(carrier.Position, ResourceKind.Stone, dropped);
+                carrier.Carrying = null;
+                carrier.CarryAmount = 0;
+                _stoneSpilled += dropped;
+            }
+
+            RecordDecision(
+                carrier,
+                "stone_haul_cancelled",
+                new Dictionary<string, int>
+                {
+                    ["jobId"] = checked((int)job.Id),
+                    ["dropped"] = job.PickedUp ? dropped : 0,
+                    ["cellX"] = previous.X,
+                    ["cellY"] = previous.Y,
+                },
+                JobKind.Haul,
+                carrier.Position);
+            carrier.CurrentJob = null;
+            carrier.Mode = CreatureMode.Waiting;
+            _jobs.Remove(job);
+        }
+    }
+
     private bool TryNearestRestTarget(
         CreatureState creature,
         IReadOnlySet<GridPoint> claimed,
@@ -2589,6 +3098,8 @@ public sealed class PrototypeWorld
                 PrototypeTuning.UrgencyHaulMeal,
             JobKind.Haul when resource == ResourceKind.RawMushroom =>
                 PrototypeTuning.UrgencyHaulRaw,
+            JobKind.Haul when resource == ResourceKind.Stone =>
+                PrototypeTuning.UrgencyHaulStone,
             JobKind.Harvest when _beds.Values.Count(bed => bed.IsRipe) >=
                 PrototypeTuning.RipeBacklogThreshold =>
                 PrototypeTuning.UrgencyRipeBacklog,
@@ -2619,11 +3130,16 @@ public sealed class PrototypeWorld
         {
             JobKind.Harvest => PrototypeMap.BedTiles.Any(tile =>
                 _zones[ZoneKind.Farm].Contains(tile) && Reachable(tile)),
+            // A haul is reachable when some unreserved job has both a reachable
+            // pile and a reachable destination — the larder for food, a usable
+            // stockpile cell for stone.
             JobKind.Haul => _jobs.Any(job =>
-                    job.Kind == JobKind.Haul &&
-                    job.ReservedBy is null &&
-                    Reachable(job.Origin)) &&
-                ActiveLarderTiles().Any(Reachable),
+                job.Kind == JobKind.Haul &&
+                job.ReservedBy is null &&
+                Reachable(job.Origin) &&
+                (job.Resource == ResourceKind.Stone
+                    ? UsableStockpileCells().Any(Reachable)
+                    : ActiveLarderTiles().Any(Reachable))),
             JobKind.Cook => PrototypeMap.KitchenTiles.Any(tile =>
                     _zones[ZoneKind.Kitchen].Contains(tile) && Reachable(tile)) &&
                 ActiveLarderTiles().Any(Reachable),
@@ -2792,6 +3308,34 @@ public sealed class PrototypeWorld
             status);
     }
 
+    /// <summary>
+    /// Four readings the player must get from one cell: it is empty, it is partly
+    /// full, it is full, or its remaining room is already promised to a carrier on
+    /// the way. A cell inside Forbidden reports that it cannot be served at all.
+    /// </summary>
+    private PrototypeStockpileCellSnapshot ToStockpileSnapshot(GridPoint tile)
+    {
+        var stored = StoredStoneAt(tile);
+        var incoming = IncomingStoneAt(tile);
+        var reachable = _map.IsPassable(tile) && !_zones[ZoneKind.Forbidden].Contains(tile);
+        var status = !reachable
+            ? "stockpile_unreachable"
+            : stored >= PrototypeTuning.StockpileCellCapacity
+                ? "stockpile_full"
+                : stored + incoming >= PrototypeTuning.StockpileCellCapacity
+                    ? "stockpile_incoming"
+                    : stored > 0
+                        ? "stockpile_partial"
+                        : "stockpile_empty";
+        return new PrototypeStockpileCellSnapshot(
+            tile,
+            stored,
+            PrototypeTuning.StockpileCellCapacity,
+            incoming,
+            reachable,
+            status);
+    }
+
     private static PrototypePendingCommandSnapshot ToSnapshot(PrototypeCommand command)
     {
         return command switch
@@ -2955,6 +3499,12 @@ public sealed class PrototypeWorld
         public int RemainingTicks { get; set; }
         public int ProgressTicks { get; set; }
         public bool PickedUp { get; set; }
+
+        // Stone hauling only. The booking lives on the job rather than on the cell
+        // so that releasing the job — cancel, replan, completion — cannot leave a
+        // stockpile cell holding capacity for a delivery that will never arrive.
+        public GridPoint? StoreCell { get; set; }
+        public int StoreReserved { get; set; }
     }
 
     private sealed class BedState(GridPoint position, int growth)

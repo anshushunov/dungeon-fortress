@@ -69,11 +69,13 @@ public partial class Main : Node2D
             _screenshotPath = ReadArgument(arguments, "--screenshot");
             _screenshotFramesRemaining = _screenshotPath is null ? 0 : 3;
             var selectCreature = ReadIntArgument(arguments, "--select-creature");
+            var selectCell = ReadArgument(arguments, "--select-cell");
             var headlessSmoke = arguments.Contains("--smoke", StringComparer.Ordinal);
             var visibleSmoke = arguments.Contains("--visible-smoke", StringComparer.Ordinal);
             var controlsSmoke = arguments.Contains("--smoke-controls", StringComparer.Ordinal);
             var demoControls = arguments.Contains("--demo-controls", StringComparer.Ordinal);
             var demoDig = arguments.Contains("--demo-dig", StringComparer.Ordinal);
+            var demoStone = arguments.Contains("--demo-stone", StringComparer.Ordinal);
             var requiresSprites = !headlessSmoke && !controlsSmoke;
 
             CreateHud();
@@ -84,7 +86,7 @@ public partial class Main : Node2D
             }
             LoadFixture(
                 fixture,
-                demoControls || demoDig || controlsSmoke || _screenshotPath is null
+                demoControls || demoDig || demoStone || controlsSmoke || _screenshotPath is null
                     ? 1
                     : screenshotTicks);
             if (demoControls || controlsSmoke)
@@ -101,6 +103,12 @@ public partial class Main : Node2D
                 ApplyDemoDig();
                 Advance(Math.Max(0, screenshotTicks - _state!.Tick));
             }
+
+            if (demoStone)
+            {
+                ApplyDemoStone();
+                Advance(Math.Max(0, screenshotTicks - _state!.Tick));
+            }
             if (selectCreature is { } creatureId)
             {
                 if (!_state!.Creatures.Any(creature => creature.Id == creatureId))
@@ -112,6 +120,20 @@ public partial class Main : Node2D
 
                 _selectedCreatureId = creatureId;
                 _selectedCell = _state.Creatures.Single(creature => creature.Id == creatureId).Position;
+                UpdateHud();
+                QueueRedraw();
+            }
+
+            // Cell selection is the map counterpart of --select-creature: it makes
+            // a capture point at the tile whose explanation the frame is about,
+            // instead of relying on whatever a demo happened to select last.
+            if (selectCell is not null)
+            {
+                _selectedCell = ParseCell(selectCell);
+                _selectedCreatureId = _state!.Creatures
+                    .Where(creature => creature.Position == _selectedCell)
+                    .Select(creature => (int?)creature.Id)
+                    .FirstOrDefault();
                 UpdateHud();
                 QueueRedraw();
             }
@@ -275,6 +297,9 @@ public partial class Main : Node2D
             case Key.X:
                 SelectEditMode(EditMode.CancelDig);
                 break;
+            case Key.M:
+                SelectStockpileBrush();
+                break;
             case Key.Z:
                 _brushZone = (ZoneKind)(((int)_brushZone + 1) % Enum.GetValues<ZoneKind>().Length);
                 RefreshState();
@@ -325,8 +350,13 @@ public partial class Main : Node2D
         title.Text = "DUNGEON FORTRESS  //  PROTOTYPE 1 GRAYBOX";
 
         _summary = MakeLabel(new Vector2(18, 42), new Vector2(620, 45), 13, new Color("#bfdbfe"));
-        _inspector = MakeLabel(new Vector2(664, 92), new Vector2(278, 278), 14, new Color("#e2e8f0"));
-        _feedback = MakeLabel(new Vector2(664, 396), new Vector2(278, 132), 12, new Color("#94a3b8"));
+        // Sized and clipped to end above the legend at y=330. The explanations grew
+        // with stone logistics, and an unclipped label draws over the legend rather
+        // than stopping at its own rectangle.
+        _inspector = MakeLabel(new Vector2(664, 92), new Vector2(278, 232), 11, new Color("#e2e8f0"));
+        _inspector.ClipText = true;
+        // Moved down to clear the two stockpile legend rows added in Issue #26.
+        _feedback = MakeLabel(new Vector2(664, 406), new Vector2(278, 122), 12, new Color("#94a3b8"));
         _roster = MakeLabel(new Vector2(18, 474), new Vector2(620, 60), 10, new Color("#cbd5e1"));
     }
 
@@ -441,20 +471,22 @@ public partial class Main : Node2D
     private void UpdateHud()
     {
         var stock = _state!.Stocks;
-        _summary!.Text =
-            $"fixture={_fixture}   tick={_state.Tick}   {(_paused ? "PAUSED" : $"{_speed:0.#}x")}" +
-            $"\nTHREAT {(_state.Threat.Announced ? $"RAID IN {_state.Threat.TicksRemaining}" : "quiet")}  ·  raid {(_state.SessionResult.Outcome ?? (_state.Raiders.Count > 0 ? "IN PROGRESS" : "waiting"))}" +
-            $"  ·  raw {stock.RawMushroom}+{stock.LooseRawMushroom}" +
-            $"  ·  meals {stock.Meals}+{stock.LooseMeals}  ·  jobs {_state.Jobs.Count}  ·  checksum {_checksum[..12]}…";
-
         _inspector!.Text = BuildInspectorText();
-        // Keep the top line deliberately short: this remains legible at both
-        // supported capture sizes instead of flowing into the control strip.
-        _summary.Text =
+
+        // Two lines and no more: the summary label ends where the time toolbar
+        // begins, so a third wrapped line would be drawn over the buttons.
+        // Session identity and bookkeeping go on the first line; the second line
+        // is the resource line. Stone is reported as three separate facts on
+        // purpose — loose on the floor, on someone's back, put away — because one
+        // combined number would hide exactly the part of the chain this step adds.
+        _summary!.Text =
             $"{_fixture.ToUpperInvariant()}  •  t{_state.Tick}  •  {(_paused ? "PAUSED" : $"{_speed:0.#}x")}" +
-            $"\n{RaidPhase()}  •  food {stock.Meals}+{stock.LooseMeals}  •  raw {stock.RawMushroom}+{stock.LooseRawMushroom}" +
-            $"  •  stone {stock.LooseStone}  •  dug {_state.Economy.DigsCompleted}" +
-            $"  •  marks {_state.DigDesignations.Count}  •  jobs {_state.Jobs.Count}  •  {_checksum[..8]}";
+            $"  •  jobs {_state.Jobs.Count}  •  {_checksum[..8]}" +
+            $"\n{RaidPhase()}  •  food {stock.Meals}+{stock.LooseMeals}" +
+            $"  •  raw {stock.RawMushroom}+{stock.LooseRawMushroom}" +
+            $"  •  stone {stock.LooseStone}L {stock.CarriedStone}C " +
+            $"{stock.StoredStone}/{stock.StockpileCapacity}S" +
+            $"  •  dug {_state.Economy.DigsCompleted}  •  marks {_state.DigDesignations.Count}";
         var eventText = _state.Events.Count == 0
             ? "EVENT FEEDBACK\nNo events yet. Step or unpause to watch autonomous choices."
             : string.Join(
@@ -464,10 +496,7 @@ public partial class Main : Node2D
         _feedback!.Text =
             "EVENT FEEDBACK\n" + eventText +
             $"\n\nDiagnostics: {_diagnostics.Count} (structured JSON is emitted by smoke/capture).";
-        _roster!.Text = "CREW · " + string.Join("   ·   ", _state.Creatures.Select(creature => creature.Name));
-        _roster.Text += "\nINDIRECT: " + _controlFeedback;
-        _roster.Text += "\nLOG " + (_playerCommands.Count == 0 ? "empty" : string.Join(" | ", _playerCommands.TakeLast(2).Select(DescribeCommand)));
-        _roster.Text = "CREW  " + string.Join("  •  ", _state.Creatures.Select(creature => $"{creature.Name} {CreatureStateShort(creature)}")) +
+        _roster!.Text = "CREW  " + string.Join("  •  ", _state.Creatures.Select(creature => $"{creature.Name} {CreatureStateShort(creature)}")) +
             "\n" + _controlFeedback +
             "\nLOG " + (_playerCommands.Count == 0 ? "empty" : string.Join(" | ", _playerCommands.TakeLast(2).Select(DescribeCommand)));
     }
@@ -494,7 +523,8 @@ public partial class Main : Node2D
                 $"martial form {creature.MartialForm}   readiness {creature.Readiness}\n" +
                 $"mode {creature.Mode}\n" +
                 $"job {(job is null ? "none" : $"#{job.JobId} {job.Kind}")}\n" +
-                $"carrying {(creature.Carrying is null ? "nothing" : $"{creature.CarryAmount} {creature.Carrying}")}\n\n" +
+                $"carrying {(creature.Carrying is null ? "nothing" : $"{creature.CarryAmount} {creature.Carrying}")}\n" +
+                $"{DescribeCarrierRoute(creature, job)}\n" +
                 $"WHY\nt{creature.LastDecision.Tick} · {creature.LastDecision.ReasonCode}\n" +
                 $"{details}";
         }
@@ -509,12 +539,25 @@ public partial class Main : Node2D
             {
                 zones = zones.Append("QUARTERS: rest only at fatigue 50+, free bunk").ToArray();
             }
-            var jobs = _state.Jobs.Where(job => job.Origin == cell || job.Target == cell).ToArray();
+            var jobs = _state.Jobs
+                .Where(job => job.Origin == cell || job.Target == cell || job.StoreCell == cell)
+                .ToArray();
+            var stockpile = _state.StockpileCells.FirstOrDefault(item => item.Position == cell);
+            var stockpileSection = stockpile is null
+                ? string.Empty
+                : $"STOCKPILE\n{BuildStockpileExplanation(stockpile)}\n\n";
+            var looseStone = _state.LooseItems.FirstOrDefault(
+                item => item.Position == cell && item.Resource == ResourceKind.Stone);
+            var looseSection = looseStone is null
+                ? string.Empty
+                : $"LOOSE STONE\n{BuildLooseStoneExplanation(looseStone, jobs)}\n\n";
             return
                 $"CELL ({cell.X}, {cell.Y})\n\n" +
                 $"tile {TileDescription(cell)}\n" +
                 $"zones {(zones.Length == 0 ? "none" : string.Join(", ", zones))}\n" +
                 $"jobs {(jobs.Length == 0 ? "none" : string.Join(", ", jobs.Select(job => $"#{job.JobId} {job.Kind}")))}\n\n" +
+                looseSection +
+                stockpileSection +
                 $"DIG\n{BuildDigExplanation(cell)}";
         }
 
@@ -556,15 +599,17 @@ public partial class Main : Node2D
     /// </summary>
     private (string Label, int X, int Width, bool Active)[] ControlButtons() =>
     [
-        ("INSPECT [I]", 18, 62, _editMode == EditMode.Inspect),
-        ("PAINT [B]", 80, 50, _editMode == EditMode.Paint),
-        ("ERASE [E]", 130, 50, _editMode == EditMode.Erase),
-        ("DIG [D]", 180, 42, _editMode == EditMode.Dig),
-        ("CANCEL DIG [X]", 222, 78, _editMode == EditMode.CancelDig),
-        ($"zone {ShortZone(_brushZone)} [Z]", 300, 76, false),
-        ($"job {_selectedJob} {_state!.Priorities[_selectedJob]} [J]", 376, 100, false),
+        ("INSPECT [I]", 18, 56, _editMode == EditMode.Inspect),
+        ("PAINT [B]", 74, 46, _editMode == EditMode.Paint),
+        ("ERASE [E]", 120, 46, _editMode == EditMode.Erase),
+        ("DIG [D]", 166, 40, _editMode == EditMode.Dig),
+        ("CANCEL [X]", 206, 56, _editMode == EditMode.CancelDig),
+        ("STOCK [M]", 262, 58,
+            _editMode == EditMode.Paint && _brushZone == ZoneKind.MaterialStockpile),
+        ($"zone {ShortZone(_brushZone)} [Z]", 320, 66, false),
+        ($"job {_selectedJob} {_state!.Priorities[_selectedJob]} [J]", 386, 94, false),
         ($"{ShortRuleId(RuleIds[_selectedRule])} {_state.Rules[RuleIds[_selectedRule]]} [K]",
-            476, 94, false),
+            480, 90, false),
         ("REPLAY [Y]", 570, 62, false),
     ];
 
@@ -574,6 +619,7 @@ public partial class Main : Node2D
         ZoneKind.Quarters => "Quart",
         ZoneKind.TrainingGround => "Train",
         ZoneKind.Forbidden => "Forbid",
+        ZoneKind.MaterialStockpile => "Stock",
         _ => zone.ToString(),
     };
 
@@ -637,6 +683,16 @@ public partial class Main : Node2D
                     DrawRect(rect.Grow(-2), new Color("#fbbf24") with { A = 0.75f }, false, 1.0f);
                 }
 
+                // Same affordance for the stockpile brush: every legal target is
+                // outlined, so the player never has to guess where a stroke lands.
+                if (_editMode == EditMode.Paint &&
+                    _brushZone == ZoneKind.MaterialStockpile &&
+                    IsStockpileFloor(cell) &&
+                    !_state.StockpileCells.Any(item => item.Position == cell))
+                {
+                    DrawRect(rect.Grow(-2), new Color("#cbd5e1") with { A = 0.55f }, false, 1.0f);
+                }
+
                 if (_selectedCell == cell)
                 {
                     DrawRect(rect.Grow(-1), new Color("#f8fafc"), false, 2.0f);
@@ -645,6 +701,7 @@ public partial class Main : Node2D
         }
 
         DrawDigDesignations();
+        DrawStockpileCells();
 
         foreach (var bed in _state!.Beds)
         {
@@ -670,9 +727,20 @@ public partial class Main : Node2D
 
         foreach (var job in _state.Jobs)
         {
-            var color = JobColor(job.Kind);
+            var color = HaulRouteColor(job);
             DrawLine(CellCenter(job.Origin), CellCenter(job.Target), color with { A = 0.35f }, 1.0f);
             DrawCircle(CellCenter(job.Target), 3.2f, color);
+
+            // A booked stockpile cell is part of the route even before pickup, so
+            // the player can see where this pile is going.
+            if (job.StoreCell is { } storeCell && storeCell != job.Target)
+            {
+                DrawLine(
+                    CellCenter(job.Target),
+                    CellCenter(storeCell),
+                    color with { A = 0.25f },
+                    1.0f);
+            }
         }
 
         foreach (var creature in _state.Creatures)
@@ -697,7 +765,20 @@ public partial class Main : Node2D
                 DrawArc(center, 10, 0, Mathf.Tau, 16, new Color("#ffffff"), 2);
             }
 
-            if (creature.Carrying is not null)
+            if (creature.Carrying is ResourceKind.Stone)
+            {
+                // Stone rides as a rimmed grey square, the same shape a stockpile
+                // pip uses, so "carrying" and "stored" read as the same material.
+                DrawRect(
+                    new Rect2(center + new Vector2(3, -9), new Vector2(6, 6)),
+                    new Color("#e2e8f0"));
+                DrawRect(
+                    new Rect2(center + new Vector2(3, -9), new Vector2(6, 6)),
+                    new Color("#0f172a"),
+                    false,
+                    1.0f);
+            }
+            else if (creature.Carrying is not null)
             {
                 DrawCircle(center + new Vector2(6, -6), 2.5f, creature.Carrying == ResourceKind.Meal ? new Color("#fde68a") : new Color("#a3e635"));
             }
@@ -734,6 +815,11 @@ public partial class Main : Node2D
                 EditMode.CancelDig => _state.DigDesignations.Any(item => item.Tile == brushCell)
                     ? new Color("#38bdf8")
                     : new Color("#ef4444"),
+                EditMode.Paint when _brushZone == ZoneKind.MaterialStockpile =>
+                    IsStockpileFloor(brushCell) &&
+                    !_state.StockpileCells.Any(item => item.Position == brushCell)
+                        ? ZoneColor(ZoneKind.MaterialStockpile)
+                        : new Color("#ef4444"),
                 _ => ZoneColor(_brushZone),
             };
             DrawRect(preview.Grow(-1), previewColor with { A = 0.32f });
@@ -806,18 +892,88 @@ public partial class Main : Node2D
         }
     }
 
+    /// <summary>
+    /// A stockpile cell has to answer three questions at tile size: is this a
+    /// storage slot at all, how full is it, and is its remaining room already
+    /// promised to someone on the way. Stored blocks are drawn as discrete pips so
+    /// "2 of 2" is countable rather than inferred from a bar.
+    /// </summary>
+    private void DrawStockpileCells()
+    {
+        foreach (var cell in _state!.StockpileCells)
+        {
+            var rect = new Rect2(
+                CellTopLeft(cell.Position),
+                new Vector2(TileSize - 1, TileSize - 1));
+            var accent = cell.StatusCode switch
+            {
+                "stockpile_unreachable" => new Color("#f87171"),
+                "stockpile_full" => new Color("#e2e8f0"),
+                "stockpile_incoming" => new Color("#7dd3fc"),
+                _ => new Color("#94a3b8"),
+            };
+
+            DrawRect(rect.Grow(-1), new Color("#1f2937"));
+            DrawRect(rect.Grow(-1), accent, false, 1.5f);
+
+            // Corner ticks read as "a marked-out storage square" instead of just
+            // another zone outline.
+            var topLeft = CellTopLeft(cell.Position);
+            foreach (var corner in new[]
+                     {
+                         (new Vector2(2, 2), new Vector2(6, 2), new Vector2(2, 6)),
+                         (new Vector2(TileSize - 3, 2), new Vector2(TileSize - 7, 2), new Vector2(TileSize - 3, 6)),
+                     })
+            {
+                DrawLine(topLeft + corner.Item1, topLeft + corner.Item2, accent, 1.0f);
+                DrawLine(topLeft + corner.Item1, topLeft + corner.Item3, accent, 1.0f);
+            }
+
+            for (var index = 0; index < cell.Stored; index++)
+            {
+                DrawRect(
+                    new Rect2(
+                        topLeft + new Vector2(4 + index * 7, TileSize - 10),
+                        new Vector2(6, 6)),
+                    new Color("#e2e8f0"));
+                DrawRect(
+                    new Rect2(
+                        topLeft + new Vector2(4 + index * 7, TileSize - 10),
+                        new Vector2(6, 6)),
+                    new Color("#475569"),
+                    false,
+                    1.0f);
+            }
+
+            // A hollow pip per booked slot: the player sees the room is taken even
+            // though the carrier has not arrived yet.
+            for (var index = cell.Stored; index < cell.Stored + cell.IncomingReserved; index++)
+            {
+                DrawRect(
+                    new Rect2(
+                        topLeft + new Vector2(4 + index * 7, TileSize - 10),
+                        new Vector2(6, 6)),
+                    new Color("#7dd3fc"),
+                    false,
+                    1.0f);
+            }
+        }
+    }
+
     private void DrawSidePanel()
     {
         DrawRect(new Rect2(654, 74, 290, 456), new Color("#0f1d2d"));
         DrawRect(new Rect2(654, 74, 290, 456), new Color("#334155"), false, 1);
         DrawString(ThemeDB.FallbackFont, new Vector2(664, 88), "STATE / WHY", HorizontalAlignment.Left, -1, 13, new Color("#93c5fd"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 332), "LEGEND", HorizontalAlignment.Left, -1, 9, new Color("#cbd5e1"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 343), "teal crew / red-ring goblin / bar = HP / white X = downed", HorizontalAlignment.Left, -1, 7, new Color("#cbd5e1"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 353), "purple QUARTERS: rest at fatigue 50+", HorizontalAlignment.Left, -1, 7, new Color("#c4b5fd"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 363), "light warm block = diggable rock / dark = map edge", HorizontalAlignment.Left, -1, 7, new Color("#d6d3d1"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 373), "amber X = dig mark / yellow bar = dig progress", HorizontalAlignment.Left, -1, 7, new Color("#fcd34d"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 383), "red X = unreachable / pale tile = new floor / gray dot = stone", HorizontalAlignment.Left, -1, 7, new Color("#fca5a5"));
-        DrawLine(new Vector2(664, 391), new Vector2(934, 391), new Color("#334155"), 1);
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 330), "LEGEND", HorizontalAlignment.Left, -1, 9, new Color("#cbd5e1"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 341), "teal crew / red-ring goblin / bar = HP / white X = downed", HorizontalAlignment.Left, -1, 7, new Color("#cbd5e1"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 350), "purple QUARTERS: rest at fatigue 50+", HorizontalAlignment.Left, -1, 7, new Color("#c4b5fd"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 359), "light warm block = diggable rock / dark = map edge", HorizontalAlignment.Left, -1, 7, new Color("#d6d3d1"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 368), "amber X = dig mark / yellow bar = dig progress", HorizontalAlignment.Left, -1, 7, new Color("#fcd34d"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 377), "red X = unreachable / pale tile = new floor / gray dot = loose stone", HorizontalAlignment.Left, -1, 7, new Color("#fca5a5"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 386), "[M] stockpile: cornered square = material cell / grey box on a crew = carried stone", HorizontalAlignment.Left, -1, 7, new Color("#e2e8f0"));
+        DrawString(ThemeDB.FallbackFont, new Vector2(664, 395), "filled pip = stored / hollow blue pip = booked by a carrier on the way", HorizontalAlignment.Left, -1, 7, new Color("#7dd3fc"));
+        DrawLine(new Vector2(664, 400), new Vector2(934, 400), new Color("#334155"), 1);
     }
 
     private bool TryHandleToolbarClick(Vector2 position)
@@ -840,14 +996,15 @@ public partial class Main : Node2D
                     case 2: SelectEditMode(EditMode.Erase); return true;
                     case 3: SelectEditMode(EditMode.Dig); return true;
                     case 4: SelectEditMode(EditMode.CancelDig); return true;
-                    case 5:
+                    case 5: SelectStockpileBrush(); return true;
+                    case 6:
                         _brushZone = (ZoneKind)(((int)_brushZone + 1) % Enum.GetValues<ZoneKind>().Length);
                         break;
-                    case 6:
+                    case 7:
                         _selectedJob = (JobKind)(((int)_selectedJob + 1) % Enum.GetValues<JobKind>().Length);
                         _editingPriorities = true;
                         break;
-                    case 7:
+                    case 8:
                         _selectedRule = (_selectedRule + 1) % RuleIds.Length;
                         _editingPriorities = false;
                         break;
@@ -926,7 +1083,7 @@ public partial class Main : Node2D
         switch (_editMode)
         {
             case EditMode.Paint:
-                TryApplyPlayerCommand(new ZonePaintCommand(_state!.Tick, _brushZone, [selected]));
+                ApplyZonePaintBrush(selected);
                 break;
             case EditMode.Erase:
                 TryApplyPlayerCommand(new ZoneEraseCommand(_state!.Tick, _brushZone, [selected]));
@@ -938,6 +1095,61 @@ public partial class Main : Node2D
                 ApplyCancelDigBrush(selected);
                 break;
         }
+    }
+
+    /// <summary>
+    /// A stockpile stroke crosses rock, features and the gate on the way to the
+    /// floor the player wants, so it is filtered the same way the dig brush is: a
+    /// tile the simulation would reject never becomes a command, it becomes an
+    /// explanation. Other zones keep their existing, more permissive behaviour.
+    /// </summary>
+    private void ApplyZonePaintBrush(GridPoint cell)
+    {
+        if (_brushZone == ZoneKind.MaterialStockpile)
+        {
+            if (_state!.StockpileCells.Any(item => item.Position == cell))
+            {
+                _controlFeedback = $"({cell.X},{cell.Y}) is already a material stockpile cell.";
+                UpdateHud();
+                QueueRedraw();
+                return;
+            }
+
+            if (!IsStockpileFloor(cell))
+            {
+                _controlFeedback =
+                    $"({cell.X},{cell.Y}) cannot store material: {UnstockpileableReason(cell)}.";
+                UpdateHud();
+                QueueRedraw();
+                return;
+            }
+        }
+
+        TryApplyPlayerCommand(new ZonePaintCommand(_state!.Tick, _brushZone, [cell]));
+    }
+
+    /// <summary>
+    /// The simulation publishes which tiles may hold material, exactly as it
+    /// publishes which rock may be dug, so the adapter never re-derives the rule.
+    /// </summary>
+    private bool IsStockpileFloor(GridPoint cell)
+    {
+        return _state!.Map.StockpileFloorTiles.Contains(cell);
+    }
+
+    private string UnstockpileableReason(GridPoint cell)
+    {
+        if (_state!.Map.RockTiles.Contains(cell))
+        {
+            return "it is still rock";
+        }
+
+        if (_state.Map.ExcavatedTiles.Contains(cell))
+        {
+            return "zoning freshly excavated ground is the next step of the experiment";
+        }
+
+        return "it is a bed, a station, the larder, a bunk, a post or the gate — not plain floor";
     }
 
     /// <summary>
@@ -990,6 +1202,36 @@ public partial class Main : Node2D
         }
 
         return "the map boundary holds the dungeon in";
+    }
+
+    private string ShortUndiggableReason(GridPoint cell)
+    {
+        if (_state!.Map.RockTiles.Contains(cell))
+        {
+            return "map boundary";
+        }
+
+        return _state.Map.ExcavatedTiles.Contains(cell)
+            ? "already excavated"
+            : "floor, feature or gate";
+    }
+
+    /// <summary>
+    /// One key for the whole intent "I want a material stockpile here": it picks
+    /// the zone and the Paint mode together, because cycling zones with [Z] to
+    /// find MaterialStockpile is the step players lose the thread on. It stays an
+    /// ordinary <c>zone_paint</c> — no new command and no new selection framework.
+    /// </summary>
+    private void SelectStockpileBrush()
+    {
+        _brushZone = ZoneKind.MaterialStockpile;
+        SelectEditMode(EditMode.Paint);
+        _controlFeedback =
+            "STOCKPILE [M]: painting MaterialStockpile. Click or drag pre-existing floor; " +
+            $"each cell holds {PrototypeTuning.StockpileCellCapacity} stone. " +
+            "[E] erases and drops stored stone back on the tile. Esc returns to Inspect.";
+        UpdateHud();
+        QueueRedraw();
     }
 
     private void SelectEditMode(EditMode mode)
@@ -1145,6 +1387,41 @@ public partial class Main : Node2D
         RefreshState();
     }
 
+    /// <summary>
+    /// The reproducible stone-logistics capture. It uses the same brush path a
+    /// human uses — [D] to mark rock, [M] to paint a stockpile — and schedules the
+    /// stockpile for a later tick so that <c>--screenshot-ticks</c> alone selects
+    /// the "loose stone, no stockpile", "stone in transit" or "stockpile full"
+    /// moment. Nothing here addresses a creature.
+    /// </summary>
+    private void ApplyDemoStone()
+    {
+        _editMode = EditMode.Dig;
+        foreach (var tile in new GridPoint[] { new(25, 1), new(25, 2), new(25, 3), new(26, 1) })
+        {
+            ApplyDigBrush(tile);
+        }
+
+        // The stockpile is painted at a fixed future tick, after the pocket is
+        // excavated, so the earlier frames legitimately show stone with nowhere
+        // to go instead of a stockpile that has not been drawn yet.
+        SelectStockpileBrush();
+        TryApplyPlayerCommand(
+            new ZonePaintCommand(
+                DemoStoneZoneTick,
+                ZoneKind.MaterialStockpile,
+                [new GridPoint(22, 1), new GridPoint(23, 1)]));
+
+        _selectedCell = new GridPoint(23, 1);
+        _selectedCreatureId = null;
+        _controlFeedback =
+            "Demo: DIG marked (25,1) (25,2) (25,3) (26,1); [M] paints the material " +
+            $"stockpile (22,1) (23,1) at tick {DemoStoneZoneTick}. Nobody was ordered to carry anything.";
+        RefreshState();
+    }
+
+    private const int DemoStoneZoneTick = 200;
+
     private void VerifyControlsSmoke()
     {
         // This is an input seam rather than a simulation test: it asserts that a
@@ -1176,6 +1453,7 @@ public partial class Main : Node2D
         }
 
         VerifyDigBrushSmoke();
+        VerifyStockpileBrushSmoke();
 
         Advance(40);
         var first = PrototypeScenario.Capture(_world!).Checksum;
@@ -1261,6 +1539,85 @@ public partial class Main : Node2D
         }
     }
 
+    /// <summary>
+    /// An input-seam check for the [M] shortcut and the stockpile brush: one key
+    /// selects both the zone and Paint, a stroke over rock, a feature and the gate
+    /// emits nothing, painting works on plain floor, and the whole loose → carried
+    /// → stored chain then runs without a single order.
+    /// </summary>
+    private void VerifyStockpileBrushSmoke()
+    {
+        SelectStockpileBrush();
+        if (_editMode != EditMode.Paint || _brushZone != ZoneKind.MaterialStockpile)
+        {
+            throw new InvalidOperationException("[M] did not select MaterialStockpile and Paint.");
+        }
+
+        var guardedChecksum = _checksum;
+        var guardedCount = _playerCommands.Count;
+        ApplyZonePaintBrush(new GridPoint(9, 4));   // internal rock
+        ApplyZonePaintBrush(new GridPoint(0, 0));   // map boundary
+        ApplyZonePaintBrush(PrototypeMapGate);
+        ApplyZonePaintBrush(new GridPoint(14, 7));  // larder feature
+        ApplyZonePaintBrush(new GridPoint(2, 1));   // mushroom bed
+        if (_playerCommands.Count != guardedCount || _checksum != guardedChecksum)
+        {
+            throw new InvalidOperationException(
+                "The stockpile brush emitted a command for a tile the simulation forbids.");
+        }
+
+        var stockpile = new GridPoint[] { new(22, 1), new(23, 1) };
+        foreach (var tile in stockpile)
+        {
+            _lastBrushCell = null;
+            ApplyZonePaintBrush(tile);
+        }
+
+        Advance(1);
+        if (_playerCommands.Count != guardedCount + stockpile.Length)
+        {
+            throw new InvalidOperationException("The stockpile brush did not paint two cells.");
+        }
+
+        foreach (var tile in stockpile)
+        {
+            if (!_state!.StockpileCells.Any(cell => cell.Position == tile))
+            {
+                throw new InvalidOperationException(
+                    $"The stockpile brush did not create a cell at ({tile.X},{tile.Y}).");
+            }
+        }
+
+        CancelBrush("stockpile smoke");
+        if (_editMode != EditMode.Inspect || _brushPointerDown)
+        {
+            throw new InvalidOperationException("The stockpile brush did not return to inspect mode.");
+        }
+
+        // The point of the step: nobody is addressed, yet the stone moves and the
+        // total amount of stone in the world never changes.
+        var produced = _state!.Economy.StoneProduced;
+        for (var guard = 0; guard < 900 && _state.Stocks.StoredStone == 0; guard++)
+        {
+            Advance(1);
+            var stocks = _state.Stocks;
+            if (stocks.LooseStone + stocks.CarriedStone + stocks.StoredStone !=
+                _state.Economy.StoneProduced)
+            {
+                throw new InvalidOperationException(
+                    $"Stone conservation broke at tick {_state.Tick}: produced " +
+                    $"{_state.Economy.StoneProduced}, loose {stocks.LooseStone}, " +
+                    $"carried {stocks.CarriedStone}, stored {stocks.StoredStone}.");
+            }
+        }
+
+        if (_state.Stocks.StoredStone == 0 || produced == 0)
+        {
+            throw new InvalidOperationException(
+                "No stone reached the material stockpile inside the smoke budget.");
+        }
+    }
+
     private static GridPoint PrototypeMapGate => new(27, 13);
 
     private static string DescribeCommand(PrototypeCommand command) => command switch
@@ -1294,6 +1651,13 @@ public partial class Main : Node2D
                 tick = _state!.Tick,
                 checksum = _checksum,
                 path = resolved,
+                // The frame carries its own conservation evidence, so a reviewer
+                // never has to trust the picture alone.
+                stoneProduced = _state.Economy.StoneProduced,
+                looseStone = _state.Stocks.LooseStone,
+                carriedStone = _state.Stocks.CarriedStone,
+                storedStone = _state.Stocks.StoredStone,
+                stockpileCapacity = _state.Stocks.StockpileCapacity,
                 loadedSpriteStates = _loadedSpriteStates,
                 missingSpriteStates = _missingSpriteStates,
                 fallbackSpriteDraws = _fallbackSpriteDraws,
@@ -1395,6 +1759,22 @@ public partial class Main : Node2D
         return value is null ? null : int.Parse(value);
     }
 
+    private static GridPoint ParseCell(string value)
+    {
+        var parts = value.Split(',');
+        if (parts.Length != 2 ||
+            !int.TryParse(parts[0], out var x) ||
+            !int.TryParse(parts[1], out var y) ||
+            !IsMapCell(new GridPoint(x, y)))
+        {
+            throw new ArgumentException(
+                $"--select-cell expects X,Y inside the map, got '{value}'.",
+                "--select-cell");
+        }
+
+        return new GridPoint(x, y);
+    }
+
     private static bool IsMapCell(GridPoint cell) =>
         cell.X is >= 0 and < PrototypeTuning.MapWidth && cell.Y is >= 0 and < PrototypeTuning.MapHeight;
 
@@ -1489,7 +1869,113 @@ public partial class Main : Node2D
                 $"result → floor + {PrototypeTuning.DigStoneYield} loose stone";
         }
 
-        return $"not diggable: {UndiggableReason(cell)}.";
+        // Deliberately terse: on a stockpile cell this section is the least
+        // important one on the panel and must not push the rest out of the box.
+        return $"not diggable: {ShortUndiggableReason(cell)}.";
+    }
+
+    /// <summary>
+    /// The carrier half of the chain: where this creature is taking the stone and
+    /// why. Read straight from the job's booking, so the panel cannot claim a
+    /// destination the simulation is not holding.
+    /// </summary>
+    private string DescribeCarrierRoute(
+        PrototypeCreatureSnapshot creature,
+        PrototypeJobSnapshot? job)
+    {
+        if (job is not { Kind: JobKind.Haul, Resource: ResourceKind.Stone })
+        {
+            return creature.Carrying is ResourceKind.Stone
+                ? "stone in hand, no haul job: it will be put down here\n"
+                : string.Empty;
+        }
+
+        var cell = job.StoreCell;
+        var where = cell is null
+            ? "no stockpile cell booked"
+            : $"booked ({cell.Value.X},{cell.Value.Y}) x{job.StoreReserved}";
+        var stage = job.PickedUp
+            ? $"carrying to ({cell?.X},{cell?.Y})"
+            : $"walking to pile ({job.Origin.X},{job.Origin.Y})";
+        return $"stone haul: {stage}, {where}\n";
+    }
+
+    /// <summary>
+    /// "Why is that stone still lying here?" answered on the tile the player
+    /// clicked. The order of the branches is the order the simulation itself
+    /// checks them, so the panel and the reason codes never disagree.
+    /// </summary>
+    private string BuildLooseStoneExplanation(
+        PrototypeLooseItemSnapshot loose,
+        PrototypeJobSnapshot[] jobs)
+    {
+        var claim = jobs.FirstOrDefault(job =>
+            job.Origin == loose.Position &&
+            job.Kind == JobKind.Haul &&
+            job.Resource == ResourceKind.Stone);
+        var head = $"{loose.Quantity} loose here.";
+        if (claim is { ReservedBy: { } carrier })
+        {
+            var destination = claim.StoreCell is { } target
+                ? $"({target.X},{target.Y})"
+                : "a cell being chosen";
+            return $"{head} {CreatureName(carrier)} chose this job, taking it to {destination}.";
+        }
+
+        if (_state!.Priorities[JobKind.Haul] == 0)
+        {
+            return $"{head} Haul priority is 0: no carrying job exists. Raise it with [J] and +/-.";
+        }
+
+        var stock = _state.Stocks;
+        if (_state.StockpileCells.Count == 0)
+        {
+            return $"{head} No material stockpile yet. Press [M], paint plain floor.";
+        }
+
+        if (!_state.StockpileCells.Any(item => item.Reachable))
+        {
+            return $"{head} Every stockpile cell is Forbidden: nobody may step on it.";
+        }
+
+        var free = stock.StockpileCapacity - stock.StoredStone - stock.ReservedStone;
+        return free <= 0
+            ? $"{head} Stockpile full: {stock.StoredStone} stored + {stock.ReservedStone} booked " +
+                $"of {stock.StockpileCapacity}. Paint another cell with [M]."
+            : $"{head} {free} slot(s) free; waiting for a creature to be free.";
+    }
+
+    /// <summary>
+    /// The player must be able to answer "why is nothing arriving here?" from the
+    /// cell alone. Every branch reports simulation state, not a UI guess.
+    /// </summary>
+    private string BuildStockpileExplanation(PrototypeStockpileCellSnapshot cell)
+    {
+        var line = $"{cell.Stored}/{cell.Capacity} stored";
+        if (cell.IncomingReserved > 0)
+        {
+            line += $", {cell.IncomingReserved} booked";
+        }
+
+        var stock = _state!.Stocks;
+        return cell.StatusCode switch
+        {
+            "stockpile_unreachable" =>
+                $"{line}. Forbidden: nobody may step here. What is stored stays; " +
+                "nothing new arrives until you erase the Forbidden paint.",
+            "stockpile_full" =>
+                $"{line}. Full. Loose {stock.LooseStone} waits until you paint another cell with [M].",
+            "stockpile_incoming" =>
+                $"{line}. Every remaining slot is promised; a carrier is walking here.",
+            "stockpile_partial" =>
+                $"{line}. Room left. Erasing this cell drops the stored stone back " +
+                "here as a loose pile — it is never destroyed.",
+            _ =>
+                $"{line}. Empty and ready. " +
+                (stock.LooseStone > 0
+                    ? "Loose stone exists; a free creature will choose the Haul job."
+                    : "Dig rock and the stone will be brought here."),
+        };
     }
 
     private static Color ZoneColor(ZoneKind zone) => zone switch
@@ -1501,8 +1987,20 @@ public partial class Main : Node2D
         ZoneKind.TrainingGround => new Color("#22d3ee"),
         ZoneKind.Watch => new Color("#f472b6"),
         ZoneKind.Forbidden => new Color("#ef4444"),
+        ZoneKind.MaterialStockpile => new Color("#cbd5e1"),
         _ => new Color("#ffffff"),
     };
+
+    /// <summary>
+    /// Food and stone share one <c>Haul</c> kind but not one destination, so they
+    /// must not share one route colour on the map.
+    /// </summary>
+    private static Color HaulRouteColor(PrototypeJobSnapshot job)
+    {
+        return job is { Kind: JobKind.Haul, Resource: ResourceKind.Stone }
+            ? new Color("#cbd5e1")
+            : JobColor(job.Kind);
+    }
 
     private static Color JobColor(JobKind job) => job switch
     {

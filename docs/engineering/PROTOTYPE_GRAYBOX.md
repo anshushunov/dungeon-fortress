@@ -1,7 +1,7 @@
 # Godot graybox — Prototype 1
 
 Status: active
-Source: Issues #10–#12, #24
+Source: Issues #10–#12, #24, #26
 
 The graybox is the visual, top-down projection of the headless Prototype 1
 economy and raid. It starts with the `baseline` gameplay-v2 fixture.
@@ -39,17 +39,24 @@ visible and keeps initial inspection repeatable.
 | Reset fixture | `BASE`, `NEGLECT` | `R`, `N` |
 | Inspect | click creature or cell | `I` |
 | Designate rock for digging | `DIG` | `D` |
-| Withdraw a dig designation | `CANCEL DIG` | `X` |
+| Withdraw a dig designation | `CANCEL` | `X` |
+| Paint a material stockpile | `STOCK` | `M` |
 
 ## Indirect controls (Phase B)
 
 The second control strip is a row of buttons: select `INSPECT`, `PAINT`, `ERASE`,
-`DIG` or `CANCEL DIG` with the mouse (or `I`, `B`, `E`, `D`, `X`), choose the
-active zone with `Z`, and click a map cell. This produces a `zone_paint`,
-`zone_erase`, `dig_designate` or `dig_cancel` v2 command; none of them addresses
-a creature. `J` selects a global job priority — including `Dig` — and `K` selects
-one of `ration_reserve`, `drill_min_satiety` or `muster_lead_ticks`; `+` / `-`
-changes the selected bounded value. `Y` rebuilds and replays the current log.
+`DIG`, `CANCEL` or `STOCK` with the mouse (or `I`, `B`, `E`, `D`, `X`, `M`),
+choose the active zone with `Z`, and click a map cell. This produces a
+`zone_paint`, `zone_erase`, `dig_designate` or `dig_cancel` v2 command; none of
+them addresses a creature. `J` selects a global job priority — including `Dig` —
+and `K` selects one of `ration_reserve`, `drill_min_satiety` or
+`muster_lead_ticks`; `+` / `-` changes the selected bounded value. `Y` rebuilds
+and replays the current log.
+
+`STOCK [M]` is a shortcut, not a new mechanism: it selects the zone
+`MaterialStockpile` and the `PAINT` mode in one key, because hunting for that
+zone with `Z` is where the intent gets lost. The command it emits is an ordinary
+`zone_paint`.
 
 Every accepted edit is appended to the visible in-memory log, fully validated,
 then replayed from the fixture to the current tick before replacing the Godot
@@ -106,8 +113,82 @@ The excavation pocket is `(25..26, 1..3)`. Its right column touches the map
 boundary, so `(26,2)` is walled in until one of its neighbours is dug — an
 intentional, self-explaining `dig_unreachable` case rather than a defect.
 
-Loose stone stays where the rock was. There is no stone hauling, storage or
-consumption yet; that is the next step of Issue #23.
+## Material stockpile and stone hauling (Issue #26)
+
+`STOCK [M]` selects `MaterialStockpile` and the paint brush together. Click or
+drag **plain floor that was already floor at tick 0**; each cell holds
+`T.stockpile_cell_capacity` = 2 stone. `ERASE [E]` removes a cell and drops
+whatever it stored back onto the same tile as a loose pile — the stone is never
+destroyed.
+
+The brush is filtered the same way the dig brush is: dragging across rock, a
+mushroom bed, a station, the larder, a bunk, a post, the gate or excavated ground
+changes nothing and explains itself in the feedback line. The legal targets come
+from `map.stockpileFloorTiles` in the snapshot, so the adapter holds no copy of
+the rule, and while the brush is active every legal cell is outlined.
+
+Nobody is ordered to carry anything. A free creature picks the `Haul` job through
+the same autonomous scoring the food chain uses, and the same global `Haul`
+priority governs both. Setting `Haul` to 0 stops stone and food alike; restoring
+it resumes both.
+
+Reading stone without the log:
+
+| Reading | What it means |
+|---|---|
+| grey dot with a dark rim on a tile | loose stone: dug, not yet carried |
+| grey box on a creature | that creature is carrying stone right now |
+| dark cell with pale corner ticks | a `MaterialStockpile` cell |
+| filled pale pip inside a cell | one stone stored there |
+| hollow blue pip inside a cell | that slot is booked by a carrier on the way |
+| pale-blue cell outline | every remaining slot is booked (`stockpile_incoming`) |
+| white cell outline | the cell is full (`stockpile_full`) |
+| red cell outline | the cell is inside `Forbidden` and cannot be served |
+| grey route line | a stone haul: pile → destination cell |
+
+The HUD reports the three states separately as `stone {loose}L {carried}C
+{stored}/{capacity}S`, because one combined number would hide exactly the part of
+the chain this step adds.
+
+Clicking a tile with loose stone states why it is not moving: no stockpile, `Haul`
+priority 0, no free capacity, no reachable cell, or simply nobody free yet.
+Clicking a stockpile cell states how full it is, how much is already booked by a
+carrier in transit, and that erasing it drops the stone back rather than deleting
+it. Clicking the carrier states what it holds and which cell it booked.
+
+**Known limitation.** Pathfinding routes around rock and `Forbidden`, not around
+creatures. A carrier whose shortest route crosses a larder tile occupied by an
+eating creature can stand still for a long stretch and repeat
+`waiting_blocked_by_other`. It resolves on its own and no stone is lost, but the
+carrier looks frozen while it lasts. Making movement avoid occupied tiles would
+change every existing scenario and is deliberately out of this step.
+
+### Reproducible stone frames
+
+`--demo-stone` replays a fixed brush session through the same code path a human
+uses: `DIG` marks `(25,1) (25,2) (25,3) (26,1)`, then `[M]` paints the material
+stockpile `(22,1) (23,1)` at tick 200 — after the pocket is dug, so the earlier
+frames legitimately show stone with nowhere to go. `--select-cell X,Y` points the
+inspector at the tile each frame is about.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
+  -Fixture baseline -DemoStone -ScreenshotTicks 190 -SelectCell 25,3 `
+  -ScreenshotPath issue26\stone-1-loose-no-stockpile.png
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
+  -Fixture baseline -DemoStone -ScreenshotTicks 336 -SelectCell 25,1 `
+  -ScreenshotPath issue26\stone-2-in-transit.png
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
+  -Fixture baseline -DemoStone -ScreenshotTicks 950 -SelectCell 23,1 `
+  -ScreenshotPath issue26\stone-3-stockpile-full.png
+```
+
+Each capture prints `stoneProduced`, `looseStone`, `carriedStone`, `storedStone`
+and `stockpileCapacity` next to its checksum, so a frame carries its own
+conservation evidence instead of being trusted as a picture.
+
+Stone is still never consumed. Spending it on a functional object is the next
+step of Issue #23.
 
 ### Reproducible excavation frames
 
@@ -183,9 +264,10 @@ commitment to production art direction.
 ## Boundary
 
 `DungeonFortress.Simulation.PrototypeWorld` owns the fixture, commands, the
-mutable map, dig designations, jobs, creatures, economy, event log and canonical
-checksum. Which tiles are rock and which of them may be designated both come from
-the snapshot, so the adapter holds no copy of the map rules. Godot reads
+mutable map, dig designations, jobs, creatures, economy, stored stone, stockpile
+capacity and reservations, the event log and the canonical checksum. Which tiles
+are rock, which of them may be designated and which floor may hold material all
+come from the snapshot, so the adapter holds no copy of the map rules. Godot reads
 only `GetSnapshot()` and owns only rendering, hit-testing selection and the
 non-canonical time controls. No Node stores an alternative job, creature or
 economy state, and no input sends a direct creature command. It remains a

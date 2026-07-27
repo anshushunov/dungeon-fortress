@@ -208,8 +208,13 @@ public sealed class PrototypeDigTests
                 @event.Details["stone"] == PrototypeTuning.DigStoneYield);
     }
 
+    /// <summary>
+    /// Digging alone still produces nothing but a loose pile. Issue #26 added the
+    /// material stockpile that turns that pile into a delivery; without one, the
+    /// result of an excavation is exactly what step 1 promised.
+    /// </summary>
     [Fact]
-    public void Loose_stone_is_not_hauled_because_stone_logistics_is_the_next_step()
+    public void Loose_stone_stays_on_its_tile_until_a_material_stockpile_exists()
     {
         var world = new PrototypeWorld(DesignateLog(PocketBottomLeft));
         world.RunTicks(200);
@@ -219,6 +224,8 @@ public sealed class PrototypeDigTests
         var state = world.GetSnapshot();
 
         Assert.Equal(PrototypeTuning.DigStoneYield, state.Stocks.LooseStone);
+        Assert.Equal(0, state.Stocks.StoredStone);
+        Assert.Empty(state.StockpileCells);
         Assert.DoesNotContain(
             state.Jobs,
             job => job.Kind == JobKind.Haul && job.Resource == ResourceKind.Stone);

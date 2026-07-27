@@ -7,8 +7,11 @@ param(
     [ValidateRange(0, 1800)]
     [int]$ScreenshotTicks = 180,
     [int]$SelectCreature = -1,
+    [ValidatePattern("^\d{1,2},\d{1,2}$")]
+    [string]$SelectCell,
     [switch]$DemoControls,
     [switch]$DemoDig,
+    [switch]$DemoStone,
     [switch]$VisibleSmoke,
     [ValidatePattern("^\d{3,5}x\d{3,5}$")]
     [string]$WindowSize
@@ -70,11 +73,17 @@ if ($null -ne $resolvedScreenshotPath) {
 if ($SelectCreature -ge 0) {
     $arguments += "--select-creature", $SelectCreature.ToString([Globalization.CultureInfo]::InvariantCulture)
 }
+if (-not [string]::IsNullOrWhiteSpace($SelectCell)) {
+    $arguments += "--select-cell", $SelectCell
+}
 if ($DemoControls) {
     $arguments += "--demo-controls"
 }
 if ($DemoDig) {
     $arguments += "--demo-dig"
+}
+if ($DemoStone) {
+    $arguments += "--demo-stone"
 }
 
 if ($VisibleSmoke -and -not [string]::IsNullOrWhiteSpace($ScreenshotPath)) {
