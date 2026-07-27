@@ -213,6 +213,7 @@ public sealed record PrototypeRaiderSnapshot(
     GridPoint Position,
     int CarryingMeals,
     int StealTicks,
+    bool ReturningToGate,
     RaiderMode Mode);
 
 public sealed record PrototypeSessionResultSnapshot(

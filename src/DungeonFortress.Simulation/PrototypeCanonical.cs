@@ -353,6 +353,7 @@ public static class PrototypeCanonical
             WritePoint(writer, "position", raider.Position);
             writer.WriteNumber("carryingMeals", raider.CarryingMeals);
             writer.WriteNumber("stealTicks", raider.StealTicks);
+            writer.WriteBoolean("returningToGate", raider.ReturningToGate);
             writer.WriteString("mode", ToJson(raider.Mode));
             writer.WriteEndObject();
         }

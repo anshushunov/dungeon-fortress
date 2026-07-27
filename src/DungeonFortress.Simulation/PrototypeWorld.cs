@@ -254,7 +254,7 @@ public sealed class PrototypeWorld
                 PrototypeTuning.RaiderCount,
                 Math.Max(0, PrototypeTuning.RaidTick - CurrentTick)),
             _raiders.OrderBy(raider => raider.Id).Select(raider => new PrototypeRaiderSnapshot(
-                raider.Id, raider.Hp, raider.Might, raider.Position, raider.CarryingMeals, raider.StealTicks, raider.Mode)).ToArray(),
+                raider.Id, raider.Hp, raider.Might, raider.Position, raider.CarryingMeals, raider.StealTicks, raider.ReturningToGate, raider.Mode)).ToArray(),
             new PrototypeSessionResultSnapshot(
                 _outcome,
                 _combatEndTick,
@@ -262,7 +262,8 @@ public sealed class PrototypeWorld
                 _creatures.Count(creature => creature.Mode == CreatureMode.Downed),
                 _creatures.Count(creature => creature.Mode == CreatureMode.Fled),
                 _raiders.Count(raider => raider.Mode == RaiderMode.Downed),
-                _raiders.Sum(raider => raider.CarryingMeals),
+                _raiders.Where(raider => raider.Mode == RaiderMode.Escaped)
+                    .Sum(raider => raider.CarryingMeals),
                 _stockMeals));
     }
 
@@ -1462,7 +1463,7 @@ public sealed class PrototypeWorld
                 continue;
             }
 
-            var target = raider.CarryingMeals >= PrototypeTuning.CarryCapacity
+            var target = raider.ReturningToGate
                 ? PrototypeMap.Gate
                 : PrototypeMap.LarderTiles[0];
             if (raider.Position == PrototypeMap.LarderTiles[0] &&
@@ -1470,27 +1471,33 @@ public sealed class PrototypeWorld
             {
                 if (_stockMeals == 0)
                 {
-                    raider.Mode = RaiderMode.Escaped;
-                    continue;
+                    raider.ReturningToGate = true;
+                    target = PrototypeMap.Gate;
                 }
-
-                raider.StealTicks++;
-                if (raider.StealTicks < PrototypeTuning.StealPeriod)
+                else
                 {
+                    raider.StealTicks++;
+                    if (raider.StealTicks < PrototypeTuning.StealPeriod)
+                    {
+                        continue;
+                    }
+
+                    _stockMeals--;
+                    raider.CarryingMeals++;
+                    raider.StealTicks = 0;
+                    if (raider.CarryingMeals >= PrototypeTuning.CarryCapacity)
+                    {
+                        raider.ReturningToGate = true;
+                    }
                     continue;
                 }
-
-                _stockMeals--;
-                raider.CarryingMeals++;
-                raider.StealTicks = 0;
-                continue;
             }
             var next = _map.NextStep(raider.Position, target, _zones[ZoneKind.Forbidden]);
             if (next is { } step)
             {
                 raider.Position = step;
             }
-            if (raider.CarryingMeals > 0 && raider.Position == PrototypeMap.Gate)
+            if (target == PrototypeMap.Gate && raider.Position == PrototypeMap.Gate)
             {
                 raider.Mode = RaiderMode.Escaped;
             }
@@ -2683,6 +2690,7 @@ public sealed class PrototypeWorld
         public GridPoint Position { get; set; } = position;
         public int CarryingMeals { get; set; }
         public int StealTicks { get; set; }
+        public bool ReturningToGate { get; set; }
         public RaiderMode Mode { get; set; } = RaiderMode.Raiding;
     }
 

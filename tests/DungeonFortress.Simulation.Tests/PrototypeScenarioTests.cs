@@ -381,6 +381,37 @@ public sealed class PrototypeScenarioTests
                 creature.MaxHp));
     }
 
+    [Fact]
+    public void Empty_larder_raider_returns_to_gate_before_escape_and_theft_accounting()
+    {
+        var world = new PrototypeWorld(LoadFixture("neglected"));
+        var observedReturn = false;
+
+        while (!world.IsComplete && !observedReturn)
+        {
+            world.Step();
+            var beforeReturn = world.GetSnapshot();
+            var raider = beforeReturn.Raiders.FirstOrDefault(item =>
+                item.Mode == RaiderMode.Raiding &&
+                item.Position == new GridPoint(14, 7) &&
+                beforeReturn.Stocks.Meals == 0);
+            if (raider is null)
+            {
+                continue;
+            }
+
+            world.Step();
+            var afterReturn = world.GetSnapshot();
+            var moved = afterReturn.Raiders.Single(item => item.Id == raider.Id);
+            Assert.Equal(RaiderMode.Raiding, moved.Mode);
+            Assert.NotEqual(new GridPoint(27, 13), moved.Position);
+            Assert.Equal(0, afterReturn.SessionResult.MealsStolen);
+            observedReturn = true;
+        }
+
+        Assert.True(observedReturn, "Neglected fixture did not reach the empty-larder return branch.");
+    }
+
     private static int AverageReadiness(PrototypeRunResult result)
     {
         return (int)result.State.Creatures.Average(creature => creature.ReadinessAtRaid!.Value);
