@@ -58,6 +58,17 @@ public enum CreatureMode
     Eating,
     Resting,
     Mustering,
+    Fighting,
+    Fled,
+    Downed,
+}
+
+public enum RaiderMode
+{
+    Queued,
+    Raiding,
+    Downed,
+    Escaped,
 }
 
 public enum InjuryKind
@@ -193,6 +204,24 @@ public sealed record PrototypeThreatSnapshot(
     int RaiderCount,
     int TicksRemaining);
 
+public sealed record PrototypeRaiderSnapshot(
+    int Id,
+    int Hp,
+    int Might,
+    GridPoint Position,
+    int CarryingMeals,
+    RaiderMode Mode);
+
+public sealed record PrototypeSessionResultSnapshot(
+    string? Outcome,
+    int? EndTick,
+    bool Unresolved,
+    int DefendersDowned,
+    int DefendersFled,
+    int RaidersDowned,
+    int MealsStolen,
+    int MealsLeft);
+
 public sealed record PrototypeSnapshot(
     int SchemaVersion,
     long NextJobId,
@@ -212,7 +241,9 @@ public sealed record PrototypeSnapshot(
     PrototypeLaborSnapshot Labor,
     IReadOnlyList<PrototypeStationSnapshot> Stations,
     IReadOnlyList<PrototypeEvent> Events,
-    PrototypeThreatSnapshot Threat);
+    PrototypeThreatSnapshot Threat,
+    IReadOnlyList<PrototypeRaiderSnapshot> Raiders,
+    PrototypeSessionResultSnapshot SessionResult);
 
 public sealed record PrototypeRunResult(
     int Tick,

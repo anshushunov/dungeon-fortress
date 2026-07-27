@@ -6,6 +6,22 @@ public static class PrototypeTuning
     public const int ThreatAnnounceTick = 300;
     public const int RaidTick = 1_500;
     public const int RaiderCount = 4;
+    public const int RaiderHp = 30;
+    public const int RaiderMightBase = 3;
+    public const int RaiderMightJitter = 1;
+    public const int RaiderEntryInterval = 2;
+    public const int CombatMinSatiety = 20;
+    public const int CombatJoinRecheck = 20;
+    public const int EngageRadius = 8;
+    public const int DamageFloor = 1;
+    public const int DamageReadinessDivisor = 25;
+    public const int ArmourReadinessDivisor = 50;
+    public const int DamageJitter = 1;
+    public const int LightInjuryShare = 40;
+    public const int MoraleGritWeight = 12;
+    public const int MoraleReadinessDivisor = 2;
+    public const int MoraleBase = 50;
+    public const int MoralePerDowned = 10;
     public const ulong DefaultSeed = 20_260_726UL;
 
     public const int MapWidth = 28;

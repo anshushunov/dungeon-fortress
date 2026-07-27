@@ -341,6 +341,29 @@ public static class PrototypeCanonical
         writer.WriteNumber("raiderCount", state.Threat.RaiderCount);
         writer.WriteNumber("ticksRemaining", state.Threat.TicksRemaining);
         writer.WriteEndObject();
+        writer.WriteStartArray("raiders");
+        foreach (var raider in state.Raiders.OrderBy(raider => raider.Id))
+        {
+            writer.WriteStartObject();
+            writer.WriteNumber("id", raider.Id);
+            writer.WriteNumber("hp", raider.Hp);
+            writer.WriteNumber("might", raider.Might);
+            WritePoint(writer, "position", raider.Position);
+            writer.WriteNumber("carryingMeals", raider.CarryingMeals);
+            writer.WriteString("mode", ToJson(raider.Mode));
+            writer.WriteEndObject();
+        }
+        writer.WriteEndArray();
+        writer.WriteStartObject("sessionResult");
+        if (state.SessionResult.Outcome is { } outcome) writer.WriteString("outcome", outcome); else writer.WriteNull("outcome");
+        if (state.SessionResult.EndTick is { } endTick) writer.WriteNumber("endTick", endTick); else writer.WriteNull("endTick");
+        writer.WriteBoolean("unresolved", state.SessionResult.Unresolved);
+        writer.WriteNumber("defendersDowned", state.SessionResult.DefendersDowned);
+        writer.WriteNumber("defendersFled", state.SessionResult.DefendersFled);
+        writer.WriteNumber("raidersDowned", state.SessionResult.RaidersDowned);
+        writer.WriteNumber("mealsStolen", state.SessionResult.MealsStolen);
+        writer.WriteNumber("mealsLeft", state.SessionResult.MealsLeft);
+        writer.WriteEndObject();
         writer.WriteEndObject();
     }
 

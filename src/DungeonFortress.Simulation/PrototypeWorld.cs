@@ -14,6 +14,8 @@ public sealed class PrototypeWorld
     private readonly Dictionary<GridPoint, BedState> _beds;
     private readonly Dictionary<(GridPoint Point, ResourceKind Resource), int> _loose = [];
     private readonly List<EventState> _events = [];
+    private readonly List<RaiderState> _raiders = [];
+    private readonly DeterministicRandom _combatRandom;
     private readonly Dictionary<GridPoint, int> _stationOccupiedTicks =
         PrototypeMap.KitchenTiles
             .Concat(PrototypeMap.PostTiles)
@@ -36,6 +38,8 @@ public sealed class PrototypeWorld
     private int _musterTicks;
     private int _idleTicks;
     private int _postCapacityTicks;
+    private string? _outcome;
+    private int? _combatEndTick;
 
     public PrototypeWorld(PrototypeCommandLog commandLog)
     {
@@ -65,6 +69,7 @@ public sealed class PrototypeWorld
             .Select((point, index) => new BedState(point, index * PrototypeTuning.BedRipenessOffset))
             .ToDictionary(bed => bed.Position);
         _creatures = CreateCreatures(commandLog.Seed);
+        _combatRandom = new DeterministicRandom(commandLog.Seed ^ 0x636F6D626174UL);
     }
 
     public ulong Seed { get; }
@@ -102,6 +107,7 @@ public sealed class PrototypeWorld
         }
 
         ApplyCommands();
+        EnterRaiders();
         if (CurrentTick == PrototypeTuning.RaidTick)
         {
             foreach (var creature in _creatures)
@@ -110,6 +116,8 @@ public sealed class PrototypeWorld
             }
         }
 
+        UpdateCombatParticipation();
+
         CancelInvalidJobs();
         DecideNeedsAndMuster();
         GenerateJobs();
@@ -117,6 +125,7 @@ public sealed class PrototypeWorld
         PlanTrafficActions();
         CountLaborForTick();
         ActCreatures();
+        ActRaiders();
         CountPostOccupancyForTick();
         ApplyPassiveProcesses();
         CurrentTick++;
@@ -243,7 +252,18 @@ public sealed class PrototypeWorld
                 PrototypeTuning.ThreatAnnounceTick,
                 PrototypeTuning.RaidTick,
                 PrototypeTuning.RaiderCount,
-                Math.Max(0, PrototypeTuning.RaidTick - CurrentTick)));
+                Math.Max(0, PrototypeTuning.RaidTick - CurrentTick)),
+            _raiders.OrderBy(raider => raider.Id).Select(raider => new PrototypeRaiderSnapshot(
+                raider.Id, raider.Hp, raider.Might, raider.Position, raider.CarryingMeals, raider.Mode)).ToArray(),
+            new PrototypeSessionResultSnapshot(
+                _outcome,
+                _combatEndTick,
+                _outcome is null && CurrentTick >= PrototypeTuning.RaidTick,
+                _creatures.Count(creature => creature.Mode == CreatureMode.Downed),
+                _creatures.Count(creature => creature.Mode == CreatureMode.Fled),
+                _raiders.Count(raider => raider.Mode == RaiderMode.Downed),
+                _raiders.Sum(raider => raider.CarryingMeals),
+                _stockMeals));
     }
 
     private static IReadOnlyDictionary<JobKind, int> Affinities(params (JobKind Kind, int Value)[] values)
@@ -1022,7 +1042,7 @@ public sealed class PrototypeWorld
                 creature.CurrentJob is null &&
                 !creature.IsMustering &&
                 creature.TrafficTarget is null &&
-                creature.Mode != CreatureMode.Eating &&
+                creature.Mode is not (CreatureMode.Eating or CreatureMode.Fighting or CreatureMode.Fled or CreatureMode.Downed) &&
                 creature.Satiety >= PrototypeTuning.CollapseThreshold)
             .OrderBy(creature => creature.Id)
             .ToList();
@@ -1275,6 +1295,17 @@ public sealed class PrototypeWorld
     {
         foreach (var creature in _creatures.OrderBy(creature => creature.Id))
         {
+            if (creature.Mode == CreatureMode.Fighting)
+            {
+                ActCombatant(creature);
+                continue;
+            }
+
+            if (creature.Mode is CreatureMode.Fled or CreatureMode.Downed)
+            {
+                continue;
+            }
+
             if (creature.TrafficTarget is { } trafficTarget)
             {
                 if (Move(creature, trafficTarget))
@@ -1305,6 +1336,184 @@ public sealed class PrototypeWorld
             }
         }
     }
+
+    private void EnterRaiders()
+    {
+        if (CurrentTick < PrototypeTuning.RaidTick)
+        {
+            return;
+        }
+
+        while (_raiders.Count < PrototypeTuning.RaiderCount &&
+               CurrentTick >= PrototypeTuning.RaidTick + _raiders.Count * PrototypeTuning.RaiderEntryInterval)
+        {
+            var id = _raiders.Count;
+            _raiders.Add(new RaiderState(
+                id,
+                PrototypeTuning.RaiderHp,
+                PrototypeTuning.RaiderMightBase + CombatJitter(PrototypeTuning.RaiderMightJitter),
+                PrototypeMap.Gate));
+        }
+    }
+
+    private void UpdateCombatParticipation()
+    {
+        if (CurrentTick < PrototypeTuning.RaidTick ||
+            (CurrentTick != PrototypeTuning.RaidTick && CurrentTick % PrototypeTuning.CombatJoinRecheck != 0))
+        {
+            return;
+        }
+
+        foreach (var creature in _creatures.Where(c => c.Mode is not (CreatureMode.Fighting or CreatureMode.Fled or CreatureMode.Downed)).OrderBy(c => c.Id))
+        {
+            var failed = new Dictionary<string, int>();
+            if (creature.Injury == InjuryKind.Heavy)
+            {
+                failed["injured"] = 1;
+                RecordDecision(creature, "combat_refused_injured", failed);
+                continue;
+            }
+            if (creature.Satiety < PrototypeTuning.CombatMinSatiety)
+            {
+                failed["satiety"] = creature.Satiety;
+                failed["threshold"] = PrototypeTuning.CombatMinSatiety;
+                RecordDecision(creature, "combat_refused_starving", failed);
+                continue;
+            }
+
+            var distance = _map.Distance(creature.Position, PrototypeMap.LarderTiles[0], _zones[ZoneKind.Forbidden]);
+            if (!creature.IsMustering && distance is > PrototypeTuning.EngageRadius)
+            {
+                RecordDecision(creature, "combat_absent_unreachable", new Dictionary<string, int> { ["distance"] = distance ?? -1 });
+                continue;
+            }
+
+            if (creature.CurrentJob is not null)
+            {
+                CancelJob(creature, "combat_joined");
+            }
+            creature.IsMustering = false;
+            creature.MusterNeedsRation = false;
+            creature.MealReserved = false;
+            creature.Mode = CreatureMode.Fighting;
+            RecordDecision(creature, "combat_joined", new Dictionary<string, int> { ["readiness"] = ComputeReadiness(creature) });
+        }
+    }
+
+    private void ActCombatant(CreatureState creature)
+    {
+        var target = _raiders.Where(raider => raider.Mode == RaiderMode.Raiding)
+            .OrderBy(raider => Manhattan(creature.Position, raider.Position))
+            .ThenBy(raider => raider.Id)
+            .FirstOrDefault();
+        if (target is null)
+        {
+            return;
+        }
+
+        if (Manhattan(creature.Position, target.Position) > 1)
+        {
+            var next = _map.NextStep(creature.Position, target.Position, _zones[ZoneKind.Forbidden]);
+            if (next is { } step)
+            {
+                _ = Move(creature, step);
+            }
+            return;
+        }
+
+        var damage = Math.Max(PrototypeTuning.DamageFloor,
+            creature.Might + ComputeReadiness(creature) / PrototypeTuning.DamageReadinessDivisor + CombatJitter(PrototypeTuning.DamageJitter));
+        target.Hp -= damage;
+        RecordDecision(creature, "combat_attack", new Dictionary<string, int> { ["raiderId"] = target.Id, ["damage"] = damage });
+        if (target.Hp <= 0)
+        {
+            target.Hp = 0;
+            target.Mode = RaiderMode.Downed;
+            RecordDecision(creature, "combat_raider_downed", new Dictionary<string, int> { ["raiderId"] = target.Id });
+        }
+    }
+
+    private void ActRaiders()
+    {
+        foreach (var raider in _raiders.Where(raider => raider.Mode == RaiderMode.Raiding).OrderBy(raider => raider.Id))
+        {
+            var defender = _creatures.Where(creature => creature.Mode == CreatureMode.Fighting)
+                .OrderBy(creature => Manhattan(creature.Position, raider.Position))
+                .ThenBy(creature => creature.Id)
+                .FirstOrDefault();
+            if (defender is not null && Manhattan(defender.Position, raider.Position) <= 1)
+            {
+                var damage = Math.Max(PrototypeTuning.DamageFloor,
+                    raider.Might - ComputeReadiness(defender) / PrototypeTuning.ArmourReadinessDivisor + CombatJitter(PrototypeTuning.DamageJitter));
+                defender.Hp -= damage;
+                if (defender.Hp * 100 <= defender.MaxHp * PrototypeTuning.LightInjuryShare && defender.Injury == InjuryKind.None)
+                {
+                    defender.Injury = InjuryKind.Light;
+                }
+                if (defender.Hp <= 0)
+                {
+                    defender.Hp = 0;
+                    defender.Injury = InjuryKind.Heavy;
+                    defender.Mode = CreatureMode.Downed;
+                    RecordDecision(defender, "combat_downed", new Dictionary<string, int> { ["raiderId"] = raider.Id, ["damage"] = damage });
+                    ApplyMorale();
+                }
+                continue;
+            }
+
+            var target = raider.CarryingMeals > 0 ? PrototypeMap.Gate : PrototypeMap.LarderTiles[0];
+            if (raider.Position == target && raider.CarryingMeals == 0)
+            {
+                raider.CarryingMeals = Math.Min(PrototypeTuning.CarryCapacity, _stockMeals);
+                _stockMeals -= raider.CarryingMeals;
+                if (raider.CarryingMeals == 0)
+                {
+                    raider.Mode = RaiderMode.Escaped;
+                    continue;
+                }
+                target = PrototypeMap.Gate;
+            }
+            var next = _map.NextStep(raider.Position, target, _zones[ZoneKind.Forbidden]);
+            if (next is { } step)
+            {
+                raider.Position = step;
+            }
+            if (raider.CarryingMeals > 0 && raider.Position == PrototypeMap.Gate)
+            {
+                raider.Mode = RaiderMode.Escaped;
+            }
+        }
+
+        if (_raiders.Count == PrototypeTuning.RaiderCount && _raiders.All(raider => raider.Mode is RaiderMode.Downed or RaiderMode.Escaped) && _outcome is null)
+        {
+            var downed = _raiders.Count(raider => raider.Mode == RaiderMode.Downed);
+            var casualties = _creatures.Count(creature => creature.Mode is CreatureMode.Downed or CreatureMode.Fled);
+            _outcome = downed == PrototypeTuning.RaiderCount
+                ? casualties == 0 ? "repelled_clean" : "repelled_costly"
+                : downed == 0 ? "overrun" : "larder_raided";
+            _combatEndTick = CurrentTick;
+        }
+    }
+
+    private void ApplyMorale()
+    {
+        var downed = _creatures.Count(creature => creature.Mode == CreatureMode.Downed);
+        foreach (var creature in _creatures.Where(creature => creature.Mode == CreatureMode.Fighting).OrderBy(creature => creature.Id))
+        {
+            if (creature.Grit * PrototypeTuning.MoraleGritWeight + ComputeReadiness(creature) / PrototypeTuning.MoraleReadinessDivisor >=
+                PrototypeTuning.MoraleBase + PrototypeTuning.MoralePerDowned * downed)
+            {
+                continue;
+            }
+            creature.Mode = CreatureMode.Fled;
+            creature.Position = new GridPoint(1, Math.Min(14, 1 + creature.Id));
+            RecordDecision(creature, "combat_fled_morale", new Dictionary<string, int> { ["downedAllies"] = downed });
+        }
+    }
+
+    private int CombatJitter(int amplitude) => _combatRandom.NextInt32(amplitude * 2 + 1) - amplitude;
+
+    private static int Manhattan(GridPoint left, GridPoint right) => Math.Abs(left.X - right.X) + Math.Abs(left.Y - right.Y);
 
     private void CountLaborForTick()
     {
@@ -2377,6 +2586,8 @@ public sealed class PrototypeWorld
         public int Satiety { get; set; }
         public int Fatigue { get; set; }
         public int MartialForm { get; set; }
+        public int MaxHp { get; } = 30;
+        public int Hp { get; set; } = 30;
         public InjuryKind Injury { get; set; }
         public CreatureMode Mode { get; set; }
         public JobState? CurrentJob { get; set; }
@@ -2435,6 +2646,16 @@ public sealed class PrototypeWorld
         public GridPoint Position { get; } = position;
         public int Growth { get; set; } = growth;
         public bool IsRipe => Growth >= PrototypeTuning.BedGrowthTicks;
+    }
+
+    private sealed class RaiderState(int id, int hp, int might, GridPoint position)
+    {
+        public int Id { get; } = id;
+        public int Hp { get; set; } = hp;
+        public int Might { get; } = might;
+        public GridPoint Position { get; set; } = position;
+        public int CarryingMeals { get; set; }
+        public RaiderMode Mode { get; set; } = RaiderMode.Raiding;
     }
 
     private sealed class EventState(

@@ -307,9 +307,9 @@ public partial class Main : Node2D
 
     private void LoadFixture(string fixture, int ticks)
     {
-        if (fixture is not ("baseline" or "neglected"))
+        if (fixture is not ("baseline" or "prepared" or "neglected"))
         {
-            throw new ArgumentException("Fixture must be baseline or neglected.", nameof(fixture));
+            throw new ArgumentException("Fixture must be baseline, prepared or neglected.", nameof(fixture));
         }
 
         _fixtureLog = PrototypeCommandDocument.Load(FixturePath(fixture));
@@ -365,7 +365,8 @@ public partial class Main : Node2D
         var stock = _state!.Stocks;
         _summary!.Text =
             $"fixture={_fixture}   tick={_state.Tick}   {(_paused ? "PAUSED" : $"{_speed:0.#}x")}" +
-            $"\nTHREAT {(_state.Threat.Announced ? "ANNOUNCED" : "quiet")}  ·  raw {stock.RawMushroom}+{stock.LooseRawMushroom}" +
+            $"\nTHREAT {(_state.Threat.Announced ? $"RAID IN {_state.Threat.TicksRemaining}" : "quiet")}  ·  raid {(_state.SessionResult.Outcome ?? (_state.Raiders.Count > 0 ? "IN PROGRESS" : "waiting"))}" +
+            $"  ·  raw {stock.RawMushroom}+{stock.LooseRawMushroom}" +
             $"  ·  meals {stock.Meals}+{stock.LooseMeals}  ·  jobs {_state.Jobs.Count}  ·  checksum {_checksum[..12]}…";
 
         _inspector!.Text = BuildInspectorText();
@@ -521,6 +522,16 @@ public partial class Main : Node2D
             {
                 DrawCircle(center + new Vector2(6, -6), 2.5f, creature.Carrying == ResourceKind.Meal ? new Color("#fde68a") : new Color("#a3e635"));
             }
+        }
+
+        foreach (var raider in _state.Raiders)
+        {
+            if (raider.Mode is RaiderMode.Downed or RaiderMode.Escaped) continue;
+            var center = CellCenter(raider.Position);
+            DrawCircle(center, 8, new Color("#ef4444"));
+            DrawString(ThemeDB.FallbackFont, center + new Vector2(-7, -10), $"R{raider.Id}", HorizontalAlignment.Left, -1, 9, new Color("#fecaca"));
+            DrawRect(new Rect2(center + new Vector2(-7, 9), new Vector2(14, 3)), new Color("#450a0a"));
+            DrawRect(new Rect2(center + new Vector2(-7, 9), new Vector2(14 * raider.Hp / PrototypeTuning.RaiderHp, 3)), new Color("#f87171"));
         }
     }
 

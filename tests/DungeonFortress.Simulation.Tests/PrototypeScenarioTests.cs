@@ -308,6 +308,24 @@ public sealed class PrototypeScenarioTests
         Assert.All(results, result => Assert.Equal(PrototypeTuning.RaidTick + 1, result.Tick));
     }
 
+    [Fact]
+    public void Preparation_changes_the_deterministic_raid_result_without_direct_orders()
+    {
+        var prepared = PrototypeScenario.Run(LoadFixture("prepared"), PrototypeTuning.SessionTicks);
+        var neglected = PrototypeScenario.Run(LoadFixture("neglected"), PrototypeTuning.SessionTicks);
+        var preparedReplay = PrototypeScenario.Run(LoadFixture("prepared"), PrototypeTuning.SessionTicks);
+
+        Assert.Equal(PrototypeTuning.RaiderCount, prepared.State.Raiders.Count);
+        Assert.Equal(PrototypeTuning.RaiderCount, neglected.State.Raiders.Count);
+        Assert.NotNull(prepared.State.SessionResult.Outcome);
+        Assert.NotNull(neglected.State.SessionResult.Outcome);
+        Assert.NotEqual(prepared.State.SessionResult.Outcome, neglected.State.SessionResult.Outcome);
+        Assert.True(
+            prepared.State.Creatures.Average(creature => creature.ReadinessAtRaid!.Value) >
+            neglected.State.Creatures.Average(creature => creature.ReadinessAtRaid!.Value));
+        Assert.Equal(prepared.Checksum, preparedReplay.Checksum);
+    }
+
     private static int AverageReadiness(PrototypeRunResult result)
     {
         return (int)result.State.Creatures.Average(creature => creature.ReadinessAtRaid!.Value);
