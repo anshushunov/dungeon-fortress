@@ -176,6 +176,7 @@ public sealed class PrototypeContractRegressionTests
             state.Labor.DrillTicks +
             state.Labor.WatchTicks +
             state.Labor.DigTicks +
+            state.Labor.StoneHaulTicks +
             state.Labor.MusterTicks +
             state.Labor.IdleTicks);
         Assert.InRange(state.Labor.FoodWorkPercent, 30, 70);

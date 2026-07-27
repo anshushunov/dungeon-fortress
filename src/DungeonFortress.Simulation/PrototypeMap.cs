@@ -135,6 +135,28 @@ internal sealed class PrototypeMap
 
     public IReadOnlyCollection<GridPoint> ExcavatedTiles => _excavated;
 
+    /// <summary>
+    /// Tiles a material stockpile may cover: plain floor that was already floor
+    /// when the session began. Map features keep their own purpose, and ground
+    /// created by excavation is deliberately excluded until the step that zones
+    /// new rooms. This is the single authority the command validator, the world
+    /// and the Godot brush all read.
+    /// </summary>
+    public IEnumerable<GridPoint> StockpileFloorTiles()
+    {
+        for (var y = 0; y < PrototypeTuning.MapHeight; y++)
+        {
+            for (var x = 0; x < PrototypeTuning.MapWidth; x++)
+            {
+                var point = new GridPoint(x, y);
+                if (_tiles[x, y] == TileKind.Floor && !_excavated.Contains(point))
+                {
+                    yield return point;
+                }
+            }
+        }
+    }
+
     public IEnumerable<GridPoint> RockTiles()
     {
         for (var y = 0; y < PrototypeTuning.MapHeight; y++)

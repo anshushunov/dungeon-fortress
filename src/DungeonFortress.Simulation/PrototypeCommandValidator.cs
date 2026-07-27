@@ -119,6 +119,17 @@ public static class PrototypeCommandValidator
                     $"Duplicate tile ({tile.X},{tile.Y}) is not allowed.");
             }
 
+            // Checked before passability so that "stockpile on rock" reports the
+            // rule the player broke instead of a generic pathfinding message.
+            if (painting && zoneKind == ZoneKind.MaterialStockpile &&
+                (!PrototypeMap.IsInside(tile) || !map.StockpileFloorTiles().Contains(tile)))
+            {
+                throw new InvalidDataException(
+                    $"MaterialStockpile tile ({tile.X},{tile.Y}) is not plain floor. " +
+                    "Rock, map features, the gate and ground that only becomes floor " +
+                    "by excavation cannot store material yet.");
+            }
+
             if (!PrototypeMap.IsInside(tile) || !map.IsPassable(tile))
             {
                 throw new InvalidDataException(
@@ -134,6 +145,7 @@ public static class PrototypeCommandValidator
             {
                 throw new InvalidDataException("A larder feature cannot be Forbidden.");
             }
+
         }
     }
 

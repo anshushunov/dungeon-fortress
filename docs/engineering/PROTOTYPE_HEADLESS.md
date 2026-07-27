@@ -2,7 +2,7 @@
 
 Статус: действует
 Дата обновления: 2026-07-27
-Источник: Issue #9
+Источник: Issue #9, расширен #24 и #26
 
 ## Назначение
 
@@ -13,7 +13,8 @@ Godot. Игровой ввод использует только закрыту�
 
 Каноническое состояние schema v2 включает оставшиеся команды, следующий id
 работы, именных существ и все их накопительные счётчики, зоны, состояние каждой
-грядки, россыпь ресурсов, полные работы, запасы, экономические и трудовые
+грядки, россыпь ресурсов, содержимое каждой клетки материального склада вместе с
+её вместимостью и бронью, полные работы, запасы, экономические и трудовые
 счётчики, занятость кухонь и тренировочных столбов, последние решения, журнал
 событий и предбоевой снимок готовности. Это позволяет сравнивать не только
 видимый итог, но и всё состояние, способное изменить будущие тики.
@@ -100,6 +101,49 @@ dotnet run --project .\tests\DungeonFortress.Scenarios -- `
 Поведение этой fixture зафиксировано тестом
 `Dig_demo_fixture_matches_the_documented_headless_walkthrough`.
 
+### Перевозка камня на материальный склад
+
+Fixture `stone-haul-demo` обозначает четыре тайла скалы на тике 0 и размечает
+зону `MaterialStockpile` на клетках `(22,1)` и `(23,1)` только на тике 200 —
+уже после того, как камень выкопан. Это делает наблюдаемыми все три состояния
+ресурса по очереди.
+
+```powershell
+dotnet run --project .\tests\DungeonFortress.Scenarios -- `
+  --prototype `
+  --commands .\scenarios\prototype1\stone-haul-demo.commands.v2.json `
+  --ticks 200
+```
+
+`digsCompleted` = 4, `looseStone` = 4, `storedStone` = 0,
+`stockpileCapacity` = 0, `materialStockpile` пуст. В журнале есть
+`waiting_no_stockpile`: камень лежит, и причина этого читается без картинки.
+
+```powershell
+dotnet run --project .\tests\DungeonFortress.Scenarios -- `
+  --prototype `
+  --commands .\scenarios\prototype1\stone-haul-demo.commands.v2.json `
+  --ticks 210
+```
+
+Появились две клетки склада со `stockpileCapacity` = 4 и `statusCode`
+`stockpile_empty`. Камень всё ещё лежит: перевозку никто не приказывал, работа
+достаётся первому освободившемуся существу по обычному скорингу.
+
+```powershell
+dotnet run --project .\tests\DungeonFortress.Scenarios -- `
+  --prototype `
+  --commands .\scenarios\prototype1\stone-haul-demo.commands.v2.json `
+  --ticks 700
+```
+
+`looseStone` = 0, `storedStone` = 4, `stoneHaulsCompleted` = 4, обе клетки в
+состоянии `stockpile_full`. Инвариант `stoneProduced = looseStone +
+carriedStone + storedStone` выполняется на каждом тике этого прогона.
+
+Поведение этой fixture зафиксировано тестом
+`Stone_haul_demo_fixture_matches_the_documented_headless_walkthrough`.
+
 В режиме `--prototype` seed берётся только из gameplay-v2 документа, а
 фиксированная популяция — из контракта Prototype 1. Явные `--seed` и `--agents`
 отклоняются, чтобы CLI не создавал второй источник истины. Эти флаги остаются
@@ -123,7 +167,9 @@ dotnet run --project .\tests\DungeonFortress.Scenarios -- `
 `commandsPath` обязан быть относительным путём внутри проверенного корня
 репозитория и вести к `.json` без symlink/junction. Ответ содержит checksum,
 канонические state/event log, счётчики `economy`/`labor`, наблюдения по
-`stations` и краткие числовые observations. Команд записи в
+`stations`, состояние камня (`looseStone`, `carriedStone`, `storedStone`,
+`reservedStone`, `stockpileCapacity` и поклеточный `materialStockpile`) и краткие
+числовые observations. Команд записи в
 живую сессию пока нет: один вызов воспроизводит весь переданный журнал, что
 сохраняет атомарность и облегчает review.
 
@@ -138,7 +184,14 @@ dotnet test .\tests\DungeonFortress.DomainMcp.Tests
 Сценарные тесты дважды запускают каждый fixture, проверяют replay, закрытую
 схему и whole-document preflight, reason codes, conservation экономической
 цепочки, трудовой бюджет, занятость станций, движение не более чем на один тайл,
-отсутствие swap/overlap и коридоры раздела 13.4 контракта. Wall-clock время
+отсутствие swap/overlap и коридоры раздела 13.4 контракта. Отдельный набор
+`PrototypeStoneHaulTests` проверяет цепочку камня: валидацию зоны
+`MaterialStockpile`, отсутствие перевозки без склада и при `Haul` = 0,
+детерминированный выбор источника, цели и брони, сохранение количества камня на
+**каждом** тике полной сессии, отсутствие переполнения и двойного подъёма,
+перепланирование и безопасный сброс груза при потере цели, высыпание запаса при
+стирании зоны, сосуществование с пищевой перевозкой и неизменность сценариев без
+камня. Wall-clock время
 наблюдается в CLI/MCP output, но не используется как flaky correctness gate.
 Налёт, бой, кража и `sessionResult` входят в текущий headless-срез. Для
 воспроизводимой полной оценочной матрицы и её повторной проверки используйте

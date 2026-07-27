@@ -68,6 +68,12 @@ public static class PrototypeTuning
     public const int DigTicks = 36;
     public const int DigStoneYield = 1;
 
+    // A stockpile cell is deliberately small. The player must be able to fill one
+    // inside a five-minute session and see the "no free capacity" wait, instead of
+    // painting two cells once and never meeting the constraint again.
+    public const int StockpileCellCapacity = 2;
+    public const int StoneCarryCapacity = 2;
+
     public const int DrillTicks = 30;
     public const int DrillGain = 12;
     public const int DrillFatigue = 6;
@@ -82,6 +88,9 @@ public static class PrototypeTuning
     public const int LowMealsThreshold = 4;
     public const int UrgencyHaulMeal = 40;
     public const int UrgencyHaulRaw = 20;
+    // Zero on purpose: stone shares the global Haul priority with food, so the
+    // food chain must keep winning an otherwise equal comparison.
+    public const int UrgencyHaulStone = 0;
     public const int UrgencyRipeBacklog = 20;
     public const int RipeBacklogThreshold = 3;
     public const int ScoreFloor = 0;

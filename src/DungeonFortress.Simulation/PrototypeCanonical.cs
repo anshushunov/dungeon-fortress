@@ -240,6 +240,13 @@ public static class PrototypeCanonical
         }
 
         writer.WriteEndArray();
+        writer.WriteStartArray("stockpileFloorTiles");
+        foreach (var tile in state.Map.StockpileFloorTiles.Order())
+        {
+            WritePointValue(writer, tile);
+        }
+
+        writer.WriteEndArray();
         writer.WriteEndObject();
 
         writer.WriteStartArray("digDesignations");
@@ -298,12 +305,33 @@ public static class PrototypeCanonical
         }
 
         writer.WriteEndArray();
+
+        // Stored stone is canonical state, not a derived counter: the same seed and
+        // log must reproduce which cell holds which block.
+        writer.WriteStartArray("materialStockpile");
+        foreach (var cell in state.StockpileCells.OrderBy(cell => cell.Position))
+        {
+            writer.WriteStartObject();
+            WritePoint(writer, "position", cell.Position);
+            writer.WriteNumber("stored", cell.Stored);
+            writer.WriteNumber("capacity", cell.Capacity);
+            writer.WriteNumber("incomingReserved", cell.IncomingReserved);
+            writer.WriteBoolean("reachable", cell.Reachable);
+            writer.WriteString("statusCode", cell.StatusCode);
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
         writer.WriteStartObject("stocks");
         writer.WriteNumber("rawMushroom", state.Stocks.RawMushroom);
         writer.WriteNumber("meals", state.Stocks.Meals);
         writer.WriteNumber("looseRawMushroom", state.Stocks.LooseRawMushroom);
         writer.WriteNumber("looseMeals", state.Stocks.LooseMeals);
         writer.WriteNumber("looseStone", state.Stocks.LooseStone);
+        writer.WriteNumber("carriedStone", state.Stocks.CarriedStone);
+        writer.WriteNumber("storedStone", state.Stocks.StoredStone);
+        writer.WriteNumber("reservedStone", state.Stocks.ReservedStone);
+        writer.WriteNumber("stockpileCapacity", state.Stocks.StockpileCapacity);
         writer.WriteNumber("capacity", state.Stocks.Capacity);
         writer.WriteNumber("mealsProduced", state.Stocks.MealsProduced);
         writer.WriteNumber("mealsEaten", state.Stocks.MealsEaten);
@@ -341,6 +369,8 @@ public static class PrototypeCanonical
             writer.WriteNumber("remainingTicks", job.RemainingTicks);
             writer.WriteNumber("progressTicks", job.ProgressTicks);
             writer.WriteBoolean("pickedUp", job.PickedUp);
+            WriteNullablePoint(writer, "storeCell", job.StoreCell);
+            writer.WriteNumber("storeReserved", job.StoreReserved);
             writer.WriteEndObject();
         }
 
@@ -354,6 +384,9 @@ public static class PrototypeCanonical
         writer.WriteNumber("mealsEaten", state.Economy.MealsEaten);
         writer.WriteNumber("digsCompleted", state.Economy.DigsCompleted);
         writer.WriteNumber("stoneProduced", state.Economy.StoneProduced);
+        writer.WriteNumber("stoneHaulsCompleted", state.Economy.StoneHaulsCompleted);
+        writer.WriteNumber("stoneStored", state.Economy.StoneStored);
+        writer.WriteNumber("stoneSpilled", state.Economy.StoneSpilled);
         writer.WriteEndObject();
         writer.WriteStartObject("labor");
         writer.WriteNumber("totalCreatureTicks", state.Labor.TotalCreatureTicks);
@@ -363,6 +396,7 @@ public static class PrototypeCanonical
         writer.WriteNumber("drillTicks", state.Labor.DrillTicks);
         writer.WriteNumber("watchTicks", state.Labor.WatchTicks);
         writer.WriteNumber("digTicks", state.Labor.DigTicks);
+        writer.WriteNumber("stoneHaulTicks", state.Labor.StoneHaulTicks);
         writer.WriteNumber("musterTicks", state.Labor.MusterTicks);
         writer.WriteNumber("idleTicks", state.Labor.IdleTicks);
         writer.WriteNumber("foodWorkPercent", state.Labor.FoodWorkPercent);

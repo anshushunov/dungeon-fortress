@@ -32,6 +32,11 @@ public enum ZoneKind
     TrainingGround,
     Watch,
     Forbidden,
+
+    // Appended on purpose: zones are serialised in enum order, so a new kind must
+    // not shift the established ones. MaterialStockpile stores only Stone in this
+    // experiment; it is not the general stockpile design of the game.
+    MaterialStockpile,
 }
 
 public enum JobKind
@@ -148,7 +153,11 @@ public sealed record PrototypeJobSnapshot(
     int? ReservedBy,
     int RemainingTicks,
     int ProgressTicks,
-    bool PickedUp);
+    bool PickedUp,
+    // Only a Stone haul fills these: the stockpile cell this job holds space in,
+    // and how much of that cell's capacity is booked while the job is alive.
+    GridPoint? StoreCell,
+    int StoreReserved);
 
 public sealed record PrototypeBedSnapshot(
     GridPoint Position,
@@ -161,6 +170,20 @@ public sealed record PrototypeLooseItemSnapshot(
     int Quantity);
 
 /// <summary>
+/// One cell of the <see cref="ZoneKind.MaterialStockpile"/> zone. Stored stone is
+/// canonical per-cell state, not a UI counter: <see cref="Stored"/> plus
+/// <see cref="IncomingReserved"/> can never exceed <see cref="Capacity"/>, which
+/// is what stops two creatures from overfilling the same cell.
+/// </summary>
+public sealed record PrototypeStockpileCellSnapshot(
+    GridPoint Position,
+    int Stored,
+    int Capacity,
+    int IncomingReserved,
+    bool Reachable,
+    string StatusCode);
+
+/// <summary>
 /// The mutable part of the map. Only <see cref="TileKind.Rock"/> can change, and
 /// only into <see cref="TileKind.Floor"/>, so the excavated delta plus the fixed
 /// initial layout fully determines the terrain.
@@ -168,7 +191,11 @@ public sealed record PrototypeLooseItemSnapshot(
 public sealed record PrototypeMapSnapshot(
     IReadOnlyList<GridPoint> RockTiles,
     IReadOnlyList<GridPoint> DiggableTiles,
-    IReadOnlyList<GridPoint> ExcavatedTiles);
+    IReadOnlyList<GridPoint> ExcavatedTiles,
+    // Where a MaterialStockpile may be painted right now. Like DiggableTiles it
+    // keeps the rule in the simulation, so no adapter re-derives which tiles are
+    // plain pre-existing floor rather than a bed, a station, a bunk or the gate.
+    IReadOnlyList<GridPoint> StockpileFloorTiles);
 
 /// <summary>
 /// A player intention to excavate one rock tile. It carries no creature identity:
@@ -201,7 +228,10 @@ public sealed record PrototypeEconomyCountersSnapshot(
     [property: JsonPropertyName("mealsProduced")] int MealsProduced,
     [property: JsonPropertyName("mealsEaten")] int MealsEaten,
     [property: JsonPropertyName("digsCompleted")] int DigsCompleted,
-    [property: JsonPropertyName("stoneProduced")] int StoneProduced);
+    [property: JsonPropertyName("stoneProduced")] int StoneProduced,
+    [property: JsonPropertyName("stoneHaulsCompleted")] int StoneHaulsCompleted,
+    [property: JsonPropertyName("stoneStored")] int StoneStored,
+    [property: JsonPropertyName("stoneSpilled")] int StoneSpilled);
 
 public sealed record PrototypeLaborSnapshot(
     [property: JsonPropertyName("totalCreatureTicks")] int TotalCreatureTicks,
@@ -211,6 +241,7 @@ public sealed record PrototypeLaborSnapshot(
     [property: JsonPropertyName("drillTicks")] int DrillTicks,
     [property: JsonPropertyName("watchTicks")] int WatchTicks,
     [property: JsonPropertyName("digTicks")] int DigTicks,
+    [property: JsonPropertyName("stoneHaulTicks")] int StoneHaulTicks,
     [property: JsonPropertyName("musterTicks")] int MusterTicks,
     [property: JsonPropertyName("idleTicks")] int IdleTicks,
     [property: JsonPropertyName("foodWorkPercent")] int FoodWorkPercent,
@@ -230,6 +261,10 @@ public sealed record PrototypeStockSnapshot(
     int LooseRawMushroom,
     int LooseMeals,
     int LooseStone,
+    int CarriedStone,
+    int StoredStone,
+    int ReservedStone,
+    int StockpileCapacity,
     int Capacity,
     int MealsProduced,
     int MealsEaten);
@@ -276,6 +311,7 @@ public sealed record PrototypeSnapshot(
     IReadOnlyList<PrototypeDigDesignationSnapshot> DigDesignations,
     IReadOnlyList<PrototypeBedSnapshot> Beds,
     IReadOnlyList<PrototypeLooseItemSnapshot> LooseItems,
+    IReadOnlyList<PrototypeStockpileCellSnapshot> StockpileCells,
     PrototypeStockSnapshot Stocks,
     IReadOnlyList<PrototypeJobSnapshot> Jobs,
     PrototypeEconomyCountersSnapshot Economy,
