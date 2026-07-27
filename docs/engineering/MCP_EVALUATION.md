@@ -1,7 +1,7 @@
 # Оценка MCP и editor bridge
 
 Статус: Phase B завершён; принят dev-only Ivan-MCP по ADR 0004
-Дата проверки: 2026-07-26
+Дата проверки: 2026-07-27
 Issue: [#4](https://github.com/anshushunov/dungeon-fortress/issues/4)
 
 ## Цель и границы
@@ -53,17 +53,19 @@ Read-only сравнение дало следующий порядок:
 
 ### Контракт
 
-Отдельный `net8.0` stdio process публикует ровно два инструмента:
+Отдельный `net8.0` stdio process после Issue #9 публикует ровно три инструмента:
 
 - `bridge_status` — версия bridge, версии canonical/command schemas,
   проверенные root sentinels и точный список tools;
 - `simulation_run` — bounded seed/agent/tick input, необязательный
   repository-relative command document, canonical UTF-8 JSON и SHA-256.
+- `prototype_run` — gameplay schema v2, repository-relative fixture, bounded
+  `0..1800` ticks, canonical state/event log и предбоевые observations.
 
 `simulation_snapshot` не добавлен: `simulation_run` уже возвращает canonical
 snapshot и checksum, поэтому отдельное имя не имело бы отличимой семантики.
 
-Оба инструмента объявлены read-only, non-destructive, idempotent и closed-world.
+Все инструменты объявлены read-only, non-destructive, idempotent и closed-world.
 Server не принимает command line, имя метода, source или arbitrary path через
 MCP. Допустимы:
 
@@ -109,12 +111,13 @@ CI-проверку. Upstream repository `LICENSE` описывает перех
 
 `.codex/config.toml` использует текущую stdio-форму
 `[mcp_servers.<name>]`, project working directory, exact
-`enabled_tools = ["bridge_status", "simulation_run"]` и не передаёт секреты.
+`enabled_tools = ["bridge_status", "prototype_run", "simulation_run"]` и не
+передаёт секреты.
 Codex загружает project config только для trusted repository.
 
 `.mcp.json` использует project-scoped `mcpServers`, transport `stdio` и
 `${CLAUDE_PROJECT_DIR:-.}` из актуальной документации Claude Code. Server-side
-surface всё равно ограничена двумя tools; client allowlist Codex является
+surface всё равно ограничена тремя tools; client allowlist Codex является
 дополнительной защитой.
 
 Обе конфигурации требуют предварительной Release-сборки:
@@ -128,6 +131,10 @@ dotnet build .\DungeonFortress.sln -c Release --no-restore
 не попадает в protocol stdout.
 
 ### Проверки и измерения блока 1
+
+Ниже сохранён исторический снимок блока 1 до Issue #9. Указанные в таблице
+число tools, размеры, checksum и результаты относятся к контракту того блока и
+не описывают текущую поверхность MCP.
 
 Сценарий: seed `424242`, 32 агента, 256 ticks,
 `scenarios/smoke.commands.json`.
@@ -145,6 +152,19 @@ dotnet build .\DungeonFortress.sln -c Release --no-restore
 `gpt-5.6-sol` не дошёл до tool call: установленный CLI 0.142.5 потребовал
 обновление. Повтор на поддерживаемом `gpt-5.4` прошёл; это client-version
 ограничение, а не отказ MCP server.
+
+### Текущее состояние после Issue #9
+
+Текущий server публикует три инструмента: `bridge_status`, legacy
+`simulation_run` и gameplay-v2 `prototype_run`. `prototype_run` до создания мира
+валидирует весь command document, включая семантику будущих команд, и возвращает
+canonical snapshot вместе с `economy`, `labor` и `stations`. Исторические
+результаты блоков ниже остаются point-in-time evidence и намеренно не
+переписываются под текущий контракт.
+
+Чистый verification Issue #9: solution build без warnings/errors, simulation
+tests 44/44, domain MCP tests 8/8, raw protocol observations 5/5,
+`toolCount=3`, deterministic/load gates и Godot 4.7.1 headless smoke — green.
 
 Автоматические проверки:
 

@@ -1,5 +1,7 @@
 using System.Text.Json;
 
+using DungeonFortress.Simulation;
+
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
@@ -63,6 +65,7 @@ public sealed class DomainMcpTool : McpServerTool
                     "bridgeVersion": { "type": "string" },
                     "canonicalSchemaVersion": { "type": "integer" },
                     "commandSchemaVersion": { "type": "integer" },
+                    "prototypeCommandSchemaVersion": { "type": "integer" },
                     "validatedSentinels": {
                       "type": "array",
                       "items": { "type": "string" }
@@ -78,6 +81,7 @@ public sealed class DomainMcpTool : McpServerTool
                     "bridgeVersion",
                     "canonicalSchemaVersion",
                     "commandSchemaVersion",
+                    "prototypeCommandSchemaVersion",
                     "validatedSentinels",
                     "tools"
                   ],
@@ -85,6 +89,86 @@ public sealed class DomainMcpTool : McpServerTool
                 }
                 """),
             tools.BridgeStatus);
+    }
+
+    public static DomainMcpTool CreatePrototypeRun(DomainTools tools)
+    {
+        return new DomainMcpTool(
+            "prototype_run",
+            "Runs Prototype 1 through the closed gameplay command schema v2. " +
+            "Returns canonical state, event log, checksum, and structured precombat observations.",
+            JsonElement.Parse(
+                $$"""
+                {
+                  "type": "object",
+                  "properties": {
+                    "commandsPath": {
+                      "type": "string",
+                      "description": "Repository-relative gameplay-v2 command fixture."
+                    },
+                    "ticks": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": {{PrototypeTuning.SessionTicks}},
+                      "description": "Fixed ticks from 0 through {{PrototypeTuning.SessionTicks}}."
+                    }
+                  },
+                  "required": ["commandsPath", "ticks"],
+                  "additionalProperties": false
+                }
+                """),
+            JsonElement.Parse(
+                """
+                {
+                  "type": "object",
+                  "properties": {
+                    "event": { "type": "string" },
+                    "status": { "type": "string" },
+                    "scenario": { "type": "string" },
+                    "seed": { "type": "integer", "minimum": 0 },
+                    "ticks": { "type": "integer" },
+                    "commandsApplied": { "type": "integer" },
+                    "checksum": { "type": "string" },
+                    "canonicalJson": { "type": "string" },
+                    "canonicalEventLog": { "type": "string" },
+                    "mealsProduced": { "type": "integer" },
+                    "mealsEaten": { "type": "integer" },
+                    "meals": { "type": "integer" },
+                    "rawMushroom": { "type": "integer" },
+                    "averageSatiety": { "type": "integer" },
+                    "averageFatigue": { "type": "integer" },
+                    "averageMartialForm": { "type": "integer" },
+                    "averageReadinessAtRaid": { "type": ["integer", "null"] },
+                    "creatureCount": { "type": "integer" },
+                    "jobCount": { "type": "integer" },
+                    "eventCount": { "type": "integer" }
+                  },
+                  "required": [
+                    "event",
+                    "status",
+                    "scenario",
+                    "seed",
+                    "ticks",
+                    "commandsApplied",
+                    "checksum",
+                    "canonicalJson",
+                    "canonicalEventLog",
+                    "mealsProduced",
+                    "mealsEaten",
+                    "meals",
+                    "rawMushroom",
+                    "averageSatiety",
+                    "averageFatigue",
+                    "averageMartialForm",
+                    "averageReadinessAtRaid",
+                    "creatureCount",
+                    "jobCount",
+                    "eventCount"
+                  ],
+                  "additionalProperties": false
+                }
+                """),
+            tools.PrototypeRun);
     }
 
     public static DomainMcpTool CreateSimulationRun(DomainTools tools)

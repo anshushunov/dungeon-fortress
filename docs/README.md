@@ -22,6 +22,9 @@ Prototype 1; `design/GDD.md` описывает игру шире и на уро
 Воспроизводимая настройка проверяемого Godot/.NET spike описана в
 `engineering/ENVIRONMENT_SETUP.md`.
 
+Запуск и наблюдение headless-экономики Prototype 1 описаны в
+`engineering/PROTOTYPE_HEADLESS.md`.
+
 Правила работы Codex, Claude Code и других агентов находятся в
 `engineering/MULTI_AGENT_WORKFLOW.md`.
 

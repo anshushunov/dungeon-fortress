@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 2,
+  "scenario": "custom",
+  "seed": 1,
+  "commands": [
+    {
+      "tick": 0,
+      "kind": "set_priority",
+      "jobKind": "Harvest",
+      "value": 4
+    },
+    {
+      "tick": 900,
+      "kind": "zone_erase",
+      "zoneKind": "Larder",
+      "tiles": [[14, 7], [15, 7]]
+    }
+  ]
+}

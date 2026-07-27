@@ -2,7 +2,7 @@
 
 Статус: действует для bootstrap-spike из Issue #3
 
-Дата проверки: 2026-07-26
+Дата проверки: 2026-07-27
 
 ## Закреплённые версии
 
@@ -170,8 +170,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-domain-mcp.
 После Release build trusted Codex project читает `.codex/config.toml`, а Claude
 Code предлагает одноразово подтвердить project-scoped `.mcp.json`. Эти файлы не
 содержат секретов и абсолютных путей. Server публикует только
-`bridge_status` и `simulation_run`; подробный контракт, pins, hashes, security
+`bridge_status`, legacy `simulation_run` и gameplay-v2 `prototype_run`; запуск
+fixtures Prototype 1 описан в `PROTOTYPE_HEADLESS.md`, а подробный контракт,
+pins, hashes и security
 guards и rollback находятся в `MCP_EVALUATION.md`.
+
+Для `prototype_run` fixture является единственным источником seed, состава
+существ и command document: флаги legacy CLI `--seed` и `--agents` с prototype
+fixture отвергаются, а не переопределяют сценарий. Command document проходит
+полную preflight-валидацию до создания мира, поэтому ошибка в будущей команде не
+может оставить частично выполненный прогон. Ответ инструмента содержит canonical
+snapshot и явные секции `economy`, `labor`, `stations`, пригодные для проверки
+агентом без анализа изображения.
 
 Чтобы отключить domain MCP без удаления user-scope данных:
 
