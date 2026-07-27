@@ -42,12 +42,19 @@ public enum JobKind
     Rest,
     Drill,
     Watch,
+
+    // Appended on purpose: enum order is the deterministic tie-break for job
+    // diagnostics, so a new kind must never outrank the established ones.
+    Dig,
 }
 
 public enum ResourceKind
 {
     RawMushroom,
     Meal,
+
+    // Appended on purpose: canonical loose-item ordering sorts by this value.
+    Stone,
 }
 
 public enum CreatureMode
@@ -153,6 +160,30 @@ public sealed record PrototypeLooseItemSnapshot(
     ResourceKind Resource,
     int Quantity);
 
+/// <summary>
+/// The mutable part of the map. Only <see cref="TileKind.Rock"/> can change, and
+/// only into <see cref="TileKind.Floor"/>, so the excavated delta plus the fixed
+/// initial layout fully determines the terrain.
+/// </summary>
+public sealed record PrototypeMapSnapshot(
+    IReadOnlyList<GridPoint> RockTiles,
+    IReadOnlyList<GridPoint> DiggableTiles,
+    IReadOnlyList<GridPoint> ExcavatedTiles);
+
+/// <summary>
+/// A player intention to excavate one rock tile. It carries no creature identity:
+/// <see cref="ReservedBy"/> is the simulation reporting who volunteered.
+/// </summary>
+public sealed record PrototypeDigDesignationSnapshot(
+    GridPoint Tile,
+    long? JobId,
+    int? ReservedBy,
+    GridPoint? WorkTile,
+    int ProgressTicks,
+    int RequiredTicks,
+    bool Reachable,
+    string StatusCode);
+
 public sealed record PrototypePendingCommandSnapshot(
     int Tick,
     string Kind,
@@ -168,7 +199,9 @@ public sealed record PrototypeEconomyCountersSnapshot(
     [property: JsonPropertyName("cookBatchesCompleted")] int CookBatchesCompleted,
     [property: JsonPropertyName("mealHaulsCompleted")] int MealHaulsCompleted,
     [property: JsonPropertyName("mealsProduced")] int MealsProduced,
-    [property: JsonPropertyName("mealsEaten")] int MealsEaten);
+    [property: JsonPropertyName("mealsEaten")] int MealsEaten,
+    [property: JsonPropertyName("digsCompleted")] int DigsCompleted,
+    [property: JsonPropertyName("stoneProduced")] int StoneProduced);
 
 public sealed record PrototypeLaborSnapshot(
     [property: JsonPropertyName("totalCreatureTicks")] int TotalCreatureTicks,
@@ -177,6 +210,7 @@ public sealed record PrototypeLaborSnapshot(
     [property: JsonPropertyName("eatTicks")] int EatTicks,
     [property: JsonPropertyName("drillTicks")] int DrillTicks,
     [property: JsonPropertyName("watchTicks")] int WatchTicks,
+    [property: JsonPropertyName("digTicks")] int DigTicks,
     [property: JsonPropertyName("musterTicks")] int MusterTicks,
     [property: JsonPropertyName("idleTicks")] int IdleTicks,
     [property: JsonPropertyName("foodWorkPercent")] int FoodWorkPercent,
@@ -195,6 +229,7 @@ public sealed record PrototypeStockSnapshot(
     int Meals,
     int LooseRawMushroom,
     int LooseMeals,
+    int LooseStone,
     int Capacity,
     int MealsProduced,
     int MealsEaten);
@@ -237,6 +272,8 @@ public sealed record PrototypeSnapshot(
     IReadOnlyDictionary<ZoneKind, IReadOnlyList<GridPoint>> Zones,
     IReadOnlyDictionary<JobKind, int> Priorities,
     IReadOnlyDictionary<string, int> Rules,
+    PrototypeMapSnapshot Map,
+    IReadOnlyList<PrototypeDigDesignationSnapshot> DigDesignations,
     IReadOnlyList<PrototypeBedSnapshot> Beds,
     IReadOnlyList<PrototypeLooseItemSnapshot> LooseItems,
     PrototypeStockSnapshot Stocks,

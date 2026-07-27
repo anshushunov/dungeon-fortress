@@ -12,6 +12,22 @@ public sealed record ZoneEraseCommand(
     ZoneKind ZoneKind,
     IReadOnlyList<GridPoint> Tiles) : PrototypeCommand(Tick);
 
+/// <summary>
+/// Marks internal rock for excavation. Strict: a single non-diggable tile rejects
+/// the whole command before any mutation, mirroring <see cref="ZonePaintCommand"/>.
+/// </summary>
+public sealed record DigDesignateCommand(
+    int Tick,
+    IReadOnlyList<GridPoint> Tiles) : PrototypeCommand(Tick);
+
+/// <summary>
+/// Withdraws excavation intent. Tolerant of tiles that carry no designation, the
+/// same way <see cref="ZoneEraseCommand"/> tolerates tiles outside the zone.
+/// </summary>
+public sealed record DigCancelCommand(
+    int Tick,
+    IReadOnlyList<GridPoint> Tiles) : PrototypeCommand(Tick);
+
 public sealed record SetPriorityCommand(
     int Tick,
     JobKind JobKind,

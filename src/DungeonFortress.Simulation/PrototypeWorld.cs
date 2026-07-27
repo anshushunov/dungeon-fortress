@@ -21,6 +21,7 @@ public sealed class PrototypeWorld
             .Concat(PrototypeMap.PostTiles)
             .ToDictionary(point => point, _ => 0);
     private readonly HashSet<GridPoint> _yieldReservations = [];
+    private readonly SortedSet<GridPoint> _digDesignations = [];
     private long _nextJobId = 1;
     private int _nextCommandIndex;
     private int _stockRaw;
@@ -35,6 +36,9 @@ public sealed class PrototypeWorld
     private int _eatTicks;
     private int _drillTicks;
     private int _watchTicks;
+    private int _digTicks;
+    private int _digsCompleted;
+    private int _stoneProduced;
     private int _musterTicks;
     private int _idleTicks;
     private int _postCapacityTicks;
@@ -58,6 +62,7 @@ public sealed class PrototypeWorld
             [JobKind.Rest] = PrototypeTuning.DefaultRestPriority,
             [JobKind.Drill] = PrototypeTuning.DefaultDrillPriority,
             [JobKind.Watch] = PrototypeTuning.DefaultWatchPriority,
+            [JobKind.Dig] = PrototypeTuning.DefaultDigPriority,
         };
         _rules = new(StringComparer.Ordinal)
         {
@@ -200,6 +205,15 @@ public sealed class PrototypeWorld
         var events = _events
             .Select(ToSnapshot)
             .ToArray();
+        // DiggableTiles keeps the "what may be designated" rule in the simulation:
+        // the Godot brush filters against this list instead of re-deriving it.
+        var map = new PrototypeMapSnapshot(
+            [.. _map.RockTiles()],
+            [.. _map.RockTiles().Where(_map.IsDiggable)],
+            [.. _map.ExcavatedTiles]);
+        var designations = _digDesignations
+            .Select(ToSnapshot)
+            .ToArray();
 
         return new PrototypeSnapshot(
             PrototypeCanonical.SchemaVersion,
@@ -212,6 +226,8 @@ public sealed class PrototypeWorld
             zones,
             priorities,
             rules,
+            map,
+            designations,
             beds,
             looseItems,
             new PrototypeStockSnapshot(
@@ -219,6 +235,7 @@ public sealed class PrototypeWorld
                 _stockMeals,
                 LooseCount(ResourceKind.RawMushroom),
                 LooseCount(ResourceKind.Meal),
+                LooseCount(ResourceKind.Stone),
                 PrototypeTuning.LarderCapacity,
                 MealsProduced,
                 MealsEaten),
@@ -229,7 +246,9 @@ public sealed class PrototypeWorld
                 _cookBatchesCompleted,
                 _mealHaulsCompleted,
                 MealsProduced,
-                MealsEaten),
+                MealsEaten,
+                _digsCompleted,
+                _stoneProduced),
             new PrototypeLaborSnapshot(
                 _totalCreatureTicks,
                 _foodWorkTicks,
@@ -237,6 +256,7 @@ public sealed class PrototypeWorld
                 _eatTicks,
                 _drillTicks,
                 _watchTicks,
+                _digTicks,
                 _musterTicks,
                 _idleTicks,
                 Percentage(_foodWorkTicks, _totalCreatureTicks),
@@ -278,6 +298,8 @@ public sealed class PrototypeWorld
         {
             ZonePaintCommand paint => paint with { Tiles = paint.Tiles.ToArray() },
             ZoneEraseCommand erase => erase with { Tiles = erase.Tiles.ToArray() },
+            DigDesignateCommand designate => designate with { Tiles = designate.Tiles.ToArray() },
+            DigCancelCommand cancel => cancel with { Tiles = cancel.Tiles.ToArray() },
             SetPriorityCommand priority => priority,
             SetRuleCommand rule => rule,
             _ => throw new InvalidDataException(
@@ -361,6 +383,12 @@ public sealed class PrototypeWorld
                 }
 
                 break;
+            case DigDesignateCommand designate:
+                ApplyDigDesignate(designate);
+                break;
+            case DigCancelCommand cancel:
+                ApplyDigCancel(cancel);
+                break;
             case SetPriorityCommand priority:
                 _priorities[priority.JobKind] = priority.Value;
                 break;
@@ -370,6 +398,116 @@ public sealed class PrototypeWorld
             default:
                 throw new InvalidDataException($"Unsupported prototype command: {command.GetType().Name}");
         }
+    }
+
+    /// <summary>
+    /// Strict and atomic: every tile is checked against the live map before the
+    /// first designation is recorded, so a rejected command mutates nothing.
+    /// Designating an already designated tile is a no-op, matching zone_paint.
+    /// </summary>
+    private void ApplyDigDesignate(DigDesignateCommand command)
+    {
+        foreach (var tile in command.Tiles)
+        {
+            if (!_map.IsDiggable(tile))
+            {
+                throw new InvalidDataException(
+                    $"Dig tile ({tile.X},{tile.Y}) is not diggable rock. " +
+                    "Floor, features, the gate and the map boundary cannot be designated.");
+            }
+        }
+
+        var added = command.Tiles.Count(tile => !_digDesignations.Contains(tile));
+        if (_digDesignations.Count + added > PrototypeTuning.MaximumDigDesignations)
+        {
+            throw new InvalidDataException(
+                $"A session cannot hold more than {PrototypeTuning.MaximumDigDesignations} " +
+                "dig designations.");
+        }
+
+        foreach (var tile in command.Tiles)
+        {
+            _digDesignations.Add(tile);
+        }
+    }
+
+    /// <summary>
+    /// Tolerant, like zone_erase: tiles without a designation are simply skipped.
+    /// Releasing the owning job in the same step keeps the world from holding a
+    /// reservation or half-finished progress for an intent the player withdrew.
+    /// </summary>
+    private void ApplyDigCancel(DigCancelCommand command)
+    {
+        foreach (var tile in command.Tiles)
+        {
+            if (!_digDesignations.Remove(tile))
+            {
+                continue;
+            }
+
+            var job = _jobs.FirstOrDefault(
+                item => item.Kind == JobKind.Dig && item.Origin == tile);
+            if (job is null)
+            {
+                continue;
+            }
+
+            var worker = _creatures.FirstOrDefault(creature => creature.CurrentJob == job);
+            if (worker is not null)
+            {
+                CancelJob(worker, "dig_cancelled");
+            }
+
+            _jobs.Remove(job);
+        }
+    }
+
+    /// <summary>
+    /// A designation is workable when at least one orthogonal neighbour is a
+    /// passable, non-forbidden tile that is not the gate. Reachability is checked
+    /// here rather than at command time because digging changes it.
+    /// </summary>
+    private IEnumerable<GridPoint> DigApproachTiles(GridPoint rock)
+    {
+        return PrototypeMap.Neighbors(rock)
+            .Where(neighbor =>
+                _map.IsPassable(neighbor) &&
+                neighbor != PrototypeMap.Gate &&
+                !_zones[ZoneKind.Forbidden].Contains(neighbor))
+            .Order();
+    }
+
+    private bool IsDigReachable(GridPoint rock)
+    {
+        return DigApproachTiles(rock).Any();
+    }
+
+    private bool TryFindDigApproach(
+        CreatureState creature,
+        GridPoint rock,
+        out GridPoint target)
+    {
+        var candidate = DigApproachTiles(rock)
+            .Select(tile => new
+            {
+                Tile = tile,
+                Distance = _map.Distance(
+                    creature.Position,
+                    tile,
+                    _zones[ZoneKind.Forbidden]),
+            })
+            .Where(item => item.Distance is not null)
+            .OrderBy(item => item.Distance)
+            .ThenBy(item => item.Tile)
+            .FirstOrDefault();
+        if (candidate is null)
+        {
+            target = default;
+            return false;
+        }
+
+        target = candidate.Tile;
+        return true;
     }
 
     private void ValidateZoneTiles(
@@ -419,7 +557,9 @@ public sealed class PrototypeWorld
                 ? "refused_priority_zero"
                 : job.Kind == JobKind.Drill
                     ? "refused_rule_min_satiety"
-                    : "refused_zone_not_designated";
+                    : job.Kind == JobKind.Dig
+                        ? "dig_cancelled"
+                        : "refused_zone_not_designated";
             CancelJob(creature, reason);
         }
     }
@@ -434,6 +574,7 @@ public sealed class PrototypeWorld
             JobKind.Rest => _zones[ZoneKind.Quarters].Contains(job.Origin),
             JobKind.Drill => _zones[ZoneKind.TrainingGround].Contains(job.Origin),
             JobKind.Watch => _zones[ZoneKind.Watch].Contains(job.Origin),
+            JobKind.Dig => _digDesignations.Contains(job.Origin) && _map.IsDiggable(job.Origin),
             _ => false,
         };
     }
@@ -462,8 +603,11 @@ public sealed class PrototypeWorld
 
         if (_priorities[JobKind.Haul] > 0 && ZoneCoversFeature(ZoneKind.Larder, TileKind.Larder))
         {
+            // Stone is deliberately excluded: hauling and storing it is the next
+            // step of the construction experiment, not this one. Excavated stone
+            // stays loose on the floor so the player can see the result.
             foreach (var entry in _loose
-                         .Where(pair => pair.Value > 0)
+                         .Where(pair => pair.Value > 0 && pair.Key.Resource != ResourceKind.Stone)
                          .OrderBy(pair => pair.Key.Point)
                          .ThenBy(pair => pair.Key.Resource))
             {
@@ -560,6 +704,25 @@ public sealed class PrototypeWorld
                 EnsureJob(
                     $"watch:{tile.X}:{tile.Y}",
                     JobKind.Watch,
+                    tile,
+                    null,
+                    0,
+                    desired);
+            }
+        }
+
+        if (_priorities[JobKind.Dig] > 0)
+        {
+            foreach (var tile in _digDesignations)
+            {
+                if (!_map.IsDiggable(tile) || !IsDigReachable(tile))
+                {
+                    continue;
+                }
+
+                EnsureJob(
+                    $"dig:{tile.X}:{tile.Y}",
+                    JobKind.Dig,
                     tile,
                     null,
                     0,
@@ -1227,6 +1390,19 @@ public sealed class PrototypeWorld
             return "refused_rule_min_satiety";
         }
 
+        if (kind == JobKind.Dig)
+        {
+            // Digging needs no zone, so it gets its own explanation ladder.
+            if (_digDesignations.Count == 0)
+            {
+                return "waiting_no_designation";
+            }
+
+            return AnyReachableTarget(creature, JobKind.Dig)
+                ? "waiting_no_job_available"
+                : "dig_unreachable";
+        }
+
         var requiredZone = kind switch
         {
             JobKind.Harvest => (ZoneKind.Farm, TileKind.Bed),
@@ -1287,6 +1463,11 @@ public sealed class PrototypeWorld
             {
                 ["looseItems"] = _loose.Values.Sum(),
                 ["freeCapacity"] = PrototypeTuning.LarderCapacity - _stockRaw - _stockMeals,
+            },
+            JobKind.Dig => new()
+            {
+                ["designations"] = _digDesignations.Count,
+                ["reachable"] = _digDesignations.Count(IsDigReachable),
             },
             _ => new(),
         };
@@ -1577,6 +1758,9 @@ public sealed class PrototypeWorld
                     case JobKind.Watch:
                         _watchTicks++;
                         break;
+                    case JobKind.Dig:
+                        _digTicks++;
+                        break;
                     default:
                         _idleTicks++;
                         break;
@@ -1818,6 +2002,26 @@ public sealed class PrototypeWorld
             return;
         }
 
+        if (job.Kind == JobKind.Dig)
+        {
+            if (job.ProgressTicks == 0)
+            {
+                RecordDecision(
+                    creature,
+                    "dig_started",
+                    new Dictionary<string, int>
+                    {
+                        ["tileX"] = job.Origin.X,
+                        ["tileY"] = job.Origin.Y,
+                        ["requiredTicks"] = job.RemainingTicks,
+                    },
+                    job.Kind,
+                    job.Origin);
+            }
+
+            job.ProgressTicks++;
+        }
+
         creature.WorkTicks++;
         if (creature.WorkTicks % PrototypeTuning.FatigueGainPeriod == 0)
         {
@@ -1880,6 +2084,24 @@ public sealed class PrototypeWorld
                 MealsProduced += PrototypeTuning.CookOutput;
                 _cookBatchesCompleted++;
                 break;
+            case JobKind.Dig:
+                _map.Excavate(job.Origin);
+                _digDesignations.Remove(job.Origin);
+                AddLoose(job.Origin, ResourceKind.Stone, PrototypeTuning.DigStoneYield);
+                _digsCompleted++;
+                _stoneProduced += PrototypeTuning.DigStoneYield;
+                RecordDecision(
+                    creature,
+                    "dig_completed",
+                    new Dictionary<string, int>
+                    {
+                        ["tileX"] = job.Origin.X,
+                        ["tileY"] = job.Origin.Y,
+                        ["stone"] = PrototypeTuning.DigStoneYield,
+                    },
+                    job.Kind,
+                    job.Origin);
+                break;
             case JobKind.Drill:
                 creature.MartialForm = Math.Min(
                     100,
@@ -1921,6 +2143,13 @@ public sealed class PrototypeWorld
         job.PickedUp = false;
         job.Target = job.Origin;
         job.RemainingTicks = 0;
+        if (job.Kind == JobKind.Dig)
+        {
+            // Excavation has no partial result: an interrupted tile is untouched
+            // rock again, so its progress must not survive the cancellation.
+            job.ProgressTicks = 0;
+        }
+
         creature.CurrentJob = null;
         creature.Mode = CreatureMode.Waiting;
         RecordDecision(
@@ -2207,6 +2436,12 @@ public sealed class PrototypeWorld
         JobState job,
         out GridPoint target)
     {
+        if (job.Kind == JobKind.Dig)
+        {
+            // The worker never enters the rock: it stands on a neighbouring tile.
+            return TryFindDigApproach(creature, job.Origin, out target);
+        }
+
         if (job.Kind != JobKind.Cook)
         {
             target = job.Origin;
@@ -2323,6 +2558,7 @@ public sealed class PrototypeWorld
             JobKind.Haul => PrototypeTuning.HaulTransferTicks,
             JobKind.Cook => PrototypeTuning.CookTicks,
             JobKind.Drill => PrototypeTuning.DrillTicks,
+            JobKind.Dig => PrototypeTuning.DigTicks,
             JobKind.Rest or JobKind.Watch => int.MaxValue,
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
@@ -2396,6 +2632,8 @@ public sealed class PrototypeWorld
             JobKind.Drill => PrototypeMap.PostTiles.Any(tile =>
                 _zones[ZoneKind.TrainingGround].Contains(tile) && Reachable(tile)),
             JobKind.Watch => _zones[ZoneKind.Watch].Any(Reachable),
+            JobKind.Dig => _digDesignations.Any(tile =>
+                _map.IsDiggable(tile) && DigApproachTiles(tile).Any(Reachable)),
             _ => false,
         };
     }
@@ -2526,6 +2764,34 @@ public sealed class PrototypeWorld
             creature.ReadinessAtRaid);
     }
 
+    private PrototypeDigDesignationSnapshot ToSnapshot(GridPoint tile)
+    {
+        var job = _jobs.FirstOrDefault(
+            item => item.Kind == JobKind.Dig && item.Origin == tile);
+        var reachable = IsDigReachable(tile);
+        var reserved = job?.ReservedBy;
+        var status = _priorities[JobKind.Dig] == 0
+            ? "dig_blocked_priority"
+            : !reachable
+                ? "dig_unreachable"
+                : reserved is null
+                    ? "dig_waiting"
+                    : job!.ProgressTicks > 0
+                        ? "dig_in_progress"
+                        : "dig_reserved";
+        return new PrototypeDigDesignationSnapshot(
+            tile,
+            job?.Id,
+            reserved,
+            reserved is null ? null : job!.Target,
+            job?.ProgressTicks ?? 0,
+            job is { ReservedBy: not null }
+                ? job.ProgressTicks + Math.Max(0, job.RemainingTicks)
+                : PrototypeTuning.DigTicks,
+            reachable,
+            status);
+    }
+
     private static PrototypePendingCommandSnapshot ToSnapshot(PrototypeCommand command)
     {
         return command switch
@@ -2543,6 +2809,22 @@ public sealed class PrototypeWorld
                 "zone_erase",
                 erase.ZoneKind,
                 erase.Tiles.ToArray(),
+                null,
+                null,
+                null),
+            DigDesignateCommand designate => new(
+                designate.Tick,
+                "dig_designate",
+                null,
+                designate.Tiles.ToArray(),
+                null,
+                null,
+                null),
+            DigCancelCommand cancel => new(
+                cancel.Tick,
+                "dig_cancel",
+                null,
+                cancel.Tiles.ToArray(),
                 null,
                 null,
                 null),

@@ -30,6 +30,7 @@ public static class PrototypeTuning
     public const int MapWidth = 28;
     public const int MapHeight = 16;
     public const int MaximumTilesPerCommand = 256;
+    public const int MaximumDigDesignations = 256;
 
     public const int StartSatiety = 70;
     public const int StartFatigue = 10;
@@ -61,6 +62,11 @@ public static class PrototypeTuning
     public const int CollapseThreshold = 10;
     public const int ExhaustedSpeedMultiplier = 2;
     public const int AffinitySpeedDenominator = 4;
+
+    // Digging is deliberately slower than a harvest and faster than a cook batch:
+    // the player must be able to watch a single tile finish inside one 4x pass.
+    public const int DigTicks = 36;
+    public const int DigStoneYield = 1;
 
     public const int DrillTicks = 30;
     public const int DrillGain = 12;
@@ -97,6 +103,10 @@ public static class PrototypeTuning
     public const int DefaultRestPriority = 2;
     public const int DefaultDrillPriority = 0;
     public const int DefaultWatchPriority = 0;
+    // Digging must start from a designation alone, so its default priority is
+    // active. It ties with the food chain and loses the tie by enum order, which
+    // keeps the existing food/raid vertical unchanged until rock is designated.
+    public const int DefaultDigPriority = 3;
     public const int RationReserveMaximum = 20;
     public const int RationReserveDefault = 0;
     public const int DrillMinimumSatietyMaximum = 100;

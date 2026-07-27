@@ -13,6 +13,8 @@ internal sealed class PrototypeMap
     private readonly TileKind[,] _tiles =
         new TileKind[PrototypeTuning.MapWidth, PrototypeTuning.MapHeight];
 
+    private readonly SortedSet<GridPoint> _excavated = [];
+
     public PrototypeMap()
     {
         for (var y = 0; y < PrototypeTuning.MapHeight; y++)
@@ -55,6 +57,23 @@ internal sealed class PrototypeMap
     [
         new(9, 4), new(9, 5), new(18, 4),
         new(18, 5), new(9, 10), new(18, 10),
+        .. DigPocketTiles,
+    ];
+
+    /// <summary>
+    /// The excavation playground of Issue #24, in the top-right corner. It was
+    /// placed away from the tiles the shipped scenarios actually walk: creature
+    /// positions, move counts and economy counters of baseline, prepared and
+    /// neglected are identical over a full session with and without the pocket.
+    /// That is a measured property of those three command logs, not a proof that
+    /// no path anywhere changes — a log that sends a creature between the
+    /// top-right corner tiles can pick a different equal-length route.
+    /// </summary>
+    public static GridPoint[] DigPocketTiles =>
+    [
+        new(25, 1), new(26, 1),
+        new(25, 2), new(26, 2),
+        new(25, 3), new(26, 3),
     ];
 
     public static GridPoint Gate => new(27, 13);
@@ -70,6 +89,65 @@ internal sealed class PrototypeMap
     {
         return point.X is >= 0 and < PrototypeTuning.MapWidth &&
             point.Y is >= 0 and < PrototypeTuning.MapHeight;
+    }
+
+    /// <summary>
+    /// The map border holds the dungeon in. Excavating it would open the fortress
+    /// to the outside world, which is a product decision this step does not take.
+    /// </summary>
+    public static bool IsBoundary(GridPoint point)
+    {
+        return point.X == 0 || point.Y == 0 ||
+            point.X == PrototypeTuning.MapWidth - 1 ||
+            point.Y == PrototypeTuning.MapHeight - 1;
+    }
+
+    /// <summary>
+    /// Diggability is a property of the tile alone. Whether a worker can actually
+    /// reach it is a job condition, because reachability changes while digging.
+    /// </summary>
+    public bool IsDiggable(GridPoint point)
+    {
+        return IsInside(point) && !IsBoundary(point) && this[point] == TileKind.Rock;
+    }
+
+    /// <summary>
+    /// Only the initial layout can tell whether a tile could <em>ever</em> be dug.
+    /// The command pre-flight uses it; the live map stays the runtime authority.
+    /// </summary>
+    public static bool IsDiggableInInitialLayout(GridPoint point)
+    {
+        return IsInside(point) && !IsBoundary(point) &&
+            InternalRockTiles.Contains(point);
+    }
+
+    public void Excavate(GridPoint point)
+    {
+        if (!IsDiggable(point))
+        {
+            throw new InvalidOperationException(
+                $"Tile ({point.X},{point.Y}) is not diggable rock.");
+        }
+
+        _tiles[point.X, point.Y] = TileKind.Floor;
+        _excavated.Add(point);
+    }
+
+    public IReadOnlyCollection<GridPoint> ExcavatedTiles => _excavated;
+
+    public IEnumerable<GridPoint> RockTiles()
+    {
+        for (var y = 0; y < PrototypeTuning.MapHeight; y++)
+        {
+            for (var x = 0; x < PrototypeTuning.MapWidth; x++)
+            {
+                var point = new GridPoint(x, y);
+                if (_tiles[x, y] == TileKind.Rock)
+                {
+                    yield return point;
+                }
+            }
+        }
     }
 
     public int? Distance(

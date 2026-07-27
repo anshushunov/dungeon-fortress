@@ -1,7 +1,7 @@
 # Godot graybox — Prototype 1
 
 Status: active
-Source: Issues #10–#12
+Source: Issues #10–#12, #24
 
 The graybox is the visual, top-down projection of the headless Prototype 1
 economy and raid. It starts with the `baseline` gameplay-v2 fixture.
@@ -37,14 +37,17 @@ visible and keeps initial inspection repeatable.
 | Advance exactly one simulation tick | `STEP` | `S` |
 | Select time speed | `0.5x`, `1x`, `4x`, `16x` | `1`, `2`, `3`, `4` |
 | Reset fixture | `BASE`, `NEGLECT` | `R`, `N` |
-| Inspect | click creature or cell | — |
+| Inspect | click creature or cell | `I` |
+| Designate rock for digging | `DIG` | `D` |
+| Withdraw a dig designation | `CANCEL DIG` | `X` |
 
 ## Indirect controls (Phase B)
 
-The second control strip is deliberately compact: select `INSPECT`, `PAINT` or
-`ERASE` with the mouse (or `I`, `B`, `E`), choose the active zone with `Z`, and
-click a map cell. This produces a `zone_paint` or `zone_erase` v2 command; it
-does not address a creature. `J` selects a global job priority and `K` selects
+The second control strip is a row of buttons: select `INSPECT`, `PAINT`, `ERASE`,
+`DIG` or `CANCEL DIG` with the mouse (or `I`, `B`, `E`, `D`, `X`), choose the
+active zone with `Z`, and click a map cell. This produces a `zone_paint`,
+`zone_erase`, `dig_designate` or `dig_cancel` v2 command; none of them addresses
+a creature. `J` selects a global job priority — including `Dig` — and `K` selects
 one of `ration_reserve`, `drill_min_satiety` or `muster_lead_ticks`; `+` / `-`
 changes the selected bounded value. `Y` rebuilds and replays the current log.
 
@@ -62,6 +65,69 @@ The inspector exposes the selected creature's needs, martial form, mode,
 current job, carried item, last reason and its structured numeric details. Cell
 inspection shows its zones and relevant jobs. Colored lines/dots are jobs;
 colored circle/square pairs and name labels distinguish all nine creatures.
+
+## Excavation (Issue #24)
+
+`DIG [D]` marks internal rock for excavation; `CANCEL DIG [X]` withdraws a mark.
+Both brushes support click and drag, and `Esc` or right-click returns to Inspect.
+Neither brush chooses a worker: the player states intent, and a free creature
+picks the `Dig` job through the normal autonomous scoring.
+
+A stroke only emits a command for a tile the simulation would accept. Dragging
+across floor, the gate, the map boundary or an existing mark changes nothing and
+explains itself in the feedback line, so a drag never produces a rejected
+command.
+
+Reading the map without the log:
+
+| Reading | What it means |
+|---|---|
+| light warm block filling the whole cell, no grid gap | diggable internal rock |
+| dark warm block | the map boundary; it is never diggable |
+| amber outline on every rock cell | shown only while the `DIG` brush is active: these are the legal targets of a stroke |
+| amber tile with an X | designated and reachable, or reserved by a worker |
+| amber fill rising from the bottom plus a yellow bar | excavation in progress |
+| red tile with an X | designated but no free neighbouring floor to work from |
+| gray tile with an X | designated while the `Dig` priority is 0 |
+| pale blue tile | floor created by excavation |
+| gray dot with a dark rim | loose stone left by a finished dig |
+
+Rock is drawn as a gapless warm block, well above the cool blue floor in both
+hue and brightness, and it fills the 1px grid gap so a wall reads as one solid
+mass. The first attempt used a near-black rock that owner playtest reported as
+indistinguishable from floor.
+
+The cell inspector states whether the tile is diggable, why it is not, who chose
+the job, which neighbouring tile they work from, the tick progress, and the
+result the player will get. The top line adds `stone`, `dug` and `marks`
+counters.
+
+The excavation pocket is `(25..26, 1..3)`. Its right column touches the map
+boundary, so `(26,2)` is walled in until one of its neighbours is dug — an
+intentional, self-explaining `dig_unreachable` case rather than a defect.
+
+Loose stone stays where the rock was. There is no stone hauling, storage or
+consumption yet; that is the next step of Issue #23.
+
+### Reproducible excavation frames
+
+`--demo-dig` replays a fixed brush session through the same code path a human
+uses: `DIG` marks `(25,1) (25,2) (25,3) (26,1)`, then `CANCEL DIG` withdraws
+`(26,3)`. It deliberately ends holding the `DIG` brush, so the capture also shows
+the outline every still-diggable tile gets. Combined with `--screenshot-ticks` it
+captures the before, during and after frames:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
+  -Fixture baseline -DemoDig -ScreenshotTicks 3 `
+  -ScreenshotPath issue24\dig-before.png
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
+  -Fixture baseline -DemoDig -ScreenshotTicks 30 `
+  -ScreenshotPath issue24\dig-during.png
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
+  -Fixture baseline -DemoDig -ScreenshotTicks 120 `
+  -ScreenshotPath issue24\dig-after.png
+```
 
 ## Raid checkpoint
 
@@ -116,8 +182,10 @@ commitment to production art direction.
 
 ## Boundary
 
-`DungeonFortress.Simulation.PrototypeWorld` owns the fixture, commands, map
-rules, jobs, creatures, economy, event log and canonical checksum. Godot reads
+`DungeonFortress.Simulation.PrototypeWorld` owns the fixture, commands, the
+mutable map, dig designations, jobs, creatures, economy, event log and canonical
+checksum. Which tiles are rock and which of them may be designated both come from
+the snapshot, so the adapter holds no copy of the map rules. Godot reads
 only `GetSnapshot()` and owns only rendering, hit-testing selection and the
 non-canonical time controls. No Node stores an alternative job, creature or
 economy state, and no input sends a direct creature command. It remains a

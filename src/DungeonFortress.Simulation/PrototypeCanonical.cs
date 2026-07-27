@@ -215,6 +215,65 @@ public static class PrototypeCanonical
         }
 
         writer.WriteEndObject();
+
+        // The map is canonical state: only Rock -> Floor can happen, so the
+        // excavated delta plus the fixed initial layout reproduces the terrain.
+        writer.WriteStartObject("map");
+        writer.WriteStartArray("rockTiles");
+        foreach (var tile in state.Map.RockTiles.Order())
+        {
+            WritePointValue(writer, tile);
+        }
+
+        writer.WriteEndArray();
+        writer.WriteStartArray("diggableTiles");
+        foreach (var tile in state.Map.DiggableTiles.Order())
+        {
+            WritePointValue(writer, tile);
+        }
+
+        writer.WriteEndArray();
+        writer.WriteStartArray("excavatedTiles");
+        foreach (var tile in state.Map.ExcavatedTiles.Order())
+        {
+            WritePointValue(writer, tile);
+        }
+
+        writer.WriteEndArray();
+        writer.WriteEndObject();
+
+        writer.WriteStartArray("digDesignations");
+        foreach (var designation in state.DigDesignations.OrderBy(item => item.Tile))
+        {
+            writer.WriteStartObject();
+            WritePoint(writer, "tile", designation.Tile);
+            if (designation.JobId is { } digJobId)
+            {
+                writer.WriteNumber("jobId", digJobId);
+            }
+            else
+            {
+                writer.WriteNull("jobId");
+            }
+
+            if (designation.ReservedBy is { } digReservedBy)
+            {
+                writer.WriteNumber("reservedBy", digReservedBy);
+            }
+            else
+            {
+                writer.WriteNull("reservedBy");
+            }
+
+            WriteNullablePoint(writer, "workTile", designation.WorkTile);
+            writer.WriteNumber("progressTicks", designation.ProgressTicks);
+            writer.WriteNumber("requiredTicks", designation.RequiredTicks);
+            writer.WriteBoolean("reachable", designation.Reachable);
+            writer.WriteString("statusCode", designation.StatusCode);
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
         writer.WriteStartArray("beds");
         foreach (var bed in state.Beds.OrderBy(bed => bed.Position))
         {
@@ -244,6 +303,7 @@ public static class PrototypeCanonical
         writer.WriteNumber("meals", state.Stocks.Meals);
         writer.WriteNumber("looseRawMushroom", state.Stocks.LooseRawMushroom);
         writer.WriteNumber("looseMeals", state.Stocks.LooseMeals);
+        writer.WriteNumber("looseStone", state.Stocks.LooseStone);
         writer.WriteNumber("capacity", state.Stocks.Capacity);
         writer.WriteNumber("mealsProduced", state.Stocks.MealsProduced);
         writer.WriteNumber("mealsEaten", state.Stocks.MealsEaten);
@@ -292,6 +352,8 @@ public static class PrototypeCanonical
         writer.WriteNumber("mealHaulsCompleted", state.Economy.MealHaulsCompleted);
         writer.WriteNumber("mealsProduced", state.Economy.MealsProduced);
         writer.WriteNumber("mealsEaten", state.Economy.MealsEaten);
+        writer.WriteNumber("digsCompleted", state.Economy.DigsCompleted);
+        writer.WriteNumber("stoneProduced", state.Economy.StoneProduced);
         writer.WriteEndObject();
         writer.WriteStartObject("labor");
         writer.WriteNumber("totalCreatureTicks", state.Labor.TotalCreatureTicks);
@@ -300,6 +362,7 @@ public static class PrototypeCanonical
         writer.WriteNumber("eatTicks", state.Labor.EatTicks);
         writer.WriteNumber("drillTicks", state.Labor.DrillTicks);
         writer.WriteNumber("watchTicks", state.Labor.WatchTicks);
+        writer.WriteNumber("digTicks", state.Labor.DigTicks);
         writer.WriteNumber("musterTicks", state.Labor.MusterTicks);
         writer.WriteNumber("idleTicks", state.Labor.IdleTicks);
         writer.WriteNumber("foodWorkPercent", state.Labor.FoodWorkPercent);

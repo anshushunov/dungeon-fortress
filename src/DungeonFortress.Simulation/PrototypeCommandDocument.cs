@@ -117,6 +117,8 @@ public static class PrototypeCommandDocument
         {
             "zone_paint" => ParseZoneCommand(element, tick, paint: true),
             "zone_erase" => ParseZoneCommand(element, tick, paint: false),
+            "dig_designate" => ParseDigCommand(element, tick, designate: true),
+            "dig_cancel" => ParseDigCommand(element, tick, designate: false),
             "set_priority" => ParsePriorityCommand(element, tick),
             "set_rule" => ParseRuleCommand(element, tick),
             string value => throw new InvalidDataException($"Unknown command kind: {value}"),
@@ -131,6 +133,29 @@ public static class PrototypeCommandDocument
     {
         RequireExactProperties(element, ["tick", "kind", "zoneKind", "tiles"]);
         var zoneKind = ReadEnum<ZoneKind>(element, "zoneKind");
+        var tiles = ReadTiles(element);
+
+        return paint
+            ? new ZonePaintCommand(tick, zoneKind, tiles)
+            : new ZoneEraseCommand(tick, zoneKind, tiles);
+    }
+
+    private static PrototypeCommand ParseDigCommand(
+        JsonElement element,
+        int tick,
+        bool designate)
+    {
+        // No zoneKind, no jobKind, no value: excavation intent is purely spatial.
+        RequireExactProperties(element, ["tick", "kind", "tiles"]);
+        var tiles = ReadTiles(element);
+
+        return designate
+            ? new DigDesignateCommand(tick, tiles)
+            : new DigCancelCommand(tick, tiles);
+    }
+
+    private static GridPoint[] ReadTiles(JsonElement element)
+    {
         var tilesElement = element.GetProperty("tiles");
         if (tilesElement.ValueKind != JsonValueKind.Array)
         {
@@ -177,9 +202,7 @@ public static class PrototypeCommandDocument
             throw new InvalidDataException("tiles cannot be empty.");
         }
 
-        return paint
-            ? new ZonePaintCommand(tick, zoneKind, [.. tiles])
-            : new ZoneEraseCommand(tick, zoneKind, [.. tiles]);
+        return [.. tiles];
     }
 
     private static PrototypeCommand ParsePriorityCommand(JsonElement element, int tick)
