@@ -61,9 +61,13 @@ internal sealed class PrototypeMap
     ];
 
     /// <summary>
-    /// The excavation playground of Issue #24. It sits in the top-right corner,
-    /// outside the bounding box of every route the food, drill, watch, muster and
-    /// raid systems walk, so adding it does not reroute the existing vertical.
+    /// The excavation playground of Issue #24, in the top-right corner. It was
+    /// placed away from the tiles the shipped scenarios actually walk: creature
+    /// positions, move counts and economy counters of baseline, prepared and
+    /// neglected are identical over a full session with and without the pocket.
+    /// That is a measured property of those three command logs, not a proof that
+    /// no path anywhere changes — a log that sends a creature between the
+    /// top-right corner tiles can pick a different equal-length route.
     /// </summary>
     public static GridPoint[] DigPocketTiles =>
     [

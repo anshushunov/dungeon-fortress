@@ -412,6 +412,63 @@ public sealed class PrototypeDigTests
         Assert.Contains(PocketBottomLeft, state.Map.RockTiles);
     }
 
+    /// <summary>
+    /// docs/engineering/PROTOTYPE_HEADLESS.md walks a reader through this shipped
+    /// fixture and quotes concrete numbers. Without this test the document and the
+    /// fixture could drift apart silently.
+    /// </summary>
+    [Fact]
+    public void Dig_demo_fixture_matches_the_documented_headless_walkthrough()
+    {
+        var log = LoadFixture("dig-demo");
+
+        var early = PrototypeScenario.Run(log, 5).State;
+        Assert.Equal(
+            [
+                new GridPoint(25, 1), new GridPoint(26, 1),
+                new GridPoint(25, 2), new GridPoint(26, 2),
+                new GridPoint(25, 3),
+            ],
+            early.DigDesignations.Select(item => item.Tile));
+        Assert.All(
+            early.DigDesignations.Where(item => item.Tile.X == 26),
+            item =>
+            {
+                Assert.False(item.Reachable);
+                Assert.Equal("dig_unreachable", item.StatusCode);
+                Assert.Null(item.ReservedBy);
+            });
+        Assert.All(
+            early.DigDesignations.Where(item => item.Tile.X == 25),
+            item =>
+            {
+                Assert.True(item.Reachable);
+                Assert.Equal("dig_reserved", item.StatusCode);
+                Assert.Equal(24, item.WorkTile!.Value.X);
+            });
+        // Three reachable designations, three different volunteers.
+        Assert.Equal(
+            3,
+            early.DigDesignations
+                .Where(item => item.ReservedBy is not null)
+                .Select(item => item.ReservedBy!.Value)
+                .Distinct()
+                .Count());
+
+        var late = PrototypeScenario.Run(log, 200).State;
+        Assert.Equal(5, late.Economy.DigsCompleted);
+        Assert.Equal(5, late.Stocks.LooseStone);
+        Assert.Equal(
+            [
+                new GridPoint(25, 1), new GridPoint(26, 1),
+                new GridPoint(25, 2), new GridPoint(26, 2),
+                new GridPoint(25, 3),
+            ],
+            late.Map.ExcavatedTiles);
+        Assert.Empty(late.DigDesignations);
+        Assert.Contains(new GridPoint(26, 3), late.Map.RockTiles);
+    }
+
     [Fact]
     public void Zoning_a_room_on_rock_stays_forbidden()
     {

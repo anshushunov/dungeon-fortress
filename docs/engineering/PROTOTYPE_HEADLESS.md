@@ -62,8 +62,28 @@ dotnet run --project .\tests\DungeonFortress.Scenarios -- `
 `--snapshot .\.artifacts\prepared.json`, чтобы записать его в файл. Параметры
 скорости воспроизведения не входят в игровой журнал.
 
-Раскопка наблюдается тем же способом. Fixture `dig-demo` обозначает пять тайлов
-внутреннего массива скалы и снимает одно обозначение на следующем тике:
+Раскопка наблюдается тем же способом. Fixture `dig-demo` обозначает все шесть
+тайлов внутреннего массива скалы на тике 0 и снимает обозначение с `(26,3)` на
+тике 1. Результат содержит `digsCompleted`, `looseStone`, `excavatedTiles` и
+`digDesignations` со `statusCode` каждого обозначения, поэтому состояние
+раскопки читается без анализа изображения.
+
+Короткий прогон показывает разбор намерений:
+
+```powershell
+dotnet run --project .\tests\DungeonFortress.Scenarios -- `
+  --prototype `
+  --commands .\scenarios\prototype1\dig-demo.commands.v2.json `
+  --ticks 5
+```
+
+Остаётся пять обозначений. `(25,1)`, `(25,2)` и `(25,3)` — `dig_reserved`, у
+каждого свой `reservedBy` и свой `workTile` из колонки 24. `(26,1)` и `(26,2)` —
+`dig_unreachable` с `reachable: false`: правая колонна примыкает к границе карты
+и замурована, пока не выкопан сосед слева. Работы у них нет, и ни одно существо
+к ним не идёт.
+
+Полный прогон показывает результат:
 
 ```powershell
 dotnet run --project .\tests\DungeonFortress.Scenarios -- `
@@ -72,10 +92,13 @@ dotnet run --project .\tests\DungeonFortress.Scenarios -- `
   --ticks 200
 ```
 
-Результат содержит `digsCompleted`, `looseStone`, `excavatedTiles` и
-`digDesignations` со `statusCode` каждого обозначения, поэтому состояние
-раскопки читается без анализа изображения. Тайл `(26,2)` замурован границей
-карты и остаётся в состоянии `dig_unreachable`, пока не будет выкопан сосед.
+`digsCompleted` = 5, `looseStone` = 5, `excavatedTiles` =
+`(25,1) (26,1) (25,2) (26,2) (25,3)`, `digDesignations` пуст. `(26,3)` остаётся
+скалой: обозначение с него снято. Замурованные тайлы выкопаны не приказом, а
+потому что раскопка соседа сделала их достижимыми.
+
+Поведение этой fixture зафиксировано тестом
+`Dig_demo_fixture_matches_the_documented_headless_walkthrough`.
 
 В режиме `--prototype` seed берётся только из gameplay-v2 документа, а
 фиксированная популяция — из контракта Prototype 1. Явные `--seed` и `--agents`
