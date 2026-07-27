@@ -25,6 +25,9 @@ Prototype 1; `design/GDD.md` описывает игру шире и на уро
 Запуск и наблюдение headless-экономики Prototype 1 описаны в
 `engineering/PROTOTYPE_HEADLESS.md`.
 
+Запуск, управление и воспроизводимый screenshot визуального Phase A graybox
+описаны в `engineering/PROTOTYPE_GRAYBOX.md`.
+
 Правила работы Codex, Claude Code и других агентов находятся в
 `engineering/MULTI_AGENT_WORKFLOW.md`.
 

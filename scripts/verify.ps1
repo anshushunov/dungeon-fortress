@@ -21,6 +21,7 @@ $commandsPath = Join-Path $repoRoot "scenarios\smoke.commands.json"
 $gameProjectPath = Join-Path $repoRoot "src\DungeonFortress.Game"
 $gameProjectFile = Join-Path $gameProjectPath "DungeonFortress.Game.csproj"
 $guardTestScript = Join-Path $repoRoot "scripts\test-godot-output-guard.ps1"
+$screenshotOutputPathTestScript = Join-Path $repoRoot "scripts\test-screenshot-output-path.ps1"
 $ivanMcpConfigTestScript = Join-Path $repoRoot "scripts\test-ivan-mcp-config.ps1"
 $domainMcpVerificationScript = Join-Path $repoRoot "scripts\verify-domain-mcp.ps1"
 
@@ -123,6 +124,9 @@ try {
 
     Invoke-Checked -FilePath "powershell" -Arguments @(
         "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $guardTestScript
+    )
+    Invoke-Checked -FilePath "powershell" -Arguments @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $screenshotOutputPathTestScript
     )
     Invoke-Checked -FilePath "powershell" -Arguments @(
         "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ivanMcpConfigTestScript

@@ -1,7 +1,12 @@
 [CmdletBinding()]
 param(
     [string]$GodotPath,
-    [UInt64]$Seed = 424242,
+    [ValidateSet("baseline", "neglected")]
+    [string]$Fixture = "baseline",
+    [string]$ScreenshotPath,
+    [ValidateRange(0, 1800)]
+    [int]$ScreenshotTicks = 180,
+    [int]$SelectCreature = -1,
     [switch]$VisibleSmoke
 )
 
@@ -14,6 +19,11 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $artifactsRoot = Join-Path $repoRoot ".artifacts"
 $projectPath = Join-Path $repoRoot "src\DungeonFortress.Game"
 $projectFile = Join-Path $projectPath "DungeonFortress.Game.csproj"
+$resolvedScreenshotPath = if ([string]::IsNullOrWhiteSpace($ScreenshotPath)) {
+    $null
+} else {
+    Resolve-RepositoryArtifactPath -RepositoryRoot $repoRoot -RelativePath $ScreenshotPath
+}
 
 $env:DOTNET_CLI_HOME = Join-Path $artifactsRoot "dotnet-home"
 $env:DOTNET_NOLOGO = "1"
@@ -44,13 +54,29 @@ Initialize-GodotRuntimeEnvironment -RepositoryRoot $repoRoot
 $arguments = @(
     "--path", $projectPath,
     "--",
-    "--seed", $Seed.ToString([Globalization.CultureInfo]::InvariantCulture)
+    "--fixture", $Fixture
 )
 if ($VisibleSmoke) {
     $arguments += "--visible-smoke"
 }
+if ($null -ne $resolvedScreenshotPath) {
+    $arguments += "--screenshot", $resolvedScreenshotPath, "--screenshot-ticks", $ScreenshotTicks.ToString([Globalization.CultureInfo]::InvariantCulture)
+}
+if ($SelectCreature -ge 0) {
+    $arguments += "--select-creature", $SelectCreature.ToString([Globalization.CultureInfo]::InvariantCulture)
+}
 
-$expectedEvent = if ($VisibleSmoke) { "godot_visible_smoke" } else { $null }
+if ($VisibleSmoke -and -not [string]::IsNullOrWhiteSpace($ScreenshotPath)) {
+    throw "-VisibleSmoke and -ScreenshotPath are separate deterministic run modes."
+}
+
+$expectedEvent = if ($VisibleSmoke) {
+    "godot_visible_smoke"
+} elseif ($null -ne $resolvedScreenshotPath) {
+    "godot_graybox_screenshot"
+} else {
+    $null
+}
 try {
     $result = Invoke-GodotChecked `
         -GodotPath $godot `
