@@ -10,6 +10,9 @@ public static class PrototypeTuning
     public const int RaiderMightBase = 3;
     public const int RaiderMightJitter = 1;
     public const int RaiderEntryInterval = 2;
+    public const int StealPeriod = 6;
+    public const int DefenderHpBase = 20;
+    public const int DefenderHpPerMight = 4;
     public const int CombatMinSatiety = 20;
     public const int CombatJoinRecheck = 20;
     public const int EngageRadius = 8;

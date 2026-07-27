@@ -326,6 +326,61 @@ public sealed class PrototypeScenarioTests
         Assert.Equal(prepared.Checksum, preparedReplay.Checksum);
     }
 
+    [Fact]
+    public void Raid_steals_one_meal_per_period_and_preserves_meal_accounting()
+    {
+        var world = new PrototypeWorld(LoadFixture("baseline"));
+        var theftTicks = new Dictionary<int, List<int>>();
+        var previousCarrying = new Dictionary<int, int>();
+
+        while (!world.IsComplete)
+        {
+            world.Step();
+            var state = world.GetSnapshot();
+            foreach (var raider in state.Raiders)
+            {
+                var before = previousCarrying.GetValueOrDefault(raider.Id);
+                if (raider.CarryingMeals > before)
+                {
+                    Assert.Equal(before + 1, raider.CarryingMeals);
+                    Assert.Equal(0, raider.StealTicks);
+                    if (!theftTicks.TryGetValue(raider.Id, out var ticks))
+                    {
+                        ticks = [];
+                        theftTicks.Add(raider.Id, ticks);
+                    }
+                    ticks.Add(state.Tick);
+                }
+
+                previousCarrying[raider.Id] = raider.CarryingMeals;
+            }
+        }
+
+        Assert.NotEmpty(theftTicks.SelectMany(pair => pair.Value));
+        Assert.All(theftTicks.Values, ticks =>
+            Assert.All(ticks.Zip(ticks.Skip(1)), pair =>
+                Assert.True(pair.Second - pair.First >= PrototypeTuning.StealPeriod)));
+
+        var result = world.GetSnapshot();
+        var looseMeals = result.LooseItems
+            .Where(item => item.Resource == ResourceKind.Meal)
+            .Sum(item => item.Quantity);
+        Assert.Equal(
+            PrototypeTuning.StartMeals + result.Stocks.MealsProduced,
+            result.Stocks.Meals + looseMeals + result.Stocks.MealsEaten + result.SessionResult.MealsStolen);
+        Assert.NotNull(result.SessionResult.Outcome);
+    }
+
+    [Fact]
+    public void Defender_max_hp_comes_from_might_tuning()
+    {
+        var state = PrototypeScenario.Run(LoadFixture("prepared"), PrototypeTuning.RaidTick).State;
+        Assert.All(state.Creatures, creature =>
+            Assert.Equal(
+                PrototypeTuning.DefenderHpBase + creature.Might * PrototypeTuning.DefenderHpPerMight,
+                creature.MaxHp));
+    }
+
     private static int AverageReadiness(PrototypeRunResult result)
     {
         return (int)result.State.Creatures.Average(creature => creature.ReadinessAtRaid!.Value);

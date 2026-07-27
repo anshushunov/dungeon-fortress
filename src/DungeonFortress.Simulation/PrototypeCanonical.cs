@@ -105,6 +105,8 @@ public static class PrototypeCanonical
             writer.WriteNumber("satiety", creature.Satiety);
             writer.WriteNumber("fatigue", creature.Fatigue);
             writer.WriteNumber("martialForm", creature.MartialForm);
+            writer.WriteNumber("hp", creature.Hp);
+            writer.WriteNumber("maxHp", creature.MaxHp);
             writer.WriteString("injury", ToJson(creature.Injury));
             WritePoint(writer, "position", creature.Position);
             writer.WriteString("mode", ToJson(creature.Mode));
@@ -350,6 +352,7 @@ public static class PrototypeCanonical
             writer.WriteNumber("might", raider.Might);
             WritePoint(writer, "position", raider.Position);
             writer.WriteNumber("carryingMeals", raider.CarryingMeals);
+            writer.WriteNumber("stealTicks", raider.StealTicks);
             writer.WriteString("mode", ToJson(raider.Mode));
             writer.WriteEndObject();
         }

@@ -104,6 +104,8 @@ public sealed record PrototypeCreatureSnapshot(
     int Satiety,
     int Fatigue,
     int MartialForm,
+    int Hp,
+    int MaxHp,
     InjuryKind Injury,
     GridPoint Position,
     CreatureMode Mode,
@@ -210,6 +212,7 @@ public sealed record PrototypeRaiderSnapshot(
     int Might,
     GridPoint Position,
     int CarryingMeals,
+    int StealTicks,
     RaiderMode Mode);
 
 public sealed record PrototypeSessionResultSnapshot(

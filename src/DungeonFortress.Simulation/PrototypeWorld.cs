@@ -254,7 +254,7 @@ public sealed class PrototypeWorld
                 PrototypeTuning.RaiderCount,
                 Math.Max(0, PrototypeTuning.RaidTick - CurrentTick)),
             _raiders.OrderBy(raider => raider.Id).Select(raider => new PrototypeRaiderSnapshot(
-                raider.Id, raider.Hp, raider.Might, raider.Position, raider.CarryingMeals, raider.Mode)).ToArray(),
+                raider.Id, raider.Hp, raider.Might, raider.Position, raider.CarryingMeals, raider.StealTicks, raider.Mode)).ToArray(),
             new PrototypeSessionResultSnapshot(
                 _outcome,
                 _combatEndTick,
@@ -1428,6 +1428,7 @@ public sealed class PrototypeWorld
         if (target.Hp <= 0)
         {
             target.Hp = 0;
+            DropRaiderMeals(target);
             target.Mode = RaiderMode.Downed;
             RecordDecision(creature, "combat_raider_downed", new Dictionary<string, int> { ["raiderId"] = target.Id });
         }
@@ -1461,17 +1462,28 @@ public sealed class PrototypeWorld
                 continue;
             }
 
-            var target = raider.CarryingMeals > 0 ? PrototypeMap.Gate : PrototypeMap.LarderTiles[0];
-            if (raider.Position == target && raider.CarryingMeals == 0)
+            var target = raider.CarryingMeals >= PrototypeTuning.CarryCapacity
+                ? PrototypeMap.Gate
+                : PrototypeMap.LarderTiles[0];
+            if (raider.Position == PrototypeMap.LarderTiles[0] &&
+                raider.CarryingMeals < PrototypeTuning.CarryCapacity)
             {
-                raider.CarryingMeals = Math.Min(PrototypeTuning.CarryCapacity, _stockMeals);
-                _stockMeals -= raider.CarryingMeals;
-                if (raider.CarryingMeals == 0)
+                if (_stockMeals == 0)
                 {
                     raider.Mode = RaiderMode.Escaped;
                     continue;
                 }
-                target = PrototypeMap.Gate;
+
+                raider.StealTicks++;
+                if (raider.StealTicks < PrototypeTuning.StealPeriod)
+                {
+                    continue;
+                }
+
+                _stockMeals--;
+                raider.CarryingMeals++;
+                raider.StealTicks = 0;
+                continue;
             }
             var next = _map.NextStep(raider.Position, target, _zones[ZoneKind.Forbidden]);
             if (next is { } step)
@@ -1512,6 +1524,17 @@ public sealed class PrototypeWorld
     }
 
     private int CombatJitter(int amplitude) => _combatRandom.NextInt32(amplitude * 2 + 1) - amplitude;
+
+    private void DropRaiderMeals(RaiderState raider)
+    {
+        if (raider.CarryingMeals <= 0)
+        {
+            return;
+        }
+
+        AddLoose(raider.Position, ResourceKind.Meal, raider.CarryingMeals);
+        raider.CarryingMeals = 0;
+    }
 
     private static int Manhattan(GridPoint left, GridPoint right) => Math.Abs(left.X - right.X) + Math.Abs(left.Y - right.Y);
 
@@ -2470,6 +2493,8 @@ public sealed class PrototypeWorld
             creature.Satiety,
             creature.Fatigue,
             creature.MartialForm,
+            creature.Hp,
+            creature.MaxHp,
             creature.Injury,
             creature.Position,
             creature.Mode,
@@ -2586,8 +2611,10 @@ public sealed class PrototypeWorld
         public int Satiety { get; set; }
         public int Fatigue { get; set; }
         public int MartialForm { get; set; }
-        public int MaxHp { get; } = 30;
-        public int Hp { get; set; } = 30;
+        public int MaxHp { get; } = PrototypeTuning.DefenderHpBase +
+            definition.Might * PrototypeTuning.DefenderHpPerMight;
+        public int Hp { get; set; } = PrototypeTuning.DefenderHpBase +
+            definition.Might * PrototypeTuning.DefenderHpPerMight;
         public InjuryKind Injury { get; set; }
         public CreatureMode Mode { get; set; }
         public JobState? CurrentJob { get; set; }
@@ -2655,6 +2682,7 @@ public sealed class PrototypeWorld
         public int Might { get; } = might;
         public GridPoint Position { get; set; } = position;
         public int CarryingMeals { get; set; }
+        public int StealTicks { get; set; }
         public RaiderMode Mode { get; set; } = RaiderMode.Raiding;
     }
 
