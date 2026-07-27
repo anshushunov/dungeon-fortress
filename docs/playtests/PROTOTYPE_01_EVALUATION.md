@@ -1,6 +1,6 @@
 # Prototype 1 — evaluation and owner playtest
 
-Status: methodology frozen; automated evidence and owner feedback are pending.
+Status: automated and agent evidence complete; owner feedback pending.
 
 Scope: Issue #12, pre-human decision gate only.
 
@@ -17,7 +17,7 @@ its own hypothesis or threshold retroactively.
 - evaluator: deterministic headless `DungeonFortress.Scenarios` runner
 - planned evidence output: `docs/playtests/data/prototype-01-agent-batch.json`
 - methodology commit: `48491da`
-- evidence commit: pending
+- evidence commit: `f9e37d4`
 
 ## Questions and pre-registered hypotheses
 
