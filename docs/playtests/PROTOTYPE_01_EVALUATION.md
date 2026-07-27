@@ -1,8 +1,8 @@
 # Prototype 1 — evaluation and owner playtest
 
-Status: automated and agent evidence complete; owner feedback pending.
+Status: complete — owner decision: **ITERATE**.
 
-Scope: Issue #12, pre-human decision gate only.
+Scope: Issue #12, reproducible evidence and owner decision gate.
 
 ## Provenance and sequence
 
@@ -73,11 +73,10 @@ engine flag.
 
 ## Interpretation boundary
 
-Automation may establish determinism, visible state changes and contract
-coverage. Agent readability may establish that the graybox/state/log exposes
-those facts. Neither can establish whether the game is clear, influential or
-interesting to its owner. The only permitted conclusion before owner feedback is
-**pending owner playtest**.
+Automation establishes determinism, visible state changes and contract coverage.
+Agent readability establishes that the graybox/state/log exposes those facts.
+Only the owner can judge clarity, influence and desire to continue; that feedback
+is recorded separately below.
 
 ## Automated evidence
 
@@ -122,7 +121,7 @@ outcome flag is used to derive the table.
 | Type / severity | Evidence | Next action |
 |---|---|---|
 | Missing feedback / metric ambiguity, P2 | H2's defender-loss metric reads "better" for an overrun because the neglected defenders do not engage. The outcome itself is visible, but the comparison needs owner interpretation. | Hold for owner decision; do not tune or add a system in this block. |
-| Human-readability risk, P2 | The graybox presents command controls, timeline, event log, selected creature reason and raid summary simultaneously. Agent inspection can read it; a human must judge density and clarity. | Ask the owner questions below; no UI change before that answer. |
+| Human-readability risk, P2 | The graybox presents command controls, timeline, event log, selected creature reason and raid summary simultaneously. Agent inspection can read it; the owner later reported collisions and unclear interactions. | Chosen next experiment: interaction/combat readability; no fix in Issue #12. |
 
 No run was blocked: all 15 sessions reached an outcome, every repeated checksum
 matched, and no gameplay defect prevented a completed session.
@@ -176,8 +175,33 @@ Answer in a few sentences or ratings:
 4. What was most irritating, confusing or slow?
 5. Would you want one more run to try something different? What would you try?
 
-## Owner feedback and decision gate
+## Owner feedback — separate from automation and agent observations
 
-**Pending owner playtest.** Do not record `iterate`, `pivot` or `discard` until
-the owner has answered the five questions. No art, content, tuning or next
-prototype initiative follows automatically from this report.
+The owner completed the playtest and reported the following, preserved without
+turning it into an automated claim:
+
+| Playtest question | Owner feedback |
+|---|---|
+| Clarity of levers | Building/painting was unclear. After starting to build, the cursor appeared unable to move anywhere. At approximately a 2500×1400 view, labels and HUD text overlapped badly. |
+| Perceived influence | Not confidently perceived. |
+| Creature story | No creature story reported. The purple room was never visited, so its purpose and feedback were unclear. |
+| Irritation / confusion | Text collisions; unclear building/painting; combat process not understandable; no clear alive-versus-downed indicator. |
+| Replay desire | Yes — specifically to continue with a visual/readability iteration and a small generated goblin-sprite pass. |
+
+Human-interest result: **supported only as willingness to iterate**. This is not
+evidence of broad fun, replayability after multiple sessions, a validated art
+direction, or a successful social simulation.
+
+## Owner decision gate
+
+Decision: **ITERATE**.
+
+Smallest next experiment: **interaction/combat readability plus a first goblin
+sprite pass**. It should make painting/building feedback, zone purpose, combat
+sequence and alive/downed state readable at the owner’s target viewport, then
+test whether that makes influence perceptible. The goblin sprites are a small
+generated visual probe, not a production-art commitment.
+
+No UI, gameplay, generated asset or tuning change is implemented in Issue #12.
+The next experiment must retain provenance for any generated sprites and keep
+the current deterministic headless checks intact.
