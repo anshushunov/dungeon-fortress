@@ -236,7 +236,7 @@ Four properties follow, and each is a unit test in
 - a mark, a withdrawal, a blueprint, a stockpile cell and a zone edit are on the
   map the instant the command is accepted, at any speed and on `STEP`;
 - **the tick that finally applies the command changes neither which cells are
-  drawn nor how they read** — with the two named exceptions below;
+  drawn nor how they read**, within the boundary stated below;
 - the brush reads the same projection, so a cell that already carries a waiting
   mark is not offered again, the count above a drag is what the command will
   really carry, and the legal-target outline matches;
@@ -267,33 +267,52 @@ the command, running the real simulation:
 Every gate above is a published snapshot fact — the priorities, the `Forbidden`
 zone, the stock counters and the job list. None of it re-derives map topology.
 
-The gates are read **through the projection, not from the snapshot**, so a
-priority change or a `Forbidden` paint accepted in the same paused moment counts.
+The gates are read **through the projection, not from the snapshot**, and that
+holds for a mark the world already carries as much as for one still waiting.
 Switching digging off with `[J]` and then marking rock with `[D]` is one gesture
-to the player, and the tick applies both: the world sets the priority first and
-then asks about it on the first rung of its ladder. Reading the canonical value
-made every mark blink in both directions — which is why `set_priority` is folded
-by `MapProjection` even though it puts nothing on the map. `MapAccents` is the
-only place that reads the folded value; everything that explains what the world
+to the player, and the tick applies both — the world sets the priority first and
+then asks about it on the first rung of its ladder. Correcting only the new mark
+would put two designations of different colours side by side on the same map,
+making opposite claims about the same fact, so `set_priority` is folded by
+`MapProjection` even though it puts nothing on the map, and both halves of
+`MapAccents` read the folded value.
+
+`MapAccents` is the only place that does. Everything that explains what the world
 is doing *now* — the inspector's "the Dig priority is 0", the reason a pile is
 not moving — keeps reading canonical priorities, because those sentences explain
 a status the world produced under the old value.
 
-**Two readings still change when the tick runs, both deliberately.**
+### Where the line is
 
-`dig_unreachable` is the real boundary. It asks whether any orthogonal neighbour
-of the rock is passable, is not the gate and is not `Forbidden`; copying that
-into the presentation layer would put the same rule on both sides of the seam
-[ADR 0011](../decisions/0011-presentation-layer-without-engine.md) draws. It is
-not a rounding error either: on the shipped `baseline` map two of the twelve
-diggable tiles — `(26,1)` and `(26,2)` — are walled in until a neighbour is dug,
-so marking the whole pocket while paused shows two amber cells that turn red one
-tick later. `MapAccentTests` names those two tiles, so the exception cannot widen
-without a failing test.
+The line is a rule, not a list. It was written as a list of exceptions three
+times and the list turned out to be incomplete every time.
 
-`dig_in_progress` is the other, and it is not a redraw at all: a creature that
-was already standing next to the rock starts digging on that tick. That is the
-world answering the mark, which is the whole point of making it.
+> **The projection answers what follows from published facts folded through it.
+> The world answers what needs a tick to run.**
+
+A priority and a forbidden square are the player's intent exactly as a brush
+stroke is: they are folded, and every reading takes them into account. Which
+creature volunteers, when work starts, and whether anyone can reach a piece of
+rock are answers the world has to walk the map for — the projection does not have
+them and does not guess. Copying reachability across would put the same rule on
+both sides of the seam
+[ADR 0011](../decisions/0011-presentation-layer-without-engine.md) draws.
+
+So a reading can still change when the tick runs, and two ways of it are worth
+knowing about. `dig_unreachable` is the sharp one and it is not a rounding error:
+on the shipped `baseline` map two of the twelve diggable tiles — `(26,1)` and
+`(26,2)` — are walled in until a neighbour is dug, so marking the whole pocket
+while paused shows two amber cells that turn red one tick later. `dig_in_progress`
+is the gentle one: a creature that was already standing next to the rock starts
+work, which is the world answering the mark rather than the mark being redrawn.
+The same shape exists for construction — painting `Forbidden` next to marked rock
+changes reachability on the applying tick — and chasing it would mean owning
+topology here.
+
+`MapAccentTests` pins the rule from both ends: it names those two baseline tiles,
+and it sweeps a whole construction session comparing the layer's prediction
+against the world's own `statusCode` at every tick, so a rung that stops matching
+fails in CI rather than in a playtest.
 
 ### What the fold does not model
 

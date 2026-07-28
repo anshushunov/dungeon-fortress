@@ -52,31 +52,70 @@ public enum StockpileCellAccent
 /// tick that applies the command:
 ///
 /// <list type="bullet">
-/// <item><see cref="Dig(string)"/>, <see cref="Blueprint(string)"/> and
-/// <see cref="Stockpile(string)"/> read the world's own <c>statusCode</c>. This
-/// is the source of truth for anything the world already holds;</item>
+/// <item><see cref="Dig(MapProjection, PrototypeDigDesignationSnapshot)"/>,
+/// <see cref="Blueprint"/> and <see cref="Stockpile"/> read the world's own
+/// <c>statusCode</c> for a mark the world already holds;</item>
 /// <item><see cref="PendingDig"/>, <see cref="PendingBlueprint"/> and
 /// <see cref="PendingStockpile"/> answer the same question for a mark whose tick
-/// has not run, from published snapshot facts only.</item>
+/// has not run.</item>
 /// </list>
 ///
-/// The second half repeats a decision the world also makes, which is a cost worth
-/// naming. It is bounded — the gates are read from <c>priorities</c>, the
-/// <c>Forbidden</c> zone and the published stock and job lists, never re-derived
-/// from map topology — and it is pinned: if the world's ladder changes and this
-/// one does not, the comparison test fails in CI on the pull request.
+/// Both halves take the projection, and that is the whole boundary rule:
+///
+/// <para><b>The projection answers what follows from published facts folded
+/// through it; the world answers what needs a tick to run.</b></para>
+///
+/// A priority and a forbidden square are the player's intent exactly as a brush
+/// stroke is, so they are folded and both halves read them — which is why a mark
+/// the world already holds is corrected here for a priority change waiting in the
+/// same frame. Reachability of rock, work starting, and which creature
+/// volunteers are answers the world has to walk the map for; the projection does
+/// not have them and does not guess.
+///
+/// The rule is stated as a rule on purpose. It was first written as a list of
+/// exceptions, and the list turned out to be incomplete three times running.
+///
+/// Repeating the world's ladder is a cost worth naming. It is bounded — the gates
+/// are read from <c>priorities</c>, the <c>Forbidden</c> zone and the published
+/// stock, job and designation records, never re-derived from map topology — and
+/// it is pinned: <c>MapAccentTests</c> sweeps a real session comparing the
+/// prediction against the world's own <c>statusCode</c>, so a rung that stops
+/// matching fails in CI on the pull request.
 /// </summary>
 public static class MapAccents
 {
-    public static DigMarkAccent Dig(string statusCode) => statusCode switch
+    /// <summary>
+    /// How a dig mark the world already holds reads.
+    ///
+    /// The world's <c>statusCode</c> is the answer, with one correction: it was
+    /// computed under the priority the world holds, and the player may have
+    /// changed that priority in this same paused moment. The priority is the
+    /// first rung of the world's ladder, so it overrides everything below it and
+    /// the correction is exact in both directions.
+    ///
+    /// Without it, a frame could hold two dig marks of different colours making
+    /// opposite claims about the same fact: the mark accepted a second ago
+    /// already knew digging was off, the one from a minute ago did not.
+    /// </summary>
+    public static DigMarkAccent Dig(MapProjection view, PrototypeDigDesignationSnapshot designation)
     {
-        "dig_in_progress" => DigMarkAccent.InProgress,
-        "dig_unreachable" => DigMarkAccent.Unreachable,
-        "dig_blocked_priority" => DigMarkAccent.BlockedByPriority,
-        // dig_waiting and dig_reserved read the same: the mark is placed and the
-        // crew is deciding. Who walks where is drawn as a line, not as a colour.
-        _ => DigMarkAccent.Waiting,
-    };
+        ArgumentNullException.ThrowIfNull(view);
+        ArgumentNullException.ThrowIfNull(designation);
+        if (view.Priority(JobKind.Dig) == 0)
+        {
+            return DigMarkAccent.BlockedByPriority;
+        }
+
+        // Digging is being switched back on, so this mark is about to leave the
+        // grey. Where it lands is the next rung down, and the world publishes it:
+        // a designation carries its own reachability.
+        if (designation.StatusCode == "dig_blocked_priority")
+        {
+            return designation.Reachable ? DigMarkAccent.Waiting : DigMarkAccent.Unreachable;
+        }
+
+        return DigFromStatus(designation.StatusCode);
+    }
 
     /// <summary>
     /// A dig mark whose tick has not run yet.
@@ -87,17 +126,11 @@ public static class MapAccents
     ///
     /// The priority is read from the projection and not from the snapshot,
     /// because switching digging off and marking rock in the same paused moment
-    /// is one gesture to the player. Reading the canonical value made the mark
-    /// blink in both directions, which is the same defect one level down.
+    /// is one gesture to the player.
     ///
-    /// <c>dig_unreachable</c> is the one reading this side of the seam may not
-    /// have. It asks whether any orthogonal neighbour of the rock is passable,
-    /// not the gate and not <c>Forbidden</c>, which is map topology; copying it
-    /// here would put a rule on both sides of the boundary ADR 0011 draws. A tile
-    /// nobody can reach is therefore drawn as an ordinary waiting mark until the
-    /// tick answers, and that is the one place where applying the command changes
-    /// a colour. <c>MapAccentTests</c> names the affected tiles rather than
-    /// leaving the exception implicit.
+    /// Below the priority the world asks whether anyone can reach the rock, and
+    /// that this side of the seam may not answer — see the boundary note on the
+    /// class.
     /// </summary>
     public static DigMarkAccent PendingDig(MapProjection view)
     {
@@ -107,7 +140,127 @@ public static class MapAccents
             : DigMarkAccent.Waiting;
     }
 
-    public static BlueprintAccent Blueprint(string statusCode) => statusCode switch
+    private static DigMarkAccent DigFromStatus(string statusCode) => statusCode switch
+    {
+        "dig_in_progress" => DigMarkAccent.InProgress,
+        "dig_unreachable" => DigMarkAccent.Unreachable,
+        "dig_blocked_priority" => DigMarkAccent.BlockedByPriority,
+        // dig_waiting and dig_reserved read the same: the mark is placed and the
+        // crew is deciding. Who walks where is drawn as a line, not as a colour.
+        _ => DigMarkAccent.Waiting,
+    };
+
+    /// <summary>
+    /// How a blueprint the world already holds reads, corrected for a priority
+    /// change waiting in the same frame — the same correction
+    /// <see cref="Dig(MapProjection, PrototypeDigDesignationSnapshot)"/> makes,
+    /// and for the same reason.
+    ///
+    /// Construction has two gates rather than one: the world asks about
+    /// <c>Build</c> first of all, and about <c>Haul</c> far down, after it has
+    /// already decided that nobody is on the site and nothing is on the way. With
+    /// either of them waiting the reading is taken from
+    /// <see cref="Predict"/>, which walks the world's ladder over the site's own
+    /// published facts; with neither waiting the world's word stands unchanged.
+    /// </summary>
+    public static BlueprintAccent Blueprint(MapProjection view, PrototypeBuildSiteSnapshot site)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        ArgumentNullException.ThrowIfNull(site);
+        return view.IsPriorityWaiting(JobKind.Build) || view.IsPriorityWaiting(JobKind.Haul)
+            ? PredictBlueprint(view, site)
+            : BlueprintFromStatus(site.StatusCode);
+    }
+
+    /// <summary>
+    /// What the ladder says about a site the world already holds, asked without
+    /// the shortcut. With no priority waiting this must equal the world's own
+    /// <c>statusCode</c>, and <c>MapAccentTests</c> sweeps a whole session
+    /// checking exactly that — which is what makes repeating the ladder safe.
+    /// </summary>
+    public static BlueprintAccent PredictBlueprint(MapProjection view, PrototypeBuildSiteSnapshot site)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        ArgumentNullException.ThrowIfNull(site);
+        return Predict(
+            view,
+            site.Reachable,
+            site.Delivered,
+            site.IncomingReserved,
+            site.ReservedBy is not null,
+            site.ProgressTicks > 0);
+    }
+
+    /// <summary>
+    /// A blueprint whose tick has not run yet. A fresh site always has nothing
+    /// delivered, nothing on the way and nobody on it — the adapter already draws
+    /// it that way — so it is <see cref="Predict"/> with those three facts fixed.
+    /// </summary>
+    public static BlueprintAccent PendingBlueprint(MapProjection view, GridPoint tile)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        // A site is workable when it is buildable floor nobody has forbidden. The
+        // floor half is guaranteed: a blueprint the world would refuse never
+        // becomes a command, so only the zone can still take the site away, and
+        // the zone is folded through the projection.
+        return Predict(
+            view,
+            !view.IsInZone(ZoneKind.Forbidden, tile),
+            delivered: 0,
+            incomingReserved: 0,
+            reserved: false,
+            inProgress: false);
+    }
+
+    /// <summary>
+    /// The world's construction ladder, rung for rung, over facts the snapshot
+    /// publishes. It is the one place the ladder is repeated, and
+    /// <c>MapAccentTests</c> sweeps a whole session comparing it against the
+    /// world's own <c>statusCode</c>, so a rung that stops matching fails in CI.
+    /// </summary>
+    private static BlueprintAccent Predict(
+        MapProjection view,
+        bool workable,
+        int delivered,
+        int incomingReserved,
+        bool reserved,
+        bool inProgress)
+    {
+        if (view.Priority(JobKind.Build) == 0)
+        {
+            return BlueprintAccent.BlockedByPriority;
+        }
+
+        if (!workable)
+        {
+            return BlueprintAccent.Unreachable;
+        }
+
+        if (inProgress)
+        {
+            return BlueprintAccent.InProgress;
+        }
+
+        // Somebody is on it, the material is complete, or the rest is on its way:
+        // three different sentences in the inspector, one reading on the map.
+        if (reserved ||
+            delivered >= PrototypeTuning.BuildStoneCost ||
+            incomingReserved > 0)
+        {
+            return BlueprintAccent.WaitingForCarrier;
+        }
+
+        if (view.Priority(JobKind.Haul) == 0)
+        {
+            return BlueprintAccent.BlockedByPriority;
+        }
+
+        return FreeStoneForSites(view.State) > 0
+            ? BlueprintAccent.WaitingForCarrier
+            : BlueprintAccent.WaitingForMaterial;
+    }
+
+    private static BlueprintAccent BlueprintFromStatus(string statusCode) => statusCode switch
     {
         "build_in_progress" => BlueprintAccent.InProgress,
         "build_unreachable" => BlueprintAccent.Unreachable,
@@ -119,53 +272,27 @@ public static class MapAccents
     };
 
     /// <summary>
-    /// A blueprint whose tick has not run yet. A fresh site always has nothing
-    /// delivered and nothing on the way — the adapter already draws it that way —
-    /// so the reading follows the world's ladder for exactly that case, in the
-    /// world's order.
-    ///
-    /// Every gate is a published fact: the two priorities and membership of the
-    /// <c>Forbidden</c> zone, both taken from the projection so that a priority
-    /// change or a <c>Forbidden</c> paint accepted in the same paused moment
-    /// counts, and the stone the crew could still give a site. Nothing here
-    /// re-derives map topology.
+    /// How a stockpile cell the world already holds reads. Nothing in the
+    /// stockpile ladder asks about a priority, so there is nothing to correct —
+    /// the projection is taken only so that every mark on the map is read the
+    /// same way.
     /// </summary>
-    public static BlueprintAccent PendingBlueprint(MapProjection view, GridPoint tile)
+    public static StockpileCellAccent Stockpile(
+        MapProjection view,
+        PrototypeStockpileCellSnapshot cell)
     {
         ArgumentNullException.ThrowIfNull(view);
-        var state = view.State;
-        if (view.Priority(JobKind.Build) == 0)
+        ArgumentNullException.ThrowIfNull(cell);
+        return cell.StatusCode switch
         {
-            return BlueprintAccent.BlockedByPriority;
-        }
-
-        // A site is workable when it is buildable floor nobody has forbidden. The
-        // floor half is guaranteed: a blueprint the world would refuse never
-        // becomes a command, so only the zone can still take the site away.
-        if (view.IsInZone(ZoneKind.Forbidden, tile))
-        {
-            return BlueprintAccent.Unreachable;
-        }
-
-        if (view.Priority(JobKind.Haul) == 0)
-        {
-            return BlueprintAccent.BlockedByPriority;
-        }
-
-        return FreeStoneForSites(state) > 0
-            ? BlueprintAccent.WaitingForCarrier
-            : BlueprintAccent.WaitingForMaterial;
+            "stockpile_unreachable" => StockpileCellAccent.Unreachable,
+            "stockpile_full" => StockpileCellAccent.Full,
+            "stockpile_incoming" => StockpileCellAccent.Incoming,
+            // stockpile_empty and stockpile_partial read the same: there is room.
+            // How much is in it is drawn as pips.
+            _ => StockpileCellAccent.Room,
+        };
     }
-
-    public static StockpileCellAccent Stockpile(string statusCode) => statusCode switch
-    {
-        "stockpile_unreachable" => StockpileCellAccent.Unreachable,
-        "stockpile_full" => StockpileCellAccent.Full,
-        "stockpile_incoming" => StockpileCellAccent.Incoming,
-        // stockpile_empty and stockpile_partial read the same: there is room. How
-        // much is in it is drawn as pips.
-        _ => StockpileCellAccent.Room,
-    };
 
     /// <summary>
     /// A stockpile cell whose tick has not run yet. It is empty and nothing is

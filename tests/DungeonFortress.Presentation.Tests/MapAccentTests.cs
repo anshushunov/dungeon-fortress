@@ -41,14 +41,17 @@ public sealed class MapAccentTests
             MapProjection.Of(PrototypeScenario.Run(log, tick + 1).State));
     }
 
+    // Read on the frame *after* the command applied, where nothing is waiting any
+    // more, so these are the world's own word and the comparisons below are not
+    // circular.
     private static DigMarkAccent AppliedDig(MapProjection applied, GridPoint tile) =>
-        MapAccents.Dig(applied.DigDesignations.Single(item => item.Tile == tile).StatusCode);
+        MapAccents.Dig(applied, applied.DigDesignations.Single(item => item.Tile == tile));
 
     private static BlueprintAccent AppliedBlueprint(MapProjection applied, GridPoint tile) =>
-        MapAccents.Blueprint(applied.BuildSites.Single(site => site.Tile == tile).StatusCode);
+        MapAccents.Blueprint(applied, applied.BuildSites.Single(site => site.Tile == tile));
 
     private static StockpileCellAccent AppliedStockpile(MapProjection applied, GridPoint tile) =>
-        MapAccents.Stockpile(applied.StockpileCells.Single(cell => cell.Position == tile).StatusCode);
+        MapAccents.Stockpile(applied, applied.StockpileCells.Single(cell => cell.Position == tile));
 
     [Fact]
     public void A_waiting_dig_mark_reads_the_same_as_the_designation_it_becomes()
@@ -214,6 +217,71 @@ public sealed class MapAccentTests
     }
 
     /// <summary>
+    /// One frame, two dig marks, one waiting priority: they must read the same.
+    ///
+    /// This is the sharpest form of the defect, and it is the form that a rule
+    /// about "waiting marks" alone cannot fix. An older mark carries a
+    /// <c>statusCode</c> the world computed under the old priority; a mark made a
+    /// second ago knows the new one. Correcting only the second put two
+    /// designations of different colours side by side on the same map making
+    /// opposite claims about the same fact — reachable through the toolbar in two
+    /// clicks, with any existing mark on screen.
+    /// </summary>
+    [Theory]
+    [InlineData(3, 0)]
+    [InlineData(0, 3)]
+    public void An_old_mark_and_a_new_one_read_the_same_when_a_priority_is_waiting(int from, int to)
+    {
+        var diggable = PresentationFixtures.Baseline(1).Map.DiggableTiles;
+        var older = diggable[0];
+        var newer = diggable[^1];
+        var (waiting, applied) = Across(
+            40,
+            new SetPriorityCommand(0, JobKind.Dig, from),
+            new DigDesignateCommand(1, [older]),
+            new SetPriorityCommand(40, JobKind.Dig, to),
+            new DigDesignateCommand(40, [newer]));
+
+        // Both are on the map in the same frame: one the world holds, one waiting.
+        Assert.Contains(waiting.DigDesignations, item => item.Tile == older);
+        Assert.Equal([newer], waiting.PendingDigMarks);
+
+        var old = MapAccents.Dig(waiting, waiting.DigDesignations.Single(item => item.Tile == older));
+        Assert.Equal(MapAccents.PendingDig(waiting), old);
+
+        // ...and the frame after the tick still says the same about the old one.
+        Assert.Equal(old, AppliedDig(applied, older));
+        Assert.Equal(old, AppliedDig(applied, newer));
+    }
+
+    /// <summary>
+    /// The same claim for construction, where the ladder has two priority gates
+    /// and the second one sits far below the first.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(JobKind.Build))]
+    [InlineData(nameof(JobKind.Haul))]
+    public void An_old_blueprint_and_a_new_one_read_the_same_when_a_priority_is_waiting(string job)
+    {
+        var older = new GridPoint(12, 10);
+        var newer = new GridPoint(15, 10);
+        var (waiting, applied) = Across(
+            40,
+            new BuildDesignateCommand(1, [older]),
+            new SetPriorityCommand(40, Enum.Parse<JobKind>(job), 0),
+            new BuildDesignateCommand(40, [newer]));
+
+        Assert.Contains(waiting.BuildSites, site => site.Tile == older);
+        Assert.Equal([newer], waiting.PendingBuildMarks);
+
+        var old = MapAccents.Blueprint(waiting, waiting.BuildSites.Single(site => site.Tile == older));
+        Assert.Equal(BlueprintAccent.BlockedByPriority, old);
+        Assert.Equal(MapAccents.PendingBlueprint(waiting, newer), old);
+        Assert.Equal(old, AppliedBlueprint(applied, older));
+        Assert.Equal(old, AppliedBlueprint(applied, newer));
+    }
+
+    /// <summary>
     /// The gates are a ladder, so the order they are asked in is part of the
     /// answer, and only a case where two of them fire at once can pin it. Every
     /// defect found in this layer so far has been an unpinned rung.
@@ -259,29 +327,36 @@ public sealed class MapAccentTests
     /// The one branch where the <c>− booked</c> term of "free stone for sites"
     /// actually decides the answer.
     ///
-    /// Stone that is in somebody's hands exists but cannot be given to a site, so
-    /// the world says <c>build_stone_reserved</c> — a different status from
-    /// <c>build_no_stone</c> and the same colour, which is exactly the kind of
-    /// pair that hides an arithmetic slip. Everywhere else in this file the term
-    /// is zero, so without this the subtraction is only weakly pinned.
+    /// It bites only when stone is lying there — loose or stored — and a live haul
+    /// has already promised all of it to somewhere else. Then the world says
+    /// <c>build_stone_reserved</c>: the stone exists, and this site still cannot
+    /// have it. Everywhere else in this file the term is zero, or the sum it is
+    /// subtracted from is, so the subtraction would go unmissed.
     ///
-    /// The moment is found by running the session rather than by guessing a tick:
-    /// dig one rock, paint one stockpile cell, and wait for the tick where the
-    /// single block is in transit and nowhere else.
+    /// An earlier version of this test picked the moment when the only block was
+    /// in somebody's hands. That looked like the same case and was not: carried
+    /// stone is not in the sum at all, so with <c>loose + stored == 0</c> the
+    /// subtraction could not decide anything and replacing it with zero left the
+    /// test green.
+    ///
+    /// The moment is found by running the session: one rock dug, one blueprint
+    /// already claiming the block, and then the tick where the claim covers
+    /// everything still on the ground.
     /// </summary>
     [Fact]
-    public void A_waiting_blueprint_whose_only_stone_is_already_booked_reads_as_waiting_for_material()
+    public void A_waiting_blueprint_whose_stone_is_promised_elsewhere_reads_as_waiting_for_material()
     {
+        var claimed = new GridPoint(15, 10);
         PrototypeCommand[] prelude =
         [
             new DigDesignateCommand(0, [Rock]),
-            new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [PresentationFixtures.StockLeft]),
+            new BuildDesignateCommand(200, [claimed]),
         ];
-        var tick = FirstTickWithEveryBlockInTransit(prelude);
+        var tick = FirstTickWithEveryLoosePileClaimed(prelude);
         var (waiting, applied) = Across(tick, [.. prelude, new BuildDesignateCommand(tick, [Floor])]);
 
-        Assert.True(waiting.State.Stocks.CarriedStone > 0);
-        Assert.Equal(0, waiting.State.Stocks.LooseStone + waiting.State.Stocks.StoredStone);
+        var stocks = waiting.State.Stocks;
+        Assert.True(stocks.LooseStone + stocks.StoredStone > 0);
         Assert.Equal(
             "build_stone_reserved",
             applied.BuildSites.Single(site => site.Tile == Floor).StatusCode);
@@ -290,25 +365,110 @@ public sealed class MapAccentTests
     }
 
     /// <summary>
-    /// The first tick at which every block of stone in the world is on somebody's
-    /// back: none loose, none stored.
+    /// The first tick at which every block of stone still on the ground is
+    /// promised to a live haul, so a new site could be given none of it.
     /// </summary>
-    private static int FirstTickWithEveryBlockInTransit(PrototypeCommand[] commands)
+    private static int FirstTickWithEveryLoosePileClaimed(PrototypeCommand[] commands)
     {
         var world = new PrototypeWorld(PresentationFixtures.Log(commands));
-        for (var step = 0; step < 600; step++)
+        for (var step = 0; step < 900; step++)
         {
-            var stocks = world.GetSnapshot().Stocks;
-            if (stocks.CarriedStone > 0 && stocks.LooseStone == 0 && stocks.StoredStone == 0)
+            var state = world.GetSnapshot();
+            var onTheGround = state.Stocks.LooseStone + state.Stocks.StoredStone;
+            var booked = state.Jobs
+                .Where(job =>
+                    job.Kind == JobKind.Haul &&
+                    job.Resource == ResourceKind.Stone &&
+                    job.ReservedBy is not null)
+                .Sum(job => job.StoreReserved);
+            if (onTheGround > 0 && booked >= onTheGround)
             {
-                return world.CurrentTick;
+                return state.Tick;
             }
 
             world.Step();
         }
 
         throw new InvalidOperationException(
-            "The one-block haul session never reached a tick with the stone in transit.");
+            "The session never reached a tick where every block on the ground was booked.");
+    }
+
+    /// <summary>
+    /// The ladder itself, swept against the world.
+    ///
+    /// Every reading of a blueprint whose tick has run goes through the same
+    /// prediction the waiting half uses, and this compares that prediction with
+    /// the world's own <c>statusCode</c> at every tick of a full construction
+    /// session. It is what makes repeating the ladder safe: a rung that stops
+    /// matching — a reordered gate, a changed threshold, a dropped term — fails
+    /// here rather than in a playtest.
+    /// </summary>
+    [Fact]
+    public void The_predicted_reading_matches_the_world_at_every_tick_of_a_build_session()
+    {
+        var world = new PrototypeWorld(PresentationFixtures.Log(SweptSession()));
+        var compared = 0;
+        var seen = new HashSet<BlueprintAccent>();
+        for (var step = 0; step < PresentationFixtures.BlueprintTick + 400; step++)
+        {
+            var view = MapProjection.Of(world.GetSnapshot());
+            foreach (var site in view.BuildSites)
+            {
+                var predicted = MapAccents.PredictBlueprint(view, site);
+                // With no priority waiting, Blueprint() is the world's own word, so
+                // this is the prediction being held against the simulation. On the
+                // handful of ticks where one does wait the two agree by
+                // construction and the reading is not counted.
+                Assert.Equal(MapAccents.Blueprint(view, site), predicted);
+                if (view.IsPriorityWaiting(JobKind.Build) || view.IsPriorityWaiting(JobKind.Haul))
+                {
+                    continue;
+                }
+
+                seen.Add(predicted);
+                compared++;
+            }
+
+            world.Step();
+        }
+
+        Assert.True(compared > 50, $"only {compared} readings were compared");
+        Assert.Equal(
+            [
+                BlueprintAccent.WaitingForCarrier,
+                BlueprintAccent.WaitingForMaterial,
+                BlueprintAccent.InProgress,
+                BlueprintAccent.BlockedByPriority,
+                BlueprintAccent.Unreachable,
+            ],
+            seen.Order().ToArray());
+    }
+
+    /// <summary>
+    /// The Issue #48 chain with every rung of the ladder forced to fire at some
+    /// point: construction switched off and back on, carrying switched off and
+    /// back on, and the site forbidden and released. A sweep that only ever saw
+    /// one answer would prove nothing.
+    /// </summary>
+    private static PrototypeCommand[] SweptSession()
+    {
+        var haul = PresentationFixtures.Baseline(1).Priorities[JobKind.Haul];
+        var site = PresentationFixtures.Site;
+        return
+        [
+            .. PresentationFixtures.BuildChain().Commands,
+            new SetPriorityCommand(PresentationFixtures.BlueprintTick + 5, JobKind.Build, 0),
+            new SetPriorityCommand(PresentationFixtures.BlueprintTick + 15, JobKind.Build, 3),
+            new SetPriorityCommand(PresentationFixtures.BlueprintTick + 20, JobKind.Haul, 0),
+            new SetPriorityCommand(PresentationFixtures.BlueprintTick + 30, JobKind.Haul, haul),
+            new ZonePaintCommand(PresentationFixtures.BlueprintTick + 35, ZoneKind.Forbidden, [site]),
+            new ZoneEraseCommand(PresentationFixtures.BlueprintTick + 45, ZoneKind.Forbidden, [site]),
+            // More posts than the dug stone can pay for, so some site is left
+            // watching material it cannot have.
+            new BuildDesignateCommand(
+                PresentationFixtures.BlueprintTick + 200,
+                [new GridPoint(12, 10), new GridPoint(15, 10), new GridPoint(12, 12)]),
+        ];
     }
 
     /// <summary>

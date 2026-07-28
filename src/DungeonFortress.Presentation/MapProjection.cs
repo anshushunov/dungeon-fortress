@@ -181,6 +181,13 @@ public sealed class MapProjection
     public IReadOnlyDictionary<JobKind, int> PendingPriorities => _priorities;
 
     /// <summary>
+    /// Whether this job kind's priority is one of them. A reading that was
+    /// computed by the world under the old value has to be corrected only when
+    /// this is true; otherwise the world's own word stands.
+    /// </summary>
+    public bool IsPriorityWaiting(JobKind job) => _priorities.ContainsKey(job);
+
+    /// <summary>
     /// Whether the projection differs from the snapshot at all; false for almost
     /// every frame.
     /// </summary>

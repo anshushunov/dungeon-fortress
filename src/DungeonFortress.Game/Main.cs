@@ -1974,7 +1974,7 @@ public partial class Main : Node2D
 
         foreach (var designation in _projection.DigDesignations)
         {
-            var accent = DigColor(MapAccents.Dig(designation.StatusCode));
+            var accent = DigColor(MapAccents.Dig(_projection, designation));
             DrawDigMark(designation.Tile, accent);
             var center = CellCenter(designation.Tile);
 
@@ -2072,7 +2072,7 @@ public partial class Main : Node2D
 
         foreach (var site in _projection.BuildSites)
         {
-            var accent = BuildColor(MapAccents.Blueprint(site.StatusCode));
+            var accent = BuildColor(MapAccents.Blueprint(_projection, site));
             DrawBlueprint(site.Tile, accent, site.Delivered, site.IncomingReserved, site.Required);
 
             if (site.ProgressTicks <= 0 || site.RequiredTicks <= 0)
@@ -2194,7 +2194,7 @@ public partial class Main : Node2D
         {
             DrawStockpileCell(
                 cell.Position,
-                StockpileColor(MapAccents.Stockpile(cell.StatusCode)),
+                StockpileColor(MapAccents.Stockpile(_projection, cell)),
                 cell.Stored,
                 cell.IncomingReserved);
         }
