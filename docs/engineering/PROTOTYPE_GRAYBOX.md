@@ -1,10 +1,18 @@
 # Godot graybox — Prototype 1
 
 Status: active
-Source: Issues #10–#12, #24, #26
+Source: Issues #10–#12, #24, #26, #28, #36
 
 The graybox is the visual, top-down projection of the headless Prototype 1
 economy and raid. It starts with the `baseline` gameplay-v2 fixture.
+
+The frame is 1280x720. It used to be 960x540, and that frame could not hold the
+HUD text: at its worst moment the side column needs about 33 lines of
+explanation and 540 px offers about 29, which is the deficit Issue #28 measured
+and Issue #36 cleared. The map is still drawn at a 22 px tile pinned to a fixed
+origin, so the larger frame leaves empty space around it; growing the tile to
+32–48 px and adding a camera is
+[ADR 0008](../decisions/0008-three-quarter-projection.md), not this.
 
 ## Run
 
@@ -67,6 +75,24 @@ on the next simulation tick.
 Speed, pause and stepping are presentation controls only. They only choose how
 often the adapter calls `PrototypeWorld.RunTicks`; they are not gameplay
 commands and never enter canonical state or a command log.
+
+## Movement between ticks
+
+The simulation still advances in whole ticks at `TicksPerSecond = 6.0`. Drawing
+no longer does: a frame lerps every creature and raider — and with them whatever
+they are carrying — between the tile they stood on when the current tick started
+and the tile the snapshot puts them on now.
+
+The lerp deliberately runs **one tick behind** canonical state. Alpha 0 draws the
+tile a body came from and alpha 1 the tile it is already on, so the picture can
+never show a creature in a tile the simulation has not moved it to. Anything that
+is not free-running time — pause, `STEP`, loading a fixture, an accepted command,
+a replay — is drawn at alpha 1, which is exactly the canonical position; `STEP`
+has to show the result of the step it just ran.
+
+None of this is state. The interpolation buffer is written from snapshots and is
+never read by `PrototypeWorld`, and `--frame-pacing` below is the check that says
+so out loud.
 
 The inspector exposes the selected creature's needs, martial form, mode,
 current job, carried item, last reason and its structured numeric details. Cell
@@ -266,9 +292,11 @@ moment with `--screenshot-ticks`, point at a tile with `--select-cell`, and asse
 a substring of `ui.inspector`. Before this, only the one branch that happened to
 land in a captured frame was ever checked.
 
-Nothing in `ui` depends on the camera. Pixel positions, the visible tile range and
-the viewport size are deliberately absent, because [ADR 0008](../decisions/0008-three-quarter-projection.md)
-drops the fixed 960x540 frame and those values stop being stable.
+Nothing in `ui` depends on the camera or on the frame. Pixel positions, the visible
+tile range and the viewport size are deliberately absent, because
+[ADR 0008](../decisions/0008-three-quarter-projection.md) drops the fixed frame and
+those values stop being stable. That is what let the Issue #36 reflow — and the
+move from 960x540 to 1280x720 — leave `tests/golden/ui/*.json` untouched.
 
 A headless run now also reports `stoneProduced`, `looseStone`, `carriedStone`,
 `storedStone` and `stockpileCapacity`, the same conservation evidence a capture
@@ -297,20 +325,34 @@ what it should" and "an explanation changed silently".
 
 ### HUD overflow guard
 
-A `Label` that does not fit its own rectangle loses text silently. Unclipped it
-re-expands past the panel below it; clipped it drops the overflowing lines
-instead. Both happened in Issue #26 and both were caught by eye on a PNG.
+A `Label` that does not fit its rectangle loses text silently: clipped it drops
+the overflowing lines, unclipped it draws over the panel below it. Both happened
+in Issue #26 and both were caught by eye on a PNG.
 
-`AssertLabelsFit()` compares `GetLineCount()` with `GetVisibleLineCount()` for the
-four HUD panels. It is measured against each label's own authored rectangle, never
-against a window constant, because ADR 0008 removes the fixed frame.
+`AssertLabelsFit()` compares `GetLineCount()` with `GetVisibleLineCount()` for
+every piece of HUD text — the four panels the golden state records, the header,
+and each legend row. It is measured against the rectangle the layout produced,
+never against a window constant, because ADR 0008 removes the fixed frame.
 
-**It runs in `_Ready`, on every entry point.** That is the only place it can mean
-anything: Godot's first layout pass re-expands an unclipped label to its own
-content, after which `GetLineCount()` and `GetVisibleLineCount()` are equal by
-construction and the check silently passes on everything. Every structured output
-carries `labelFit` with `authoredHeight` next to the live `height`, so a run states
-which of the two it measured instead of the guard being trusted.
+**It runs in `_Ready`, on every entry point, at five frame sizes.** Since the HUD
+became a Control tree the measurement is only meaningful *after* a layout pass,
+which is the opposite of what the old absolute layout needed: a container hands a
+label its size, so that size is the designed one and an unclipped label can no
+longer re-expand to its own content. Godot sorts containers on a deferred pass, so
+`LayoutHud()` notifies the subtree and gets the same placement a frame would
+produce, synchronously. It then repeats the whole check at 1280x720, 1366x768,
+1600x900 and 1024x768, so "the layout follows the viewport" is a checked claim
+rather than an intention — a guard that only ever saw one size cannot tell a
+responsive layout from a lucky one.
+
+A size that is absent from that list is not unsupported, it is unmeasured. The old
+960x540 frame is absent because the current text does not fit it: the side column
+needs about 33 lines and that frame offers about 29.
+
+Every structured output carries `labelFit`, now shaped as the live `viewport`, the
+`checkedViewports`, and a `labels` array with `neededLines`, `visibleLines`,
+`hardLines`, `width` and `height` per label. A run therefore states what the guard
+had to work with instead of the guard being trusted.
 
 Godot 4.7.1 `--headless` was suspected of degrading font metrics, which would make
 the guard vacuous. It does not: shaping, wrapping and font metrics are identical to
@@ -318,27 +360,43 @@ a windowed run — the same wrapped line counts and the same font height. The
 suspicion was backwards. Headless is where the guard is meaningful, and the
 windowed capture path is where it is not.
 
-**Known limitation.** At the fixed 960x540 frame the side panel is
-over-subscribed: at its worst frame the inspector needs 244 px and the event
-feedback 197 px, the legend block takes about 75 px, and the column is 456 px
-tall. No arrangement of the current four labels fits, so three of them lose lines
-today — the event feedback runs off the bottom of the window and the roster's `LOG`
-line never appears. `KnownLineDeficit` in `Main.cs` records exactly how much each
-panel loses; the guard fails on anything worse. Clearing the deficit belongs to the
-HUD reflow in Issue #36 and to the resizable viewport ADR 0008 requires.
+### Frame pacing: the simulation must not notice the renderer
 
-Recording the deficit rather than failing on it is a deliberate decision, taken by
-the owner on PR #37: an unconditional guard would leave `verify.ps1` red until
-Issue #36 lands and block every other change in the repository. The known weakness
-is that an allowance is per panel, not per frame, so a panel with slack on one
-frame can degrade inside its allowance. The golden UI state closes that gap from
-the other side — it compares the text itself, so a panel that grows a line fails
-the run even when the fit guard absorbs it.
+`--frame-pacing <tick>` unpauses the world, drives the real `_Process` loop until
+the simulation reaches that tick, prints `godot_frame_pacing` and quits. Combined
+with Godot's `--fixed-fps` it turns "does the frame rate reach the simulation?"
+into an ordinary headless comparison:
 
-`verify.ps1` also runs `--strict-hud-fit`, which ignores those recorded allowances,
-and **requires it to fail**. A guard nobody has seen fail cannot be distinguished
-from a guard that cannot fail. When that run starts passing, the reflow has landed
-and both `KnownLineDeficit` and the check are due for deletion.
+```powershell
+& $godot --headless --fixed-fps 20 --path .\src\DungeonFortress.Game `
+  -- --fixture baseline --frame-pacing 200
+& $godot --headless --fixed-fps 60 --path .\src\DungeonFortress.Game `
+  -- --fixture baseline --frame-pacing 200
+```
+
+The result carries `checksum` next to `replayChecksum` — the same command log
+replayed in one shot with no frames at all — plus `frames`, `interpolatedFrames`,
+`interpolationLeadViolations` and `maxRenderStepPixels`.
+
+`scripts/verify.ps1` runs both frame rates and requires all of:
+
+| Claim | How it is read |
+|---|---|
+| the frame rate does not reach canonical state | both runs end on the same tick with the same `checksum` |
+| interpolation is not state | `checksum` equals `replayChecksum` in each run |
+| the runs really differed | `frames` differs between them |
+| interpolation never leads the simulation | `interpolationLeadViolations` is 0 |
+| interpolation actually engaged | `interpolatedFrames` is above 0 |
+| movement no longer teleports | `maxRenderStepPixels` is below `tileSize` |
+
+Measured on the `baseline` fixture at tick 200: 665 frames at 20 fps and 1992 at
+60 fps, both landing on the same checksum, `maxRenderStepPixels` 6.6 and 2.2
+against a 22 px tile. Before interpolation that number was the tile size itself.
+
+The last row only means something while a frame is shorter than a tick. At a frame
+rate low enough to cover several ticks the picture legitimately moves more than a
+tile, which is why the check pins the frame rate instead of sampling whatever the
+machine produces.
 
 ### What ADR 0008 will change here
 
@@ -346,11 +404,17 @@ and both `KnownLineDeficit` and the check are due for deletion.
 the capture inputs: the same tick at a different camera position or zoom produces a
 different picture. When the camera lands, its position and zoom must be recorded
 next to the seed and the tick for every reproducible frame in this document. The
-camera is not implemented yet and is out of Issue #28.
+camera is not implemented yet and is out of Issue #28 and Issue #36.
 
-The golden UI state is unaffected on purpose — it holds no camera-dependent value —
-so it is the instrument that can prove the reflow in Issue #36 and the projection
-work in ADR 0008 did not change what the HUD says.
+The golden UI state is unaffected on purpose — it holds no camera-dependent value.
+It is what proved the Issue #36 reflow changed where the HUD text sits and not
+what it says: all three frames passed without regeneration.
+
+The stretch aspect stays `keep`, so the viewport is a stable 1280x720 whatever the
+window does. `expand` would let the viewport grow with the window, but then a
+capture stops having one frame size, which is the same ambiguity ADR 0008 warns
+about for the camera. The HUD does not depend on that choice: it is laid out from
+`GetViewportRect()` and relaid out whenever the viewport changes.
 
 ## Readability pass
 
@@ -382,6 +446,9 @@ are rock, which of them may be designated and which floor may hold material all
 come from the snapshot, so the adapter holds no copy of the map rules. Godot reads
 only `GetSnapshot()` and owns only rendering, hit-testing selection and the
 non-canonical time controls. No Node stores an alternative job, creature or
-economy state, and no input sends a direct creature command. It remains a
+economy state, and no input sends a direct creature command. The motion
+interpolation buffer is the one piece of per-frame state the adapter keeps: it
+holds the tile each body came from, it is written from snapshots only, and
+`--frame-pacing` is the check that it never travels the other way. It remains a
 graybox: art assets, animation, production onboarding and Ivan runtime
 integration are outside Prototype 1.

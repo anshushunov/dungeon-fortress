@@ -11,9 +11,23 @@ config/features=PackedStringArray("4.7", "C#", "GL Compatibility")
 
 [display]
 
-window/size/viewport_width=960
-window/size/viewport_height=540
+; The graybox frame. 960x540 could not hold the HUD text: at its worst frame the
+; side column needs about 33 lines of explanation and that frame offers about 29.
+; That is the deficit Issue #28 measured and Issue #36 had to clear, and no
+; arrangement of the same four panels closes it inside 540 px. ADR 0008 drops the
+; fixed frame anyway and grows the tile from 22 px to 32-48 px, which is what
+; will fill the space the map leaves here.
+;
+; The aspect stays "keep" on purpose. "expand" would let the viewport itself grow
+; with the window, but then the reproducible captures in PROTOTYPE_GRAYBOX.md stop
+; having one frame size, which is the ambiguity ADR 0008 already warns about for
+; the camera. The HUD does not depend on this: it is laid out from
+; GetViewportRect() and reflows whenever that changes, and Main.AssertLabelsFit
+; proves the layout holds at five different frame sizes on every run.
+window/size/viewport_width=1280
+window/size/viewport_height=720
 window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
 
 [dotnet]
 

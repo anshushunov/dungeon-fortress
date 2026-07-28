@@ -24,19 +24,18 @@ public partial class Main : Node2D
 
     private readonly List<RuntimeDiagnostic> _diagnostics = [];
     private readonly Dictionary<int, Label> _nameLabels = [];
-    // The rectangle a label was authored with. Godot re-expands an unclipped
-    // Label to its content on the first layout pass, so the live Size stops
-    // being the layout the HUD was designed around; the guard needs the original.
-    private readonly Dictionary<Label, Vector2> _authoredLabelSize = [];
     private readonly Dictionary<string, Texture2D> _goblinSprites = [];
     private readonly List<string> _loadedSpriteStates = [];
     private readonly List<string> _missingSpriteStates = [];
     private PrototypeWorld? _world;
     private PrototypeSnapshot? _state;
+    private Control? _hudRoot;
+    private Label? _title;
     private Label? _summary;
     private Label? _inspector;
     private Label? _feedback;
     private Label? _roster;
+    private readonly List<Label> _legendLines = [];
     private PrototypeCommandLog? _fixtureLog;
     private readonly List<PrototypeCommand> _playerCommands = [];
     private ZoneKind _brushZone = ZoneKind.Farm;
@@ -59,6 +58,13 @@ public partial class Main : Node2D
     private double _visibleSmokeElapsed;
     private double _speed = 1.0;
     private double _tickAccumulator;
+    // Presentation-only motion buffer: where every body stood when the tick now
+    // being drawn started. See RenderCenter for why it is read but never written
+    // back into the simulation.
+    private readonly Dictionary<int, GridPoint> _creatureMotionOrigin = [];
+    private readonly Dictionary<int, GridPoint> _raiderMotionOrigin = [];
+    private bool _motionOriginPending;
+    private bool _interpolatesMotion;
     private string _checksum = string.Empty;
     private int _screenshotFramesRemaining;
     private int _fallbackSpriteDraws;
@@ -184,10 +190,32 @@ public partial class Main : Node2D
 
     public override void _Process(double delta)
     {
+        if (!_framePacingArgumentsRead)
+        {
+            _framePacingArgumentsRead = true;
+            BeginFramePacingProbe();
+        }
+
         if (_screenshotPath is not null)
         {
             if (_screenshotFramesRemaining-- > 0)
             {
+                return;
+            }
+
+            // A capture is the one moment the HUD can be measured after Godot's
+            // own layout passes have run. _Ready proves the design; this proves
+            // the frame that was actually drawn, and it is what caught the HUD
+            // collapsing to its minimum size after _Ready returned.
+            try
+            {
+                AssertLabelsFit();
+            }
+            catch (Exception exception)
+            {
+                RecordDiagnostic("hud_layout", exception);
+                GD.PushError(exception.ToString());
+                GetTree().Quit(1);
                 return;
             }
 
@@ -208,16 +236,204 @@ public partial class Main : Node2D
             return;
         }
 
+        if (_framePacingTargetTick is { } target)
+        {
+            MeasureFramePacingFrame();
+            if (_state!.Tick >= target || _world!.IsComplete)
+            {
+                PrintFramePacingResult(target);
+                GetTree().Quit();
+                return;
+            }
+        }
+
         if (!_paused)
         {
             _tickAccumulator += delta * TicksPerSecond * _speed;
             var steps = Math.Min(24, (int)_tickAccumulator);
+            if (_framePacingTargetTick is { } probeTarget)
+            {
+                // The probe stops on an exact tick, so two frame rates are compared
+                // at the same point of the simulation instead of at whichever tick
+                // each of them happened to overshoot to.
+                steps = Math.Min(steps, probeTarget - _state!.Tick);
+            }
+
             if (steps > 0)
             {
                 _tickAccumulator -= steps;
+                // Presentation only: remember where every body stood so the frames
+                // between this tick and the next can lerp instead of teleport.
+                RememberMotionOrigin();
                 Advance(steps);
             }
+            else if (_interpolatesMotion)
+            {
+                // No tick ran, but alpha moved. Redrawing here is what separates
+                // rendering from the tick: at TicksPerSecond = 6.0 a frame-driven
+                // redraw is the only thing that makes movement continuous.
+                UpdateCreatureLabels();
+                QueueRedraw();
+            }
         }
+    }
+
+    /// <summary>
+    /// Where every creature and raider stood when the tick now being drawn
+    /// started. Rendering lerps from here to the canonical position, so a 6 Hz
+    /// simulation stops teleporting bodies a whole tile at a time.
+    ///
+    /// This is presentation state and nothing else: it is written from snapshots
+    /// and never read by <see cref="PrototypeWorld"/>.
+    /// </summary>
+    private void RememberMotionOrigin()
+    {
+        if (_state is null)
+        {
+            return;
+        }
+
+        _creatureMotionOrigin.Clear();
+        foreach (var creature in _state.Creatures)
+        {
+            _creatureMotionOrigin[creature.Id] = creature.Position;
+        }
+
+        _raiderMotionOrigin.Clear();
+        foreach (var raider in _state.Raiders)
+        {
+            _raiderMotionOrigin[raider.Id] = raider.Position;
+        }
+
+        _motionOriginPending = true;
+    }
+
+    /// <summary>
+    /// How far the drawing has travelled from the previous tick towards the
+    /// current one. The lerp deliberately runs one tick *behind* canonical state:
+    /// alpha 0 draws the tile a creature came from and alpha 1 the tile it is
+    /// already standing on, so the picture can never show a body in a tile the
+    /// simulation has not moved it to.
+    ///
+    /// Paused, stepped, reloaded and command-edited states are drawn at alpha 1,
+    /// which is canonical: STEP has to show the result of the step it just ran.
+    /// </summary>
+    private float MotionAlpha() =>
+        !_interpolatesMotion || _paused ? 1f : (float)Math.Clamp(_tickAccumulator, 0.0, 1.0);
+
+    private Vector2 RenderCenter(GridPoint position, Dictionary<int, GridPoint> origins, int id)
+    {
+        var alpha = MotionAlpha();
+        if (alpha >= 1f || !origins.TryGetValue(id, out var origin) || origin == position)
+        {
+            return CellCenter(position);
+        }
+
+        return CellCenter(origin).Lerp(CellCenter(position), alpha);
+    }
+
+    private Vector2 CreatureRenderCenter(PrototypeCreatureSnapshot creature) =>
+        RenderCenter(creature.Position, _creatureMotionOrigin, creature.Id);
+
+    private Vector2 RaiderRenderCenter(PrototypeRaiderSnapshot raider) =>
+        RenderCenter(raider.Position, _raiderMotionOrigin, raider.Id);
+
+    // ---------------------------------------------------------------------
+    // Frame pacing probe
+    //
+    // Interpolation is only allowed to change the picture, so the claim that
+    // needs evidence is "the canonical state does not notice it". The probe
+    // drives the very same _Process path a player's frames drive and reports the
+    // canonical checksum, so Godot's --fixed-fps turns "does the frame rate
+    // change the simulation?" into an ordinary headless comparison. It also
+    // measures the two properties a human would otherwise have to judge from a
+    // video: that no drawn body ever leads the simulation into a tile it has not
+    // reached, and that no frame moves a body by a whole tile.
+    // ---------------------------------------------------------------------
+    private bool _framePacingArgumentsRead;
+    private int? _framePacingTargetTick;
+    private long _framePacingFrames;
+    private long _framePacingInterpolatedFrames;
+    private long _framePacingLeadViolations;
+    private float _framePacingMaxRenderStep;
+    private readonly Dictionary<int, Vector2> _framePacingLastRender = [];
+
+    private void BeginFramePacingProbe()
+    {
+        var arguments = OS.GetCmdlineUserArgs();
+        var index = Array.IndexOf(arguments, "--frame-pacing");
+        if (index < 0)
+        {
+            return;
+        }
+
+        if (index + 1 >= arguments.Length || !int.TryParse(arguments[index + 1], out var target))
+        {
+            throw new ArgumentException("--frame-pacing expects a target tick.", "--frame-pacing");
+        }
+
+        _framePacingTargetTick = target;
+        _paused = false;
+        _speed = 1.0;
+    }
+
+    private void MeasureFramePacingFrame()
+    {
+        _framePacingFrames++;
+        if (MotionAlpha() < 1f)
+        {
+            _framePacingInterpolatedFrames++;
+        }
+
+        foreach (var creature in _state!.Creatures)
+        {
+            var render = CreatureRenderCenter(creature);
+            var drawnCell = ToCell(render);
+            var origin = _creatureMotionOrigin.TryGetValue(creature.Id, out var from)
+                ? from
+                : creature.Position;
+            if (drawnCell != creature.Position && drawnCell != origin)
+            {
+                _framePacingLeadViolations++;
+            }
+
+            if (_framePacingLastRender.TryGetValue(creature.Id, out var previous))
+            {
+                _framePacingMaxRenderStep = Math.Max(
+                    _framePacingMaxRenderStep,
+                    previous.DistanceTo(render));
+            }
+
+            _framePacingLastRender[creature.Id] = render;
+        }
+    }
+
+    private void PrintFramePacingResult(int targetTick)
+    {
+        // The same command log replayed in one shot, with no frames at all. If a
+        // frame-driven run and a frameless replay agree, the render loop added
+        // nothing to canonical state.
+        var replay = new PrototypeWorld(BuildFullLog(_playerCommands));
+        replay.RunTicks(_state!.Tick);
+
+        GD.Print(JsonSerializer.Serialize(new
+        {
+            @event = "godot_frame_pacing",
+            status = "ok",
+            fixture = _fixture,
+            seed = _state.Seed,
+            targetTick,
+            tick = _state.Tick,
+            checksum = _checksum,
+            replayChecksum = PrototypeScenario.Capture(replay).Checksum,
+            frames = _framePacingFrames,
+            interpolatedFrames = _framePacingInterpolatedFrames,
+            interpolationLeadViolations = _framePacingLeadViolations,
+            maxRenderStepPixels = Math.Round((double)_framePacingMaxRenderStep, 3),
+            tileSize = TileSize,
+            ticksPerSecond = TicksPerSecond,
+            runtimeDiagnostics = _diagnostics,
+        }));
     }
 
     public override void _Input(InputEvent @event)
@@ -352,27 +568,251 @@ public partial class Main : Node2D
             return;
         }
 
-        DrawRect(new Rect2(0, 0, 960, 540), new Color("#07111d"));
+        DrawRect(new Rect2(Vector2.Zero, GetViewportRect().Size), new Color("#07111d"));
         DrawToolbar();
         DrawControlToolbar();
         DrawMap();
-        DrawSidePanel();
     }
+
+    // ---------------------------------------------------------------------
+    // HUD layout
+    //
+    // The HUD used to be four Labels authored at absolute pixels inside a fixed
+    // 960x540 frame. Three of them lost text on every frame, and the summary
+    // rectangle (18, 42, 620, 45) overlapped the time toolbar at y=74, so the
+    // resource line was drawn over the 1x/4x/16x buttons. Neither is a font-size
+    // problem: both follow from authoring a layout against a window constant.
+    //
+    // It is now one Control tree anchored to the viewport. Panel heights are a
+    // share of the live frame, which is what ADR 0008 needs when the fixed frame
+    // goes away, and it is what makes the overflow guard measure the layout the
+    // player actually gets rather than a rectangle nobody has laid out.
+    //
+    // Two things are deliberately still pinned to constants: the map keeps
+    // MapOrigin and TileSize, and the two control strips keep the offsets
+    // TryHandleToolbarClick hit-tests. Replacing those belongs to ADR 0008's
+    // camera, not here, so the left column reserves exactly the band they use.
+    // ---------------------------------------------------------------------
+    private const int ToolbarStripTop = 74;
+    private const int ControlStripTop = 96;
+    private const int ControlStripHeight = 20;
+    private const int HudTopMargin = 8;
+    private const int HudRightMargin = 16;
+    private const int HudBottomMargin = 8;
+    private const int HudColumnSeparation = 10;
+    private const int HudPanelSeparation = 6;
+    private const int HudSidePanelMinimumWidth = 240;
+
+    private static Vector2 MapPixelSize =>
+        new(PrototypeTuning.MapWidth * TileSize, PrototypeTuning.MapHeight * TileSize);
 
     private void CreateHud()
     {
-        var title = MakeLabel(new Vector2(18, 8), new Vector2(620, 24), 18, new Color("#dbeafe"));
-        title.Text = "DUNGEON FORTRESS  //  PROTOTYPE 1 GRAYBOX";
+        // The root keeps top-left anchors and is resized explicitly, and that is
+        // load-bearing rather than a style choice. A Control anchored to the full
+        // rect measures itself against its parent's anchorable rect, and the
+        // parent here is a Node2D, whose anchorable rect is empty — the HUD would
+        // silently collapse to its own minimum size on the first layout pass
+        // after _Ready. Top-left anchors have no such dependency, so the size the
+        // viewport hands the HUD is the size it keeps.
+        _hudRoot = new Control
+        {
+            Name = "Hud",
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        AddChild(_hudRoot);
+        _hudRoot.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.TopLeft);
+        GetViewport().SizeChanged += OnViewportResized;
 
-        _summary = MakeLabel(new Vector2(18, 42), new Vector2(620, 45), 13, new Color("#bfdbfe"));
-        // Sized and clipped to end above the legend at y=330. The explanations grew
-        // with stone logistics, and an unclipped label draws over the legend rather
-        // than stopping at its own rectangle.
-        _inspector = MakeLabel(new Vector2(664, 92), new Vector2(278, 232), 11, new Color("#e2e8f0"));
-        _inspector.ClipText = true;
-        // Moved down to clear the two stockpile legend rows added in Issue #26.
-        _feedback = MakeLabel(new Vector2(664, 406), new Vector2(278, 122), 12, new Color("#94a3b8"));
-        _roster = MakeLabel(new Vector2(18, 474), new Vector2(620, 60), 10, new Color("#cbd5e1"));
+        var margins = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        _hudRoot.AddChild(margins);
+        margins.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        margins.AddThemeConstantOverride("margin_left", (int)MapOrigin.X);
+        margins.AddThemeConstantOverride("margin_top", HudTopMargin);
+        margins.AddThemeConstantOverride("margin_right", HudRightMargin);
+        margins.AddThemeConstantOverride("margin_bottom", HudBottomMargin);
+
+        var columns = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        columns.AddThemeConstantOverride("separation", HudColumnSeparation);
+        margins.AddChild(columns);
+        columns.AddChild(CreateMapColumn());
+        columns.AddChild(CreateSideColumn());
+        LayoutHud(GetViewportRect().Size);
+    }
+
+    private void OnViewportResized() => LayoutHud(GetViewportRect().Size);
+
+    /// <summary>
+    /// The left column: the header, the band the two control strips are drawn
+    /// in, the band the map is drawn in, and the roster underneath. Only the
+    /// roster expands, because everything above it is drawn at a fixed pixel
+    /// geometry that the camera work of ADR 0008 owns.
+    /// </summary>
+    private Control CreateMapColumn()
+    {
+        var column = new VBoxContainer
+        {
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            SizeFlagsHorizontal = Control.SizeFlags.Fill,
+            CustomMinimumSize = new Vector2(MapPixelSize.X + 10, 0),
+        };
+        column.AddThemeConstantOverride("separation", 0);
+
+        var header = new VBoxContainer
+        {
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            SizeFlagsVertical = Control.SizeFlags.Fill,
+            // Ends exactly where the time toolbar starts. The old summary label
+            // ran 45px from y=42 and drew its second line over the buttons.
+            CustomMinimumSize = new Vector2(0, ToolbarStripTop - HudTopMargin),
+        };
+        header.AddThemeConstantOverride("separation", 2);
+        column.AddChild(header);
+
+        _title = MakeHudLabel(15, new Color("#dbeafe"));
+        _title.AutowrapMode = TextServer.AutowrapMode.Off;
+        _title.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        _title.Text = "DUNGEON FORTRESS  //  PROTOTYPE 1 GRAYBOX";
+        header.AddChild(_title);
+
+        _summary = MakeHudLabel(12, new Color("#bfdbfe"));
+        header.AddChild(_summary);
+        // The summary is always exactly two lines, and it is the one panel that
+        // must never be squeezed: the line under it is the time toolbar.
+        _summary.CustomMinimumSize = new Vector2(0, HudTextHeight(_summary, 2));
+
+        column.AddChild(new Control
+        {
+            Name = "ControlStrips",
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            CustomMinimumSize = new Vector2(0, MapOrigin.Y - ToolbarStripTop),
+        });
+        column.AddChild(new Control
+        {
+            Name = "Map",
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            CustomMinimumSize = MapPixelSize,
+        });
+
+        _roster = MakeHudLabel(10, new Color("#cbd5e1"));
+        _roster.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        column.AddChild(_roster);
+        return column;
+    }
+
+    /// <summary>
+    /// The side panel: heading, inspector, legend, event feedback. The legend is
+    /// static text and takes exactly the height it needs; the two panels that
+    /// grow with the session share what is left in a 3:2 ratio, so the column
+    /// cannot become over-subscribed the way the authored 456px one was.
+    /// </summary>
+    private Control CreateSideColumn()
+    {
+        var panel = new PanelContainer
+        {
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(HudSidePanelMinimumWidth, 0),
+        };
+        var background = new StyleBoxFlat { BgColor = new Color("#0f1d2d"), BorderColor = new Color("#334155") };
+        background.SetBorderWidthAll(1);
+        background.SetContentMarginAll(10);
+        panel.AddThemeStyleboxOverride("panel", background);
+
+        var column = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        column.AddThemeConstantOverride("separation", HudPanelSeparation);
+        panel.AddChild(column);
+
+        var heading = MakeHudLabel(13, new Color("#93c5fd"));
+        heading.AutowrapMode = TextServer.AutowrapMode.Off;
+        heading.Text = "STATE / WHY";
+        column.AddChild(heading);
+        heading.CustomMinimumSize = new Vector2(0, HudTextHeight(heading, 1));
+
+        _inspector = MakeHudLabel(11, new Color("#e2e8f0"));
+        _inspector.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        _inspector.SizeFlagsStretchRatio = 3;
+        column.AddChild(_inspector);
+
+        column.AddChild(CreateLegend());
+        // The rule the absolute layout drew at y=400: it is what separates the
+        // static map key from the live event feed above and below it.
+        column.AddChild(new HSeparator { MouseFilter = Control.MouseFilterEnum.Ignore });
+
+        _feedback = MakeHudLabel(12, new Color("#94a3b8"));
+        _feedback.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        _feedback.SizeFlagsStretchRatio = 2;
+        column.AddChild(_feedback);
+        return panel;
+    }
+
+    /// <summary>
+    /// The map legend. It used to be eight <c>DrawString</c> calls at fixed
+    /// offsets with no width limit, so the long stockpile rows ran past the right
+    /// edge of the panel and nothing measured it. One coloured Label per row
+    /// keeps the colour cue, reserves the height in the column, and puts every
+    /// row under the same overflow guard as the four panels.
+    /// </summary>
+    private Control CreateLegend()
+    {
+        var legend = new VBoxContainer
+        {
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            SizeFlagsVertical = Control.SizeFlags.Fill,
+        };
+        legend.AddThemeConstantOverride("separation", 0);
+
+        foreach (var (text, size, color) in new (string Text, int Size, string Color)[]
+                 {
+                     ("LEGEND", 9, "#cbd5e1"),
+                     ("teal crew / red-ring goblin / bar = HP / white X = downed", 8, "#cbd5e1"),
+                     ("purple QUARTERS: rest at fatigue 50+", 8, "#c4b5fd"),
+                     ("light warm block = diggable rock / dark = map edge", 8, "#d6d3d1"),
+                     ("amber X = dig mark / yellow bar = dig progress", 8, "#fcd34d"),
+                     ("red X = unreachable / pale tile = new floor / gray dot = loose stone", 8, "#fca5a5"),
+                     ("[M] stockpile: cornered square = material cell / grey box on a crew = carried stone", 8, "#e2e8f0"),
+                     ("filled pip = stored / hollow blue pip = booked by a carrier on the way", 8, "#7dd3fc"),
+                 })
+        {
+            var line = MakeHudLabel(size, new Color(color));
+            line.Text = text;
+            legend.AddChild(line);
+            line.CustomMinimumSize = new Vector2(0, HudTextHeight(line, 1));
+            _legendLines.Add(line);
+        }
+
+        return legend;
+    }
+
+    /// <summary>
+    /// A HUD panel. Clipping is on for all of them: a Label that does not fit its
+    /// rectangle either drops lines or draws over the panel below it, and only
+    /// the first of the two is detectable, so the guard is given something it can
+    /// actually see.
+    /// </summary>
+    private static Label MakeHudLabel(int fontSize, Color color)
+    {
+        var label = new Label
+        {
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            ClipText = true,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        label.AddThemeFontSizeOverride("font_size", fontSize);
+        label.AddThemeColorOverride("font_color", color);
+        return label;
+    }
+
+    /// <summary>
+    /// The height a label needs for a known number of lines, read from the font
+    /// it will actually be drawn with rather than from a guessed constant.
+    /// </summary>
+    private static float HudTextHeight(Label label, int lines)
+    {
+        var fontSize = label.GetThemeFontSize("font_size");
+        var lineHeight = label.GetThemeFont("font").GetHeight(fontSize) +
+            label.GetThemeConstant("line_spacing");
+        return Mathf.Ceil(lineHeight * lines);
     }
 
     private void LoadGoblinSprites()
@@ -404,11 +844,15 @@ public partial class Main : Node2D
             ". Run scripts/run-game.ps1 so its Godot asset-import preflight can create the local .godot/import cache.");
     }
 
-    private Label MakeLabel(Vector2 position, Vector2 size, int fontSize, Color color)
+    /// <summary>
+    /// A name tag pinned to a map cell. These are map annotations rather than
+    /// HUD: they follow a creature, so they are positioned in map pixels and are
+    /// not part of the Control layout.
+    /// </summary>
+    private Label MakeMapLabel(Vector2 size, int fontSize, Color color)
     {
         var label = new Label
         {
-            Position = position,
             Size = size,
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             MouseFilter = Control.MouseFilterEnum.Ignore,
@@ -416,7 +860,6 @@ public partial class Main : Node2D
         label.AddThemeFontSizeOverride("font_size", fontSize);
         label.AddThemeColorOverride("font_color", color);
         AddChild(label);
-        _authoredLabelSize[label] = size;
         return label;
     }
 
@@ -454,6 +897,11 @@ public partial class Main : Node2D
     private void RefreshState()
     {
         _state = _world!.GetSnapshot();
+        // Only a refresh that follows RememberMotionOrigin has something to lerp
+        // from. Everything else — loading a fixture, a single STEP, an accepted
+        // command, a replay — is drawn at the canonical position straight away.
+        _interpolatesMotion = _motionOriginPending;
+        _motionOriginPending = false;
         _checksum = PrototypeScenario.Capture(_world).Checksum;
         UpdateHud();
         UpdateCreatureLabels();
@@ -466,7 +914,7 @@ public partial class Main : Node2D
         {
             if (!_nameLabels.TryGetValue(creature.Id, out var label))
             {
-                label = MakeLabel(Vector2.Zero, new Vector2(98, 17), 10, CreatureColors[creature.Id]);
+                label = MakeMapLabel(new Vector2(98, 17), 10, CreatureColors[creature.Id]);
                 _nameLabels.Add(creature.Id, label);
             }
 
@@ -480,7 +928,10 @@ public partial class Main : Node2D
             }
 
             label.Text = $"{creature.Name} {CreatureStateShort(creature)}";
-            label.Position = CellTopLeft(creature.Position) + new Vector2(2, -14);
+            // Follows the interpolated body, not the canonical tile, so the tag
+            // does not snap a whole tile ahead of the creature it names.
+            label.Position = CreatureRenderCenter(creature) +
+                new Vector2(2 - (TileSize / 2f), -14 - (TileSize / 2f));
         }
     }
 
@@ -583,9 +1034,10 @@ public partial class Main : Node2D
     }
 
     /// <summary>
-    /// The four HUD panels the overflow guard and the golden UI state care about.
-    /// One list drives both, so a panel cannot be added to one and forgotten in
-    /// the other.
+    /// Every piece of HUD text the overflow guard measures. The four panels the
+    /// golden UI state records come first; the header and the legend rows are
+    /// here too, because a Control layout can squeeze them just as easily and
+    /// nothing else would notice.
     /// </summary>
     private (string Name, Label? Label)[] HudLabels() =>
     [
@@ -593,6 +1045,8 @@ public partial class Main : Node2D
         ("inspector", _inspector),
         ("feedback", _feedback),
         ("roster", _roster),
+        ("title", _title),
+        .. _legendLines.Select((label, index) => ($"legend[{index}]", (Label?)label)),
     ];
 
     /// <summary>
@@ -619,111 +1073,146 @@ public partial class Main : Node2D
     };
 
     /// <summary>
-    /// How many wrapped lines each HUD panel is currently allowed to lose. Zero is
-    /// the target and the only value a new panel may have.
+    /// Viewport sizes the HUD is required to hold all of its text at. The live
+    /// frame is always one of them; the rest exist so that "the layout follows
+    /// the viewport" is a checked claim rather than an intention. ADR 0008 turns
+    /// the frame into an input, and a guard that only ever saw one size could not
+    /// tell a responsive layout from a lucky one.
     ///
-    /// The non-zero entries are measured, pre-existing debt rather than a decision
-    /// taken here: inside the fixed 960x540 frame the side panel is
-    /// over-subscribed. At its worst frame the inspector needs 244 px and the
-    /// event feedback 197 px, the legend block takes ~75 px, and the column is
-    /// 456 px tall — no arrangement of the current four labels fits. Reflowing the
-    /// HUD is Issue #36 and ADR 0008 additionally drops the fixed frame, so the
-    /// deficit is theirs to clear. Until then the guard still fails the moment
-    /// anything gets worse, which is the regression Issue #26 shipped twice.
+    /// A size that is missing here is not "unsupported": it is unmeasured. The
+    /// current text does not fit the old 960x540 frame at readable sizes — the
+    /// side column needs about 33 lines and that frame offers about 29 — which is
+    /// exactly the deficit Issue #28 measured and this Issue had to clear.
     /// </summary>
-    private static readonly Dictionary<string, int> KnownLineDeficit =
-        new(StringComparer.Ordinal)
+    private Vector2[] HudFitViewports() =>
+        new[]
         {
-            ["summary"] = 0,
-            ["inspector"] = 1,
-            ["feedback"] = 4,
-            ["roster"] = 2,
-        };
+            GetViewportRect().Size,
+            new Vector2(1280, 720),
+            new Vector2(1366, 768),
+            new Vector2(1600, 900),
+            new Vector2(1024, 768),
+        }.Distinct().ToArray();
 
     /// <summary>
-    /// A <see cref="Label"/> that does not fit its own rectangle silently loses
-    /// text: unclipped it re-expands past the panel below it (the event feedback
-    /// currently runs off the bottom of the window that way), clipped it drops the
-    /// overflowing lines instead. Both happened in Issue #26 and both were found
-    /// by eye on a PNG.
+    /// Lays the HUD out at a given frame size and waits for nothing. Godot sorts
+    /// containers on a deferred pass, so a guard that ran in <c>_Ready</c> without
+    /// this would measure rectangles nobody had laid out yet. Notifying the
+    /// subtree runs every container's sort synchronously, parent first, which is
+    /// the same placement a frame would produce.
     ///
-    /// The check is made against the label's authored rectangle and never against
-    /// a window constant: ADR 0008 drops the fixed 960x540 frame, so any assertion
-    /// pinned to it would be wrong the moment the camera lands.
+    /// Two passes, because a wrapped legend row's height depends on the width the
+    /// first pass hands it. Asking for that height back is what makes a narrow
+    /// frame take space away from the panels that can spare it instead of
+    /// quietly clipping the legend.
+    /// </summary>
+    private void LayoutHud(Vector2 size)
+    {
+        _hudRoot!.Size = size;
+        _hudRoot.PropagateNotification((int)Container.NotificationSortChildren);
+        foreach (var line in _legendLines)
+        {
+            line.CustomMinimumSize = new Vector2(0, HudTextHeight(line, line.GetLineCount()));
+        }
+
+        _hudRoot.PropagateNotification((int)Container.NotificationSortChildren);
+    }
+
+    /// <summary>
+    /// A <see cref="Label"/> that does not fit its rectangle silently loses text:
+    /// unclipped it draws over the panel below it, clipped it drops the
+    /// overflowing lines. Both happened in Issue #26 and both were found by eye on
+    /// a PNG.
     ///
-    /// It must run before Godot's first layout pass, because that pass re-expands
-    /// an unclipped label to its content and <c>GetVisibleLineCount()</c> then
-    /// reports the grown rectangle instead of the designed one. <c>_Ready</c> still
-    /// satisfies that in every mode, headless or windowed; a capture in
-    /// <c>_Process</c> no longer does. See <see cref="LabelFit"/> for the evidence
-    /// a run carries about which of the two rectangles it measured.
+    /// The check is made against the rectangle the layout produced and never
+    /// against a window constant, because ADR 0008 drops the fixed 960x540 frame.
+    /// Since the HUD became a Control tree the measurement is only meaningful
+    /// *after* a layout pass, which is the opposite of what the absolute layout
+    /// needed: a container gives a label its size, so the size is the designed one
+    /// and an unclipped label can no longer re-expand to its own content.
+    /// <see cref="LayoutHud"/> forces that pass, so <c>_Ready</c> is still a valid
+    /// place to run this on every entry point.
     /// </summary>
     /// <param name="strict">
-    /// Ignore <see cref="KnownLineDeficit"/> and require every panel to hold all of
-    /// its text. Used by <c>--strict-hud-fit</c>, which <c>verify.ps1</c> expects to
-    /// fail today; the day it stops failing, Issue #36 has cleared the deficit and
-    /// the recorded allowances are due for deletion.
+    /// Kept so that the <c>--strict-hud-fit</c> flag parsed in <c>_Ready</c> still
+    /// compiles. There is no longer a recorded deficit to ignore — every panel
+    /// must hold all of its text on every run — so strict and ordinary runs are
+    /// the same check. Removing the now-inert flag touches <c>_Ready</c>, which
+    /// Issue #39 owns in parallel.
     /// </param>
     private void AssertLabelsFit(bool strict = false)
     {
-        foreach (var (name, label) in HudLabels())
+        _ = strict;
+        var live = GetViewportRect().Size;
+        var failures = new List<string>();
+        foreach (var viewport in HudFitViewports())
         {
-            if (label is null)
+            LayoutHud(viewport);
+            foreach (var (name, label) in HudLabels())
             {
-                continue;
-            }
+                if (label is null)
+                {
+                    continue;
+                }
 
-            if (_authoredLabelSize.TryGetValue(label, out var authored) &&
-                !label.Size.IsEqualApprox(authored))
-            {
-                throw new InvalidOperationException(
-                    $"HUD label '{name}' has already been resized from {authored} to " +
-                    $"{label.Size}, so a fit check here would measure the grown " +
-                    "rectangle instead of the designed one. Run the guard before the " +
-                    "first layout pass.");
+                var needed = label.GetLineCount();
+                var shown = label.GetVisibleLineCount();
+                if (needed > shown)
+                {
+                    failures.Add(
+                        $"'{name}' needs {needed} lines but only {shown} fit in " +
+                        $"{label.Size} at viewport {viewport}");
+                }
             }
+        }
 
-            var needed = label.GetLineCount();
-            var shown = label.GetVisibleLineCount();
-            var allowed = strict || !KnownLineDeficit.TryGetValue(name, out var known)
-                ? 0
-                : known;
-            if (needed - shown > allowed)
-            {
-                throw new InvalidOperationException(
-                    $"HUD label '{name}' needs {needed} lines but only {shown} fit in " +
-                    $"{label.Size}: {needed - shown} lines lost, {allowed} is the " +
-                    "deficit recorded for Issue #36. Text that does not fit its own " +
-                    "rectangle is drawn over the panel below it.");
-            }
+        LayoutHud(live);
+
+        if (failures.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"The HUD loses text in {failures.Count} place(s): " +
+                string.Join("; ", failures) +
+                ". Text that does not fit its rectangle is dropped or drawn over " +
+                "the panel below it.");
         }
     }
 
     /// <summary>
     /// The measurements <see cref="AssertLabelsFit"/> acts on, published so a run
     /// states what the guard had to work with instead of the guard being trusted.
-    /// <c>height</c> differing from <c>authoredHeight</c> is the tell that Godot
-    /// has already re-expanded the label and that a fit check at this point would
-    /// be vacuous.
+    /// The viewport is reported next to them, because every height below is a
+    /// share of it rather than a constant.
     /// </summary>
-    private object[] LabelFit() => HudLabels()
-        .Where(entry => entry.Label is not null)
-        .Select(entry => (object)new
+    private object LabelFit()
+    {
+        var viewport = GetViewportRect().Size;
+        return new
         {
-            name = entry.Name,
-            neededLines = entry.Label!.GetLineCount(),
-            visibleLines = entry.Label.GetVisibleLineCount(),
-            hardLines = (entry.Label.Text ?? string.Empty).Split('\n').Length,
-            authoredHeight = _authoredLabelSize.TryGetValue(entry.Label, out var authored)
-                ? authored.Y
-                : (float?)null,
-            height = entry.Label.Size.Y,
-        })
-        .ToArray();
+            viewport = new[] { viewport.X, viewport.Y },
+            checkedViewports = HudFitViewports()
+                .Select(size => new[] { size.X, size.Y })
+                .ToArray(),
+            labels = HudLabels()
+                .Where(entry => entry.Label is not null)
+                .Select(entry => (object)new
+                {
+                    name = entry.Name,
+                    neededLines = entry.Label!.GetLineCount(),
+                    visibleLines = entry.Label.GetVisibleLineCount(),
+                    hardLines = (entry.Label.Text ?? string.Empty).Split('\n').Length,
+                    width = entry.Label.Size.X,
+                    height = entry.Label.Size.Y,
+                })
+                .ToArray(),
+        };
+    }
 
     private void DrawToolbar()
     {
-        DrawRect(new Rect2(18, 74, 626, 20), new Color("#0f1d2d"));
+        DrawRect(
+            new Rect2(MapOrigin.X, ToolbarStripTop, MapPixelSize.X + 10, ControlStripHeight),
+            new Color("#0f1d2d"));
         var buttons = new[]
         {
             (_paused ? "RUN [P]" : "PAUSE [P]", 18, 72),
@@ -787,7 +1276,9 @@ public partial class Main : Node2D
 
     private void DrawControlToolbar()
     {
-        DrawRect(new Rect2(18, 96, 626, 20), new Color("#102338"));
+        DrawRect(
+            new Rect2(MapOrigin.X, ControlStripTop, MapPixelSize.X + 10, ControlStripHeight),
+            new Color("#102338"));
         foreach (var (label, x, width, active) in ControlButtons())
         {
             DrawRect(
@@ -806,7 +1297,7 @@ public partial class Main : Node2D
 
     private void DrawMap()
     {
-        DrawRect(new Rect2(MapOrigin, new Vector2(PrototypeTuning.MapWidth * TileSize, PrototypeTuning.MapHeight * TileSize)), new Color("#111827"));
+        DrawRect(new Rect2(MapOrigin, MapPixelSize), new Color("#111827"));
         for (var y = 0; y < PrototypeTuning.MapHeight; y++)
         {
             for (var x = 0; x < PrototypeTuning.MapWidth; x++)
@@ -900,7 +1391,10 @@ public partial class Main : Node2D
 
         foreach (var creature in _state.Creatures)
         {
-            var center = CellCenter(creature.Position);
+            // Interpolated, not canonical: the body, its carried item, its health
+            // bar and its selection ring all hang off this one point, so lerping
+            // it is what turns six canonical steps a second into motion.
+            var center = CreatureRenderCenter(creature);
             var color = DefenderColor(creature);
             // The generated character states serve both factions; the outline is
             // the stable team cue (teal crew, red-raider ring).
@@ -942,7 +1436,7 @@ public partial class Main : Node2D
         foreach (var raider in _state.Raiders)
         {
             if (raider.Mode == RaiderMode.Escaped) continue;
-            var center = CellCenter(raider.Position);
+            var center = RaiderRenderCenter(raider);
             DrawCircle(center, 9, new Color("#7f1d1d"));
             DrawGoblin(center, RaiderSpriteKey(raider));
             DrawHpBar(center + new Vector2(-7, 9), raider.Hp, PrototypeTuning.RaiderHp, new Color("#fb7185"));
@@ -1115,25 +1609,9 @@ public partial class Main : Node2D
         }
     }
 
-    private void DrawSidePanel()
-    {
-        DrawRect(new Rect2(654, 74, 290, 456), new Color("#0f1d2d"));
-        DrawRect(new Rect2(654, 74, 290, 456), new Color("#334155"), false, 1);
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 88), "STATE / WHY", HorizontalAlignment.Left, -1, 13, new Color("#93c5fd"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 330), "LEGEND", HorizontalAlignment.Left, -1, 9, new Color("#cbd5e1"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 341), "teal crew / red-ring goblin / bar = HP / white X = downed", HorizontalAlignment.Left, -1, 7, new Color("#cbd5e1"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 350), "purple QUARTERS: rest at fatigue 50+", HorizontalAlignment.Left, -1, 7, new Color("#c4b5fd"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 359), "light warm block = diggable rock / dark = map edge", HorizontalAlignment.Left, -1, 7, new Color("#d6d3d1"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 368), "amber X = dig mark / yellow bar = dig progress", HorizontalAlignment.Left, -1, 7, new Color("#fcd34d"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 377), "red X = unreachable / pale tile = new floor / gray dot = loose stone", HorizontalAlignment.Left, -1, 7, new Color("#fca5a5"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 386), "[M] stockpile: cornered square = material cell / grey box on a crew = carried stone", HorizontalAlignment.Left, -1, 7, new Color("#e2e8f0"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(664, 395), "filled pip = stored / hollow blue pip = booked by a carrier on the way", HorizontalAlignment.Left, -1, 7, new Color("#7dd3fc"));
-        DrawLine(new Vector2(664, 400), new Vector2(934, 400), new Color("#334155"), 1);
-    }
-
     private bool TryHandleToolbarClick(Vector2 position)
     {
-        if (position.Y is >= 96 and <= 116)
+        if (position.Y >= ControlStripTop && position.Y <= ControlStripTop + ControlStripHeight)
         {
             var buttons = ControlButtons();
             for (var index = 0; index < buttons.Length; index++)
@@ -1175,7 +1653,7 @@ public partial class Main : Node2D
             return true;
         }
 
-        if (position.Y is < 74 or > 94)
+        if (position.Y < ToolbarStripTop || position.Y > ToolbarStripTop + ControlStripHeight)
         {
             return false;
         }
