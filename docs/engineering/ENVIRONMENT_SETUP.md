@@ -113,7 +113,12 @@ Pure .NET тесты:
 
 ```powershell
 dotnet test .\tests\DungeonFortress.Simulation.Tests\DungeonFortress.Simulation.Tests.csproj -c Release
+dotnet test .\tests\DungeonFortress.Presentation.Tests\DungeonFortress.Presentation.Tests.csproj -c Release
 ```
+
+`DungeonFortress.Presentation.Tests` проверяет текст HUD и объяснения инспектора
+из `src\DungeonFortress.Presentation`. Эта сборка не ссылается на Godot, поэтому
+тесты не требуют движка — см. [ADR 0011](../decisions/0011-presentation-layer-without-engine.md).
 
 Запись canonical snapshot:
 
@@ -141,6 +146,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 -Visi
 `.github/workflows/dotnet.yml` восстанавливает, собирает и тестирует только
 engine-independent .NET projects на Ubuntu. Godot остаётся локальной проверкой:
 загрузка и pinning engine binary в CI расширили бы этот spike без новой пользы.
+
+Поэтому всё, что должно проверяться на каждом pull request, обязано жить в
+сборке без зависимости от движка. Текст HUD и инспектора вынесен в
+`DungeonFortress.Presentation` именно ради этого: до Issue #39 эталоны
+`tests/golden/ui/*.json` сравнивались только локально на машине владельца.
 
 ## Откат и удаление
 

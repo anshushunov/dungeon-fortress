@@ -5,6 +5,7 @@
     <EnableDynamicLoading>true</EnableDynamicLoading>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\DungeonFortress.Presentation\DungeonFortress.Presentation.csproj" />
     <ProjectReference Include="..\DungeonFortress.Simulation\DungeonFortress.Simulation.csproj" />
   </ItemGroup>
   <Import Project="DungeonFortress.Game.IvanMcp.props"

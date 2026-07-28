@@ -215,6 +215,7 @@ carriedStone + storedStone` выполняется на каждом тике э
 
 ```powershell
 dotnet test .\tests\DungeonFortress.Simulation.Tests
+dotnet test .\tests\DungeonFortress.Presentation.Tests
 dotnet test .\tests\DungeonFortress.DomainMcp.Tests
 .\scripts\verify.ps1
 ```
@@ -229,7 +230,17 @@ dotnet test .\tests\DungeonFortress.DomainMcp.Tests
 **каждом** тике полной сессии, отсутствие переполнения и двойного подъёма,
 перепланирование и безопасный сброс груза при потере цели, высыпание запаса при
 стирании зоны, сосуществование с пищевой перевозкой и неизменность сценариев без
-камня. Wall-clock время
+камня.
+
+`DungeonFortress.Presentation.Tests` проверяет уже не симуляцию, а её показ:
+текст четырёх панелей HUD и все ветки объяснений инспектора, включая все
+`statusCode` склада и раскопки. Отдельный набор воспроизводит три эталонных кадра
+`tests/golden/ui/*.json` из того же журнала команд и сравнивает текст с
+эталонами **без запуска Godot**, поэтому изменение формулировки видно в CI на
+pull request, а не при следующем локальном `verify.ps1`. Граница слоя описана в
+[ADR 0011](../decisions/0011-presentation-layer-without-engine.md).
+
+Wall-clock время
 наблюдается в CLI/MCP output, но не используется как flaky correctness gate.
 Налёт, бой, кража и `sessionResult` входят в текущий headless-срез. Для
 воспроизводимой полной оценочной матрицы и её повторной проверки используйте

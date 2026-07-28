@@ -24,12 +24,17 @@ jobs:
       - name: Restore tests, domain MCP, and scenario runner
         run: |
           dotnet restore tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj
+          dotnet restore tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj
           dotnet restore tests/DungeonFortress.DomainMcp.Tests/DungeonFortress.DomainMcp.Tests.csproj --locked-mode
           dotnet restore tests/DungeonFortress.Scenarios/DungeonFortress.Scenarios.csproj
 
+      # DungeonFortress.Presentation carries the HUD and inspector text. It does
+      # not reference Godot, so this job checks the golden UI wording on every
+      # pull request instead of only on the machine that can start an engine.
       - name: Build and test engine-independent projects
         run: |
           dotnet test tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj --configuration Release --no-restore
+          dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --configuration Release --no-restore
           dotnet test tests/DungeonFortress.DomainMcp.Tests/DungeonFortress.DomainMcp.Tests.csproj --configuration Release --no-restore
 
       - name: Run deterministic scenario CLI

@@ -17,6 +17,7 @@ $solutionPath = Join-Path $repoRoot "DungeonFortress.sln"
 $scenarioProject = Join-Path $repoRoot "tests\DungeonFortress.Scenarios\DungeonFortress.Scenarios.csproj"
 $scenarioAssembly = Join-Path $repoRoot "tests\DungeonFortress.Scenarios\bin\Release\net8.0\DungeonFortress.Scenarios.dll"
 $testProject = Join-Path $repoRoot "tests\DungeonFortress.Simulation.Tests\DungeonFortress.Simulation.Tests.csproj"
+$presentationTestProject = Join-Path $repoRoot "tests\DungeonFortress.Presentation.Tests\DungeonFortress.Presentation.Tests.csproj"
 $domainMcpTestProject = Join-Path $repoRoot "tests\DungeonFortress.DomainMcp.Tests\DungeonFortress.DomainMcp.Tests.csproj"
 $commandsPath = Join-Path $repoRoot "scenarios\smoke.commands.json"
 $gameProjectPath = Join-Path $repoRoot "src\DungeonFortress.Game"
@@ -146,6 +147,13 @@ try {
     )
     Invoke-Checked -FilePath "dotnet" -Arguments @(
         "test", $testProject, "--configuration", "Release", "--no-build", "--no-restore"
+    )
+    # The HUD and inspector text lives in DungeonFortress.Presentation, which does
+    # not reference Godot. These run here and in CI; the golden UI comparison below
+    # still starts an engine, because only it can also prove the adapter wires the
+    # text through to the labels.
+    Invoke-Checked -FilePath "dotnet" -Arguments @(
+        "test", $presentationTestProject, "--configuration", "Release", "--no-build", "--no-restore"
     )
     Invoke-Checked -FilePath "dotnet" -Arguments @(
         "test", $domainMcpTestProject, "--configuration", "Release", "--no-build", "--no-restore"
