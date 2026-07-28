@@ -240,6 +240,110 @@ commit the image. `--smoke` and
 `--visible-smoke` continue to report structured runtime diagnostics for
 automation.
 
+## Checking the HUD without reading pixels
+
+The picture is evidence for a human. Everything an automated check needs is text,
+and text is reported structurally. This section is the tooling from Issue #28; it
+changes no gameplay, no contract and no tuning.
+
+### `ui`: the HUD as text
+
+Both structured outputs — `godot_headless_smoke` from `--smoke` and
+`godot_graybox_screenshot` from a capture — carry a `ui` object:
+
+| Field | What it is |
+|---|---|
+| `summary` | the two-line top bar, including the stone counters |
+| `inspector` | the whole side-panel explanation for the current selection |
+| `feedback` | the event feedback buffer |
+| `roster` | crew line, control feedback line and the command log tail |
+| `controlFeedback` | the raw control feedback string |
+| `editMode`, `brushZone` | which brush is held |
+| `selectedCell`, `selectedCreatureId` | what the inspector is pointed at |
+
+This turns every inspector branch into an ordinary testable artifact: choose the
+moment with `--screenshot-ticks`, point at a tile with `--select-cell`, and assert
+a substring of `ui.inspector`. Before this, only the one branch that happened to
+land in a captured frame was ever checked.
+
+Nothing in `ui` depends on the camera. Pixel positions, the visible tile range and
+the viewport size are deliberately absent, because [ADR 0008](../decisions/0008-three-quarter-projection.md)
+drops the fixed 960x540 frame and those values stop being stable.
+
+A headless run now also reports `stoneProduced`, `looseStone`, `carriedStone`,
+`storedStone` and `stockpileCapacity`, the same conservation evidence a capture
+carries. A frame can therefore be recorded without producing a picture at all.
+
+### Golden UI state
+
+`tests/golden/ui/*.json` holds the reference HUD state for the three reproducible
+`--demo-stone` moments — stone with nowhere to go (t190), stone in transit (t336)
+and a full stockpile (t950). `scripts/verify.ps1` captures each frame headless and
+compares it field by field.
+
+```powershell
+# regenerate after an intended change, then review the diff
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\update-golden-ui.ps1
+```
+
+Golden **screenshots** were considered and rejected. The three Issue #26 frames did
+reproduce byte-for-byte, but on one machine and one driver; elsewhere the pixels
+move and the test becomes a source of false failures. `.artifacts/` is ignored, so
+the references would also have to be committed as binary blobs that cannot be read
+in a review. A perceptual hash fixes the first problem at the price of a threshold
+nobody can justify. The committed JSON is deterministic, cross-platform and
+readable in a diff, and it catches the same two failures: "the HUD stopped showing
+what it should" and "an explanation changed silently".
+
+### HUD overflow guard
+
+A `Label` that does not fit its own rectangle loses text silently. Unclipped it
+re-expands past the panel below it; clipped it drops the overflowing lines
+instead. Both happened in Issue #26 and both were caught by eye on a PNG.
+
+`AssertLabelsFit()` compares `GetLineCount()` with `GetVisibleLineCount()` for the
+four HUD panels. It is measured against each label's own authored rectangle, never
+against a window constant, because ADR 0008 removes the fixed frame.
+
+**It runs in `_Ready`, on every entry point.** That is the only place it can mean
+anything: Godot's first layout pass re-expands an unclipped label to its own
+content, after which `GetLineCount()` and `GetVisibleLineCount()` are equal by
+construction and the check silently passes on everything. Every structured output
+carries `labelFit` with `authoredHeight` next to the live `height`, so a run states
+which of the two it measured instead of the guard being trusted.
+
+Godot 4.7.1 `--headless` was suspected of degrading font metrics, which would make
+the guard vacuous. It does not: shaping, wrapping and font metrics are identical to
+a windowed run — the same wrapped line counts and the same font height. The
+suspicion was backwards. Headless is where the guard is meaningful, and the
+windowed capture path is where it is not.
+
+**Known limitation.** At the fixed 960x540 frame the side panel is
+over-subscribed: at its worst frame the inspector needs 244 px and the event
+feedback 197 px, the legend block takes about 75 px, and the column is 456 px
+tall. No arrangement of the current four labels fits, so three of them lose lines
+today — the event feedback runs off the bottom of the window and the roster's `LOG`
+line never appears. `KnownLineDeficit` in `Main.cs` records exactly how much each
+panel loses; the guard fails on anything worse. Clearing the deficit belongs to the
+HUD reflow in Issue #36 and to the resizable viewport ADR 0008 requires.
+
+`verify.ps1` also runs `--strict-hud-fit`, which ignores those recorded allowances,
+and **requires it to fail**. A guard nobody has seen fail cannot be distinguished
+from a guard that cannot fail. When that run starts passing, the reflow has landed
+and both `KnownLineDeficit` and the check are due for deletion.
+
+### What ADR 0008 will change here
+
+[ADR 0008](../decisions/0008-three-quarter-projection.md) makes the camera part of
+the capture inputs: the same tick at a different camera position or zoom produces a
+different picture. When the camera lands, its position and zoom must be recorded
+next to the seed and the tick for every reproducible frame in this document. The
+camera is not implemented yet and is out of Issue #28.
+
+The golden UI state is unaffected on purpose — it holds no camera-dependent value —
+so it is the instrument that can prove the reflow in Issue #36 and the projection
+work in ADR 0008 did not change what the HUD says.
+
 ## Readability pass
 
 `B` starts painting and `E` starts erasing the selected zone. A bright preview
