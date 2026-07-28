@@ -1,17 +1,6 @@
 [mcp_servers.dungeon_fortress_domain]
-command = "dotnet"
-args = [
-  "run",
-  "--project",
-  "tools/DungeonFortress.DomainMcp/DungeonFortress.DomainMcp.csproj",
-  "--configuration",
-  "Release",
-  "--no-build",
-  "--no-restore",
-  "--",
-  "--root",
-  ".",
-]
+command = "cmd"
+args = ["/c", "scripts\\domain-mcp-server.cmd"]
 cwd = "."
 enabled_tools = ["bridge_status", "prototype_run", "simulation_run"]
 default_tools_approval_mode = "auto"
