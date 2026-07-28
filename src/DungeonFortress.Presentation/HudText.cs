@@ -17,10 +17,16 @@ public static class HudText
     /// nothing else, so "what the HUD says" and "how it is drawn" stop being the
     /// same code.
     /// </summary>
-    public static HudPanels Build(HudViewState view)
+    /// <param name="view">The frame.</param>
+    /// <param name="projection">
+    /// The frame's map projection. A caller that already has one — the adapter
+    /// builds exactly one per snapshot — passes it so the HUD does not build a
+    /// second; omitting it derives the same value from the same snapshot.
+    /// </param>
+    public static HudPanels Build(HudViewState view, MapProjection? projection = null)
     {
         ArgumentNullException.ThrowIfNull(view);
-        var projection = view.Projection;
+        projection ??= view.Projection;
         return new(
             Summary(view, projection),
             Inspector(view, projection),

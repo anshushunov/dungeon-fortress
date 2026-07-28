@@ -83,6 +83,8 @@ public sealed class MapProjection
         HashSet<GridPoint> buildWithdrawals = [];
         Dictionary<ZoneKind, HashSet<GridPoint>> zonePaints = new();
         Dictionary<ZoneKind, HashSet<GridPoint>> zoneErasures = new();
+        var digTiles = state.DigDesignations.Select(item => item.Tile).ToHashSet();
+        var siteTiles = state.BuildSites.Select(site => site.Tile).ToHashSet();
         var count = 0;
 
         // Only the commands of *this* tick. A fixture that schedules a stockpile
@@ -98,33 +100,31 @@ public sealed class MapProjection
                 continue;
             }
 
-            switch (command.Kind)
+            var changed = command.Kind switch
             {
-                case "dig_designate":
-                    Move(command.Tiles, digMarks, digWithdrawals);
-                    break;
-                case "dig_cancel":
-                    Move(command.Tiles, digWithdrawals, digMarks);
-                    break;
-                case "build_designate":
-                    Move(command.Tiles, buildMarks, buildWithdrawals);
-                    break;
-                case "build_cancel":
-                    Move(command.Tiles, buildWithdrawals, buildMarks);
-                    break;
-                case "zone_paint" when command.ZoneKind is { } painted:
-                    Move(command.Tiles, Bucket(zonePaints, painted), Bucket(zoneErasures, painted));
-                    break;
-                case "zone_erase" when command.ZoneKind is { } erased:
-                    Move(command.Tiles, Bucket(zoneErasures, erased), Bucket(zonePaints, erased));
-                    break;
-                default:
-                    // set_priority and set_rule change how the crew reacts to the
-                    // map, never what is drawn on it.
-                    continue;
-            }
+                "dig_designate" => Mark(command.Tiles, digMarks, digWithdrawals, digTiles.Contains),
+                "dig_cancel" => Withdraw(command.Tiles, digMarks, digWithdrawals, digTiles.Contains),
+                "build_designate" => Mark(command.Tiles, buildMarks, buildWithdrawals, siteTiles.Contains),
+                "build_cancel" => Withdraw(command.Tiles, buildMarks, buildWithdrawals, siteTiles.Contains),
+                "zone_paint" when command.ZoneKind is { } painted => Mark(
+                    command.Tiles,
+                    Bucket(zonePaints, painted),
+                    Bucket(zoneErasures, painted),
+                    state.Zones[painted].Contains),
+                "zone_erase" when command.ZoneKind is { } erased => Withdraw(
+                    command.Tiles,
+                    Bucket(zonePaints, erased),
+                    Bucket(zoneErasures, erased),
+                    state.Zones[erased].Contains),
+                // set_priority and set_rule change how the crew reacts to the map,
+                // never what is drawn on it.
+                _ => false,
+            };
 
-            count++;
+            if (changed)
+            {
+                count++;
+            }
         }
 
         return new MapProjection(
@@ -141,11 +141,23 @@ public sealed class MapProjection
     /// <summary>The canonical snapshot this projection was taken from.</summary>
     public PrototypeSnapshot State { get; }
 
-    /// <summary>How many accepted map commands are waiting for this tick to run.</summary>
+    /// <summary>
+    /// How many accepted map commands are waiting for this tick to run and will
+    /// actually change something. A command the world would fold away — a second
+    /// mark on a marked tile, a withdrawal from a tile that carries nothing — is
+    /// not counted, because it is not going to move the map either.
+    /// </summary>
     public int PendingCommandCount { get; }
 
-    /// <summary>Whether anything at all is waiting; false for almost every frame.</summary>
-    public bool HasPendingMarking => PendingCommandCount > 0;
+    /// <summary>
+    /// Whether the projection differs from the snapshot at all; false for almost
+    /// every frame.
+    /// </summary>
+    public bool HasPendingMarking =>
+        _digMarks.Count > 0 || _digWithdrawals.Count > 0 ||
+        _buildMarks.Count > 0 || _buildWithdrawals.Count > 0 ||
+        _zonePaints.Any(pair => pair.Value.Count > 0) ||
+        _zoneErasures.Any(pair => pair.Value.Count > 0);
 
     /// <summary>
     /// The dig designations the world holds, minus the ones a withdrawal accepted
@@ -161,9 +173,7 @@ public sealed class MapProjection
     /// an ordinary designation waiting for a worker, because that is what they
     /// become when the tick runs.
     /// </summary>
-    public IReadOnlyList<GridPoint> PendingDigMarks => Fresh(
-        _digMarks,
-        tile => State.DigDesignations.Any(item => item.Tile == tile));
+    public IReadOnlyList<GridPoint> PendingDigMarks => Ordered(_digMarks);
 
     /// <summary>Tiles whose designation is about to be withdrawn.</summary>
     public IReadOnlyList<GridPoint> PendingDigWithdrawals => Ordered(_digWithdrawals);
@@ -175,9 +185,7 @@ public sealed class MapProjection
             : [.. State.BuildSites.Where(site => !_buildWithdrawals.Contains(site.Tile))];
 
     /// <summary>Tiles that carry a blueprint the world has not recorded yet.</summary>
-    public IReadOnlyList<GridPoint> PendingBuildMarks => Fresh(
-        _buildMarks,
-        tile => State.BuildSites.Any(site => site.Tile == tile));
+    public IReadOnlyList<GridPoint> PendingBuildMarks => Ordered(_buildMarks);
 
     /// <summary>Tiles whose blueprint is about to be withdrawn.</summary>
     public IReadOnlyList<GridPoint> PendingBuildWithdrawals => Ordered(_buildWithdrawals);
@@ -194,9 +202,8 @@ public sealed class MapProjection
             : [.. State.StockpileCells.Where(cell => !IsErased(ZoneKind.MaterialStockpile, cell.Position))];
 
     /// <summary>Tiles that become stockpile cells when this tick runs.</summary>
-    public IReadOnlyList<GridPoint> PendingStockpileCells => Fresh(
-        Painted(ZoneKind.MaterialStockpile),
-        tile => State.StockpileCells.Any(cell => cell.Position == tile));
+    public IReadOnlyList<GridPoint> PendingStockpileCells =>
+        Ordered(Painted(ZoneKind.MaterialStockpile));
 
     /// <summary>
     /// How many tiles read as designated for digging, which is the number the HUD
@@ -262,26 +269,63 @@ public sealed class MapProjection
     /// the crew answers when time moves" is a different sentence from "nobody has
     /// taken the job yet".
     /// </summary>
-    public bool IsPendingDigMark(GridPoint tile) =>
-        _digMarks.Contains(tile) && !State.DigDesignations.Any(item => item.Tile == tile);
+    public bool IsPendingDigMark(GridPoint tile) => _digMarks.Contains(tile);
 
-    public bool IsPendingBuildMark(GridPoint tile) =>
-        _buildMarks.Contains(tile) && !State.BuildSites.Any(site => site.Tile == tile);
+    public bool IsPendingBuildMark(GridPoint tile) => _buildMarks.Contains(tile);
 
     public bool IsPendingStockpileCell(GridPoint tile) =>
-        Painted(ZoneKind.MaterialStockpile).Contains(tile) &&
-        !State.StockpileCells.Any(cell => cell.Position == tile);
+        Painted(ZoneKind.MaterialStockpile).Contains(tile);
 
-    private static void Move(
+    /// <summary>
+    /// Marking, folded the way the world folds it. Marking a tile that already
+    /// carries the mark is a no-op in <c>PrototypeWorld</c> — "designating an
+    /// already designated tile is a no-op, matching zone_paint" — so it is a no-op
+    /// here, and undoing a withdrawal simply restores the canonical mark rather
+    /// than inventing a fresh one.
+    /// </summary>
+    /// <returns>Whether the projection actually moved.</returns>
+    private static bool Mark(
         IReadOnlyList<GridPoint> tiles,
-        HashSet<GridPoint> into,
-        HashSet<GridPoint> outOf)
+        HashSet<GridPoint> fresh,
+        HashSet<GridPoint> withdrawn,
+        Func<GridPoint, bool> canonical)
     {
+        var changed = false;
         foreach (var tile in tiles)
         {
-            into.Add(tile);
-            outOf.Remove(tile);
+            if (withdrawn.Remove(tile) || (!canonical(tile) && fresh.Add(tile)))
+            {
+                changed = true;
+            }
         }
+
+        return changed;
+    }
+
+    /// <summary>
+    /// Withdrawal, folded the way the world folds it: <c>ApplyDigCancel</c>,
+    /// <c>ApplyBuildCancel</c> and <c>zone_erase</c> are all tolerant and skip a
+    /// tile that carries nothing. Adding such a tile here would make the map claim
+    /// a withdrawal that is never going to happen — reachable through a fixture,
+    /// even though the brush would never emit it.
+    /// </summary>
+    /// <returns>Whether the projection actually moved.</returns>
+    private static bool Withdraw(
+        IReadOnlyList<GridPoint> tiles,
+        HashSet<GridPoint> fresh,
+        HashSet<GridPoint> withdrawn,
+        Func<GridPoint, bool> canonical)
+    {
+        var changed = false;
+        foreach (var tile in tiles)
+        {
+            if (fresh.Remove(tile) || (canonical(tile) && withdrawn.Add(tile)))
+            {
+                changed = true;
+            }
+        }
+
+        return changed;
     }
 
     private static HashSet<GridPoint> Bucket(
@@ -306,16 +350,6 @@ public sealed class MapProjection
     private bool IsErased(ZoneKind zone, GridPoint tile) => Erased(zone).Contains(tile);
 
     private static readonly HashSet<GridPoint> FrozenEmpty = [];
-
-    /// <summary>
-    /// The waiting tiles the world does not already carry. Marking a tile that is
-    /// already marked is a no-op for the simulation, so it must be a no-op for the
-    /// picture too — otherwise the same cell would be drawn twice.
-    /// </summary>
-    private static IReadOnlyList<GridPoint> Fresh(
-        IReadOnlySet<GridPoint> tiles,
-        Func<GridPoint, bool> alreadyThere) =>
-        tiles.Count == 0 ? NoTiles : [.. tiles.Where(tile => !alreadyThere(tile)).Order()];
 
     private static IReadOnlyList<GridPoint> Ordered(IReadOnlySet<GridPoint> tiles) =>
         tiles.Count == 0 ? NoTiles : [.. tiles.Order()];

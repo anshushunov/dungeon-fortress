@@ -1391,9 +1391,9 @@ public partial class Main : Node2D
     private void RefreshState()
     {
         _state = _world!.GetSnapshot();
-        // One projection per state, built here and nowhere else, so the map, the
-        // brush, the HUD and the structured output cannot be looking at four
-        // different moments of the same tick.
+        // One projection per state. Everything that draws or reads the map takes
+        // this instance — the map, the brush, the HUD panels and the structured
+        // output — so they cannot be looking at four moments of the same tick.
         _projection = MapProjection.Of(_state);
         // Only a refresh that follows RememberMotionOrigin has something to lerp
         // from. Everything else — loading a fixture, a single STEP, an accepted
@@ -1442,7 +1442,7 @@ public partial class Main : Node2D
     /// </summary>
     private void UpdateHud()
     {
-        var panels = HudText.Build(CurrentHudView());
+        var panels = HudText.Build(CurrentHudView(), _projection);
         _inspector!.Text = panels.Inspector;
         _summary!.Text = panels.Summary;
         _feedback!.Text = panels.Feedback;
@@ -1959,16 +1959,17 @@ public partial class Main : Node2D
     private void DrawDigDesignations()
     {
         // Accepted on this tick and not applied yet. Drawn first and drawn as the
-        // ordinary waiting designation it is about to become: the picture must not
-        // change when the tick that records it runs, only gain a status.
+        // designation it is about to become, accent included: the picture must not
+        // change when the tick that records it runs.
+        var pendingAccent = DigColor(MapAccents.PendingDig(_projection!));
         foreach (var tile in _projection!.PendingDigMarks)
         {
-            DrawDigMark(tile, DigAccent(null));
+            DrawDigMark(tile, pendingAccent);
         }
 
         foreach (var designation in _projection.DigDesignations)
         {
-            var accent = DigAccent(designation.StatusCode);
+            var accent = DigColor(MapAccents.Dig(designation.StatusCode));
             DrawDigMark(designation.Tile, accent);
             var center = CellCenter(designation.Tile);
 
@@ -2027,15 +2028,17 @@ public partial class Main : Node2D
     }
 
     /// <summary>
-    /// A designation waiting for its tick has no <c>statusCode</c> yet — the world
-    /// assigns one when it applies the command — so it takes the colour of the
-    /// designation that is waiting for a worker, which is what it becomes.
+    /// The palette, and nothing else. Which reading a mark has is decided in
+    /// <c>DungeonFortress.Presentation.MapAccents</c>, where a unit test can
+    /// compare the waiting reading against the applied one; this file is not
+    /// built by the "Pure .NET" CI job, so a decision made here is a decision
+    /// nothing checks.
     /// </summary>
-    private static Color DigAccent(string? statusCode) => statusCode switch
+    private static Color DigColor(DigMarkAccent accent) => accent switch
     {
-        "dig_in_progress" => new Color("#fbbf24"),
-        "dig_unreachable" => new Color("#f87171"),
-        "dig_blocked_priority" => new Color("#94a3b8"),
+        DigMarkAccent.InProgress => new Color("#fbbf24"),
+        DigMarkAccent.Unreachable => new Color("#f87171"),
+        DigMarkAccent.BlockedByPriority => new Color("#94a3b8"),
         _ => new Color("#f59e0b"),
     };
 
@@ -2050,15 +2053,21 @@ public partial class Main : Node2D
     {
         // A blueprint the player marked on this tick, drawn as the blueprint it
         // becomes: nothing delivered, nothing booked, the full cost as hollow
-        // pips. BuildStoneCost is the same tuning value the world charges.
+        // pips, and the accent the same facts give it. BuildStoneCost is the same
+        // tuning value the world charges.
         foreach (var tile in _projection!.PendingBuildMarks)
         {
-            DrawBlueprint(tile, BuildAccent(null), 0, 0, PrototypeTuning.BuildStoneCost);
+            DrawBlueprint(
+                tile,
+                BuildColor(MapAccents.PendingBlueprint(_projection, tile)),
+                0,
+                0,
+                PrototypeTuning.BuildStoneCost);
         }
 
         foreach (var site in _projection.BuildSites)
         {
-            var accent = BuildAccent(site.StatusCode);
+            var accent = BuildColor(MapAccents.Blueprint(site.StatusCode));
             DrawBlueprint(site.Tile, accent, site.Delivered, site.IncomingReserved, site.Required);
 
             if (site.ProgressTicks <= 0 || site.RequiredTicks <= 0)
@@ -2125,17 +2134,13 @@ public partial class Main : Node2D
         }
     }
 
-    /// <summary>
-    /// The colour of a blueprint. A blueprint waiting for its tick has no
-    /// <c>statusCode</c> yet and takes the plain "marked, nothing decided"
-    /// colour it will be given.
-    /// </summary>
-    private static Color BuildAccent(string? statusCode) => statusCode switch
+    /// <summary>The palette for a blueprint; the reading comes from MapAccents.</summary>
+    private static Color BuildColor(BlueprintAccent accent) => accent switch
     {
-        "build_in_progress" => new Color("#5eead4"),
-        "build_unreachable" => new Color("#f87171"),
-        "build_blocked_priority" or "build_haul_blocked" => new Color("#94a3b8"),
-        "build_no_stone" or "build_stone_reserved" => new Color("#fbbf24"),
+        BlueprintAccent.InProgress => new Color("#5eead4"),
+        BlueprintAccent.Unreachable => new Color("#f87171"),
+        BlueprintAccent.BlockedByPriority => new Color("#94a3b8"),
+        BlueprintAccent.WaitingForMaterial => new Color("#fbbf24"),
         _ => new Color("#2dd4bf"),
     };
 
@@ -2177,14 +2182,14 @@ public partial class Main : Node2D
         // the world creates when it applies the paint.
         foreach (var tile in _projection!.PendingStockpileCells)
         {
-            DrawStockpileCell(tile, StockpileAccent(null), 0, 0);
+            DrawStockpileCell(tile, StockpileColor(MapAccents.PendingStockpile(_projection, tile)), 0, 0);
         }
 
         foreach (var cell in _projection.StockpileCells)
         {
             DrawStockpileCell(
                 cell.Position,
-                StockpileAccent(cell.StatusCode),
+                StockpileColor(MapAccents.Stockpile(cell.StatusCode)),
                 cell.Stored,
                 cell.IncomingReserved);
         }
@@ -2244,15 +2249,12 @@ public partial class Main : Node2D
         }
     }
 
-    /// <summary>
-    /// The colour of a stockpile cell. A cell waiting for its tick has no
-    /// <c>statusCode</c> yet and takes the empty-cell colour it is about to get.
-    /// </summary>
-    private static Color StockpileAccent(string? statusCode) => statusCode switch
+    /// <summary>The palette for a stockpile cell; the reading comes from MapAccents.</summary>
+    private static Color StockpileColor(StockpileCellAccent accent) => accent switch
     {
-        "stockpile_unreachable" => new Color("#f87171"),
-        "stockpile_full" => new Color("#e2e8f0"),
-        "stockpile_incoming" => new Color("#7dd3fc"),
+        StockpileCellAccent.Unreachable => new Color("#f87171"),
+        StockpileCellAccent.Full => new Color("#e2e8f0"),
+        StockpileCellAccent.Incoming => new Color("#7dd3fc"),
         _ => new Color("#94a3b8"),
     };
 

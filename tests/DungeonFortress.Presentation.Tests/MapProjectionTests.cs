@@ -116,6 +116,65 @@ public sealed class MapProjectionTests
         Assert.Empty(view.PendingDigMarks);
     }
 
+    /// <summary>
+    /// The world's withdrawals are tolerant: <c>ApplyDigCancel</c>,
+    /// <c>ApplyBuildCancel</c> and <c>zone_erase</c> skip a tile that carries
+    /// nothing at all. Folding such a tile in anyway would make the map announce a
+    /// withdrawal that is never going to happen — unreachable through the brush,
+    /// reachable through a fixture, and wrong either way.
+    /// </summary>
+    [Fact]
+    public void A_withdrawal_from_a_tile_that_carries_nothing_changes_nothing()
+    {
+        var view = MapProjection.Of(Stopped(
+            new DigCancelCommand(MarkTick, [Rock]),
+            new BuildCancelCommand(MarkTick, [Floor]),
+            new ZoneEraseCommand(MarkTick, ZoneKind.TrainingGround, [Floor])));
+
+        Assert.False(view.HasPendingMarking);
+        Assert.Equal(0, view.PendingCommandCount);
+        Assert.Empty(view.PendingDigWithdrawals);
+        Assert.Empty(view.PendingBuildWithdrawals);
+        Assert.False(view.IsDesignatedForDigging(Rock));
+    }
+
+    /// <summary>
+    /// The mirror: marking a tile that already carries the mark is a no-op in the
+    /// world — "designating an already designated tile is a no-op, matching
+    /// zone_paint" — so the projection must not report it as something waiting to
+    /// happen either.
+    /// </summary>
+    [Fact]
+    public void Marking_a_tile_that_is_already_marked_changes_nothing()
+    {
+        var view = MapProjection.Of(Stopped(
+            new DigDesignateCommand(0, [Rock]),
+            new DigDesignateCommand(MarkTick, [Rock])));
+
+        Assert.Contains(view.State.DigDesignations, item => item.Tile == Rock);
+        Assert.False(view.HasPendingMarking);
+        Assert.Empty(view.PendingDigMarks);
+        Assert.True(view.IsDesignatedForDigging(Rock));
+    }
+
+    /// <summary>
+    /// Taking a withdrawal back inside one paused moment restores the canonical
+    /// mark rather than inventing a second one on top of it.
+    /// </summary>
+    [Fact]
+    public void Withdrawing_and_marking_again_in_one_paused_moment_restores_the_mark()
+    {
+        var view = MapProjection.Of(Stopped(
+            new DigDesignateCommand(0, [Rock]),
+            new DigCancelCommand(MarkTick, [Rock]),
+            new DigDesignateCommand(MarkTick, [Rock])));
+
+        Assert.True(view.IsDesignatedForDigging(Rock));
+        Assert.Empty(view.PendingDigMarks);
+        Assert.Empty(view.PendingDigWithdrawals);
+        Assert.Contains(view.DigDesignations, item => item.Tile == Rock);
+    }
+
     [Fact]
     public void A_blueprint_accepted_on_this_tick_is_on_the_map_before_the_tick_runs()
     {

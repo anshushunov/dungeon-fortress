@@ -326,7 +326,7 @@ public sealed class BuildExplanationTests
         var state = PresentationFixtures.BuildChainAt(PresentationFixtures.BlueprintTick + 1);
         var site = Assert.Single(state.BuildSites);
 
-        var text = InspectorText.Build(state, null, site.Tile);
+        var text = InspectorText.Build(state.Shown(),null, site.Tile);
 
         Assert.Contains("tile floor (blueprint)\n", text, StringComparison.Ordinal);
         Assert.Contains("\nBUILD\ntraining post blueprint · stone ", text, StringComparison.Ordinal);
@@ -342,7 +342,7 @@ public sealed class BuildExplanationTests
         var state = PresentationFixtures.BuiltPost(PresentationFixtures.BlueprintTick + 300);
         var post = Assert.Single(state.Map.BuiltPostTiles);
 
-        var text = InspectorText.Build(state, null, post);
+        var text = InspectorText.Build(state.Shown(),null, post);
 
         Assert.Contains("tile Post (built)\n", text, StringComparison.Ordinal);
         Assert.Contains("\nBUILD\nbuilt training post; it cost 2 stone.", text, StringComparison.Ordinal);
@@ -359,11 +359,11 @@ public sealed class BuildExplanationTests
 
         Assert.DoesNotContain(
             "BUILD",
-            InspectorText.Build(state, null, PresentationFixtures.StockRight),
+            InspectorText.Build(state.Shown(),null, PresentationFixtures.StockRight),
             StringComparison.Ordinal);
         Assert.DoesNotContain(
             "BUILD",
-            InspectorText.Build(state, null, new GridPoint(12, 12)),
+            InspectorText.Build(state.Shown(),null, new GridPoint(12, 12)),
             StringComparison.Ordinal);
     }
 

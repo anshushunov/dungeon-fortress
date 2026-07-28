@@ -235,20 +235,77 @@ Four properties follow, and each is a unit test in
 
 - a mark, a withdrawal, a blueprint, a stockpile cell and a zone edit are on the
   map the instant the command is accepted, at any speed and on `STEP`;
-- **the tick that finally applies the command does not change which cells are
-  drawn.** A waiting mark is drawn as the mark it is about to become, so
-  unpausing refines a status — reserved, unreachable, in progress — instead of
-  drawing the mark for the first time. Nothing blinks;
+- **the tick that finally applies the command changes neither which cells are
+  drawn nor how they read** — with the two named exceptions below;
 - the brush reads the same projection, so a cell that already carries a waiting
   mark is not offered again, the count above a drag is what the command will
   really carry, and the legal-target outline matches;
 - a command a fixture scheduled for a *later* tick is **not** shown early. It is
   in the log, but it is not an intent waiting for this frame.
 
+The fold follows the world's own tolerance: marking a tile that already carries
+the mark is a no-op, and withdrawing from a tile that carries nothing is skipped,
+exactly as `ApplyDigDesignate`, `ApplyDigCancel`, `ApplyBuildCancel` and
+`zone_erase` do. A command that would change nothing is not reported as waiting.
+
+### How a waiting mark reads, and where that still moves
+
+A colour is not a detail here: "it did not blink" is a claim about the accent,
+not only about the set of cells. The accent is therefore chosen in
+`DungeonFortress.Presentation.MapAccents` and not in the adapter, because
+`Main.cs` is not built by the "Pure .NET" CI job — a reading decided there is
+decided where nothing can check it. `MapAccents` states the two halves
+separately, and `MapAccentTests` compares them across the very tick that applies
+the command, running the real simulation:
+
+| Mark | While it waits | The world's answer |
+|---|---|---|
+| dig | grey when `Dig` priority is 0, else amber | `dig_blocked_priority`, else `dig_waiting` / `dig_reserved` |
+| blueprint | grey when `Build` or `Haul` priority is 0; red on `Forbidden`; amber when no free stone; else teal | `build_blocked_priority` / `build_haul_blocked`, `build_unreachable`, `build_no_stone` / `build_stone_reserved`, `build_waiting_carrier` |
+| stockpile cell | red on `Forbidden`, else grey | `stockpile_unreachable`, else `stockpile_empty` |
+
+Every gate above is a published snapshot fact — the priorities, the `Forbidden`
+zone, the stock counters and the job list. None of it re-derives map topology.
+
+**Two readings still change when the tick runs, both deliberately.**
+
+`dig_unreachable` is the real boundary. It asks whether any orthogonal neighbour
+of the rock is passable, is not the gate and is not `Forbidden`; copying that
+into the presentation layer would put the same rule on both sides of the seam
+[ADR 0011](../decisions/0011-presentation-layer-without-engine.md) draws. It is
+not a rounding error either: on the shipped `baseline` map two of the twelve
+diggable tiles — `(26,1)` and `(26,2)` — are walled in until a neighbour is dug,
+so marking the whole pocket while paused shows two amber cells that turn red one
+tick later. `MapAccentTests` names those two tiles, so the exception cannot widen
+without a failing test.
+
+`dig_in_progress` is the other, and it is not a redraw at all: a creature that
+was already standing next to the rock starts digging on that tick. That is the
+world answering the mark, which is the whole point of making it.
+
+### What the fold does not model
+
+The projection folds **geometry**, not the side effects of applying a command.
+Erasing a stockpile cell that holds stone removes the square and its pips at
+once, but the loose pile the world drops on that tile appears only when the tick
+runs; withdrawing a blueprint that already holds delivered stone behaves the same
+way. Modelling those would mean predicting where the world puts material, which
+is exactly the rule this layer must not own. The geometry is what the player is
+marking, and the geometry is what answers immediately.
+
 The inspector states what the picture deliberately does not: a cell whose mark
 is still waiting reads `marked as … on this tick; the world applies it when time
 advances`. The top line counts such a mark in `marks`, because "the log has it
 and the HUD denies it" was the text half of the same defect.
+
+Two consequences are worth naming rather than leaving to a diff. **The brush now
+declines a cell that carries a waiting mark** — no legal-target list changed, the
+same "already marked" test is simply told the truth while time is stopped, and
+without it the player would re-mark what is already marked, which is the
+complaint Issue #58 was opened about. **Zone paint and erase go through the same
+fold as the rest**, so painting a room while paused shows its outline
+immediately; no colour, style or legend row changed, only where the tiles are
+read from.
 
 `ui.pending` reports the whole thing structurally — the waiting dig marks and
 withdrawals, blueprints, blueprint withdrawals and stockpile cells — and is

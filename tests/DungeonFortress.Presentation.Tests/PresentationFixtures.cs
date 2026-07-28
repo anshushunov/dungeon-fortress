@@ -16,6 +16,14 @@ namespace DungeonFortress.Presentation.Tests;
 /// </summary>
 internal static class PresentationFixtures
 {
+    /// <summary>
+    /// The snapshot as the map shows it. The brush and the inspector deliberately
+    /// take a <see cref="MapProjection"/> and not a snapshot — building one per
+    /// call would cost a projection per map cell per frame — so a test that only
+    /// cares about canonical state says so here in one word.
+    /// </summary>
+    internal static MapProjection Shown(this PrototypeSnapshot state) => MapProjection.Of(state);
+
     internal static readonly GridPoint[] Pocket =
     [
         new(25, 1), new(25, 2), new(25, 3), new(26, 1),

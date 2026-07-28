@@ -67,7 +67,7 @@ public sealed class BrushSelectionTests
     {
         var state = PresentationFixtures.Baseline(1);
         var stroke = BrushSelection.Resolve(
-            state, BrushMode.Paint, ZoneKind.TrainingGround, PlainFloorFrom, PlainFloorTo);
+            state.Shown(), BrushMode.Paint, ZoneKind.TrainingGround, PlainFloorFrom, PlainFloorTo);
 
         Assert.Null(stroke.Refusal);
         Assert.Equal(12, stroke.Tiles.Count);
@@ -88,7 +88,7 @@ public sealed class BrushSelectionTests
     {
         var state = PresentationFixtures.Baseline(1);
         var stroke = BrushSelection.Resolve(
-            state, BrushMode.Dig, ZoneKind.Farm, new GridPoint(25, 1), new GridPoint(26, 3));
+            state.Shown(), BrushMode.Dig, ZoneKind.Farm, new GridPoint(25, 1), new GridPoint(26, 3));
 
         var command = Assert.IsType<DigDesignateCommand>(BrushSelection.ToCommand(stroke, state.Tick));
         Assert.Equal(6, command.Tiles.Count);
@@ -105,7 +105,7 @@ public sealed class BrushSelectionTests
     {
         var state = PresentationFixtures.Baseline(1);
         var tile = new GridPoint(25, 1);
-        var stroke = BrushSelection.Resolve(state, BrushMode.Dig, ZoneKind.Farm, tile, tile);
+        var stroke = BrushSelection.Resolve(state.Shown(), BrushMode.Dig, ZoneKind.Farm, tile, tile);
 
         var command = Assert.IsType<DigDesignateCommand>(BrushSelection.ToCommand(stroke, 7));
         Assert.Equal([tile], command.Tiles);
@@ -123,7 +123,7 @@ public sealed class BrushSelectionTests
         var state = PresentationFixtures.Baseline(1);
         // (24,1)..(26,3) is the pocket plus a column of plain floor beside it.
         var stroke = BrushSelection.Resolve(
-            state, BrushMode.Dig, ZoneKind.Farm, new GridPoint(24, 1), new GridPoint(26, 3));
+            state.Shown(), BrushMode.Dig, ZoneKind.Farm, new GridPoint(24, 1), new GridPoint(26, 3));
 
         Assert.Equal(9, stroke.RectangleTiles);
         Assert.Equal(6, stroke.Tiles.Count);
@@ -139,7 +139,7 @@ public sealed class BrushSelectionTests
     {
         var state = PresentationFixtures.DigOnly(3);
         var stroke = BrushSelection.Resolve(
-            state, BrushMode.Dig, ZoneKind.Farm, new GridPoint(25, 1), new GridPoint(26, 3));
+            state.Shown(), BrushMode.Dig, ZoneKind.Farm, new GridPoint(25, 1), new GridPoint(26, 3));
 
         Assert.Equal(2, stroke.Tiles.Count); // (26,2) and (26,3) were never designated
         Assert.DoesNotContain(new GridPoint(25, 1), stroke.Tiles);
@@ -150,7 +150,7 @@ public sealed class BrushSelectionTests
     {
         var state = PresentationFixtures.Baseline(1);
         var stroke = BrushSelection.Resolve(
-            state, BrushMode.Dig, ZoneKind.Farm, PlainFloorFrom, PlainFloorTo);
+            state.Shown(), BrushMode.Dig, ZoneKind.Farm, PlainFloorFrom, PlainFloorTo);
 
         Assert.Empty(stroke.Tiles);
         Assert.False(stroke.Applies);
@@ -168,7 +168,7 @@ public sealed class BrushSelectionTests
     public void A_refused_single_cell_names_the_rule(int x, int y, string expected)
     {
         var stroke = BrushSelection.Resolve(
-            PresentationFixtures.Baseline(1),
+            PresentationFixtures.Baseline(1).Shown(),
             BrushMode.Dig,
             ZoneKind.Farm,
             new GridPoint(x, y),
@@ -181,7 +181,7 @@ public sealed class BrushSelectionTests
     public void An_already_designated_single_cell_says_so()
     {
         var stroke = BrushSelection.Resolve(
-            PresentationFixtures.DigOnly(3),
+            PresentationFixtures.DigOnly(3).Shown(),
             BrushMode.Dig,
             ZoneKind.Farm,
             new GridPoint(25, 1),
@@ -200,7 +200,7 @@ public sealed class BrushSelectionTests
     {
         var state = PresentationFixtures.Baseline(1);
         var stroke = BrushSelection.Resolve(
-            state,
+            state.Shown(),
             BrushMode.Paint,
             ZoneKind.TrainingGround,
             new GridPoint(0, 0),
@@ -234,7 +234,7 @@ public sealed class BrushSelectionTests
     public void Inspect_never_marks_the_map()
     {
         var stroke = BrushSelection.Resolve(
-            PresentationFixtures.Baseline(1),
+            PresentationFixtures.Baseline(1).Shown(),
             BrushMode.Inspect,
             ZoneKind.Farm,
             PlainFloorFrom,
@@ -254,7 +254,7 @@ public sealed class BrushSelectionTests
         var state = PresentationFixtures.Baseline(1);
         // The authored Farm zone is (1,1)..(6,7); this rectangle overhangs it.
         var stroke = BrushSelection.Resolve(
-            state, BrushMode.Erase, ZoneKind.Farm, new GridPoint(5, 6), new GridPoint(8, 8));
+            state.Shown(), BrushMode.Erase, ZoneKind.Farm, new GridPoint(5, 6), new GridPoint(8, 8));
 
         Assert.Equal(12, stroke.RectangleTiles);
         Assert.All(stroke.Tiles, tile => Assert.Contains(tile, state.Zones[ZoneKind.Farm]));
@@ -271,7 +271,7 @@ public sealed class BrushSelectionTests
     {
         var state = PresentationFixtures.Baseline(1);
         var stroke = BrushSelection.Resolve(
-            state, BrushMode.Dig, ZoneKind.Farm, new GridPoint(25, 1), new GridPoint(26, 3));
+            state.Shown(), BrushMode.Dig, ZoneKind.Farm, new GridPoint(25, 1), new GridPoint(26, 3));
         var command = BrushSelection.ToCommand(stroke, 0)!;
 
         var applied = PrototypeScenario.Run(PresentationFixtures.Log(command), 2).State;

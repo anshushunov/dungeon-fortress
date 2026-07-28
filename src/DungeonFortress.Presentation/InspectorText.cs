@@ -16,18 +16,11 @@ public static class InspectorText
     /// <summary>
     /// The whole panel for one selection: a creature if one is selected, else the
     /// selected cell, else the idle text.
-    /// </summary>
-    public static string Build(
-        PrototypeSnapshot state,
-        int? selectedCreatureId,
-        GridPoint? selectedCell) =>
-        Build(MapProjection.Of(state), selectedCreatureId, selectedCell);
-
-    /// <summary>
-    /// The same panel read from the map the player is looking at. A mark accepted
-    /// for this tick is already drawn on the map, so the panel has to know about
-    /// it too — a cell that visibly carries a designation must not be described as
-    /// bare rock waiting to be marked.
+    ///
+    /// It reads a <see cref="MapProjection"/> rather than a snapshot, because a
+    /// mark accepted for this tick is already drawn on the map and the panel has
+    /// to agree with it: a cell that visibly carries a designation must not be
+    /// described as bare rock waiting to be marked.
     /// </summary>
     public static string Build(
         MapProjection view,
@@ -112,9 +105,6 @@ public static class InspectorText
             "The world is a read-only projection of PrototypeWorld; Godot owns only selection, UI tempo and drawing.";
     }
 
-    public static string TileDescription(PrototypeSnapshot state, GridPoint cell) =>
-        TileDescription(MapProjection.Of(state), cell);
-
     public static string TileDescription(MapProjection view, GridPoint cell)
     {
         ArgumentNullException.ThrowIfNull(view);
@@ -139,9 +129,6 @@ public static class InspectorText
     /// The player must be able to answer "why is nobody digging this?" from the
     /// inspector alone. Every branch reports simulation state, not a UI guess.
     /// </summary>
-    public static string BuildDigExplanation(PrototypeSnapshot state, GridPoint cell) =>
-        BuildDigExplanation(MapProjection.Of(state), cell);
-
     public static string BuildDigExplanation(MapProjection view, GridPoint cell)
     {
         ArgumentNullException.ThrowIfNull(view);

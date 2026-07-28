@@ -81,21 +81,17 @@ public static class BrushSelection
     /// What dragging <paramref name="mode"/> from one corner to the other would
     /// do. A single click is the same call with both corners equal, so a 1x1
     /// rectangle is not a special case anywhere below it.
-    /// </summary>
-    public static BrushStroke Resolve(
-        PrototypeSnapshot state,
-        BrushMode mode,
-        ZoneKind zone,
-        GridPoint from,
-        GridPoint to) =>
-        Resolve(MapProjection.Of(state), mode, zone, from, to);
-
-    /// <summary>
-    /// The same question asked of the map the player is actually looking at,
-    /// which includes the marking accepted for this tick and not applied yet. A
-    /// cell that already carries a waiting mark is not offered again: the drawn
-    /// mark, the highlighted area and the emitted command have to be one answer,
-    /// and paused they would otherwise be three.
+    ///
+    /// The question is asked of the map the player is actually looking at, which
+    /// includes the marking accepted for this tick and not applied yet. A cell
+    /// that already carries a waiting mark is not offered again: the drawn mark,
+    /// the highlighted area and the emitted command have to be one answer, and
+    /// paused they would otherwise be three.
+    ///
+    /// It takes a <see cref="MapProjection"/> and not a snapshot deliberately. A
+    /// snapshot overload would have to build one, and this runs once per cell of
+    /// a rectangle — and, through <see cref="Accepts"/>, once per cell of the map
+    /// on every frame a brush is held.
     /// </summary>
     public static BrushStroke Resolve(
         MapProjection view,
@@ -167,13 +163,12 @@ public static class BrushSelection
     /// A cell the brush would not change is excluded too, not only a cell it may
     /// not touch: the number the player sees during a drag has to be the number of
     /// cells the command actually affects.
-    /// </summary>
-    public static bool Accepts(PrototypeSnapshot state, BrushMode mode, ZoneKind zone, GridPoint tile) =>
-        Accepts(MapProjection.Of(state), mode, zone, tile);
-
-    /// <summary>
-    /// The same rule read from the projection, so a mark that is waiting for its
-    /// tick counts exactly as a mark the world already holds.
+    ///
+    /// "Would not change" is read from the projection, so a mark that is waiting
+    /// for its tick counts exactly as a mark the world already holds. That is not
+    /// a new rule about which cells a brush may take — the legal-target lists
+    /// above are untouched — it is the same "already marked" test finally being
+    /// told the truth while the world is paused.
     /// </summary>
     public static bool Accepts(MapProjection view, BrushMode mode, ZoneKind zone, GridPoint tile)
     {

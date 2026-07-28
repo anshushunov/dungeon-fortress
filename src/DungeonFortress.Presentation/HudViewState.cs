@@ -39,6 +39,12 @@ public sealed record HudViewState(
     /// was accepted for this tick and has not been applied yet. Derived rather
     /// than passed in, so no caller can build a frame whose HUD disagrees with
     /// the map beside it.
+    ///
+    /// It is derived on every access and deliberately not cached: caching it in
+    /// a record would put a mutable field into value equality and would go stale
+    /// under <c>with</c>. A caller that draws a whole frame builds one projection
+    /// itself and hands it to <see cref="HudText.Build"/> instead of reaching
+    /// through here.
     /// </summary>
     public MapProjection Projection => MapProjection.Of(Snapshot);
 }
