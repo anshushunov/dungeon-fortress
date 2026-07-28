@@ -24,6 +24,11 @@ internal static class PresentationFixtures
     internal static readonly GridPoint StockLeft = new(22, 1);
     internal static readonly GridPoint StockRight = new(23, 1);
 
+    /// <summary>The blueprint of the functional-room chain, on excavated ground.</summary>
+    internal static readonly GridPoint Site = new(25, 2);
+
+    internal const int BlueprintTick = 1_000;
+
     /// <summary>A session that digs a pocket and stores the stone.</summary>
     internal static PrototypeSnapshot FullChain(int ticks) => PrototypeScenario.Run(
         Log(
@@ -35,6 +40,50 @@ internal static class PresentationFixtures
     internal static PrototypeSnapshot DigOnly(int ticks) => PrototypeScenario.Run(
         Log(new DigDesignateCommand(0, Pocket)),
         ticks).State;
+
+    /// <summary>
+    /// The whole Issue #48 chain: dig, store, mark a blueprint on the excavated
+    /// ground, deliver the stone back out of the stockpile, build, and zone the
+    /// post as a training ground.
+    /// </summary>
+    internal static PrototypeCommandLog BuildChain() => Log(
+        new DigDesignateCommand(0, Pocket),
+        new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [StockLeft, StockRight]),
+        new BuildDesignateCommand(BlueprintTick, [Site]),
+        new ZonePaintCommand(BlueprintTick, ZoneKind.TrainingGround, [Site]),
+        new SetPriorityCommand(BlueprintTick, JobKind.Drill, 3));
+
+    internal static PrototypeSnapshot BuildChainAt(int ticks) =>
+        PrototypeScenario.Run(BuildChain(), ticks).State;
+
+    /// <summary>A session far enough along that the post actually stands.</summary>
+    internal static PrototypeSnapshot BuiltPost(int ticks)
+    {
+        var state = BuildChainAt(ticks);
+        if (state.Map.BuiltPostTiles.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"The build chain has no post at tick {ticks}.");
+        }
+
+        return state;
+    }
+
+    internal static PrototypeBuildSiteSnapshot BuildSite(
+        GridPoint tile,
+        int delivered = 0,
+        string statusCode = "build_waiting_carrier") =>
+        new(
+            tile,
+            delivered,
+            PrototypeTuning.BuildStoneCost,
+            0,
+            null,
+            null,
+            0,
+            PrototypeTuning.BuildTicks,
+            true,
+            statusCode);
 
     internal static PrototypeSnapshot Baseline(int ticks) => PrototypeScenario.Run(
         new PrototypeCommandLog("baseline", PrototypeTuning.DefaultSeed, []),

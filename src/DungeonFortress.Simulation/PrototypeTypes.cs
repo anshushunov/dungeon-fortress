@@ -51,6 +51,10 @@ public enum JobKind
     // Appended on purpose: enum order is the deterministic tie-break for job
     // diagnostics, so a new kind must never outrank the established ones.
     Dig,
+
+    // Appended for the same reason. Build is last, so a blueprint never outranks
+    // the food chain or excavation on an otherwise equal score.
+    Build,
 }
 
 public enum ResourceKind
@@ -154,10 +158,15 @@ public sealed record PrototypeJobSnapshot(
     int RemainingTicks,
     int ProgressTicks,
     bool PickedUp,
-    // Only a Stone haul fills these: the stockpile cell this job holds space in,
-    // and how much of that cell's capacity is booked while the job is alive.
+    // Only a Stone haul fills these: the destination this job holds space in —
+    // a stockpile cell or a construction site — and how much of that
+    // destination's room is booked while the job is alive.
     GridPoint? StoreCell,
-    int StoreReserved);
+    int StoreReserved,
+    // Set only when the load is withdrawn from a stockpile cell instead of from a
+    // loose pile. A cell can hold both at once, so the source is stated rather
+    // than guessed from the tile.
+    GridPoint? SourceCell = null);
 
 public sealed record PrototypeBedSnapshot(
     GridPoint Position,
@@ -195,7 +204,32 @@ public sealed record PrototypeMapSnapshot(
     // Where a MaterialStockpile may be painted right now. Like DiggableTiles it
     // keeps the rule in the simulation, so no adapter re-derives which tiles are
     // plain pre-existing floor rather than a bed, a station, a bunk or the gate.
-    IReadOnlyList<GridPoint> StockpileFloorTiles);
+    IReadOnlyList<GridPoint> StockpileFloorTiles,
+    // Where a training-post blueprint may be placed right now. Unlike a stockpile
+    // this list includes ground the player created by digging: a functional room
+    // out of excavated space is the point of the step that introduced it.
+    IReadOnlyList<GridPoint> BuildFloorTiles,
+    // Posts that exist because they were built, not because the map fixture
+    // authored them. Floor -> Post is the second mutation the map allows, so the
+    // delta belongs in canonical state next to ExcavatedTiles.
+    IReadOnlyList<GridPoint> BuiltPostTiles);
+
+/// <summary>
+/// A player intention to build a training post on one floor tile. It carries no
+/// creature identity: <see cref="ReservedBy"/> is the simulation reporting who
+/// volunteered, and <see cref="Delivered"/> is stone that physically arrived.
+/// </summary>
+public sealed record PrototypeBuildSiteSnapshot(
+    GridPoint Tile,
+    int Delivered,
+    int Required,
+    int IncomingReserved,
+    long? JobId,
+    int? ReservedBy,
+    int ProgressTicks,
+    int RequiredTicks,
+    bool Reachable,
+    string StatusCode);
 
 /// <summary>
 /// A player intention to excavate one rock tile. It carries no creature identity:
@@ -231,7 +265,10 @@ public sealed record PrototypeEconomyCountersSnapshot(
     [property: JsonPropertyName("stoneProduced")] int StoneProduced,
     [property: JsonPropertyName("stoneHaulsCompleted")] int StoneHaulsCompleted,
     [property: JsonPropertyName("stoneStored")] int StoneStored,
-    [property: JsonPropertyName("stoneSpilled")] int StoneSpilled);
+    [property: JsonPropertyName("stoneSpilled")] int StoneSpilled,
+    [property: JsonPropertyName("stoneDelivered")] int StoneDelivered,
+    [property: JsonPropertyName("stoneConsumed")] int StoneConsumed,
+    [property: JsonPropertyName("buildsCompleted")] int BuildsCompleted);
 
 public sealed record PrototypeLaborSnapshot(
     [property: JsonPropertyName("totalCreatureTicks")] int TotalCreatureTicks,
@@ -242,6 +279,7 @@ public sealed record PrototypeLaborSnapshot(
     [property: JsonPropertyName("watchTicks")] int WatchTicks,
     [property: JsonPropertyName("digTicks")] int DigTicks,
     [property: JsonPropertyName("stoneHaulTicks")] int StoneHaulTicks,
+    [property: JsonPropertyName("buildTicks")] int BuildTicks,
     [property: JsonPropertyName("musterTicks")] int MusterTicks,
     [property: JsonPropertyName("idleTicks")] int IdleTicks,
     [property: JsonPropertyName("foodWorkPercent")] int FoodWorkPercent,
@@ -263,6 +301,9 @@ public sealed record PrototypeStockSnapshot(
     int LooseStone,
     int CarriedStone,
     int StoredStone,
+    // Stone that reached a construction site and is waiting to be spent. It is a
+    // fourth state of the same material, not a copy of StoredStone.
+    int SiteStone,
     int ReservedStone,
     int StockpileCapacity,
     int Capacity,
@@ -309,6 +350,7 @@ public sealed record PrototypeSnapshot(
     IReadOnlyDictionary<string, int> Rules,
     PrototypeMapSnapshot Map,
     IReadOnlyList<PrototypeDigDesignationSnapshot> DigDesignations,
+    IReadOnlyList<PrototypeBuildSiteSnapshot> BuildSites,
     IReadOnlyList<PrototypeBedSnapshot> Beds,
     IReadOnlyList<PrototypeLooseItemSnapshot> LooseItems,
     IReadOnlyList<PrototypeStockpileCellSnapshot> StockpileCells,

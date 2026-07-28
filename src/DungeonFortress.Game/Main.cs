@@ -87,6 +87,7 @@ public partial class Main : Node2D
             var demoControls = arguments.Contains("--demo-controls", StringComparer.Ordinal);
             var demoDig = arguments.Contains("--demo-dig", StringComparer.Ordinal);
             var demoStone = arguments.Contains("--demo-stone", StringComparer.Ordinal);
+            var demoBuild = arguments.Contains("--demo-build", StringComparer.Ordinal);
             // Holds the HUD to "every line fits", ignoring the deficit Issue #36
             // still owns. verify.ps1 runs it and requires it to fail: that is what
             // proves the guard reacts at all instead of passing on everything.
@@ -101,7 +102,8 @@ public partial class Main : Node2D
             }
             LoadFixture(
                 fixture,
-                demoControls || demoDig || demoStone || controlsSmoke || _screenshotPath is null
+                demoControls || demoDig || demoStone || demoBuild || controlsSmoke ||
+                _screenshotPath is null
                     ? 1
                     : screenshotTicks);
             if (demoControls || controlsSmoke)
@@ -122,6 +124,12 @@ public partial class Main : Node2D
             if (demoStone)
             {
                 ApplyDemoStone();
+                Advance(Math.Max(0, screenshotTicks - _state!.Tick));
+            }
+
+            if (demoBuild)
+            {
+                ApplyDemoBuild();
                 Advance(Math.Max(0, screenshotTicks - _state!.Tick));
             }
             if (selectCreature is { } creatureId)
@@ -531,6 +539,12 @@ public partial class Main : Node2D
                 break;
             case Key.M:
                 SelectStockpileBrush();
+                break;
+            case Key.C:
+                SelectEditMode(EditMode.Build);
+                break;
+            case Key.V:
+                SelectEditMode(EditMode.CancelBuild);
                 break;
             case Key.Z:
                 _brushZone = (ZoneKind)(((int)_brushZone + 1) % Enum.GetValues<ZoneKind>().Length);
@@ -1186,11 +1200,13 @@ public partial class Main : Node2D
         ("CANCEL [X]", 206, 56, _editMode == EditMode.CancelDig),
         ("STOCK [M]", 262, 58,
             _editMode == EditMode.Paint && _brushZone == ZoneKind.MaterialStockpile),
-        ($"zone {ShortZone(_brushZone)} [Z]", 320, 66, false),
-        ($"job {_selectedJob} {_state!.Priorities[_selectedJob]} [J]", 386, 94, false),
+        ("BUILD [C]", 320, 52, _editMode == EditMode.Build),
+        ("UNBLD [V]", 372, 54, _editMode == EditMode.CancelBuild),
+        ($"zone {ShortZone(_brushZone)} [Z]", 426, 66, false),
+        ($"job {_selectedJob} {_state!.Priorities[_selectedJob]} [J]", 492, 94, false),
         ($"{ShortRuleId(RuleIds[_selectedRule])} {_state.Rules[RuleIds[_selectedRule]]} [K]",
-            480, 90, false),
-        ("REPLAY [Y]", 570, 62, false),
+            586, 90, false),
+        ("REPLAY [Y]", 676, 62, false),
     ];
 
     private static string ShortZone(ZoneKind zone) => zone switch
@@ -1212,10 +1228,16 @@ public partial class Main : Node2D
 
     private void DrawControlToolbar()
     {
+        // The strip has to reach past the last button, and the button row is now
+        // wider than the map: the two brushes this step adds do not fit under it.
+        var buttons = ControlButtons();
+        var stripWidth = Math.Max(
+            MapPixelSize.X + 10,
+            buttons[^1].X + buttons[^1].Width + 6 - MapOrigin.X);
         DrawRect(
-            new Rect2(MapOrigin.X, ControlStripTop, MapPixelSize.X + 10, ControlStripHeight),
+            new Rect2(MapOrigin.X, ControlStripTop, stripWidth, ControlStripHeight),
             new Color("#102338"));
-        foreach (var (label, x, width, active) in ControlButtons())
+        foreach (var (label, x, width, active) in buttons)
         {
             DrawRect(
                 new Rect2(x, 97, width - 3, 18),
@@ -1275,6 +1297,13 @@ public partial class Main : Node2D
                     DrawRect(rect.Grow(-2), new Color("#cbd5e1") with { A = 0.55f }, false, 1.0f);
                 }
 
+                // And for the construction brush, which is the only one whose legal
+                // targets include ground the player created by digging.
+                if (_editMode == EditMode.Build && IsBuildFloor(cell))
+                {
+                    DrawRect(rect.Grow(-2), new Color("#5eead4") with { A = 0.55f }, false, 1.0f);
+                }
+
                 if (_selectedCell == cell)
                 {
                     DrawRect(rect.Grow(-1), new Color("#f8fafc"), false, 2.0f);
@@ -1283,6 +1312,8 @@ public partial class Main : Node2D
         }
 
         DrawDigDesignations();
+        DrawBuildSites();
+        DrawBuiltPosts();
         DrawStockpileCells();
 
         foreach (var bed in _state!.Beds)
@@ -1405,6 +1436,12 @@ public partial class Main : Node2D
                     !_state.StockpileCells.Any(item => item.Position == brushCell)
                         ? ZoneColor(ZoneKind.MaterialStockpile)
                         : new Color("#ef4444"),
+                EditMode.Build => IsBuildFloor(brushCell)
+                    ? new Color("#2dd4bf")
+                    : new Color("#ef4444"),
+                EditMode.CancelBuild => _state.BuildSites.Any(site => site.Tile == brushCell)
+                    ? new Color("#38bdf8")
+                    : new Color("#ef4444"),
                 _ => ZoneColor(_brushZone),
             };
             DrawRect(preview.Grow(-1), previewColor with { A = 0.32f });
@@ -1474,6 +1511,105 @@ public partial class Main : Node2D
             DrawRect(
                 new Rect2(barTopLeft, new Vector2((TileSize - 5) * fraction, 4)),
                 new Color("#fde047"));
+        }
+    }
+
+    /// <summary>
+    /// A blueprint has to answer three questions at tile size: is this an
+    /// intention rather than a building, how much of its material has arrived, and
+    /// is anything actually happening. Delivered blocks are drawn as discrete pips
+    /// so "1 of 2" is countable, and the caption keeps the graybox primitive
+    /// readable without an asset — ADR 0008 is accepted but not implemented.
+    /// </summary>
+    private void DrawBuildSites()
+    {
+        foreach (var site in _state!.BuildSites)
+        {
+            var rect = new Rect2(
+                CellTopLeft(site.Tile),
+                new Vector2(TileSize - 1, TileSize - 1));
+            var accent = site.StatusCode switch
+            {
+                "build_in_progress" => new Color("#5eead4"),
+                "build_unreachable" => new Color("#f87171"),
+                "build_blocked_priority" or "build_haul_blocked" => new Color("#94a3b8"),
+                "build_no_stone" or "build_stone_reserved" => new Color("#fbbf24"),
+                _ => new Color("#2dd4bf"),
+            };
+
+            DrawRect(rect.Grow(-1), accent with { A = 0.22f });
+            DrawRect(rect.Grow(-1), accent, false, 1.5f);
+
+            var topLeft = CellTopLeft(site.Tile);
+            DrawString(
+                ThemeDB.FallbackFont,
+                topLeft + new Vector2(2, 8),
+                "POST?",
+                HorizontalAlignment.Left,
+                TileSize - 3,
+                6,
+                accent);
+
+            for (var index = 0; index < site.Required; index++)
+            {
+                var pip = new Rect2(
+                    topLeft + new Vector2(3 + index * 7, TileSize - 9),
+                    new Vector2(5, 5));
+                if (index < site.Delivered)
+                {
+                    DrawRect(pip, new Color("#e2e8f0"));
+                    DrawRect(pip, new Color("#475569"), false, 1.0f);
+                }
+                else if (index < site.Delivered + site.IncomingReserved)
+                {
+                    DrawRect(pip, new Color("#7dd3fc"), false, 1.0f);
+                }
+                else
+                {
+                    DrawRect(pip, accent with { A = 0.45f }, false, 1.0f);
+                }
+            }
+
+            if (site.ProgressTicks <= 0 || site.RequiredTicks <= 0)
+            {
+                continue;
+            }
+
+            var fraction = Math.Clamp(
+                site.ProgressTicks / (float)site.RequiredTicks,
+                0f,
+                1f);
+            var barTopLeft = topLeft + new Vector2(2, 2);
+            DrawRect(new Rect2(barTopLeft, new Vector2(TileSize - 5, 3)), new Color("#0f172a"));
+            DrawRect(
+                new Rect2(barTopLeft, new Vector2((TileSize - 5) * fraction, 3)),
+                new Color("#5eead4"));
+        }
+    }
+
+    /// <summary>
+    /// The end of the chain, drawn as a graybox primitive with a caption: a solid
+    /// teal block so a built post reads as a built thing rather than as floor, and
+    /// the word itself because a 22 px square cannot say "training post" on its
+    /// own. The authored posts are drawn the same way, so the player cannot tell
+    /// them apart — which is the claim the step is making.
+    /// </summary>
+    private void DrawBuiltPosts()
+    {
+        foreach (var station in _state!.Stations.Where(item => item.Kind == TileKind.Post))
+        {
+            var topLeft = CellTopLeft(station.Position);
+            var rect = new Rect2(topLeft, new Vector2(TileSize - 1, TileSize - 1));
+            DrawRect(rect.Grow(-3), new Color("#0f766e"));
+            DrawRect(rect.Grow(-3), new Color("#5eead4"), false, 1.0f);
+            DrawString(
+                ThemeDB.FallbackFont,
+                topLeft + new Vector2(2, 9),
+                "POST",
+                HorizontalAlignment.Left,
+                TileSize - 3,
+                6,
+                new Color("#ccfbf1"));
         }
     }
 
@@ -1566,14 +1702,16 @@ public partial class Main : Node2D
                     case 3: SelectEditMode(EditMode.Dig); return true;
                     case 4: SelectEditMode(EditMode.CancelDig); return true;
                     case 5: SelectStockpileBrush(); return true;
-                    case 6:
+                    case 6: SelectEditMode(EditMode.Build); return true;
+                    case 7: SelectEditMode(EditMode.CancelBuild); return true;
+                    case 8:
                         _brushZone = (ZoneKind)(((int)_brushZone + 1) % Enum.GetValues<ZoneKind>().Length);
                         break;
-                    case 7:
+                    case 9:
                         _selectedJob = (JobKind)(((int)_selectedJob + 1) % Enum.GetValues<JobKind>().Length);
                         _editingPriorities = true;
                         break;
-                    case 8:
+                    case 10:
                         _selectedRule = (_selectedRule + 1) % RuleIds.Length;
                         _editingPriorities = false;
                         break;
@@ -1663,6 +1801,12 @@ public partial class Main : Node2D
             case EditMode.CancelDig:
                 ApplyCancelDigBrush(selected);
                 break;
+            case EditMode.Build:
+                ApplyBuildBrush(selected);
+                break;
+            case EditMode.CancelBuild:
+                ApplyCancelBuildBrush(selected);
+                break;
         }
     }
 
@@ -1738,6 +1882,54 @@ public partial class Main : Node2D
         TryApplyPlayerCommand(new DigDesignateCommand(_state.Tick, [cell]));
     }
 
+    /// <summary>
+    /// The construction brush is filtered exactly like the dig and stockpile
+    /// brushes: a tile the simulation would reject never becomes a command, it
+    /// becomes an explanation. The legal targets come from
+    /// <c>map.buildFloorTiles</c>, so the adapter holds no copy of the rule.
+    /// </summary>
+    private void ApplyBuildBrush(GridPoint cell)
+    {
+        if (_state!.BuildSites.Any(site => site.Tile == cell))
+        {
+            _controlFeedback = $"({cell.X},{cell.Y}) already carries a blueprint.";
+            UpdateHud();
+            QueueRedraw();
+            return;
+        }
+
+        if (!IsBuildFloor(cell))
+        {
+            _controlFeedback =
+                $"({cell.X},{cell.Y}) cannot hold a training post: " +
+                $"{InspectorText.UnbuildableReason(_state, cell)}.";
+            UpdateHud();
+            QueueRedraw();
+            return;
+        }
+
+        TryApplyPlayerCommand(new BuildDesignateCommand(_state.Tick, [cell]));
+    }
+
+    private void ApplyCancelBuildBrush(GridPoint cell)
+    {
+        if (!_state!.BuildSites.Any(site => site.Tile == cell))
+        {
+            _controlFeedback = $"({cell.X},{cell.Y}) carries no blueprint.";
+            UpdateHud();
+            QueueRedraw();
+            return;
+        }
+
+        TryApplyPlayerCommand(new BuildCancelCommand(_state.Tick, [cell]));
+    }
+
+    /// <summary>
+    /// The simulation publishes where a post may be placed, exactly as it
+    /// publishes which rock may be dug, so the adapter never re-derives the rule.
+    /// </summary>
+    private bool IsBuildFloor(GridPoint cell) => _state!.Map.BuildFloorTiles.Contains(cell);
+
     private void ApplyCancelDigBrush(GridPoint cell)
     {
         if (!_state!.DigDesignations.Any(item => item.Tile == cell))
@@ -1782,6 +1974,13 @@ public partial class Main : Node2D
             EditMode.CancelDig =>
                 "CANCEL DIG: click or drag a designation to withdraw it. " +
                 "Esc/right-click returns to Inspect.",
+            EditMode.Build =>
+                "BUILD [C]: click or drag plain floor — including ground you dug — to " +
+                $"mark a training post. It costs {PrototypeTuning.BuildStoneCost} stone, " +
+                "which the crew brings on its own. Esc/right-click returns to Inspect.",
+            EditMode.CancelBuild =>
+                "UNBUILD [V]: click or drag a blueprint to withdraw it. Stone already " +
+                "delivered drops back onto that tile. Esc/right-click returns to Inspect.",
             _ => _controlFeedback,
         };
         RefreshState();
@@ -1956,6 +2155,54 @@ public partial class Main : Node2D
     }
 
     private const int DemoStoneZoneTick = 200;
+    private const int DemoBuildBlueprintTick = 1_000;
+    private static GridPoint DemoBuildSite => new(25, 2);
+
+    /// <summary>
+    /// The reproducible functional-room capture, and the whole Issue #48 chain in
+    /// one brush session: [D] marks the pocket, [M] paints the stockpile, and at a
+    /// fixed later tick [C] marks a blueprint on ground that did not exist at tick
+    /// 0, [B] zones it as a TrainingGround and [J] switches Drill on. Nothing here
+    /// addresses a creature; every stone that reaches the post is fetched back out
+    /// of the stockpile by whoever is free.
+    /// </summary>
+    private void ApplyDemoBuild()
+    {
+        _editMode = EditMode.Dig;
+        foreach (var tile in new GridPoint[] { new(25, 1), new(25, 2), new(25, 3), new(26, 1) })
+        {
+            ApplyDigBrush(tile);
+        }
+
+        SelectStockpileBrush();
+        TryApplyPlayerCommand(
+            new ZonePaintCommand(
+                DemoStoneZoneTick,
+                ZoneKind.MaterialStockpile,
+                [new GridPoint(22, 1), new GridPoint(23, 1)]));
+
+        // Scheduled for a tick at which the pocket is dug and its stone is already
+        // put away, so the blueprint has to pull the material back out again.
+        TryApplyPlayerCommand(new BuildDesignateCommand(DemoBuildBlueprintTick, [DemoBuildSite]));
+        TryApplyPlayerCommand(
+            new ZonePaintCommand(
+                DemoBuildBlueprintTick,
+                ZoneKind.TrainingGround,
+                [DemoBuildSite]));
+        TryApplyPlayerCommand(
+            new SetPriorityCommand(DemoBuildBlueprintTick, JobKind.Drill, 3));
+
+        _editMode = EditMode.Build;
+        _brushZone = ZoneKind.TrainingGround;
+        _selectedCell = DemoBuildSite;
+        _selectedCreatureId = null;
+        _controlFeedback =
+            "Demo: DIG marked (25,1) (25,2) (25,3) (26,1); [M] paints the material " +
+            $"stockpile (22,1) (23,1) at tick {DemoStoneZoneTick}; [C] marks a training " +
+            $"post on (25,2) at tick {DemoBuildBlueprintTick}, [B] zones it TrainingGround " +
+            "and Drill is switched on. Nobody was ordered to carry or build anything.";
+        RefreshState();
+    }
 
     private void VerifyControlsSmoke()
     {
@@ -1989,6 +2236,7 @@ public partial class Main : Node2D
 
         VerifyDigBrushSmoke();
         VerifyStockpileBrushSmoke();
+        VerifyBuildBrushSmoke();
 
         Advance(40);
         var first = PrototypeScenario.Capture(_world!).Checksum;
@@ -2153,6 +2401,106 @@ public partial class Main : Node2D
         }
     }
 
+    /// <summary>
+    /// An input-seam check for [C] and [V]: a stroke over rock, a feature and the
+    /// gate emits nothing, a blueprint lands on ground the player dug, withdrawing
+    /// it works, and then the whole chain — deliver, build, drill — runs with no
+    /// order given and no stone lost.
+    /// </summary>
+    private void VerifyBuildBrushSmoke()
+    {
+        SelectEditMode(EditMode.Build);
+        if (_editMode != EditMode.Build)
+        {
+            throw new InvalidOperationException("[C] did not select the build brush.");
+        }
+
+        var guardedChecksum = _checksum;
+        var guardedCount = _playerCommands.Count;
+        ApplyBuildBrush(new GridPoint(9, 4));   // internal rock
+        ApplyBuildBrush(new GridPoint(0, 0));   // map boundary
+        ApplyBuildBrush(PrototypeMapGate);
+        ApplyBuildBrush(new GridPoint(14, 7));  // larder feature
+        ApplyBuildBrush(new GridPoint(8, 12));  // an existing post
+        ApplyBuildBrush(new GridPoint(22, 1));  // a stockpile cell
+        if (_playerCommands.Count != guardedCount || _checksum != guardedChecksum)
+        {
+            throw new InvalidOperationException(
+                "The build brush emitted a command for a tile the simulation forbids.");
+        }
+
+        // (25,1) and (25,2) are floor only because the dig smoke above excavated
+        // them, which is the claim this step makes: a room out of carved space.
+        var site = new GridPoint(25, 2);
+        _lastBrushCell = null;
+        ApplyBuildBrush(new GridPoint(25, 1));
+        _lastBrushCell = null;
+        ApplyBuildBrush(site);
+        Advance(1);
+        if (_playerCommands.Count != guardedCount + 2 ||
+            !_state!.BuildSites.Any(item => item.Tile == site))
+        {
+            throw new InvalidOperationException("The build brush did not mark two blueprints.");
+        }
+
+        SelectEditMode(EditMode.CancelBuild);
+        ApplyCancelBuildBrush(new GridPoint(25, 1));
+        ApplyCancelBuildBrush(new GridPoint(12, 12));
+        Advance(1);
+        if (_playerCommands.Count != guardedCount + 3 ||
+            _state!.BuildSites.Count != 1)
+        {
+            throw new InvalidOperationException("The unbuild brush did not withdraw one blueprint.");
+        }
+
+        _editMode = EditMode.Paint;
+        _brushZone = ZoneKind.TrainingGround;
+        ApplyZonePaintBrush(site);
+        TryApplyPlayerCommand(new SetPriorityCommand(_state!.Tick, JobKind.Drill, 3));
+        CancelBrush("build smoke");
+        if (_editMode != EditMode.Inspect || _brushPointerDown)
+        {
+            throw new InvalidOperationException("The build brush did not return to inspect mode.");
+        }
+
+        // Nobody is addressed, yet the post appears and stone stops being a number.
+        for (var guard = 0; guard < 900 && _state!.Economy.BuildsCompleted == 0; guard++)
+        {
+            Advance(1);
+            var stocks = _state.Stocks;
+            if (stocks.LooseStone + stocks.CarriedStone + stocks.StoredStone +
+                stocks.SiteStone + _state.Economy.StoneConsumed !=
+                _state.Economy.StoneProduced)
+            {
+                throw new InvalidOperationException(
+                    $"Stone conservation broke at tick {_state.Tick}: produced " +
+                    $"{_state.Economy.StoneProduced}, loose {stocks.LooseStone}, " +
+                    $"carried {stocks.CarriedStone}, stored {stocks.StoredStone}, " +
+                    $"on site {stocks.SiteStone}, consumed {_state.Economy.StoneConsumed}.");
+            }
+        }
+
+        if (_state!.Economy.BuildsCompleted == 0 ||
+            !_state.Map.BuiltPostTiles.Contains(site))
+        {
+            throw new InvalidOperationException(
+                "No training post was built autonomously inside the smoke budget.");
+        }
+
+        for (var guard = 0; guard < 200 &&
+             !_state.Jobs.Any(job => job.Kind == JobKind.Drill && job.Origin == site);
+             guard++)
+        {
+            Advance(1);
+        }
+
+        if (!_state.Jobs.Any(job => job.Kind == JobKind.Drill && job.Origin == site))
+        {
+            throw new InvalidOperationException(
+                "The built post produced no Drill job inside the smoke budget.");
+        }
+    }
+
     private static GridPoint PrototypeMapGate => new(27, 13);
 
     private void CaptureScreenshot(string path)
@@ -2181,7 +2529,10 @@ public partial class Main : Node2D
                 looseStone = _state.Stocks.LooseStone,
                 carriedStone = _state.Stocks.CarriedStone,
                 storedStone = _state.Stocks.StoredStone,
+                siteStone = _state.Stocks.SiteStone,
+                stoneConsumed = _state.Economy.StoneConsumed,
                 stockpileCapacity = _state.Stocks.StockpileCapacity,
+                buildsCompleted = _state.Economy.BuildsCompleted,
                 ui = UiText(),
                 labelFit = LabelFit(),
                 loadedSpriteStates = _loadedSpriteStates,
@@ -2226,7 +2577,10 @@ public partial class Main : Node2D
             looseStone = _state?.Stocks.LooseStone,
             carriedStone = _state?.Stocks.CarriedStone,
             storedStone = _state?.Stocks.StoredStone,
+            siteStone = _state?.Stocks.SiteStone,
+            stoneConsumed = _state?.Economy.StoneConsumed,
             stockpileCapacity = _state?.Stocks.StockpileCapacity,
+            buildsCompleted = _state?.Economy.BuildsCompleted,
             ui = UiText(),
             labelFit = LabelFit(),
             loadedSpriteStates = _loadedSpriteStates,
@@ -2299,6 +2653,7 @@ public partial class Main : Node2D
 
         if (_state!.Beds.Any(bed => bed.Position == cell)) return new Color("#31572c");
         if (_state.Stations.Any(station => station.Position == cell && station.Kind == TileKind.Kitchen)) return new Color("#7c4a22");
+        if (_state.Stations.Any(station => station.Position == cell && station.Kind == TileKind.Post)) return new Color("#134e4a");
         if (_state.Zones[ZoneKind.Larder].Contains(cell)) return new Color("#5b3a32");
         if (cell is { X: 20 or 21, Y: 3 } or { X: 21 or 22, Y: 4 }) return new Color("#3b4252");
         if (cell == new GridPoint(27, 13)) return new Color("#854d0e");
@@ -2338,6 +2693,7 @@ public partial class Main : Node2D
         JobKind.Drill => new Color("#22d3ee"),
         JobKind.Watch => new Color("#f472b6"),
         JobKind.Dig => new Color("#f59e0b"),
+        JobKind.Build => new Color("#2dd4bf"),
         _ => new Color("#ffffff"),
     };
 
@@ -2429,7 +2785,7 @@ public partial class Main : Node2D
         DrawString(ThemeDB.FallbackFont, CellTopLeft(anchor) + new Vector2(2, 10), text, HorizontalAlignment.Left, -1, 7, ZoneColor(zone));
     }
 
-    private enum EditMode { Inspect, Paint, Erase, Dig, CancelDig }
+    private enum EditMode { Inspect, Paint, Erase, Dig, CancelDig, Build, CancelBuild }
 
     private sealed record RuntimeDiagnostic(string Scope, string Type, string Message);
 }

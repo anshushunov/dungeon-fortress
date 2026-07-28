@@ -247,6 +247,20 @@ public static class PrototypeCanonical
         }
 
         writer.WriteEndArray();
+        writer.WriteStartArray("buildFloorTiles");
+        foreach (var tile in state.Map.BuildFloorTiles.Order())
+        {
+            WritePointValue(writer, tile);
+        }
+
+        writer.WriteEndArray();
+        writer.WriteStartArray("builtPostTiles");
+        foreach (var tile in state.Map.BuiltPostTiles.Order())
+        {
+            WritePointValue(writer, tile);
+        }
+
+        writer.WriteEndArray();
         writer.WriteEndObject();
 
         writer.WriteStartArray("digDesignations");
@@ -277,6 +291,44 @@ public static class PrototypeCanonical
             writer.WriteNumber("requiredTicks", designation.RequiredTicks);
             writer.WriteBoolean("reachable", designation.Reachable);
             writer.WriteString("statusCode", designation.StatusCode);
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
+
+        // A blueprint and the stone that reached it are canonical state: the same
+        // seed and log must reproduce which site holds how much and how far the
+        // work on it got.
+        writer.WriteStartArray("buildSites");
+        foreach (var site in state.BuildSites.OrderBy(item => item.Tile))
+        {
+            writer.WriteStartObject();
+            WritePoint(writer, "tile", site.Tile);
+            writer.WriteNumber("delivered", site.Delivered);
+            writer.WriteNumber("required", site.Required);
+            writer.WriteNumber("incomingReserved", site.IncomingReserved);
+            if (site.JobId is { } buildJobId)
+            {
+                writer.WriteNumber("jobId", buildJobId);
+            }
+            else
+            {
+                writer.WriteNull("jobId");
+            }
+
+            if (site.ReservedBy is { } buildReservedBy)
+            {
+                writer.WriteNumber("reservedBy", buildReservedBy);
+            }
+            else
+            {
+                writer.WriteNull("reservedBy");
+            }
+
+            writer.WriteNumber("progressTicks", site.ProgressTicks);
+            writer.WriteNumber("requiredTicks", site.RequiredTicks);
+            writer.WriteBoolean("reachable", site.Reachable);
+            writer.WriteString("statusCode", site.StatusCode);
             writer.WriteEndObject();
         }
 
@@ -330,6 +382,7 @@ public static class PrototypeCanonical
         writer.WriteNumber("looseStone", state.Stocks.LooseStone);
         writer.WriteNumber("carriedStone", state.Stocks.CarriedStone);
         writer.WriteNumber("storedStone", state.Stocks.StoredStone);
+        writer.WriteNumber("siteStone", state.Stocks.SiteStone);
         writer.WriteNumber("reservedStone", state.Stocks.ReservedStone);
         writer.WriteNumber("stockpileCapacity", state.Stocks.StockpileCapacity);
         writer.WriteNumber("capacity", state.Stocks.Capacity);
@@ -371,6 +424,7 @@ public static class PrototypeCanonical
             writer.WriteBoolean("pickedUp", job.PickedUp);
             WriteNullablePoint(writer, "storeCell", job.StoreCell);
             writer.WriteNumber("storeReserved", job.StoreReserved);
+            WriteNullablePoint(writer, "sourceCell", job.SourceCell);
             writer.WriteEndObject();
         }
 
@@ -387,6 +441,9 @@ public static class PrototypeCanonical
         writer.WriteNumber("stoneHaulsCompleted", state.Economy.StoneHaulsCompleted);
         writer.WriteNumber("stoneStored", state.Economy.StoneStored);
         writer.WriteNumber("stoneSpilled", state.Economy.StoneSpilled);
+        writer.WriteNumber("stoneDelivered", state.Economy.StoneDelivered);
+        writer.WriteNumber("stoneConsumed", state.Economy.StoneConsumed);
+        writer.WriteNumber("buildsCompleted", state.Economy.BuildsCompleted);
         writer.WriteEndObject();
         writer.WriteStartObject("labor");
         writer.WriteNumber("totalCreatureTicks", state.Labor.TotalCreatureTicks);
@@ -397,6 +454,7 @@ public static class PrototypeCanonical
         writer.WriteNumber("watchTicks", state.Labor.WatchTicks);
         writer.WriteNumber("digTicks", state.Labor.DigTicks);
         writer.WriteNumber("stoneHaulTicks", state.Labor.StoneHaulTicks);
+        writer.WriteNumber("buildTicks", state.Labor.BuildTicks);
         writer.WriteNumber("musterTicks", state.Labor.MusterTicks);
         writer.WriteNumber("idleTicks", state.Labor.IdleTicks);
         writer.WriteNumber("foodWorkPercent", state.Labor.FoodWorkPercent);

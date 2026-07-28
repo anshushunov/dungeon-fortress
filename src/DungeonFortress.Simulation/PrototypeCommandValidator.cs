@@ -19,6 +19,10 @@ public static class PrototypeCommandValidator
 
         var map = new PrototypeMap();
         var zones = PrototypeMap.CreateDefaultZones(map);
+        // Tracked exactly like the zones above: a blueprint and a material
+        // stockpile cannot share a tile, and the document must be rejected before
+        // any world exists when it asks for both.
+        var blueprints = new SortedSet<GridPoint>();
         var previousTick = -1;
         foreach (var command in commandLog.Commands)
         {
@@ -42,7 +46,7 @@ public static class PrototypeCommandValidator
             switch (command)
             {
                 case ZonePaintCommand paint:
-                    ValidateZoneCommand(map, paint.ZoneKind, paint.Tiles, painting: true);
+                    ValidateZoneCommand(map, blueprints, paint.ZoneKind, paint.Tiles, painting: true);
                     foreach (var tile in paint.Tiles)
                     {
                         zones[paint.ZoneKind].Add(tile);
@@ -50,7 +54,7 @@ public static class PrototypeCommandValidator
 
                     break;
                 case ZoneEraseCommand erase:
-                    ValidateZoneCommand(map, erase.ZoneKind, erase.Tiles, painting: false);
+                    ValidateZoneCommand(map, blueprints, erase.ZoneKind, erase.Tiles, painting: false);
                     var remaining = new SortedSet<GridPoint>(zones[erase.ZoneKind]);
                     remaining.ExceptWith(erase.Tiles);
                     if (erase.ZoneKind == ZoneKind.Larder &&
@@ -67,6 +71,18 @@ public static class PrototypeCommandValidator
                     break;
                 case DigCancelCommand cancel:
                     ValidateDigTiles(cancel.Tiles, requireDiggable: false);
+                    break;
+                case BuildDesignateCommand build:
+                    ValidateBuildTiles(map, zones, build.Tiles, requireBuildable: true);
+                    foreach (var tile in build.Tiles)
+                    {
+                        blueprints.Add(tile);
+                    }
+
+                    break;
+                case BuildCancelCommand unbuild:
+                    ValidateBuildTiles(map, zones, unbuild.Tiles, requireBuildable: false);
+                    blueprints.ExceptWith(unbuild.Tiles);
                     break;
                 case SetPriorityCommand priority:
                     if (!Enum.IsDefined(priority.JobKind) ||
@@ -91,6 +107,7 @@ public static class PrototypeCommandValidator
 
     private static void ValidateZoneCommand(
         PrototypeMap map,
+        IReadOnlySet<GridPoint> blueprints,
         ZoneKind zoneKind,
         IReadOnlyList<GridPoint> tiles,
         bool painting)
@@ -130,10 +147,22 @@ public static class PrototypeCommandValidator
                     "by excavation cannot store material yet.");
             }
 
-            if (!PrototypeMap.IsInside(tile) || !map.IsPassable(tile))
+            if (painting && zoneKind == ZoneKind.MaterialStockpile && blueprints.Contains(tile))
             {
                 throw new InvalidDataException(
-                    $"Zone tile ({tile.X},{tile.Y}) is outside the map or not passable.");
+                    $"MaterialStockpile tile ({tile.X},{tile.Y}) carries a construction " +
+                    "blueprint. A building site is not a warehouse.");
+            }
+
+            // Rock that digging can turn into floor is accepted here on purpose:
+            // a room built out of excavated space has to be zonable. The live map
+            // in PrototypeWorld stays the authority and rejects the command on its
+            // tick if the tile is still rock then.
+            if (!PrototypeMap.IsInside(tile) ||
+                (!map.IsPassable(tile) && !map.IsDiggable(tile)))
+            {
+                throw new InvalidDataException(
+                    $"Zone tile ({tile.X},{tile.Y}) is outside the map or can never be passable.");
             }
 
             if (painting && map[tile] == TileKind.Gate)
@@ -190,6 +219,66 @@ public static class PrototypeCommandValidator
                 throw new InvalidDataException(
                     $"Dig tile ({tile.X},{tile.Y}) is not internal rock. " +
                     "Floor, features, the gate and the map boundary cannot be designated.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// A static pre-flight over the <em>initial</em> layout, the mirror of
+    /// <see cref="ValidateDigTiles"/>. A tile that is neither plain floor nor
+    /// diggable rock at tick 0 can never become plain floor, so rejecting it here
+    /// is sound. Whether it is floor <em>yet</em> is decided by the live map.
+    /// </summary>
+    private static void ValidateBuildTiles(
+        PrototypeMap map,
+        IReadOnlyDictionary<ZoneKind, SortedSet<GridPoint>> zones,
+        IReadOnlyList<GridPoint> tiles,
+        bool requireBuildable)
+    {
+        if (tiles is null)
+        {
+            throw new InvalidDataException("tiles must be an array.");
+        }
+
+        if (tiles.Count is < 1 or > PrototypeTuning.MaximumTilesPerCommand)
+        {
+            throw new InvalidDataException(
+                $"tiles must contain between 1 and {PrototypeTuning.MaximumTilesPerCommand} entries.");
+        }
+
+        var distinct = new HashSet<GridPoint>();
+        foreach (var tile in tiles)
+        {
+            if (!distinct.Add(tile))
+            {
+                throw new InvalidDataException(
+                    $"Duplicate tile ({tile.X},{tile.Y}) is not allowed.");
+            }
+
+            if (!PrototypeMap.IsInside(tile))
+            {
+                throw new InvalidDataException(
+                    $"Build tile ({tile.X},{tile.Y}) is outside the map.");
+            }
+
+            if (!requireBuildable)
+            {
+                continue;
+            }
+
+            if (!map.IsBuildableInInitialLayout(tile))
+            {
+                throw new InvalidDataException(
+                    $"Build tile ({tile.X},{tile.Y}) is not plain floor. " +
+                    "Map features, the gate, the map boundary and an existing post " +
+                    "cannot hold a blueprint.");
+            }
+
+            if (zones[ZoneKind.MaterialStockpile].Contains(tile))
+            {
+                throw new InvalidDataException(
+                    $"Build tile ({tile.X},{tile.Y}) is a material stockpile cell. " +
+                    "Erase the cell first; a building site is not a warehouse.");
             }
         }
     }

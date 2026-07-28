@@ -476,18 +476,59 @@ public sealed class PrototypeDigTests
         Assert.Contains(new GridPoint(26, 3), late.Map.RockTiles);
     }
 
+    /// <summary>
+    /// Zoning a room follows the same two-level rule the dig designation does, and
+    /// since Issue #48 the rule is stated on the tile's future rather than on its
+    /// present: internal rock passes the static pre-flight because digging can
+    /// turn it into floor, and the live map rejects the command on its own tick
+    /// while the tile is still rock. Only the map boundary is refused outright —
+    /// it can never become anything.
+    /// </summary>
     [Fact]
-    public void Zoning_a_room_on_rock_stays_forbidden()
+    public void Zoning_a_room_on_rock_is_refused_by_the_live_map_not_by_the_preflight()
     {
-        const string json =
+        const string tooEarly =
             """
             {"schemaVersion":2,"scenario":"custom","seed":1,"commands":[
               {"tick":0,"kind":"zone_paint","zoneKind":"Quarters","tiles":[[25,1]]}
             ]}
             """;
 
+        var log = PrototypeCommandDocument.Parse(Encoding.UTF8.GetBytes(tooEarly));
+        var failure = Assert.Throws<InvalidDataException>(() => PrototypeScenario.Run(log, 1));
+        Assert.Contains("not passable", failure.Message, StringComparison.Ordinal);
+
+        const string boundary =
+            """
+            {"schemaVersion":2,"scenario":"custom","seed":1,"commands":[
+              {"tick":0,"kind":"zone_paint","zoneKind":"Quarters","tiles":[[0,0]]}
+            ]}
+            """;
         Assert.Throws<InvalidDataException>(
-            () => PrototypeCommandDocument.Parse(Encoding.UTF8.GetBytes(json)));
+            () => PrototypeCommandDocument.Parse(Encoding.UTF8.GetBytes(boundary)));
+    }
+
+    /// <summary>
+    /// The other half of the same rule: once the tile really is floor, the room
+    /// may be zoned over it. This is what makes a functional room out of carved
+    /// space possible at all.
+    /// </summary>
+    [Fact]
+    public void Zoning_a_room_on_excavated_ground_is_accepted_once_the_tile_is_floor()
+    {
+        var excavated = new GridPoint(25, 1);
+        var state = PrototypeScenario.Run(
+            new PrototypeCommandLog(
+                "custom",
+                PrototypeTuning.DefaultSeed,
+                [
+                    new DigDesignateCommand(0, [excavated]),
+                    new ZonePaintCommand(400, ZoneKind.TrainingGround, [excavated]),
+                ]),
+            401).State;
+
+        Assert.Contains(excavated, state.Map.ExcavatedTiles);
+        Assert.Contains(excavated, state.Zones[ZoneKind.TrainingGround]);
     }
 
     private static int Manhattan(GridPoint left, GridPoint right)

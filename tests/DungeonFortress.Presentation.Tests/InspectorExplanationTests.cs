@@ -403,8 +403,10 @@ public sealed class InspectorExplanationTests
         Assert.Equal(
             "it is still rock",
             InspectorText.UnstockpileableReason(fresh, new GridPoint(0, 0)));
+        // Reworded by Issue #48: excavated ground stopped being "the next step"
+        // and became buildable ground that still cannot store material.
         Assert.Equal(
-            "zoning freshly excavated ground is the next step of the experiment",
+            "freshly excavated ground can hold a building, but not stored material",
             InspectorText.UnstockpileableReason(dug, dug.Map.ExcavatedTiles[0]));
         Assert.Equal(
             "it is a bed, a station, the larder, a bunk, a post or the gate — not plain floor",

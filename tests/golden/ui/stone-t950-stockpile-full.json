@@ -13,7 +13,7 @@
                   "stockpileCapacity":  4
               },
     "ui":  {
-               "summary":  "BASELINE  •  t950  •  PAUSED  •  jobs 4  •  2ef3c7d1\nRAID IN 550t  •  food 8+2  •  raw 33+0  •  stone 0L 0C 4/4S  •  dug 4  •  marks 0",
+               "summary":  "BASELINE  •  t950  •  PAUSED  •  jobs 4  •  695413d9\nRAID IN 550t  •  food 8+2  •  raw 33+0  •  stone 0L 0C 4/4S  •  dug 4  •  marks 0",
                "inspector":  "CELL (23, 1)\n\ntile floor\nzones MaterialStockpile\njobs none\n\nSTOCKPILE\n2/2 stored. Full. Loose 0 waits until you paint another cell with [M].\n\nDIG\nnot diggable: floor, feature or gate.",
                "feedback":  "EVENT FEEDBACK\nt949 · Брусок\nchosen_traffic_yield\nt949 · Обух\nwaiting_stock_sufficient\nt948 · Смола\nwaiting_blocked_by_other\n\nDiagnostics: 0 (structured JSON is emitted by smoke/capture).",
                "roster":  "CREW  Брусок READY  •  Кремень WORK  •  Мотылёк MOVE  •  Смола MOVE  •  Дёготь READY  •  Уголёк READY  •  Прель MOVE  •  Обух READY  •  Тишина READY\nDemo: DIG marked (25,1) (25,2) (25,3) (26,1); [M] paints the material stockpile (22,1) (23,1) at tick 200. Nobody was ordered to carry anything.\nLOG t1 dig_designate (1) | t200 paint MaterialStockpile (2)",

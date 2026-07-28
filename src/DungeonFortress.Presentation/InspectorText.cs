@@ -43,7 +43,7 @@ public static class InspectorText
                 $"mode {creature.Mode}\n" +
                 $"job {(job is null ? "none" : $"#{job.JobId} {job.Kind}")}\n" +
                 $"carrying {(creature.Carrying is null ? "nothing" : $"{creature.CarryAmount} {creature.Carrying}")}\n" +
-                $"{DescribeCarrierRoute(creature, job)}\n" +
+                $"{DescribeCarrierRoute(creature, job, state.BuildSites)}\n" +
                 $"WHY\nt{creature.LastDecision.Tick} · {creature.LastDecision.ReasonCode}\n" +
                 $"{details}";
         }
@@ -70,12 +70,22 @@ public static class InspectorText
             var looseSection = looseStone is null
                 ? string.Empty
                 : $"LOOSE STONE\n{BuildLooseStoneExplanation(state, looseStone, jobs)}\n\n";
+            // Only a cell that is part of the construction chain carries this
+            // section. A tile that is neither a blueprint nor a built post reads
+            // exactly as it did before the chain existed.
+            var site = state.BuildSites.FirstOrDefault(item => item.Tile == cell);
+            var buildSection = site is not null
+                ? $"BUILD\n{BuildBlueprintExplanation(state, site)}\n\n"
+                : state.Map.BuiltPostTiles.Contains(cell)
+                    ? $"BUILD\n{BuildPostExplanation(state, cell)}\n\n"
+                    : string.Empty;
             return
                 $"CELL ({cell.X}, {cell.Y})\n\n" +
                 $"tile {TileDescription(state, cell)}\n" +
                 $"zones {(zones.Length == 0 ? "none" : string.Join(", ", zones))}\n" +
                 $"jobs {(jobs.Length == 0 ? "none" : string.Join(", ", jobs.Select(job => $"#{job.JobId} {job.Kind}")))}\n\n" +
                 looseSection +
+                buildSection +
                 stockpileSection +
                 $"DIG\n{BuildDigExplanation(state, cell)}";
         }
@@ -94,6 +104,8 @@ public static class InspectorText
                 : "rock (map boundary)";
         }
 
+        if (state.Map.BuiltPostTiles.Contains(cell)) return "Post (built)";
+        if (state.BuildSites.Any(site => site.Tile == cell)) return "floor (blueprint)";
         if (state.Map.ExcavatedTiles.Contains(cell)) return "floor (excavated)";
         if (state.Beds.Any(bed => bed.Position == cell)) return "mushroom bed";
         if (state.Stations.Any(station => station.Position == cell)) return state.Stations.Single(station => station.Position == cell).Kind.ToString();
@@ -151,7 +163,8 @@ public static class InspectorText
     /// </summary>
     public static string DescribeCarrierRoute(
         PrototypeCreatureSnapshot creature,
-        PrototypeJobSnapshot? job)
+        PrototypeJobSnapshot? job,
+        IReadOnlyList<PrototypeBuildSiteSnapshot>? buildSites = null)
     {
         if (job is not { Kind: JobKind.Haul, Resource: ResourceKind.Stone })
         {
@@ -161,12 +174,20 @@ public static class InspectorText
         }
 
         var cell = job.StoreCell;
+        var toSite = cell is { } destination &&
+            buildSites is not null &&
+            buildSites.Any(site => site.Tile == destination);
         var where = cell is null
             ? "no stockpile cell booked"
-            : $"booked ({cell.Value.X},{cell.Value.Y}) x{job.StoreReserved}";
+            : toSite
+                ? $"booked for the site at ({cell.Value.X},{cell.Value.Y}) x{job.StoreReserved}"
+                : $"booked ({cell.Value.X},{cell.Value.Y}) x{job.StoreReserved}";
+        var source = job.SourceCell is { } stockpile
+            ? $"taking it out of the stockpile ({stockpile.X},{stockpile.Y})"
+            : $"walking to pile ({job.Origin.X},{job.Origin.Y})";
         var stage = job.PickedUp
             ? $"carrying to ({cell?.X},{cell?.Y})"
-            : $"walking to pile ({job.Origin.X},{job.Origin.Y})";
+            : source;
         return $"stone haul: {stage}, {where}\n";
     }
 
@@ -252,6 +273,103 @@ public static class InspectorText
     }
 
     /// <summary>
+    /// The player must be able to answer "why is nothing happening on my
+    /// blueprint?" from the cell alone. The branches follow the order the
+    /// simulation itself decides them in, so the panel and the status codes can
+    /// never disagree.
+    /// </summary>
+    public static string BuildBlueprintExplanation(
+        PrototypeSnapshot state,
+        PrototypeBuildSiteSnapshot site)
+    {
+        var head = $"training post blueprint · stone {site.Delivered}/{site.Required}";
+        if (site.IncomingReserved > 0)
+        {
+            head += $", {site.IncomingReserved} booked";
+        }
+
+        var result = "\nresult → a training post; Drill work needs a TrainingGround zone here";
+        return site.StatusCode switch
+        {
+            "build_blocked_priority" =>
+                $"{head}. Build priority is {state.Priorities[JobKind.Build]}.\n" +
+                "Raise it with [J] and +/- to let creatures take the job." + result,
+            "build_unreachable" =>
+                $"{head}. Nobody may step on this tile, so nothing can be brought " +
+                "here and nothing can be built.\nErase the Forbidden paint." + result,
+            "build_in_progress" =>
+                $"{head}. Building {site.ProgressTicks}/{site.RequiredTicks} ticks by " +
+                $"{HudText.CreatureName(state, site.ReservedBy!.Value)}." + result,
+            "build_reserved" =>
+                $"{head}. {HudText.CreatureName(state, site.ReservedBy!.Value)} chose " +
+                "this job and is walking here." + result,
+            "build_ready" =>
+                $"{head}. Material complete; waiting for a creature to be free.\n" +
+                "You mark intent, the crew decides who builds." + result,
+            "build_carrier_on_the_way" =>
+                $"{head}. A carrier is walking here with the rest of the stone." + result,
+            "build_haul_blocked" =>
+                $"{head}. Haul priority is 0: nothing is being carried anywhere.\n" +
+                "Raise it with [J] and +/-." + result,
+            "build_stone_reserved" =>
+                $"{head}. The stone that exists is already booked by another job.\n" +
+                "Dig more rock, or wait for a carrier to free up." + result,
+            "build_no_stone" =>
+                $"{head}. There is no stone in the world yet.\n" +
+                "Press [D] and mark rock; a finished dig leaves one block." + result,
+            _ =>
+                $"{head}. Stone is available and free; waiting for a creature to " +
+                "choose the Haul job." + result,
+        };
+    }
+
+    /// <summary>
+    /// The end of the chain, read from the tile the player built. It states the
+    /// one condition that still stands between a post and actual training.
+    /// </summary>
+    public static string BuildPostExplanation(PrototypeSnapshot state, GridPoint cell)
+    {
+        var zoned = state.Zones[ZoneKind.TrainingGround].Contains(cell);
+        var head = $"built training post; it cost {PrototypeTuning.BuildStoneCost} stone.";
+        if (!zoned)
+        {
+            return $"{head}\nNo TrainingGround zone here yet: press [Z] to select it and " +
+                "[B] to paint, and Drill work appears.";
+        }
+
+        return state.Priorities[JobKind.Drill] == 0
+            ? $"{head}\nInside TrainingGround, but the Drill priority is 0. " +
+                "Raise it with [J] and +/-."
+            : $"{head}\nInside TrainingGround: this post now produces Drill work like any other.";
+    }
+
+    /// <summary>
+    /// Why a brush stroke over this tile produced no blueprint. Shown on the
+    /// control feedback line, where there is room for the full sentence.
+    /// </summary>
+    public static string UnbuildableReason(PrototypeSnapshot state, GridPoint cell)
+    {
+        if (state.Map.RockTiles.Contains(cell))
+        {
+            return state.Map.DiggableTiles.Contains(cell)
+                ? "it is still rock — dig it first, then build on the floor it leaves"
+                : "the map boundary holds the dungeon in";
+        }
+
+        if (state.Map.BuiltPostTiles.Contains(cell))
+        {
+            return "a training post already stands here";
+        }
+
+        if (state.StockpileCells.Any(item => item.Position == cell))
+        {
+            return "it is a material stockpile cell — erase it first, a building site is not a warehouse";
+        }
+
+        return "it is a bed, a station, the larder, a bunk, an existing post or the gate — not plain floor";
+    }
+
+    /// <summary>
     /// Why a brush stroke over this tile produced no dig designation. Shown on the
     /// control feedback line, where there is room for the full sentence.
     /// </summary>
@@ -295,7 +413,12 @@ public static class InspectorText
 
         if (state.Map.ExcavatedTiles.Contains(cell))
         {
-            return "zoning freshly excavated ground is the next step of the experiment";
+            return "freshly excavated ground can hold a building, but not stored material";
+        }
+
+        if (state.BuildSites.Any(site => site.Tile == cell))
+        {
+            return "it carries a construction blueprint — a building site is not a warehouse";
         }
 
         return "it is a bed, a station, the larder, a bunk, a post or the gate — not plain floor";

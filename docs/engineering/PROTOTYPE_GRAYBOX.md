@@ -1,7 +1,7 @@
 # Godot graybox — Prototype 1
 
 Status: active
-Source: Issues #10–#12, #24, #26, #28, #36
+Source: Issues #10–#12, #24, #26, #28, #36, #48
 
 The graybox is the visual, top-down projection of the headless Prototype 1
 economy and raid. It starts with the `baseline` gameplay-v2 fixture.
@@ -49,15 +49,18 @@ visible and keeps initial inspection repeatable.
 | Designate rock for digging | `DIG` | `D` |
 | Withdraw a dig designation | `CANCEL` | `X` |
 | Paint a material stockpile | `STOCK` | `M` |
+| Mark a training-post blueprint | `BUILD` | `C` |
+| Withdraw a blueprint | `UNBLD` | `V` |
 
 ## Indirect controls (Phase B)
 
 The second control strip is a row of buttons: select `INSPECT`, `PAINT`, `ERASE`,
-`DIG`, `CANCEL` or `STOCK` with the mouse (or `I`, `B`, `E`, `D`, `X`, `M`),
-choose the active zone with `Z`, and click a map cell. This produces a
-`zone_paint`, `zone_erase`, `dig_designate` or `dig_cancel` v2 command; none of
-them addresses a creature. `J` selects a global job priority — including `Dig` —
-and `K` selects one of `ration_reserve`, `drill_min_satiety` or
+`DIG`, `CANCEL`, `STOCK`, `BUILD` or `UNBLD` with the mouse (or `I`, `B`, `E`,
+`D`, `X`, `M`, `C`, `V`), choose the active zone with `Z`, and click a map cell.
+This produces a `zone_paint`, `zone_erase`, `dig_designate`, `dig_cancel`,
+`build_designate` or `build_cancel` v2 command; none of them addresses a
+creature. `J` selects a global job priority — including `Dig` and `Build` — and
+`K` selects one of `ration_reserve`, `drill_min_satiety` or
 `muster_lead_ticks`; `+` / `-` changes the selected bounded value. `Y` rebuilds
 and replays the current log.
 
@@ -213,8 +216,81 @@ Each capture prints `stoneProduced`, `looseStone`, `carriedStone`, `storedStone`
 and `stockpileCapacity` next to its checksum, so a frame carries its own
 conservation evidence instead of being trusted as a picture.
 
-Stone is still never consumed. Spending it on a functional object is the next
-step of Issue #23.
+## Building the first functional room (Issue #48)
+
+`BUILD [C]` marks plain floor as a training-post blueprint; `UNBLD [V]` withdraws
+one. Unlike the stockpile brush, the legal targets **include ground the player
+created by digging** — a room out of carved space is the point of the step. The
+list comes from `map.buildFloorTiles` in the snapshot, so the adapter holds no
+copy of the rule, and while the brush is active every legal cell is outlined.
+
+Nobody is ordered to fetch anything or to build anything. A post costs
+`T.build_stone_cost` = 2 stone; free creatures pick the `Haul` job that brings it
+— from a loose pile or back out of the material stockpile — and then the `Build`
+job, through the same autonomous scoring the food chain uses.
+
+Once the post stands, paint `TrainingGround` over it with `Z` + `B`, raise the
+`Drill` priority with `J` and `+`, and the crew starts training at a post that
+did not exist at tick 0. Nothing distinguishes it from the four authored posts:
+the built one enters the same station list and produces the same `Drill` work.
+
+The post is a **graybox primitive with a caption**, deliberately: `ADR 0008` is
+accepted but not implemented, the map is still flat squares, and a labelled teal
+block answers the slice's question — "does turning a plan into a working object
+feel like ownership?" — as well as finished art would. Asset generation is Codex's
+job and comes after the projection lands; see
+[`ANIMATION_PIPELINE.md`](../art/ANIMATION_PIPELINE.md).
+
+Reading construction without the log:
+
+| Reading | What it means |
+|---|---|
+| teal outlined cell with `POST?` and hollow pips | a blueprint; each pip is one of the two stones it needs |
+| filled pale pip inside a blueprint | that stone has arrived |
+| hollow blue pip inside a blueprint | that stone is booked by a carrier on the way |
+| amber blueprint outline | there is no free stone for it yet |
+| grey blueprint outline | `Build` or `Haul` priority is 0 |
+| red blueprint outline | nobody may step on the site |
+| teal bar across the top of a blueprint | construction in progress |
+| solid teal block labelled `POST` | a training post — authored or built |
+
+Clicking a blueprint states which of those it is, how much stone arrived, who
+volunteered and how far the work got. Clicking the finished post states what it
+cost and the one condition still standing between it and training: the
+`TrainingGround` zone or the `Drill` priority. Clicking the carrier states
+whether it is taking the stone out of the stockpile and which site booked it.
+
+The top line still reports stone as `stone {loose}L {carried}C {stored}/{cap}S`.
+Stone on a site and stone already spent are deliberately **not** folded into that
+line — the HUD summary is exactly two lines and a third would be drawn over the
+toolbar. They are reported structurally instead, in `stocks.siteStone` and
+`economy.stoneConsumed`, which is where the conservation invariant is checked.
+
+### Reproducible construction frames
+
+`--demo-build` replays a fixed brush session through the same code path a human
+uses: `DIG` marks `(25,1) (25,2) (25,3) (26,1)`, `[M]` paints the material
+stockpile `(22,1) (23,1)` at tick 200, and at tick 1000 — after every block is
+already put away — `[C]` marks a blueprint on `(25,2)`, `[B]` zones it as a
+`TrainingGround` and `Drill` is switched on. The stone therefore has to come back
+out of the stockpile.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
+  -Fixture baseline -DemoBuild -ScreenshotTicks 1001 -SelectCell 25,2 `
+  -ScreenshotPath issue48\build-1-blueprint-waiting.png
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
+  -Fixture baseline -DemoBuild -ScreenshotTicks 1030 -SelectCell 25,2 `
+  -ScreenshotPath issue48\build-2-carrier-on-the-way.png
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
+  -Fixture baseline -DemoBuild -ScreenshotTicks 1150 -SelectCell 25,2 `
+  -ScreenshotPath issue48\build-3-post-and-drill.png
+```
+
+Stone is now consumed, and the conservation invariant grew to match:
+`stoneProduced = looseStone + carriedStone + storedStone + siteStone +
+stoneConsumed`. Every capture and every headless run prints all five, so a frame
+still carries its own conservation evidence instead of being trusted as a picture.
 
 ### Reproducible excavation frames
 

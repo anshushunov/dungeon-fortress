@@ -28,6 +28,24 @@ public sealed record DigCancelCommand(
     int Tick,
     IReadOnlyList<GridPoint> Tiles) : PrototypeCommand(Tick);
 
+/// <summary>
+/// Marks plain floor as a training-post blueprint. Strict and atomic like
+/// <see cref="DigDesignateCommand"/>: one illegal tile rejects the whole command
+/// before any mutation. It says "a post belongs here", not who builds it.
+/// </summary>
+public sealed record BuildDesignateCommand(
+    int Tick,
+    IReadOnlyList<GridPoint> Tiles) : PrototypeCommand(Tick);
+
+/// <summary>
+/// Withdraws a blueprint. Tolerant of tiles that carry none, like
+/// <see cref="DigCancelCommand"/>. Stone already delivered to the site returns to
+/// the floor of that same tile, so cancelling never destroys material.
+/// </summary>
+public sealed record BuildCancelCommand(
+    int Tick,
+    IReadOnlyList<GridPoint> Tiles) : PrototypeCommand(Tick);
+
 public sealed record SetPriorityCommand(
     int Tick,
     JobKind JobKind,

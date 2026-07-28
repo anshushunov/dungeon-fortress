@@ -119,6 +119,8 @@ public static class PrototypeCommandDocument
             "zone_erase" => ParseZoneCommand(element, tick, paint: false),
             "dig_designate" => ParseDigCommand(element, tick, designate: true),
             "dig_cancel" => ParseDigCommand(element, tick, designate: false),
+            "build_designate" => ParseBuildCommand(element, tick, designate: true),
+            "build_cancel" => ParseBuildCommand(element, tick, designate: false),
             "set_priority" => ParsePriorityCommand(element, tick),
             "set_rule" => ParseRuleCommand(element, tick),
             string value => throw new InvalidDataException($"Unknown command kind: {value}"),
@@ -152,6 +154,21 @@ public static class PrototypeCommandDocument
         return designate
             ? new DigDesignateCommand(tick, tiles)
             : new DigCancelCommand(tick, tiles);
+    }
+
+    private static PrototypeCommand ParseBuildCommand(
+        JsonElement element,
+        int tick,
+        bool designate)
+    {
+        // No building type, no zoneKind, no creature: the post is the only thing
+        // this step can build, and construction intent is purely spatial.
+        RequireExactProperties(element, ["tick", "kind", "tiles"]);
+        var tiles = ReadTiles(element);
+
+        return designate
+            ? new BuildDesignateCommand(tick, tiles)
+            : new BuildCancelCommand(tick, tiles);
     }
 
     private static GridPoint[] ReadTiles(JsonElement element)

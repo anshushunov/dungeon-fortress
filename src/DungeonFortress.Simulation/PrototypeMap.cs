@@ -14,6 +14,7 @@ internal sealed class PrototypeMap
         new TileKind[PrototypeTuning.MapWidth, PrototypeTuning.MapHeight];
 
     private readonly SortedSet<GridPoint> _excavated = [];
+    private readonly SortedSet<GridPoint> _builtPosts = [];
 
     public PrototypeMap()
     {
@@ -34,7 +35,7 @@ internal sealed class PrototypeMap
         Set(TileKind.Kitchen, KitchenTiles);
         Set(TileKind.Larder, LarderTiles);
         Set(TileKind.Bunk, BunkTiles);
-        Set(TileKind.Post, PostTiles);
+        Set(TileKind.Post, AuthoredPostTiles);
         Set(TileKind.Rock, InternalRockTiles);
         _tiles[Gate.X, Gate.Y] = TileKind.Gate;
     }
@@ -51,7 +52,12 @@ internal sealed class PrototypeMap
 
     public static GridPoint[] BunkTiles => [new(20, 3), new(21, 3), new(21, 4), new(22, 4)];
 
-    public static GridPoint[] PostTiles => [new(8, 12), new(9, 12), new(8, 13), new(9, 13)];
+    /// <summary>
+    /// The training posts the map fixture authors. It is the starting gym, not
+    /// the set of posts that can exist: <see cref="PostTiles"/> is the runtime
+    /// authority once the player starts building.
+    /// </summary>
+    public static GridPoint[] AuthoredPostTiles => [new(8, 12), new(9, 12), new(8, 13), new(9, 13)];
 
     public static GridPoint[] InternalRockTiles =>
     [
@@ -121,6 +127,29 @@ internal sealed class PrototypeMap
             InternalRockTiles.Contains(point);
     }
 
+    /// <summary>
+    /// A tile a training-post blueprint may occupy: plain floor inside the map,
+    /// whether it was authored as floor or created by digging. Features, the gate,
+    /// rock and an already built post are excluded because the tile kind is no
+    /// longer <see cref="TileKind.Floor"/>.
+    /// </summary>
+    public bool IsBuildableFloor(GridPoint point)
+    {
+        return IsInside(point) && !IsBoundary(point) &&
+            this[point] == TileKind.Floor && point != Gate;
+    }
+
+    /// <summary>
+    /// Only the initial layout can tell whether a tile could <em>ever</em> hold a
+    /// blueprint: it is already plain floor, or it is internal rock that digging
+    /// can turn into plain floor. The command pre-flight uses it; the live map
+    /// stays the runtime authority.
+    /// </summary>
+    public bool IsBuildableInInitialLayout(GridPoint point)
+    {
+        return IsBuildableFloor(point) || IsDiggable(point);
+    }
+
     public void Excavate(GridPoint point)
     {
         if (!IsDiggable(point))
@@ -133,7 +162,65 @@ internal sealed class PrototypeMap
         _excavated.Add(point);
     }
 
+    /// <summary>
+    /// The second mutation the map allows: plain floor becomes a training post.
+    /// Like excavation it is recorded as a delta, so the fixed initial layout plus
+    /// the two deltas reproduce the terrain exactly.
+    /// </summary>
+    public void BuildPost(GridPoint point)
+    {
+        if (!IsBuildableFloor(point))
+        {
+            throw new InvalidOperationException(
+                $"Tile ({point.X},{point.Y}) is not plain floor.");
+        }
+
+        _tiles[point.X, point.Y] = TileKind.Post;
+        _builtPosts.Add(point);
+    }
+
     public IReadOnlyCollection<GridPoint> ExcavatedTiles => _excavated;
+
+    public IReadOnlyCollection<GridPoint> BuiltPostTiles => _builtPosts;
+
+    /// <summary>
+    /// Every training post on the live map, authored or built. Reading it from
+    /// the map rather than from a static list is what lets a built post create the
+    /// same <see cref="JobKind.Drill"/> work an authored one does.
+    /// </summary>
+    public IEnumerable<GridPoint> PostTiles()
+    {
+        for (var y = 0; y < PrototypeTuning.MapHeight; y++)
+        {
+            for (var x = 0; x < PrototypeTuning.MapWidth; x++)
+            {
+                if (_tiles[x, y] == TileKind.Post)
+                {
+                    yield return new GridPoint(x, y);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Where a blueprint may be placed, published for the same reason
+    /// <see cref="StockpileFloorTiles"/> is: the Godot brush filters against this
+    /// list instead of re-deriving the rule.
+    /// </summary>
+    public IEnumerable<GridPoint> BuildFloorTiles()
+    {
+        for (var y = 0; y < PrototypeTuning.MapHeight; y++)
+        {
+            for (var x = 0; x < PrototypeTuning.MapWidth; x++)
+            {
+                var point = new GridPoint(x, y);
+                if (IsBuildableFloor(point))
+                {
+                    yield return point;
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Tiles a material stockpile may cover: plain floor that was already floor

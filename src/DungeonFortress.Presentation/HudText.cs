@@ -133,6 +133,8 @@ public static class HudText
         ZoneEraseCommand erase => $"t{erase.Tick} erase {erase.ZoneKind} ({erase.Tiles.Count})",
         DigDesignateCommand designate => $"t{designate.Tick} dig_designate ({designate.Tiles.Count})",
         DigCancelCommand cancel => $"t{cancel.Tick} dig_cancel ({cancel.Tiles.Count})",
+        BuildDesignateCommand build => $"t{build.Tick} build_designate ({build.Tiles.Count})",
+        BuildCancelCommand unbuild => $"t{unbuild.Tick} build_cancel ({unbuild.Tiles.Count})",
         SetPriorityCommand priority => $"t{priority.Tick} priority {priority.JobKind}={priority.Value}",
         SetRuleCommand rule => $"t{rule.Tick} rule {rule.RuleId}={rule.Value}",
         _ => command.GetType().Name,

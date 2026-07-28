@@ -99,9 +99,12 @@ public sealed class DomainTools(ProjectRoot projectRoot)
                 result.State.Stocks.LooseStone,
                 result.State.Stocks.CarriedStone,
                 result.State.Stocks.StoredStone,
+                result.State.Stocks.SiteStone,
                 result.State.Stocks.ReservedStone,
                 result.State.Stocks.StockpileCapacity,
                 result.State.StockpileCells,
+                result.State.BuildSites,
+                result.State.Map.BuiltPostTiles,
                 (int)creatures.Average(creature => creature.Satiety),
                 (int)creatures.Average(creature => creature.Fatigue),
                 (int)creatures.Average(creature => creature.MartialForm),
@@ -293,10 +296,17 @@ public sealed record PrototypeRunResponse(
     [property: JsonPropertyName("looseStone")] int LooseStone,
     [property: JsonPropertyName("carriedStone")] int CarriedStone,
     [property: JsonPropertyName("storedStone")] int StoredStone,
+    // The fourth state of the same material: delivered to a construction site and
+    // waiting to be spent. Without it the conservation sum cannot be checked from
+    // this summary alone.
+    [property: JsonPropertyName("siteStone")] int SiteStone,
     [property: JsonPropertyName("reservedStone")] int ReservedStone,
     [property: JsonPropertyName("stockpileCapacity")] int StockpileCapacity,
     [property: JsonPropertyName("materialStockpile")]
     IReadOnlyList<PrototypeStockpileCellSnapshot> MaterialStockpile,
+    [property: JsonPropertyName("buildSites")]
+    IReadOnlyList<PrototypeBuildSiteSnapshot> BuildSites,
+    [property: JsonPropertyName("builtPostTiles")] IReadOnlyList<GridPoint> BuiltPostTiles,
     [property: JsonPropertyName("averageSatiety")] int AverageSatiety,
     [property: JsonPropertyName("averageFatigue")] int AverageFatigue,
     [property: JsonPropertyName("averageMartialForm")] int AverageMartialForm,
