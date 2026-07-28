@@ -24,6 +24,10 @@ public partial class Main : Node2D
 
     private readonly List<RuntimeDiagnostic> _diagnostics = [];
     private readonly Dictionary<int, Label> _nameLabels = [];
+    // The rectangle a label was authored with. Godot re-expands an unclipped
+    // Label to its content on the first layout pass, so the live Size stops
+    // being the layout the HUD was designed around; the guard needs the original.
+    private readonly Dictionary<Label, Vector2> _authoredLabelSize = [];
     private readonly Dictionary<string, Texture2D> _goblinSprites = [];
     private readonly List<string> _loadedSpriteStates = [];
     private readonly List<string> _missingSpriteStates = [];
@@ -76,6 +80,10 @@ public partial class Main : Node2D
             var demoControls = arguments.Contains("--demo-controls", StringComparer.Ordinal);
             var demoDig = arguments.Contains("--demo-dig", StringComparer.Ordinal);
             var demoStone = arguments.Contains("--demo-stone", StringComparer.Ordinal);
+            // Holds the HUD to "every line fits", ignoring the deficit Issue #36
+            // still owns. verify.ps1 runs it and requires it to fail: that is what
+            // proves the guard reacts at all instead of passing on everything.
+            var strictHudFit = arguments.Contains("--strict-hud-fit", StringComparer.Ordinal);
             var requiresSprites = !headlessSmoke && !controlsSmoke;
 
             CreateHud();
@@ -137,6 +145,13 @@ public partial class Main : Node2D
                 UpdateHud();
                 QueueRedraw();
             }
+
+            // Every entry point pays for the fit guard, because _Ready still runs
+            // before Godot's first layout pass and the labels therefore still have
+            // the rectangles the HUD was designed around. Later is too late: by the
+            // time a frame is drawn an unclipped label has re-expanded to its own
+            // content and the check would silently pass on anything.
+            AssertLabelsFit(strictHudFit);
 
             if (headlessSmoke || visibleSmoke)
             {
@@ -401,6 +416,7 @@ public partial class Main : Node2D
         label.AddThemeFontSizeOverride("font_size", fontSize);
         label.AddThemeColorOverride("font_color", color);
         AddChild(label);
+        _authoredLabelSize[label] = size;
         return label;
     }
 
@@ -565,6 +581,145 @@ public partial class Main : Node2D
             "INSPECTOR\n\nClick a creature or map cell.\n\n" +
             "The world is a read-only projection of PrototypeWorld; Godot owns only selection, UI tempo and drawing.";
     }
+
+    /// <summary>
+    /// The four HUD panels the overflow guard and the golden UI state care about.
+    /// One list drives both, so a panel cannot be added to one and forgotten in
+    /// the other.
+    /// </summary>
+    private (string Name, Label? Label)[] HudLabels() =>
+    [
+        ("summary", _summary),
+        ("inspector", _inspector),
+        ("feedback", _feedback),
+        ("roster", _roster),
+    ];
+
+    /// <summary>
+    /// What the HUD currently says, as text rather than as pixels. Every branch of
+    /// the inspector then becomes an ordinary testable artifact: pick the frame
+    /// with <c>--screenshot-ticks</c>, point at a tile with <c>--select-cell</c>
+    /// and assert a substring of <c>ui.inspector</c>.
+    ///
+    /// Nothing here depends on the camera. Pixel positions, the visible tile range
+    /// and the viewport size are deliberately absent, because ADR 0008 drops the
+    /// fixed 960x540 frame and those values stop being stable.
+    /// </summary>
+    private object UiText() => new
+    {
+        summary = _summary?.Text,
+        inspector = _inspector?.Text,
+        feedback = _feedback?.Text,
+        roster = _roster?.Text,
+        controlFeedback = _controlFeedback,
+        editMode = _editMode.ToString(),
+        brushZone = _brushZone.ToString(),
+        selectedCell = _selectedCell is { } selected ? new[] { selected.X, selected.Y } : null,
+        selectedCreatureId = _selectedCreatureId,
+    };
+
+    /// <summary>
+    /// How many wrapped lines each HUD panel is currently allowed to lose. Zero is
+    /// the target and the only value a new panel may have.
+    ///
+    /// The non-zero entries are measured, pre-existing debt rather than a decision
+    /// taken here: inside the fixed 960x540 frame the side panel is
+    /// over-subscribed. At its worst frame the inspector needs 244 px and the
+    /// event feedback 197 px, the legend block takes ~75 px, and the column is
+    /// 456 px tall — no arrangement of the current four labels fits. Reflowing the
+    /// HUD is Issue #36 and ADR 0008 additionally drops the fixed frame, so the
+    /// deficit is theirs to clear. Until then the guard still fails the moment
+    /// anything gets worse, which is the regression Issue #26 shipped twice.
+    /// </summary>
+    private static readonly Dictionary<string, int> KnownLineDeficit =
+        new(StringComparer.Ordinal)
+        {
+            ["summary"] = 0,
+            ["inspector"] = 1,
+            ["feedback"] = 4,
+            ["roster"] = 2,
+        };
+
+    /// <summary>
+    /// A <see cref="Label"/> that does not fit its own rectangle silently loses
+    /// text: unclipped it re-expands past the panel below it (the event feedback
+    /// currently runs off the bottom of the window that way), clipped it drops the
+    /// overflowing lines instead. Both happened in Issue #26 and both were found
+    /// by eye on a PNG.
+    ///
+    /// The check is made against the label's authored rectangle and never against
+    /// a window constant: ADR 0008 drops the fixed 960x540 frame, so any assertion
+    /// pinned to it would be wrong the moment the camera lands.
+    ///
+    /// It must run before Godot's first layout pass, because that pass re-expands
+    /// an unclipped label to its content and <c>GetVisibleLineCount()</c> then
+    /// reports the grown rectangle instead of the designed one. <c>_Ready</c> still
+    /// satisfies that in every mode, headless or windowed; a capture in
+    /// <c>_Process</c> no longer does. See <see cref="LabelFit"/> for the evidence
+    /// a run carries about which of the two rectangles it measured.
+    /// </summary>
+    /// <param name="strict">
+    /// Ignore <see cref="KnownLineDeficit"/> and require every panel to hold all of
+    /// its text. Used by <c>--strict-hud-fit</c>, which <c>verify.ps1</c> expects to
+    /// fail today; the day it stops failing, Issue #36 has cleared the deficit and
+    /// the recorded allowances are due for deletion.
+    /// </param>
+    private void AssertLabelsFit(bool strict = false)
+    {
+        foreach (var (name, label) in HudLabels())
+        {
+            if (label is null)
+            {
+                continue;
+            }
+
+            if (_authoredLabelSize.TryGetValue(label, out var authored) &&
+                !label.Size.IsEqualApprox(authored))
+            {
+                throw new InvalidOperationException(
+                    $"HUD label '{name}' has already been resized from {authored} to " +
+                    $"{label.Size}, so a fit check here would measure the grown " +
+                    "rectangle instead of the designed one. Run the guard before the " +
+                    "first layout pass.");
+            }
+
+            var needed = label.GetLineCount();
+            var shown = label.GetVisibleLineCount();
+            var allowed = strict || !KnownLineDeficit.TryGetValue(name, out var known)
+                ? 0
+                : known;
+            if (needed - shown > allowed)
+            {
+                throw new InvalidOperationException(
+                    $"HUD label '{name}' needs {needed} lines but only {shown} fit in " +
+                    $"{label.Size}: {needed - shown} lines lost, {allowed} is the " +
+                    "deficit recorded for Issue #36. Text that does not fit its own " +
+                    "rectangle is drawn over the panel below it.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// The measurements <see cref="AssertLabelsFit"/> acts on, published so a run
+    /// states what the guard had to work with instead of the guard being trusted.
+    /// <c>height</c> differing from <c>authoredHeight</c> is the tell that Godot
+    /// has already re-expanded the label and that a fit check at this point would
+    /// be vacuous.
+    /// </summary>
+    private object[] LabelFit() => HudLabels()
+        .Where(entry => entry.Label is not null)
+        .Select(entry => (object)new
+        {
+            name = entry.Name,
+            neededLines = entry.Label!.GetLineCount(),
+            visibleLines = entry.Label.GetVisibleLineCount(),
+            hardLines = (entry.Label.Text ?? string.Empty).Split('\n').Length,
+            authoredHeight = _authoredLabelSize.TryGetValue(entry.Label, out var authored)
+                ? authored.Y
+                : (float?)null,
+            height = entry.Label.Size.Y,
+        })
+        .ToArray();
 
     private void DrawToolbar()
     {
@@ -1658,6 +1813,8 @@ public partial class Main : Node2D
                 carriedStone = _state.Stocks.CarriedStone,
                 storedStone = _state.Stocks.StoredStone,
                 stockpileCapacity = _state.Stocks.StockpileCapacity,
+                ui = UiText(),
+                labelFit = LabelFit(),
                 loadedSpriteStates = _loadedSpriteStates,
                 missingSpriteStates = _missingSpriteStates,
                 fallbackSpriteDraws = _fallbackSpriteDraws,
@@ -1693,6 +1850,16 @@ public partial class Main : Node2D
             tick = _state?.Tick,
             checksum = _checksum,
             canonicalStateOwner = "DungeonFortress.Simulation.PrototypeWorld",
+            // The same conservation evidence a screenshot carries. A headless run
+            // is now a complete frame report, so the golden UI state does not need
+            // a window to be captured.
+            stoneProduced = _state?.Economy.StoneProduced,
+            looseStone = _state?.Stocks.LooseStone,
+            carriedStone = _state?.Stocks.CarriedStone,
+            storedStone = _state?.Stocks.StoredStone,
+            stockpileCapacity = _state?.Stocks.StockpileCapacity,
+            ui = UiText(),
+            labelFit = LabelFit(),
             loadedSpriteStates = _loadedSpriteStates,
             missingSpriteStates = _missingSpriteStates,
             fallbackSpriteDraws = _fallbackSpriteDraws,

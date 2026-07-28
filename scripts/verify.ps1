@@ -8,6 +8,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "GodotTools.ps1")
+. (Join-Path $PSScriptRoot "HudVerification.ps1")
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $artifactsRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot ".artifacts"))
@@ -210,6 +211,28 @@ try {
             "--", "--smoke-controls"
         ) `
         -ExpectedSuccessEvent "godot_controls_smoke"
+
+    # Text before pixels: the HUD and the inspector are compared against committed
+    # reference state, and the label overflow guard is required to still react.
+    # Both run headless, because neither needs a window to be true.
+    Write-Host "Comparing the golden UI state..."
+    $goldenUiFrames = @()
+    foreach ($frame in Get-GoldenUiFrames) {
+        $capture = Invoke-GoldenUiCapture `
+            -GodotPath $godot `
+            -ProjectPath $gameProjectPath `
+            -Frame $frame
+        $document = ConvertTo-GoldenUiDocument -Frame $frame -Capture $capture
+        Assert-GoldenUiFrame `
+            -ExpectedPath (Get-GoldenUiPath -RepositoryRoot $repoRoot -Frame $frame) `
+            -Actual $document `
+            -FrameName $frame.Name
+        $goldenUiFrames += $frame.Name
+    }
+
+    Write-Host "Checking that the HUD overflow guard still reacts..."
+    Assert-HudFitGuardReacts -GodotPath $godot -ProjectPath $gameProjectPath
+
     $raidScreenshot = Join-Path $verifyRoot "prepared-raid.png"
     $baselineScreenshot = Join-Path $verifyRoot "baseline-t1.png"
     $baselineResult = Invoke-GodotChecked `
@@ -250,6 +273,7 @@ try {
         godotExitCode = $godotExitCode
         godotControlsExitCode = $controlsResult.ExitCode
         godotRaidExitCode = $raidResult.ExitCode
+        goldenUiFrames = $goldenUiFrames
     } | ConvertTo-Json -Compress | Write-Host
 }
 finally {
