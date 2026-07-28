@@ -32,7 +32,16 @@ public sealed record HudViewState(
     GridPoint? SelectedCell,
     string ControlFeedback,
     IReadOnlyList<PrototypeCommand> PlayerCommands,
-    int DiagnosticCount);
+    int DiagnosticCount)
+{
+    /// <summary>
+    /// The snapshot as the map shows it: canonical state plus whatever marking
+    /// was accepted for this tick and has not been applied yet. Derived rather
+    /// than passed in, so no caller can build a frame whose HUD disagrees with
+    /// the map beside it.
+    /// </summary>
+    public MapProjection Projection => MapProjection.Of(Snapshot);
+}
 
 /// <summary>
 /// The four HUD panels as text. One value carries them together so a caller

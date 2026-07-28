@@ -87,19 +87,34 @@ public static class BrushSelection
         BrushMode mode,
         ZoneKind zone,
         GridPoint from,
+        GridPoint to) =>
+        Resolve(MapProjection.Of(state), mode, zone, from, to);
+
+    /// <summary>
+    /// The same question asked of the map the player is actually looking at,
+    /// which includes the marking accepted for this tick and not applied yet. A
+    /// cell that already carries a waiting mark is not offered again: the drawn
+    /// mark, the highlighted area and the emitted command have to be one answer,
+    /// and paused they would otherwise be three.
+    /// </summary>
+    public static BrushStroke Resolve(
+        MapProjection view,
+        BrushMode mode,
+        ZoneKind zone,
+        GridPoint from,
         GridPoint to)
     {
-        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(view);
         var rectangle = Rectangle(from, to);
         if (mode == BrushMode.Inspect)
         {
             return new BrushStroke(mode, zone, [], rectangle.Count, "Inspect does not mark the map.");
         }
 
-        var tiles = rectangle.Where(tile => Accepts(state, mode, zone, tile)).ToArray();
+        var tiles = rectangle.Where(tile => Accepts(view, mode, zone, tile)).ToArray();
         if (tiles.Length == 0)
         {
-            return new BrushStroke(mode, zone, [], rectangle.Count, EmptyReason(state, mode, zone, rectangle));
+            return new BrushStroke(mode, zone, [], rectangle.Count, EmptyReason(view, mode, zone, rectangle));
         }
 
         // One command carries at most 256 tiles, so a very large drag has to be
@@ -153,33 +168,38 @@ public static class BrushSelection
     /// not touch: the number the player sees during a drag has to be the number of
     /// cells the command actually affects.
     /// </summary>
-    public static bool Accepts(PrototypeSnapshot state, BrushMode mode, ZoneKind zone, GridPoint tile)
+    public static bool Accepts(PrototypeSnapshot state, BrushMode mode, ZoneKind zone, GridPoint tile) =>
+        Accepts(MapProjection.Of(state), mode, zone, tile);
+
+    /// <summary>
+    /// The same rule read from the projection, so a mark that is waiting for its
+    /// tick counts exactly as a mark the world already holds.
+    /// </summary>
+    public static bool Accepts(MapProjection view, BrushMode mode, ZoneKind zone, GridPoint tile)
     {
-        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(view);
         if (!MapBounds.Contains(tile))
         {
             return false;
         }
 
+        var state = view.State;
         return mode switch
         {
             BrushMode.Paint when zone == ZoneKind.MaterialStockpile =>
-                state.Map.StockpileFloorTiles.Contains(tile) &&
-                !state.StockpileCells.Any(cell => cell.Position == tile),
+                state.Map.StockpileFloorTiles.Contains(tile) && !view.IsStockpileCell(tile),
             BrushMode.Paint =>
-                IsZonable(state, tile) && !state.Zones[zone].Contains(tile),
+                IsZonable(state, tile) && !view.IsInZone(zone, tile),
             BrushMode.Erase =>
-                IsZonable(state, tile) && state.Zones[zone].Contains(tile),
+                IsZonable(state, tile) && view.IsInZone(zone, tile),
             BrushMode.Dig =>
-                state.Map.DiggableTiles.Contains(tile) &&
-                !state.DigDesignations.Any(item => item.Tile == tile),
+                state.Map.DiggableTiles.Contains(tile) && !view.IsDesignatedForDigging(tile),
             BrushMode.CancelDig =>
-                state.DigDesignations.Any(item => item.Tile == tile),
+                view.IsDesignatedForDigging(tile),
             BrushMode.Build =>
-                state.Map.BuildFloorTiles.Contains(tile) &&
-                !state.BuildSites.Any(site => site.Tile == tile),
+                state.Map.BuildFloorTiles.Contains(tile) && !view.CarriesBlueprint(tile),
             BrushMode.CancelBuild =>
-                state.BuildSites.Any(site => site.Tile == tile),
+                view.CarriesBlueprint(tile),
             _ => false,
         };
     }
@@ -199,14 +219,14 @@ public static class BrushSelection
     /// gets the same sentence about the area instead of one per cell.
     /// </summary>
     private static string EmptyReason(
-        PrototypeSnapshot state,
+        MapProjection view,
         BrushMode mode,
         ZoneKind zone,
         IReadOnlyList<GridPoint> rectangle)
     {
         if (rectangle.Count == 1)
         {
-            return SingleCellReason(state, mode, zone, rectangle[0]);
+            return SingleCellReason(view, mode, zone, rectangle[0]);
         }
 
         var area = $"None of the {rectangle.Count} cells in the selection";
@@ -225,29 +245,29 @@ public static class BrushSelection
     }
 
     private static string SingleCellReason(
-        PrototypeSnapshot state,
+        MapProjection view,
         BrushMode mode,
         ZoneKind zone,
         GridPoint tile)
     {
+        var state = view.State;
         var at = $"({tile.X},{tile.Y})";
         return mode switch
         {
-            BrushMode.Paint when zone == ZoneKind.MaterialStockpile &&
-                state.StockpileCells.Any(cell => cell.Position == tile) =>
+            BrushMode.Paint when zone == ZoneKind.MaterialStockpile && view.IsStockpileCell(tile) =>
                 $"{at} is already a material stockpile cell.",
             BrushMode.Paint when zone == ZoneKind.MaterialStockpile =>
                 $"{at} cannot store material: {InspectorText.UnstockpileableReason(state, tile)}.",
-            BrushMode.Paint when state.Zones[zone].Contains(tile) =>
+            BrushMode.Paint when view.IsInZone(zone, tile) =>
                 $"{at} is already in the {zone} zone.",
             BrushMode.Paint => $"{at} cannot take a zone: it is not passable ground.",
             BrushMode.Erase => $"{at} is not in the {zone} zone.",
-            BrushMode.Dig when state.DigDesignations.Any(item => item.Tile == tile) =>
+            BrushMode.Dig when view.IsDesignatedForDigging(tile) =>
                 $"{at} is already designated for digging.",
             BrushMode.Dig =>
                 $"{at} cannot be dug: {InspectorText.UndiggableReason(state, tile)}.",
             BrushMode.CancelDig => $"{at} carries no dig designation.",
-            BrushMode.Build when state.BuildSites.Any(site => site.Tile == tile) =>
+            BrushMode.Build when view.CarriesBlueprint(tile) =>
                 $"{at} already carries a blueprint.",
             BrushMode.Build =>
                 $"{at} cannot hold a training post: {InspectorText.UnbuildableReason(state, tile)}.",

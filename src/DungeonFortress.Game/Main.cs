@@ -36,6 +36,10 @@ public partial class Main : Node2D
     private Texture2D? _iconPlaceholder;
     private PrototypeWorld? _world;
     private PrototypeSnapshot? _state;
+    // The snapshot as the map is allowed to show it: canonical state plus the
+    // marking accepted for this tick and not applied yet. Rebuilt with _state and
+    // never written back — see DungeonFortress.Presentation.MapProjection.
+    private MapProjection? _projection;
     private Control? _hudRoot;
     private Label? _title;
     private Label? _summary;
@@ -1387,6 +1391,10 @@ public partial class Main : Node2D
     private void RefreshState()
     {
         _state = _world!.GetSnapshot();
+        // One projection per state, built here and nowhere else, so the map, the
+        // brush, the HUD and the structured output cannot be looking at four
+        // different moments of the same tick.
+        _projection = MapProjection.Of(_state);
         // Only a refresh that follows RememberMotionOrigin has something to lerp
         // from. Everything else — loading a fixture, a single STEP, an accepted
         // command, a replay — is drawn at the canonical position straight away.
@@ -1523,7 +1531,27 @@ public partial class Main : Node2D
                 refusal = stroke.Refusal,
             }
             : null,
+        // Marking accepted for this tick that the tick has not applied yet. It is
+        // what the map draws over canonical state while the world is paused, so
+        // "the mark showed up straight away" is a field in a structured run rather
+        // than something judged from a screenshot. Null whenever nothing waits,
+        // which is every frame of free-running time.
+        pending = _projection is { HasPendingMarking: true } waiting
+            ? (object)new
+            {
+                tick = _state!.Tick,
+                commands = waiting.PendingCommandCount,
+                digMarks = Tiles(waiting.PendingDigMarks),
+                digWithdrawals = Tiles(waiting.PendingDigWithdrawals),
+                buildMarks = Tiles(waiting.PendingBuildMarks),
+                buildWithdrawals = Tiles(waiting.PendingBuildWithdrawals),
+                stockpileCells = Tiles(waiting.PendingStockpileCells),
+            }
+            : null,
     };
+
+    private static int[][] Tiles(IReadOnlyList<GridPoint> tiles) =>
+        [.. tiles.Select(tile => new[] { tile.X, tile.Y })];
 
     /// <summary>
     /// Viewport sizes the HUD is required to hold all of its text at. The live
@@ -1683,7 +1711,7 @@ public partial class Main : Node2D
                     DrawRect(rect, BaseTileColor(cell));
                 }
 
-                foreach (var zone in _state.Zones.Where(pair => pair.Value.Contains(cell)).Select(pair => pair.Key))
+                foreach (var zone in _projection!.ZonesAt(cell))
                 {
                     DrawRect(rect.Grow(-3), ZoneColor(zone), false, 1.5f);
                 }
@@ -1693,7 +1721,7 @@ public partial class Main : Node2D
                 // rule is read from the same function the stroke itself uses, so
                 // an outlined cell and an accepted cell cannot be different sets.
                 if (LegalTargetOutline() is { } outline &&
-                    BrushSelection.Accepts(_state, _editMode, _brushZone, cell))
+                    BrushSelection.Accepts(_projection, _editMode, _brushZone, cell))
                 {
                     DrawRect(rect.Grow(-2), outline, false, 1.0f);
                 }
@@ -1886,7 +1914,7 @@ public partial class Main : Node2D
         }
 
         var preview = new Rect2(CellTopLeft(hovered), new Vector2(TileSize - 1, TileSize - 1));
-        var previewColor = BrushSelection.Accepts(_state, _editMode, _brushZone, hovered)
+        var previewColor = BrushSelection.Accepts(_projection!, _editMode, _brushZone, hovered)
             ? BrushAccent()
             : new Color("#ef4444");
         DrawRect(preview.Grow(-1), previewColor with { A = 0.32f });
@@ -1930,26 +1958,19 @@ public partial class Main : Node2D
     /// </summary>
     private void DrawDigDesignations()
     {
-        foreach (var designation in _state!.DigDesignations)
+        // Accepted on this tick and not applied yet. Drawn first and drawn as the
+        // ordinary waiting designation it is about to become: the picture must not
+        // change when the tick that records it runs, only gain a status.
+        foreach (var tile in _projection!.PendingDigMarks)
         {
-            var rect = new Rect2(
-                CellTopLeft(designation.Tile),
-                new Vector2(TileSize - 1, TileSize - 1));
-            var accent = designation.StatusCode switch
-            {
-                "dig_in_progress" => new Color("#fbbf24"),
-                "dig_unreachable" => new Color("#f87171"),
-                "dig_blocked_priority" => new Color("#94a3b8"),
-                _ => new Color("#f59e0b"),
-            };
+            DrawDigMark(tile, DigAccent(null));
+        }
 
-            DrawRect(rect.Grow(-1), accent with { A = 0.26f });
-            DrawRect(rect.Grow(-1), accent, false, 1.5f);
-
-            // The crossed pick reads as "marked for excavation" at tile size.
+        foreach (var designation in _projection.DigDesignations)
+        {
+            var accent = DigAccent(designation.StatusCode);
+            DrawDigMark(designation.Tile, accent);
             var center = CellCenter(designation.Tile);
-            DrawLine(center + new Vector2(-5, -5), center + new Vector2(5, 5), accent, 1.5f);
-            DrawLine(center + new Vector2(5, -5), center + new Vector2(-5, 5), accent, 1.5f);
 
             if (designation.StatusCode == "dig_unreachable")
             {
@@ -1989,6 +2010,36 @@ public partial class Main : Node2D
     }
 
     /// <summary>
+    /// The mark itself: a tinted cell and the crossed pick that reads as "marked
+    /// for excavation" at tile size. One routine for a designation the world holds
+    /// and for one still waiting for its tick, so the two cannot drift apart and
+    /// the moment of application cannot be seen.
+    /// </summary>
+    private void DrawDigMark(GridPoint tile, Color accent)
+    {
+        var rect = new Rect2(CellTopLeft(tile), new Vector2(TileSize - 1, TileSize - 1));
+        DrawRect(rect.Grow(-1), accent with { A = 0.26f });
+        DrawRect(rect.Grow(-1), accent, false, 1.5f);
+
+        var center = CellCenter(tile);
+        DrawLine(center + new Vector2(-5, -5), center + new Vector2(5, 5), accent, 1.5f);
+        DrawLine(center + new Vector2(5, -5), center + new Vector2(-5, 5), accent, 1.5f);
+    }
+
+    /// <summary>
+    /// A designation waiting for its tick has no <c>statusCode</c> yet — the world
+    /// assigns one when it applies the command — so it takes the colour of the
+    /// designation that is waiting for a worker, which is what it becomes.
+    /// </summary>
+    private static Color DigAccent(string? statusCode) => statusCode switch
+    {
+        "dig_in_progress" => new Color("#fbbf24"),
+        "dig_unreachable" => new Color("#f87171"),
+        "dig_blocked_priority" => new Color("#94a3b8"),
+        _ => new Color("#f59e0b"),
+    };
+
+    /// <summary>
     /// A blueprint has to answer three questions at tile size: is this an
     /// intention rather than a building, how much of its material has arrived, and
     /// is anything actually happening. Delivered blocks are drawn as discrete pips
@@ -1997,52 +2048,18 @@ public partial class Main : Node2D
     /// </summary>
     private void DrawBuildSites()
     {
-        foreach (var site in _state!.BuildSites)
+        // A blueprint the player marked on this tick, drawn as the blueprint it
+        // becomes: nothing delivered, nothing booked, the full cost as hollow
+        // pips. BuildStoneCost is the same tuning value the world charges.
+        foreach (var tile in _projection!.PendingBuildMarks)
         {
-            var rect = new Rect2(
-                CellTopLeft(site.Tile),
-                new Vector2(TileSize - 1, TileSize - 1));
-            var accent = site.StatusCode switch
-            {
-                "build_in_progress" => new Color("#5eead4"),
-                "build_unreachable" => new Color("#f87171"),
-                "build_blocked_priority" or "build_haul_blocked" => new Color("#94a3b8"),
-                "build_no_stone" or "build_stone_reserved" => new Color("#fbbf24"),
-                _ => new Color("#2dd4bf"),
-            };
+            DrawBlueprint(tile, BuildAccent(null), 0, 0, PrototypeTuning.BuildStoneCost);
+        }
 
-            DrawRect(rect.Grow(-1), accent with { A = 0.22f });
-            DrawRect(rect.Grow(-1), accent, false, 1.5f);
-
-            var topLeft = CellTopLeft(site.Tile);
-            DrawString(
-                ThemeDB.FallbackFont,
-                topLeft + new Vector2(2, 8),
-                "POST?",
-                HorizontalAlignment.Left,
-                TileSize - 3,
-                6,
-                accent);
-
-            for (var index = 0; index < site.Required; index++)
-            {
-                var pip = new Rect2(
-                    topLeft + new Vector2(3 + index * 7, TileSize - 9),
-                    new Vector2(5, 5));
-                if (index < site.Delivered)
-                {
-                    DrawRect(pip, new Color("#e2e8f0"));
-                    DrawRect(pip, new Color("#475569"), false, 1.0f);
-                }
-                else if (index < site.Delivered + site.IncomingReserved)
-                {
-                    DrawRect(pip, new Color("#7dd3fc"), false, 1.0f);
-                }
-                else
-                {
-                    DrawRect(pip, accent with { A = 0.45f }, false, 1.0f);
-                }
-            }
+        foreach (var site in _projection.BuildSites)
+        {
+            var accent = BuildAccent(site.StatusCode);
+            DrawBlueprint(site.Tile, accent, site.Delivered, site.IncomingReserved, site.Required);
 
             if (site.ProgressTicks <= 0 || site.RequiredTicks <= 0)
             {
@@ -2053,13 +2070,74 @@ public partial class Main : Node2D
                 site.ProgressTicks / (float)site.RequiredTicks,
                 0f,
                 1f);
-            var barTopLeft = topLeft + new Vector2(2, 2);
+            var barTopLeft = CellTopLeft(site.Tile) + new Vector2(2, 2);
             DrawRect(new Rect2(barTopLeft, new Vector2(TileSize - 5, 3)), new Color("#0f172a"));
             DrawRect(
                 new Rect2(barTopLeft, new Vector2((TileSize - 5) * fraction, 3)),
                 new Color("#5eead4"));
         }
     }
+
+    /// <summary>
+    /// The blueprint itself. One routine for a site the world holds and for one
+    /// accepted on this tick, so applying the command changes the pips rather than
+    /// making the blueprint appear.
+    /// </summary>
+    private void DrawBlueprint(
+        GridPoint tile,
+        Color accent,
+        int delivered,
+        int incomingReserved,
+        int required)
+    {
+        var rect = new Rect2(CellTopLeft(tile), new Vector2(TileSize - 1, TileSize - 1));
+        DrawRect(rect.Grow(-1), accent with { A = 0.22f });
+        DrawRect(rect.Grow(-1), accent, false, 1.5f);
+
+        var topLeft = CellTopLeft(tile);
+        DrawString(
+            ThemeDB.FallbackFont,
+            topLeft + new Vector2(2, 8),
+            "POST?",
+            HorizontalAlignment.Left,
+            TileSize - 3,
+            6,
+            accent);
+
+        for (var index = 0; index < required; index++)
+        {
+            var pip = new Rect2(
+                topLeft + new Vector2(3 + index * 7, TileSize - 9),
+                new Vector2(5, 5));
+            if (index < delivered)
+            {
+                DrawRect(pip, new Color("#e2e8f0"));
+                DrawRect(pip, new Color("#475569"), false, 1.0f);
+            }
+            else if (index < delivered + incomingReserved)
+            {
+                DrawRect(pip, new Color("#7dd3fc"), false, 1.0f);
+            }
+            else
+            {
+                DrawRect(pip, accent with { A = 0.45f }, false, 1.0f);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The colour of a blueprint. A blueprint waiting for its tick has no
+    /// <c>statusCode</c> yet and takes the plain "marked, nothing decided"
+    /// colour it will be given.
+    /// </summary>
+    private static Color BuildAccent(string? statusCode) => statusCode switch
+    {
+        "build_in_progress" => new Color("#5eead4"),
+        "build_unreachable" => new Color("#f87171"),
+        "build_blocked_priority" or "build_haul_blocked" => new Color("#94a3b8"),
+        "build_no_stone" or "build_stone_reserved" => new Color("#fbbf24"),
+        _ => new Color("#2dd4bf"),
+    };
 
     /// <summary>
     /// The end of the chain, drawn as a graybox primitive with a caption: a solid
@@ -2095,65 +2173,88 @@ public partial class Main : Node2D
     /// </summary>
     private void DrawStockpileCells()
     {
-        foreach (var cell in _state!.StockpileCells)
+        // Painted on this tick and not applied yet: an empty cell, which is what
+        // the world creates when it applies the paint.
+        foreach (var tile in _projection!.PendingStockpileCells)
         {
-            var rect = new Rect2(
-                CellTopLeft(cell.Position),
-                new Vector2(TileSize - 1, TileSize - 1));
-            var accent = cell.StatusCode switch
-            {
-                "stockpile_unreachable" => new Color("#f87171"),
-                "stockpile_full" => new Color("#e2e8f0"),
-                "stockpile_incoming" => new Color("#7dd3fc"),
-                _ => new Color("#94a3b8"),
-            };
+            DrawStockpileCell(tile, StockpileAccent(null), 0, 0);
+        }
 
-            DrawRect(rect.Grow(-1), new Color("#1f2937"));
-            DrawRect(rect.Grow(-1), accent, false, 1.5f);
-
-            // Corner ticks read as "a marked-out storage square" instead of just
-            // another zone outline.
-            var topLeft = CellTopLeft(cell.Position);
-            foreach (var corner in new[]
-                     {
-                         (new Vector2(2, 2), new Vector2(6, 2), new Vector2(2, 6)),
-                         (new Vector2(TileSize - 3, 2), new Vector2(TileSize - 7, 2), new Vector2(TileSize - 3, 6)),
-                     })
-            {
-                DrawLine(topLeft + corner.Item1, topLeft + corner.Item2, accent, 1.0f);
-                DrawLine(topLeft + corner.Item1, topLeft + corner.Item3, accent, 1.0f);
-            }
-
-            for (var index = 0; index < cell.Stored; index++)
-            {
-                DrawRect(
-                    new Rect2(
-                        topLeft + new Vector2(4 + index * 7, TileSize - 10),
-                        new Vector2(6, 6)),
-                    new Color("#e2e8f0"));
-                DrawRect(
-                    new Rect2(
-                        topLeft + new Vector2(4 + index * 7, TileSize - 10),
-                        new Vector2(6, 6)),
-                    new Color("#475569"),
-                    false,
-                    1.0f);
-            }
-
-            // A hollow pip per booked slot: the player sees the room is taken even
-            // though the carrier has not arrived yet.
-            for (var index = cell.Stored; index < cell.Stored + cell.IncomingReserved; index++)
-            {
-                DrawRect(
-                    new Rect2(
-                        topLeft + new Vector2(4 + index * 7, TileSize - 10),
-                        new Vector2(6, 6)),
-                    new Color("#7dd3fc"),
-                    false,
-                    1.0f);
-            }
+        foreach (var cell in _projection.StockpileCells)
+        {
+            DrawStockpileCell(
+                cell.Position,
+                StockpileAccent(cell.StatusCode),
+                cell.Stored,
+                cell.IncomingReserved);
         }
     }
+
+    /// <summary>
+    /// One storage square. Shared by a cell the world holds and by one accepted on
+    /// this tick, so painting a stockpile while paused draws the same square the
+    /// tick would draw.
+    /// </summary>
+    private void DrawStockpileCell(GridPoint position, Color accent, int stored, int incomingReserved)
+    {
+        var rect = new Rect2(CellTopLeft(position), new Vector2(TileSize - 1, TileSize - 1));
+        DrawRect(rect.Grow(-1), new Color("#1f2937"));
+        DrawRect(rect.Grow(-1), accent, false, 1.5f);
+
+        // Corner ticks read as "a marked-out storage square" instead of just
+        // another zone outline.
+        var topLeft = CellTopLeft(position);
+        foreach (var corner in new[]
+                 {
+                     (new Vector2(2, 2), new Vector2(6, 2), new Vector2(2, 6)),
+                     (new Vector2(TileSize - 3, 2), new Vector2(TileSize - 7, 2), new Vector2(TileSize - 3, 6)),
+                 })
+        {
+            DrawLine(topLeft + corner.Item1, topLeft + corner.Item2, accent, 1.0f);
+            DrawLine(topLeft + corner.Item1, topLeft + corner.Item3, accent, 1.0f);
+        }
+
+        for (var index = 0; index < stored; index++)
+        {
+            DrawRect(
+                new Rect2(
+                    topLeft + new Vector2(4 + index * 7, TileSize - 10),
+                    new Vector2(6, 6)),
+                new Color("#e2e8f0"));
+            DrawRect(
+                new Rect2(
+                    topLeft + new Vector2(4 + index * 7, TileSize - 10),
+                    new Vector2(6, 6)),
+                new Color("#475569"),
+                false,
+                1.0f);
+        }
+
+        // A hollow pip per booked slot: the player sees the room is taken even
+        // though the carrier has not arrived yet.
+        for (var index = stored; index < stored + incomingReserved; index++)
+        {
+            DrawRect(
+                new Rect2(
+                    topLeft + new Vector2(4 + index * 7, TileSize - 10),
+                    new Vector2(6, 6)),
+                new Color("#7dd3fc"),
+                false,
+                1.0f);
+        }
+    }
+
+    /// <summary>
+    /// The colour of a stockpile cell. A cell waiting for its tick has no
+    /// <c>statusCode</c> yet and takes the empty-cell colour it is about to get.
+    /// </summary>
+    private static Color StockpileAccent(string? statusCode) => statusCode switch
+    {
+        "stockpile_unreachable" => new Color("#f87171"),
+        "stockpile_full" => new Color("#e2e8f0"),
+        "stockpile_incoming" => new Color("#7dd3fc"),
+        _ => new Color("#94a3b8"),
+    };
 
     private void CycleZone()
     {
@@ -2209,10 +2310,10 @@ public partial class Main : Node2D
     /// above the cursor and the command that lands cannot disagree.
     /// </summary>
     private BrushStroke? PendingStroke() =>
-        _state is null || _dragAnchor is not { } anchor
+        _projection is null || _dragAnchor is not { } anchor
             ? null
             : BrushSelection.Resolve(
-                _state,
+                _projection,
                 _editMode,
                 _brushZone,
                 anchor,
@@ -2232,13 +2333,16 @@ public partial class Main : Node2D
     /// </summary>
     private void ApplyBrushStroke(GridPoint from, GridPoint to)
     {
-        if (_state is null)
+        if (_projection is null)
         {
             return;
         }
 
-        var stroke = BrushSelection.Resolve(_state, _editMode, _brushZone, from, to);
-        if (BrushSelection.ToCommand(stroke, _state.Tick) is { } command)
+        // Resolved against the projection, so a cell that already carries a mark
+        // the world has not applied yet is not marked a second time. Paused, that
+        // is the difference between one command and one per click.
+        var stroke = BrushSelection.Resolve(_projection, _editMode, _brushZone, from, to);
+        if (BrushSelection.ToCommand(stroke, _projection.State.Tick) is { } command)
         {
             TryApplyPlayerCommand(command);
             return;
@@ -2423,8 +2527,11 @@ public partial class Main : Node2D
             ApplyBrushStroke(tile, tile);
         }
 
-        // A command issued at tick T is applied at the start of tick T, so the
-        // designations only become visible to the brush after one step.
+        // The withdrawal deliberately lands on the next tick, which is what keeps
+        // this session's log the same shape as
+        // scenarios/prototype1/dig-demo.commands.v2.json. The brush no longer
+        // needs the step to see the marks: since Issue #58 a mark is part of the
+        // projection the moment it is accepted.
         Advance(1);
         _editMode = BrushMode.CancelDig;
         ApplyBrushStroke(new GridPoint(26, 3), new GridPoint(26, 3));
@@ -2554,6 +2661,7 @@ public partial class Main : Node2D
             throw new InvalidOperationException("Invalid indirect command changed the world or log.");
         }
 
+        VerifyPausedMarkingSmoke();
         VerifyDigBrushSmoke();
         VerifyStockpileBrushSmoke();
         VerifyBuildBrushSmoke();
@@ -2630,6 +2738,108 @@ public partial class Main : Node2D
 
         CancelBrush("rectangle smoke");
     }
+
+    /// <summary>
+    /// Issue #58, through the adapter rather than through the unit tests: a mark
+    /// accepted while time is stopped is on the map at once, a withdrawal is off
+    /// it at once, and the tick that finally records either of them does not
+    /// change what is drawn.
+    ///
+    /// The last claim is the one a picture cannot make. Marking is only useful
+    /// while paused if unpausing does not visibly redo it, so the check compares
+    /// the set of cells that read as designated across the very tick that applies
+    /// the command and requires it to be the same set.
+    ///
+    /// It leaves the world exactly as it found it — mark, apply, withdraw, apply —
+    /// so the excavation smoke below still starts from no designations.
+    /// </summary>
+    private void VerifyPausedMarkingSmoke()
+    {
+        // In the excavation pocket and used by no other smoke in this file.
+        var tile = new GridPoint(26, 3);
+        var commandsBefore = _playerCommands.Count;
+        var tickBefore = _state!.Tick;
+
+        SelectEditMode(BrushMode.Dig);
+        ApplyBrushStroke(tile, tile);
+
+        if (_state!.Tick != tickBefore)
+        {
+            throw new InvalidOperationException(
+                "Accepting a brush stroke advanced the simulation. Marking is not a time control.");
+        }
+
+        if (_playerCommands.Count != commandsBefore + 1)
+        {
+            throw new InvalidOperationException("The paused stroke did not emit exactly one command.");
+        }
+
+        if (_state.DigDesignations.Any(item => item.Tile == tile))
+        {
+            throw new InvalidOperationException(
+                "Canonical state applied a command before its own tick ran.");
+        }
+
+        if (!_projection!.IsDesignatedForDigging(tile) ||
+            !_projection.PendingDigMarks.Contains(tile))
+        {
+            throw new InvalidOperationException(
+                "A designation accepted while paused is not on the map until time moves (Issue #58).");
+        }
+
+        if (BrushSelection.Accepts(_projection, BrushMode.Dig, _brushZone, tile))
+        {
+            throw new InvalidOperationException(
+                "The dig brush offered a cell that already carries a mark waiting for its tick.");
+        }
+
+        var drawnBefore = DesignatedTiles();
+        Advance(1);
+        if (!_state!.DigDesignations.Any(item => item.Tile == tile) ||
+            _projection!.PendingDigMarks.Count != 0)
+        {
+            throw new InvalidOperationException("The tick did not apply the paused designation.");
+        }
+
+        if (!drawnBefore.SequenceEqual(DesignatedTiles()))
+        {
+            throw new InvalidOperationException(
+                "The cells drawn as designated changed when the command was applied: " +
+                "unpausing redraws the marking instead of refining it.");
+        }
+
+        SelectEditMode(BrushMode.CancelDig);
+        ApplyBrushStroke(tile, tile);
+        if (_projection!.IsDesignatedForDigging(tile))
+        {
+            throw new InvalidOperationException(
+                "A withdrawal accepted while paused stayed on the map until the next tick.");
+        }
+
+        if (!_state!.DigDesignations.Any(item => item.Tile == tile))
+        {
+            throw new InvalidOperationException(
+                "The withdrawal reached canonical state before its own tick ran.");
+        }
+
+        Advance(1);
+        if (_state!.DigDesignations.Any(item => item.Tile == tile) ||
+            _projection!.HasPendingMarking)
+        {
+            throw new InvalidOperationException("The tick did not apply the paused withdrawal.");
+        }
+
+        CancelBrush("paused marking smoke");
+    }
+
+    /// <summary>Every cell that currently reads as designated, drawn or waiting.</summary>
+    private IReadOnlyList<GridPoint> DesignatedTiles() =>
+    [
+        .. _projection!.DigDesignations
+            .Select(item => item.Tile)
+            .Concat(_projection.PendingDigMarks)
+            .Order(),
+    ];
 
     /// <summary>
     /// An input-seam check for the excavation brushes: a stroke marks several
@@ -3033,7 +3243,7 @@ public partial class Main : Node2D
         if (_state!.Beds.Any(bed => bed.Position == cell)) return new Color("#31572c");
         if (_state.Stations.Any(station => station.Position == cell && station.Kind == TileKind.Kitchen)) return new Color("#7c4a22");
         if (_state.Stations.Any(station => station.Position == cell && station.Kind == TileKind.Post)) return new Color("#134e4a");
-        if (_state.Zones[ZoneKind.Larder].Contains(cell)) return new Color("#5b3a32");
+        if (_projection!.IsInZone(ZoneKind.Larder, cell)) return new Color("#5b3a32");
         if (cell is { X: 20 or 21, Y: 3 } or { X: 21 or 22, Y: 4 }) return new Color("#3b4252");
         if (cell == new GridPoint(27, 13)) return new Color("#854d0e");
         return new Color("#243244");
@@ -3148,7 +3358,7 @@ public partial class Main : Node2D
         DrawZoneLabel(ZoneKind.Kitchen, new GridPoint(9, 6), "KITCHEN");
         DrawZoneLabel(ZoneKind.Larder, new GridPoint(13, 6), "LARDER");
         DrawZoneLabel(ZoneKind.Quarters, new GridPoint(19, 2), "QUARTERS");
-        if (_state!.Zones[ZoneKind.TrainingGround].Count > 0)
+        if (_projection!.Zone(ZoneKind.TrainingGround).Count > 0)
         {
             DrawZoneLabel(ZoneKind.TrainingGround, new GridPoint(7, 11), "TRAIN");
         }
@@ -3156,7 +3366,7 @@ public partial class Main : Node2D
 
     private void DrawZoneLabel(ZoneKind zone, GridPoint anchor, string text)
     {
-        if (!_state!.Zones[zone].Contains(anchor))
+        if (!_projection!.IsInZone(zone, anchor))
         {
             return;
         }

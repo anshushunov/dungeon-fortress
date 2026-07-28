@@ -1,7 +1,7 @@
 # Godot graybox — Prototype 1
 
 Status: active
-Source: Issues #10–#12, #24, #26, #28, #36, #48, #55
+Source: Issues #10–#12, #24, #26, #28, #36, #48, #55, #58
 
 The graybox is the visual, top-down projection of the headless Prototype 1
 economy and raid. It starts with the `baseline` gameplay-v2 fixture.
@@ -90,8 +90,10 @@ zone with `Z` is where the intent gets lost. The command it emits is an ordinary
 Every accepted edit is appended to the visible in-memory log, fully validated,
 then replayed from the fixture to the current tick before replacing the Godot
 projection. Invalid edits leave both world and log unchanged and appear in the
-feedback/diagnostic buffer. A command applied at the current tick becomes active
-on the next simulation tick.
+feedback/diagnostic buffer. A command accepted at the current tick becomes
+active in canonical state on the next simulation tick, and is drawn on the map
+straight away — see
+[Marking while time is stopped](#marking-while-time-is-stopped-issue-58).
 
 Speed, pause and stepping are presentation controls only. They only choose how
 often the adapter calls `PrototypeWorld.RunTicks`; they are not gameplay
@@ -202,6 +204,62 @@ width budget is drawn against.
 `ui.summary` is untouched and stays a semantic dump, so `tests/golden/ui/*.json`
 pass **without regeneration**. A regenerated golden file here would be a defect
 report, not a chore.
+
+## Marking while time is stopped (Issue #58)
+
+Pause is the planning mode: the player stops time in order to lay out space
+calmly. Until Issue #58 that was the one mode with no feedback at all. A command
+carrying tick `T` is applied at the **start** of tick `T`, so a world stopped at
+`T` holds the intent in its log and not yet in its designations. Running, that
+gap lasts a sixth of a second and nobody sees it; paused it never closes, so the
+player marked rock and the rock stayed bare. The same thing made `STEP` — mark,
+advance one tick, see what happened — read as a broken control rather than as a
+way to learn the mechanic.
+
+Two ways out were possible: **show the intent before it is applied**, or **apply
+designation commands immediately**. The second moves the order of operations
+inside a tick, which is an invariant under
+[ADR 0010](../decisions/0010-contract-invariants-and-tuning.md) and would need an
+ADR of its own. The first was taken.
+
+`DungeonFortress.Presentation.MapProjection` is that layer. It is a pure function
+of one snapshot: it reads `pendingCommands`, keeps the ones whose tick is the
+tick the world is sitting on, and folds them over the canonical designations,
+blueprints, stockpile cells and zones. Nothing is written back, no simulation
+rule is copied to this side of the seam, and neither the tick order, the command
+vocabulary nor the canonical snapshot changes — which is why the checksum, the
+event log and a replay are the same whether or not the player was paused.
+
+Four properties follow, and each is a unit test in
+`DungeonFortress.Presentation.Tests`:
+
+- a mark, a withdrawal, a blueprint, a stockpile cell and a zone edit are on the
+  map the instant the command is accepted, at any speed and on `STEP`;
+- **the tick that finally applies the command does not change which cells are
+  drawn.** A waiting mark is drawn as the mark it is about to become, so
+  unpausing refines a status — reserved, unreachable, in progress — instead of
+  drawing the mark for the first time. Nothing blinks;
+- the brush reads the same projection, so a cell that already carries a waiting
+  mark is not offered again, the count above a drag is what the command will
+  really carry, and the legal-target outline matches;
+- a command a fixture scheduled for a *later* tick is **not** shown early. It is
+  in the log, but it is not an intent waiting for this frame.
+
+The inspector states what the picture deliberately does not: a cell whose mark
+is still waiting reads `marked as … on this tick; the world applies it when time
+advances`. The top line counts such a mark in `marks`, because "the log has it
+and the HUD denies it" was the text half of the same defect.
+
+`ui.pending` reports the whole thing structurally — the waiting dig marks and
+withdrawals, blueprints, blueprint withdrawals and stockpile cells — and is
+`null` whenever nothing waits, which is every frame of free-running time. So
+"the mark showed up straight away" is a field in a headless run rather than
+something judged from a screenshot. `--smoke-controls` asserts it end to end,
+including the no-blink property.
+
+`tests/golden/ui/*.json` is unaffected and passes **without regeneration**: the
+three frames it records are `--demo-stone` moments at ticks 190, 336 and 950,
+and no command in that session carries any of those ticks.
 
 ## Movement between ticks
 
@@ -486,6 +544,7 @@ Both structured outputs — `godot_headless_smoke` from `--smoke` and
 | `controlFeedback` | the raw control feedback string |
 | `editMode`, `brushZone` | which brush is held |
 | `selectedCell`, `selectedCreatureId` | what the inspector is pointed at |
+| `pending` | marking accepted for this tick that the tick has not applied yet, or `null` |
 
 This turns every inspector branch into an ordinary testable artifact: choose the
 moment with `--screenshot-ticks`, point at a tile with `--select-cell`, and assert
