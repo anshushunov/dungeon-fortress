@@ -327,6 +327,14 @@ line never appears. `KnownLineDeficit` in `Main.cs` records exactly how much eac
 panel loses; the guard fails on anything worse. Clearing the deficit belongs to the
 HUD reflow in Issue #36 and to the resizable viewport ADR 0008 requires.
 
+Recording the deficit rather than failing on it is a deliberate decision, taken by
+the owner on PR #37: an unconditional guard would leave `verify.ps1` red until
+Issue #36 lands and block every other change in the repository. The known weakness
+is that an allowance is per panel, not per frame, so a panel with slack on one
+frame can degrade inside its allowance. The golden UI state closes that gap from
+the other side — it compares the text itself, so a panel that grows a line fails
+the run even when the fit guard absorbs it.
+
 `verify.ps1` also runs `--strict-hud-fit`, which ignores those recorded allowances,
 and **requires it to fail**. A guard nobody has seen fail cannot be distinguished
 from a guard that cannot fail. When that run starts passing, the reflow has landed
