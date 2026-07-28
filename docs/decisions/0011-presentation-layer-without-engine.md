@@ -1,7 +1,8 @@
 # ADR 0011: Чистый слой представления живёт в сборке без зависимости от движка
 
-- Статус: Proposed
+- Статус: Accepted
 - Дата: 2026-07-28
+- Принят: решением владельца при review PR #44; merge PR остаётся за владельцем
 - Ответственные: владелец проекта и агенты разработки
 - Связано: [Issue #39](https://github.com/anshushunov/dungeon-fortress/issues/39),
   ретроспектива [#28](https://github.com/anshushunov/dungeon-fortress/issues/28),
