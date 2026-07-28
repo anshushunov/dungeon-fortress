@@ -65,22 +65,94 @@ public enum StockpileCellAccent
 /// <para><b>The projection answers what follows from published facts folded
 /// through it; the world answers what needs a tick to run.</b></para>
 ///
-/// A priority and a forbidden square are the player's intent exactly as a brush
-/// stroke is, so they are folded and both halves read them — which is why a mark
-/// the world already holds is corrected here for a priority change waiting in the
-/// same frame. Reachability of rock, work starting, and which creature
-/// volunteers are answers the world has to walk the map for; the projection does
-/// not have them and does not guess.
-///
 /// The rule is stated as a rule on purpose. It was first written as a list of
-/// exceptions, and the list turned out to be incomplete three times running.
+/// exceptions, and the list turned out to be incomplete four times running: the
+/// colour of a fresh blueprint, <c>dig_blocked_priority</c>, a priority waiting
+/// over a mark that was also waiting, the same priority over marks the world
+/// already held, and a <c>Forbidden</c> paint over them. Each was one more
+/// instance of one class.
 ///
-/// Repeating the world's ladder is a cost worth naming. It is bounded — the gates
-/// are read from <c>priorities</c>, the <c>Forbidden</c> zone and the published
-/// stock, job and designation records, never re-derived from map topology — and
-/// it is pinned: <c>MapAccentTests</c> sweeps a real session comparing the
-/// prediction against the world's own <c>statusCode</c>, so a rung that stops
-/// matching fails in CI on the pull request.
+/// So instead of a list of exceptions, here is the list of <em>inputs</em>. Every
+/// fact the three ladders in <c>PrototypeWorld</c> ask about appears below, and
+/// each one is folded, impossible to have waiting, or the world's to answer.
+///
+/// <list type="table">
+/// <listheader><term>Fact (where the world asks it)</term><description>Verdict</description></listheader>
+///
+/// <item><term><c>priorities[Dig]</c>, <c>[Build]</c>, <c>[Haul]</c> — first rung
+/// of the dig ladder, first and next-to-last of the construction one</term>
+/// <description><b>Folded.</b> <c>set_priority</c> is folded by
+/// <c>MapProjection.Of</c> and read through <c>MapProjection.Priority</c>. Pinned
+/// by <c>A_dig_mark_reads_the_priority_the_same_moment_accepted</c>,
+/// <c>A_blueprint_reads_...</c> and the two
+/// <c>An_old_..._and_a_new_one_read_the_same_when_a_priority_is_waiting</c>
+/// cases.</description></item>
+///
+/// <item><term><c>Forbidden</c> over a construction site or a stockpile cell —
+/// <c>IsBuildSiteWorkable</c>, <c>ToStockpileSnapshot</c></term>
+/// <description><b>Folded.</b> <c>zone_paint</c> and <c>zone_erase</c> are folded
+/// like any other marking and read through <c>MapProjection.IsInZone</c>, which
+/// is why neither <c>PredictBlueprint</c> nor <see cref="Stockpile"/> uses the
+/// <c>Reachable</c> field of the snapshot. Pinned by the two
+/// <c>..._read_the_same_when_forbidden_is_waiting</c> cases.</description></item>
+///
+/// <item><term><c>Forbidden</c> over a tile marked for digging</term>
+/// <description><b>Impossible while waiting.</b> A zone command over rock is
+/// rejected before any world exists: <c>PrototypeCommandValidator</c> and
+/// <c>PrototypeWorld.ValidateZoneTiles</c> refuse a tile that is neither passable
+/// nor diggable-into-passable, and the live map refuses it again on its
+/// tick.</description></item>
+///
+/// <item><term>buildable floor under a site — <c>IsBuildableFloor</c>; passable
+/// ground under a stockpile cell — <c>IsPassable</c></term>
+/// <description><b>Impossible while waiting.</b> The only mutations of the map are
+/// rock → floor and floor → post, and both need a tick; no command moves them. A
+/// site or a cell that exists therefore stands on ground that stays legal for as
+/// long as it exists.</description></item>
+///
+/// <item><term>reachability of rock — <c>IsDigReachable</c>: has the tile any
+/// orthogonal neighbour that is passable, not the gate and not
+/// <c>Forbidden</c></term>
+/// <description><b>The world's.</b> It is a question about the neighbours of a
+/// tile, and answering it here would put map topology on both sides of the seam
+/// ADR 0011 draws. A <c>Forbidden</c> paint over a <em>neighbouring floor tile</em>
+/// can therefore change a dig mark's reading on the applying tick, and that is
+/// deliberate.</description></item>
+///
+/// <item><term>who volunteered and whether work started — <c>job.ReservedBy</c>,
+/// <c>job.ProgressTicks</c></term>
+/// <description><b>The world's.</b> Job generation and matching happen inside the
+/// tick. Read from the published record for the frame being drawn; the tick may
+/// change them, and when it does, the world has done something.</description></item>
+///
+/// <item><term>material on a site — <c>Delivered</c>, <c>IncomingReserved</c> —
+/// and stone in the world — <c>AvailableStoneForSites</c>, over
+/// <c>stocks.looseStone</c>, <c>stocks.storedStone</c> and the booked part of
+/// <c>jobs</c></term>
+/// <description><b>The world's.</b> No command delivers, picks up or books stone.
+/// Two commands move material as a <em>side effect</em> — <c>zone_erase</c> spills
+/// a stockpile cell, <c>build_cancel</c> spills a site — and the projection
+/// deliberately does not model side effects, only geometry: predicting where the
+/// world puts material and which reservations survive is the rule this layer must
+/// not own. So withdrawing a blueprint that holds stone can change another site's
+/// material reading on the applying tick.</description></item>
+///
+/// <item><term><c>StoneAnywhere</c> — the world's split between
+/// <c>build_no_stone</c> and <c>build_stone_reserved</c></term>
+/// <description><b>Never reaches a reading.</b> Both statuses are the same accent,
+/// so the fact cannot change what is drawn.</description></item>
+///
+/// <item><term>tuning constants — <c>BuildStoneCost</c>,
+/// <c>StockpileCellCapacity</c></term>
+/// <description><b>Impossible while waiting.</b> No command changes tuning; they
+/// are compile-time values, and <c>capacity</c> is published on the cell
+/// anyway.</description></item>
+/// </list>
+///
+/// Repeating the world's ladders is a cost worth naming, and it is pinned:
+/// <c>MapAccentTests</c> sweeps a real session comparing every prediction against
+/// the world's own <c>statusCode</c> on every tick where nothing is waiting, so a
+/// rung that stops matching fails in CI on the pull request.
 /// </summary>
 public static class MapAccents
 {
@@ -151,26 +223,19 @@ public static class MapAccents
     };
 
     /// <summary>
-    /// How a blueprint the world already holds reads, corrected for a priority
-    /// change waiting in the same frame — the same correction
-    /// <see cref="Dig(MapProjection, PrototypeDigDesignationSnapshot)"/> makes,
-    /// and for the same reason.
+    /// How a blueprint the world already holds reads.
     ///
-    /// Construction has two gates rather than one: the world asks about
-    /// <c>Build</c> first of all, and about <c>Haul</c> far down, after it has
-    /// already decided that nobody is on the site and nothing is on the way. With
-    /// either of them waiting the reading is taken from
-    /// <see cref="Predict"/>, which walks the world's ladder over the site's own
-    /// published facts; with neither waiting the world's word stands unchanged.
+    /// It always walks <see cref="Predict"/> rather than taking the world's
+    /// <c>statusCode</c> when something looks like it is waiting. Deciding *when*
+    /// to correct was itself a source of defects: a gate on "is a priority
+    /// waiting" left a waiting <c>Forbidden</c> paint uncorrected, and any such
+    /// gate has to be kept in step with the ladder by hand. Walking the ladder
+    /// unconditionally cannot fall out of step, and
+    /// <c>MapAccentTests</c> pins it against the world's own word on every tick
+    /// of a whole session where nothing is waiting.
     /// </summary>
-    public static BlueprintAccent Blueprint(MapProjection view, PrototypeBuildSiteSnapshot site)
-    {
-        ArgumentNullException.ThrowIfNull(view);
-        ArgumentNullException.ThrowIfNull(site);
-        return view.IsPriorityWaiting(JobKind.Build) || view.IsPriorityWaiting(JobKind.Haul)
-            ? PredictBlueprint(view, site)
-            : BlueprintFromStatus(site.StatusCode);
-    }
+    public static BlueprintAccent Blueprint(MapProjection view, PrototypeBuildSiteSnapshot site) =>
+        PredictBlueprint(view, site);
 
     /// <summary>
     /// What the ladder says about a site the world already holds, asked without
@@ -182,9 +247,13 @@ public static class MapAccents
     {
         ArgumentNullException.ThrowIfNull(view);
         ArgumentNullException.ThrowIfNull(site);
+        // Not site.Reachable: that was computed under the zones the world holds,
+        // and a Forbidden paint or erase accepted in this same paused moment has
+        // not reached them yet. The floor half of the world's workability test is
+        // guaranteed for a site that exists, so the zone is the whole question.
         return Predict(
             view,
-            site.Reachable,
+            !view.IsInZone(ZoneKind.Forbidden, site.Tile),
             site.Delivered,
             site.IncomingReserved,
             site.ReservedBy is not null,
@@ -260,7 +329,12 @@ public static class MapAccents
             : BlueprintAccent.WaitingForMaterial;
     }
 
-    private static BlueprintAccent BlueprintFromStatus(string statusCode) => statusCode switch
+    /// <summary>
+    /// The world's own word about a blueprint, as an accent. Nothing draws with
+    /// it: it exists so that <c>MapAccentTests</c> can hold
+    /// <see cref="Predict"/> against the simulation.
+    /// </summary>
+    public static BlueprintAccent BlueprintReadingOfStatus(string statusCode) => statusCode switch
     {
         "build_in_progress" => BlueprintAccent.InProgress,
         "build_unreachable" => BlueprintAccent.Unreachable,
@@ -272,10 +346,14 @@ public static class MapAccents
     };
 
     /// <summary>
-    /// How a stockpile cell the world already holds reads. Nothing in the
-    /// stockpile ladder asks about a priority, so there is nothing to correct —
-    /// the projection is taken only so that every mark on the map is read the
-    /// same way.
+    /// How a stockpile cell the world already holds reads.
+    ///
+    /// The stockpile ladder asks about no priority, but it does ask about
+    /// <c>Forbidden</c> — <c>reachable = IsPassable &amp;&amp; !Forbidden</c> —
+    /// so a paint or an erase accepted in this same paused moment decides it, and
+    /// the whole ladder is walked over the cell's published facts for the same
+    /// reason the construction one is. The passability half is guaranteed: the
+    /// world only lets the zone be painted on plain floor.
     /// </summary>
     public static StockpileCellAccent Stockpile(
         MapProjection view,
@@ -283,28 +361,58 @@ public static class MapAccents
     {
         ArgumentNullException.ThrowIfNull(view);
         ArgumentNullException.ThrowIfNull(cell);
-        return cell.StatusCode switch
+        return PredictStockpile(view, cell.Position, cell.Stored, cell.IncomingReserved, cell.Capacity);
+    }
+
+    private static StockpileCellAccent PredictStockpile(
+        MapProjection view,
+        GridPoint position,
+        int stored,
+        int incomingReserved,
+        int capacity)
+    {
+        if (view.IsInZone(ZoneKind.Forbidden, position))
         {
-            "stockpile_unreachable" => StockpileCellAccent.Unreachable,
-            "stockpile_full" => StockpileCellAccent.Full,
-            "stockpile_incoming" => StockpileCellAccent.Incoming,
-            // stockpile_empty and stockpile_partial read the same: there is room.
-            // How much is in it is drawn as pips.
-            _ => StockpileCellAccent.Room,
-        };
+            return StockpileCellAccent.Unreachable;
+        }
+
+        if (stored >= capacity)
+        {
+            return StockpileCellAccent.Full;
+        }
+
+        // stockpile_empty and stockpile_partial read the same: there is room. How
+        // much is in it is drawn as pips.
+        return stored + incomingReserved >= capacity
+            ? StockpileCellAccent.Incoming
+            : StockpileCellAccent.Room;
     }
 
     /// <summary>
-    /// A stockpile cell whose tick has not run yet. It is empty and nothing is
-    /// booked for it, so the only question left is whether anybody may step on
-    /// it — a single zone lookup, not topology.
+    /// The world's own word about a stockpile cell, as an accent. Test-facing, in
+    /// the same way as <see cref="BlueprintReadingOfStatus"/>.
+    /// </summary>
+    public static StockpileCellAccent StockpileReadingOfStatus(string statusCode) => statusCode switch
+    {
+        "stockpile_unreachable" => StockpileCellAccent.Unreachable,
+        "stockpile_full" => StockpileCellAccent.Full,
+        "stockpile_incoming" => StockpileCellAccent.Incoming,
+        _ => StockpileCellAccent.Room,
+    };
+
+    /// <summary>
+    /// A stockpile cell whose tick has not run yet: <see cref="PredictStockpile"/>
+    /// with "empty and nothing booked" fixed, which is what the world creates.
     /// </summary>
     public static StockpileCellAccent PendingStockpile(MapProjection view, GridPoint tile)
     {
         ArgumentNullException.ThrowIfNull(view);
-        return view.IsInZone(ZoneKind.Forbidden, tile)
-            ? StockpileCellAccent.Unreachable
-            : StockpileCellAccent.Room;
+        return PredictStockpile(
+            view,
+            tile,
+            stored: 0,
+            incomingReserved: 0,
+            capacity: PrototypeTuning.StockpileCellCapacity);
     }
 
     /// <summary>

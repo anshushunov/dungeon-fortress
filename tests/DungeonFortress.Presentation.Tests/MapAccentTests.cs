@@ -282,6 +282,92 @@ public sealed class MapAccentTests
     }
 
     /// <summary>
+    /// The same claim for a forbidden square, which is the other fact the player
+    /// can change with a command and the world asks about in a ladder.
+    ///
+    /// Painting or erasing <c>Forbidden</c> over the tile of a blueprint the world
+    /// already holds decides whether anybody may work there. Reading that from the
+    /// site's own <c>Reachable</c> field takes it from the zones the world holds,
+    /// which is a frame behind — and produced the same contradiction the priority
+    /// did: two sites under one waiting paint, drawn in different colours.
+    ///
+    /// The whole-session sweep cannot catch this by construction. It compares the
+    /// prediction with the world's word, and both took the same stale
+    /// <c>Reachable</c>, so on exactly the ticks that matter they agreed with each
+    /// other and were both wrong.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void An_old_blueprint_and_a_new_one_read_the_same_when_forbidden_is_waiting(bool painting)
+    {
+        var older = new GridPoint(12, 10);
+        var newer = new GridPoint(15, 10);
+        // Erasing needs the paint to be there in the first place, so the session
+        // starts on the opposite side of the fact under test.
+        PrototypeCommand[] before = painting
+            ? []
+            : [new ZonePaintCommand(0, ZoneKind.Forbidden, [older, newer])];
+        PrototypeCommand waiting = painting
+            ? new ZonePaintCommand(40, ZoneKind.Forbidden, [older, newer])
+            : new ZoneEraseCommand(40, ZoneKind.Forbidden, [older, newer]);
+
+        var (frame, applied) = Across(
+            40,
+            [.. before, new BuildDesignateCommand(1, [older]), waiting, new BuildDesignateCommand(40, [newer])]);
+
+        var site = frame.BuildSites.Single(item => item.Tile == older);
+        // The world is still holding the opposite of what the player just asked
+        // for — reachable while a paint waits, unreachable while an erase does —
+        // which is what makes this a real test of the fold rather than of the
+        // snapshot.
+        Assert.Equal(painting, site.Reachable);
+
+        var old = MapAccents.Blueprint(frame, site);
+        Assert.Equal(
+            painting ? BlueprintAccent.Unreachable : BlueprintAccent.WaitingForMaterial,
+            old);
+        Assert.Equal(MapAccents.PendingBlueprint(frame, newer), old);
+        Assert.Equal(old, AppliedBlueprint(applied, older));
+        Assert.Equal(old, AppliedBlueprint(applied, newer));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void An_old_stockpile_cell_and_a_new_one_read_the_same_when_forbidden_is_waiting(bool painting)
+    {
+        var older = PresentationFixtures.StockLeft;
+        var newer = PresentationFixtures.StockRight;
+        PrototypeCommand[] before = painting
+            ? []
+            : [new ZonePaintCommand(0, ZoneKind.Forbidden, [older, newer])];
+        PrototypeCommand waiting = painting
+            ? new ZonePaintCommand(40, ZoneKind.Forbidden, [older, newer])
+            : new ZoneEraseCommand(40, ZoneKind.Forbidden, [older, newer]);
+
+        var (frame, applied) = Across(
+            40,
+            [
+                .. before,
+                new ZonePaintCommand(1, ZoneKind.MaterialStockpile, [older]),
+                waiting,
+                new ZonePaintCommand(40, ZoneKind.MaterialStockpile, [newer]),
+            ]);
+
+        var cell = frame.StockpileCells.Single(item => item.Position == older);
+        Assert.Equal(painting, cell.Reachable);
+
+        var old = MapAccents.Stockpile(frame, cell);
+        Assert.Equal(
+            painting ? StockpileCellAccent.Unreachable : StockpileCellAccent.Room,
+            old);
+        Assert.Equal(MapAccents.PendingStockpile(frame, newer), old);
+        Assert.Equal(old, AppliedStockpile(applied, older));
+        Assert.Equal(old, AppliedStockpile(applied, newer));
+    }
+
+    /// <summary>
     /// The gates are a ladder, so the order they are asked in is part of the
     /// answer, and only a case where two of them fire at once can pin it. Every
     /// defect found in this layer so far has been an unpinned rung.
@@ -394,45 +480,57 @@ public sealed class MapAccentTests
     }
 
     /// <summary>
-    /// The ladder itself, swept against the world.
+    /// The ladders themselves, swept against the world.
     ///
-    /// Every reading of a blueprint whose tick has run goes through the same
-    /// prediction the waiting half uses, and this compares that prediction with
-    /// the world's own <c>statusCode</c> at every tick of a full construction
-    /// session. It is what makes repeating the ladder safe: a rung that stops
-    /// matching — a reordered gate, a changed threshold, a dropped term — fails
-    /// here rather than in a playtest.
+    /// Nothing draws from a <c>statusCode</c> any more: both blueprints and
+    /// stockpile cells are read by walking the world's ladder over published
+    /// facts, unconditionally. That is only safe if the walk agrees with the
+    /// simulation, so this compares the two on every tick of a full session where
+    /// nothing is waiting — where the world's word is, by definition, the right
+    /// answer. A rung that stops matching — a reordered gate, a changed threshold,
+    /// a dropped term — fails here rather than in a playtest.
+    ///
+    /// What it cannot catch is a fact both sides read from the same stale place;
+    /// that is what the point tests above are for.
     /// </summary>
     [Fact]
-    public void The_predicted_reading_matches_the_world_at_every_tick_of_a_build_session()
+    public void The_predicted_readings_match_the_world_at_every_tick_of_a_session()
     {
         var world = new PrototypeWorld(PresentationFixtures.Log(SweptSession()));
-        var compared = 0;
-        var seen = new HashSet<BlueprintAccent>();
+        var sites = 0;
+        var cells = 0;
+        var seenSites = new HashSet<BlueprintAccent>();
+        var seenCells = new HashSet<StockpileCellAccent>();
         for (var step = 0; step < PresentationFixtures.BlueprintTick + 400; step++)
         {
             var view = MapProjection.Of(world.GetSnapshot());
-            foreach (var site in view.BuildSites)
+            world.Step();
+            if (view.HasPendingIntent)
             {
-                var predicted = MapAccents.PredictBlueprint(view, site);
-                // With no priority waiting, Blueprint() is the world's own word, so
-                // this is the prediction being held against the simulation. On the
-                // handful of ticks where one does wait the two agree by
-                // construction and the reading is not counted.
-                Assert.Equal(MapAccents.Blueprint(view, site), predicted);
-                if (view.IsPriorityWaiting(JobKind.Build) || view.IsPriorityWaiting(JobKind.Haul))
-                {
-                    continue;
-                }
-
-                seen.Add(predicted);
-                compared++;
+                // On the tick a command lands the world has not applied it yet, so
+                // its word is the old one and disagreeing with it is the point.
+                continue;
             }
 
-            world.Step();
+            foreach (var site in view.BuildSites)
+            {
+                var predicted = MapAccents.Blueprint(view, site);
+                Assert.Equal(MapAccents.BlueprintReadingOfStatus(site.StatusCode), predicted);
+                seenSites.Add(predicted);
+                sites++;
+            }
+
+            foreach (var cell in view.StockpileCells)
+            {
+                var predicted = MapAccents.Stockpile(view, cell);
+                Assert.Equal(MapAccents.StockpileReadingOfStatus(cell.StatusCode), predicted);
+                seenCells.Add(predicted);
+                cells++;
+            }
         }
 
-        Assert.True(compared > 50, $"only {compared} readings were compared");
+        Assert.True(sites > 50, $"only {sites} blueprint readings were compared");
+        Assert.True(cells > 50, $"only {cells} stockpile readings were compared");
         Assert.Equal(
             [
                 BlueprintAccent.WaitingForCarrier,
@@ -441,14 +539,23 @@ public sealed class MapAccentTests
                 BlueprintAccent.BlockedByPriority,
                 BlueprintAccent.Unreachable,
             ],
-            seen.Order().ToArray());
+            seenSites.Order().ToArray());
+        Assert.Equal(
+            [
+                StockpileCellAccent.Room,
+                StockpileCellAccent.Full,
+                StockpileCellAccent.Incoming,
+                StockpileCellAccent.Unreachable,
+            ],
+            seenCells.Order().ToArray());
     }
 
     /// <summary>
-    /// The Issue #48 chain with every rung of the ladder forced to fire at some
+    /// The Issue #48 chain with every rung of both ladders forced to fire at some
     /// point: construction switched off and back on, carrying switched off and
-    /// back on, and the site forbidden and released. A sweep that only ever saw
-    /// one answer would prove nothing.
+    /// back on, the site forbidden and released, a stockpile cell forbidden and
+    /// released, and more posts than the dug stone can pay for. A sweep that only
+    /// ever saw one answer would prove nothing.
     /// </summary>
     private static PrototypeCommand[] SweptSession()
     {
@@ -463,6 +570,14 @@ public sealed class MapAccentTests
             new SetPriorityCommand(PresentationFixtures.BlueprintTick + 30, JobKind.Haul, haul),
             new ZonePaintCommand(PresentationFixtures.BlueprintTick + 35, ZoneKind.Forbidden, [site]),
             new ZoneEraseCommand(PresentationFixtures.BlueprintTick + 45, ZoneKind.Forbidden, [site]),
+            new ZonePaintCommand(
+                PresentationFixtures.BlueprintTick + 55,
+                ZoneKind.Forbidden,
+                [PresentationFixtures.StockLeft]),
+            new ZoneEraseCommand(
+                PresentationFixtures.BlueprintTick + 65,
+                ZoneKind.Forbidden,
+                [PresentationFixtures.StockLeft]),
             // More posts than the dug stone can pay for, so some site is left
             // watching material it cannot have.
             new BuildDesignateCommand(

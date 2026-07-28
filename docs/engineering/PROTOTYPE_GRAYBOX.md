@@ -273,46 +273,57 @@ Switching digging off with `[J]` and then marking rock with `[D]` is one gesture
 to the player, and the tick applies both — the world sets the priority first and
 then asks about it on the first rung of its ladder. Correcting only the new mark
 would put two designations of different colours side by side on the same map,
-making opposite claims about the same fact, so `set_priority` is folded by
-`MapProjection` even though it puts nothing on the map, and both halves of
-`MapAccents` read the folded value.
+making opposite claims about the same fact. The same is true of a `Forbidden`
+paint over a blueprint or a stockpile cell, so neither reading uses the
+`reachable` field of the snapshot: that field was computed under the zones the
+world holds, and the zones the player is looking at are the folded ones.
 
-`MapAccents` is the only place that does. Everything that explains what the world
-is doing *now* — the inspector's "the Dig priority is 0", the reason a pile is
-not moving — keeps reading canonical priorities, because those sentences explain
-a status the world produced under the old value.
+`MapAccents` is the only place that reads a folded value. Everything that
+explains what the world is doing *now* — the inspector's "the Dig priority is 0",
+the reason a pile is not moving — keeps reading canonical state, because those
+sentences explain a status the world produced under the old value.
 
 ### Where the line is
 
-The line is a rule, not a list. It was written as a list of exceptions three
-times and the list turned out to be incomplete every time.
+The line is a rule, not a list. It was written as a list of exceptions four times
+and the list turned out to be incomplete every time.
 
 > **The projection answers what follows from published facts folded through it.
 > The world answers what needs a tick to run.**
 
-A priority and a forbidden square are the player's intent exactly as a brush
-stroke is: they are folded, and every reading takes them into account. Which
-creature volunteers, when work starts, and whether anyone can reach a piece of
-rock are answers the world has to walk the map for — the projection does not have
-them and does not guess. Copying reachability across would put the same rule on
-both sides of the seam
-[ADR 0011](../decisions/0011-presentation-layer-without-engine.md) draws.
+So instead of a list of exceptions, here is the list of *inputs*. Every fact the
+three status ladders in `PrototypeWorld` ask about is below, and each one is
+folded, impossible to have waiting, or the world's to answer. The same table
+lives on `MapAccents`, next to the code that implements it.
 
-So a reading can still change when the tick runs, and two ways of it are worth
-knowing about. `dig_unreachable` is the sharp one and it is not a rounding error:
-on the shipped `baseline` map two of the twelve diggable tiles — `(26,1)` and
-`(26,2)` — are walled in until a neighbour is dug, so marking the whole pocket
-while paused shows two amber cells that turn red one tick later. `dig_in_progress`
-is the gentle one: a creature that was already standing next to the rock starts
-work, which is the world answering the mark rather than the mark being redrawn.
-The same shape exists for construction — painting `Forbidden` next to marked rock
-changes reachability on the applying tick — and chasing it would mean owning
-topology here.
+| Fact, and where the world asks it | Verdict |
+|---|---|
+| `priorities[Dig]`, `[Build]`, `[Haul]` — first rung of the dig ladder, first and next-to-last of the construction one | **Folded.** `set_priority` is folded by `MapProjection` and read through `MapProjection.Priority` |
+| `Forbidden` over a construction site or a stockpile cell — `IsBuildSiteWorkable`, `ToStockpileSnapshot` | **Folded.** `zone_paint` / `zone_erase` are folded like any other marking and read through `MapProjection.IsInZone` |
+| `Forbidden` over a tile marked for digging | **Impossible while waiting.** A zone on rock is refused before any world exists, by `PrototypeCommandValidator`, and again by `ValidateZoneTiles` on its tick |
+| buildable floor under a site, passable ground under a stockpile cell | **Impossible while waiting.** The only map mutations are rock → floor and floor → post, and both need a tick; no command moves them |
+| reachability of rock — has the tile any orthogonal neighbour that is passable, not the gate and not `Forbidden` | **The world's.** It is a question about a tile's neighbours, and answering it here would put map topology on both sides of the seam [ADR 0011](../decisions/0011-presentation-layer-without-engine.md) draws |
+| who volunteered, whether work started — `reservedBy`, `progressTicks` | **The world's.** Jobs are generated and matched inside the tick |
+| material on a site and stone in the world — `delivered`, `incomingReserved`, `looseStone`, `storedStone`, the booked part of `jobs` | **The world's.** No command delivers, picks up or books stone. Two commands move material as a *side effect* — `zone_erase` spills a cell, `build_cancel` spills a site — and the fold covers geometry, not side effects |
+| the world's split between `build_no_stone` and `build_stone_reserved` | **Never reaches a reading.** Both are the same accent |
+| tuning — `build_stone_cost`, `stockpile_cell_capacity` | **Impossible while waiting.** No command changes tuning |
 
-`MapAccentTests` pins the rule from both ends: it names those two baseline tiles,
-and it sweeps a whole construction session comparing the layer's prediction
-against the world's own `statusCode` at every tick, so a rung that stops matching
-fails in CI rather than in a playtest.
+Two consequences of the third block are worth stating plainly, because they are
+the readings that can still move when the tick runs. Painting `Forbidden` on a
+floor tile *next to* marked rock changes that mark's reading on the applying
+tick — the neighbour question is the world's. And on the shipped `baseline` map
+two of the twelve diggable tiles, `(26,1)` and `(26,2)`, are walled in until a
+neighbour is dug, so marking the whole pocket while paused shows two amber cells
+that turn red one tick later. `dig_in_progress` is the gentle case: a creature
+already standing next to the rock starts work, which is the world answering the
+mark rather than the mark being redrawn.
+
+`MapAccentTests` pins the table from both ends. It names those two baseline
+tiles; it checks an old mark and a new one in the same frame under a waiting
+priority and under a waiting `Forbidden`, in both directions; and it sweeps a
+whole session comparing the layer's prediction against the world's own
+`statusCode` on every tick where nothing is waiting, so a rung that stops
+matching fails in CI rather than in a playtest.
 
 ### What the fold does not model
 
