@@ -130,8 +130,10 @@ dotnet build .\DungeonFortress.sln -c Release --no-restore
 После этого client запускает `cmd /c scripts\domain-mcp-server.cmd`. Launcher
 копирует Release build output в каталог сессии `.artifacts\domain-mcp-sessions\<id>`
 и исполняет копию, поэтому `dotnet build DungeonFortress.sln` не встречает
-открытый файл сервера (Issue #38). Ни launcher, ни build output не пишут в
-protocol stdout; диагностика идёт в stderr. Подробности — в
+открытый файл сервера (Issue #38). Копия снимается на старте сессии: живая
+сессия исполняет её до перезапуска и новую сборку сама не подхватывает. Ни
+launcher, ни build output не пишут в protocol stdout; диагностика идёт в stderr.
+Запуск через `cmd` делает domain MCP Windows-only. Подробности — в
 `ENVIRONMENT_SETUP.md`.
 
 ### Проверки и измерения блока 1

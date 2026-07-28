@@ -27,6 +27,7 @@ $screenshotOutputPathTestScript = Join-Path $repoRoot "scripts\test-screenshot-o
 $goblinImportTestScript = Join-Path $repoRoot "scripts\test-goblin-sprite-import.ps1"
 $ivanMcpConfigTestScript = Join-Path $repoRoot "scripts\test-ivan-mcp-config.ps1"
 $domainMcpConfigTestScript = Join-Path $repoRoot "scripts\test-domain-mcp-config.ps1"
+$domainMcpLauncherTestScript = Join-Path $repoRoot "scripts\test-domain-mcp-launcher.ps1"
 $domainMcpVerificationScript = Join-Path $repoRoot "scripts\verify-domain-mcp.ps1"
 
 $env:DOTNET_CLI_HOME = Join-Path $artifactsRoot "dotnet-home"
@@ -151,6 +152,12 @@ try {
     )
     Invoke-Checked -FilePath "dotnet" -Arguments @(
         "build", $solutionPath, "--configuration", "Release", "--no-restore"
+    )
+    # The text guard above cannot tell whether the batch launcher still runs. A
+    # typo in it would leave this script green and break the owner's next client
+    # session, so the launcher is started for real once the build output exists.
+    Invoke-Checked -FilePath "powershell" -Arguments @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $domainMcpLauncherTestScript
     )
     Invoke-Checked -FilePath "dotnet" -Arguments @(
         "test", $testProject, "--configuration", "Release", "--no-build", "--no-restore"

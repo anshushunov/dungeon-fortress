@@ -82,11 +82,14 @@ if ($codexSectionText -match '(?m)^command\s*=\s*"dotnet"$') {
     throw ".codex/config.toml still starts the domain MCP server with dotnet run."
 }
 
-# The launcher itself must copy the build output and run the copy.
+# The launcher itself must copy the build output and run the copy. The session
+# copy is staged next to its final name and renamed into place, and the session
+# lock is held across the copy so a concurrent sweep cannot remove it.
 foreach ($fragment in @(
         '.artifacts\domain-mcp-sessions',
         'tools\DungeonFortress.DomainMcp\bin\Release\net8.0',
-        'robocopy "%BUILD_OUTPUT%" "%SESSION_ROOT%"',
+        '9>>"%SESSION_LOCK%" call :run_session',
+        'ren "%SESSION_STAGE%" "%SESSION_ID%"',
         '"%SESSION_ROOT%\%HOST_NAME%" --root "%REPO_ROOT%"',
         'rd /s /q "%SESSION_ROOT%"',
         ':remove_if_dead')) {
@@ -99,15 +102,37 @@ if ($launcherText.Contains('"%BUILD_OUTPUT%\%HOST_NAME%" --root')) {
 }
 
 # The client speaks JSON-RPC over the launcher's stdout, so nothing may be
-# written there: every diagnostic has to be redirected to stderr.
+# written there. Three separate things can break that, and each is asserted:
+# command echo, diagnostics, and the copy step.
+if ($launcherLines.Count -lt 1 -or $launcherLines[0].TrimEnd() -ne "@echo off") {
+    throw "Domain MCP launcher must start with '@echo off', or every command it runs is echoed to the protocol stdout."
+}
+
 $echoLines = @($launcherLines | Where-Object { $_ -match '(?i)\becho\b' })
 foreach ($line in $echoLines) {
     $trimmed = $line.Trim()
-    if ($trimmed -eq "@echo off" -or $trimmed.StartsWith("rem ")) {
+    if ($trimmed -eq "@echo off" -or $trimmed -match '(?i)^(rem\b|::)') {
         continue
     }
     if (-not $trimmed.StartsWith(">&2 echo")) {
         throw "Domain MCP launcher writes to stdout: '$trimmed'."
+    }
+}
+
+$robocopyLines = @($launcherLines | Where-Object {
+    $_ -match '(?i)\brobocopy\b' -and $_.Trim() -notmatch '(?i)^(rem\b|::)'
+})
+if ($robocopyLines.Count -eq 0) {
+    throw "Domain MCP launcher does not copy the build output into a session directory."
+}
+foreach ($line in $robocopyLines) {
+    $trimmed = $line.Trim()
+    if (-not $trimmed.EndsWith(">nul 2>&1")) {
+        throw "Domain MCP launcher lets robocopy write to stdout: '$trimmed'."
+    }
+    if (-not ($trimmed.Contains('"%BUILD_OUTPUT%"') -and
+            $trimmed.Contains('"%SESSION_STAGE%"'))) {
+        throw "Domain MCP launcher must copy the build output into the staged session directory: '$trimmed'."
     }
 }
 
@@ -119,4 +144,6 @@ foreach ($line in $echoLines) {
     sessionCopyRoot = ".artifacts/domain-mcp-sessions"
     executesBuildOutput = $false
     absolutePathsInConfig = $false
+    commandEchoDisabled = $true
+    stdoutWriters = 0
 } | ConvertTo-Json -Compress
