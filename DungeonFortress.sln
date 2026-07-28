@@ -4,9 +4,13 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DungeonFortress.Simulation", "src\DungeonFortress.Simulation\DungeonFortress.Simulation.csproj", "{E9B75163-FD0A-47E8-836A-C3E765BC8766}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DungeonFortress.Presentation", "src\DungeonFortress.Presentation\DungeonFortress.Presentation.csproj", "{544C8210-C9A0-4D27-8660-850579CD3C8F}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DungeonFortress.Game", "src\DungeonFortress.Game\DungeonFortress.Game.csproj", "{C130360D-5215-45A4-9343-6194F7D65E4D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DungeonFortress.Simulation.Tests", "tests\DungeonFortress.Simulation.Tests\DungeonFortress.Simulation.Tests.csproj", "{D9EE7962-CF6E-4278-A01D-02FA57899D0B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DungeonFortress.Presentation.Tests", "tests\DungeonFortress.Presentation.Tests\DungeonFortress.Presentation.Tests.csproj", "{DFB52D85-1836-4779-BA2E-D08E271B41FF}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DungeonFortress.Scenarios", "tests\DungeonFortress.Scenarios\DungeonFortress.Scenarios.csproj", "{85494589-E860-4380-8A27-9394A31BD3A3}"
 EndProject
@@ -24,6 +28,10 @@ Global
 		{E9B75163-FD0A-47E8-836A-C3E765BC8766}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E9B75163-FD0A-47E8-836A-C3E765BC8766}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E9B75163-FD0A-47E8-836A-C3E765BC8766}.Release|Any CPU.Build.0 = Release|Any CPU
+		{544C8210-C9A0-4D27-8660-850579CD3C8F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{544C8210-C9A0-4D27-8660-850579CD3C8F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{544C8210-C9A0-4D27-8660-850579CD3C8F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{544C8210-C9A0-4D27-8660-850579CD3C8F}.Release|Any CPU.Build.0 = Release|Any CPU
 		{C130360D-5215-45A4-9343-6194F7D65E4D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C130360D-5215-45A4-9343-6194F7D65E4D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C130360D-5215-45A4-9343-6194F7D65E4D}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -32,6 +40,10 @@ Global
 		{D9EE7962-CF6E-4278-A01D-02FA57899D0B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D9EE7962-CF6E-4278-A01D-02FA57899D0B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D9EE7962-CF6E-4278-A01D-02FA57899D0B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DFB52D85-1836-4779-BA2E-D08E271B41FF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DFB52D85-1836-4779-BA2E-D08E271B41FF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DFB52D85-1836-4779-BA2E-D08E271B41FF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DFB52D85-1836-4779-BA2E-D08E271B41FF}.Release|Any CPU.Build.0 = Release|Any CPU
 		{85494589-E860-4380-8A27-9394A31BD3A3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{85494589-E860-4380-8A27-9394A31BD3A3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{85494589-E860-4380-8A27-9394A31BD3A3}.Release|Any CPU.ActiveCfg = Release|Any CPU

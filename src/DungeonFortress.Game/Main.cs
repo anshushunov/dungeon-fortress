@@ -1,5 +1,6 @@
 using System.Text.Json;
 
+using DungeonFortress.Presentation;
 using DungeonFortress.Simulation;
 
 using Godot;
@@ -68,12 +69,12 @@ public partial class Main : Node2D
         try
         {
             var arguments = OS.GetCmdlineUserArgs();
-            var fixture = ReadArgument(arguments, "--fixture") ?? "baseline";
-            var screenshotTicks = ReadIntArgument(arguments, "--screenshot-ticks") ?? 1;
-            _screenshotPath = ReadArgument(arguments, "--screenshot");
+            var fixture = CommandLineArguments.Read(arguments, "--fixture") ?? "baseline";
+            var screenshotTicks = CommandLineArguments.ReadInt(arguments, "--screenshot-ticks") ?? 1;
+            _screenshotPath = CommandLineArguments.Read(arguments, "--screenshot");
             _screenshotFramesRemaining = _screenshotPath is null ? 0 : 3;
-            var selectCreature = ReadIntArgument(arguments, "--select-creature");
-            var selectCell = ReadArgument(arguments, "--select-cell");
+            var selectCreature = CommandLineArguments.ReadInt(arguments, "--select-creature");
+            var selectCell = CommandLineArguments.Read(arguments, "--select-cell");
             var headlessSmoke = arguments.Contains("--smoke", StringComparer.Ordinal);
             var visibleSmoke = arguments.Contains("--visible-smoke", StringComparer.Ordinal);
             var controlsSmoke = arguments.Contains("--smoke-controls", StringComparer.Ordinal);
@@ -137,7 +138,7 @@ public partial class Main : Node2D
             // instead of relying on whatever a demo happened to select last.
             if (selectCell is not null)
             {
-                _selectedCell = ParseCell(selectCell);
+                _selectedCell = CommandLineArguments.ParseCell(selectCell);
                 _selectedCreatureId = _state!.Creatures
                     .Where(creature => creature.Position == _selectedCell)
                     .Select(creature => (int?)creature.Id)
@@ -484,103 +485,38 @@ public partial class Main : Node2D
         }
     }
 
+    /// <summary>
+    /// What the four panels currently say is decided in
+    /// <c>DungeonFortress.Presentation</c>, which does not reference Godot and is
+    /// covered by unit tests running in CI. All this node does is put the
+    /// resulting strings on the labels, so the adapter can no longer be the only
+    /// place a wording change is observable.
+    /// </summary>
     private void UpdateHud()
     {
-        var stock = _state!.Stocks;
-        _inspector!.Text = BuildInspectorText();
-
-        // Two lines and no more: the summary label ends where the time toolbar
-        // begins, so a third wrapped line would be drawn over the buttons.
-        // Session identity and bookkeeping go on the first line; the second line
-        // is the resource line. Stone is reported as three separate facts on
-        // purpose — loose on the floor, on someone's back, put away — because one
-        // combined number would hide exactly the part of the chain this step adds.
-        _summary!.Text =
-            $"{_fixture.ToUpperInvariant()}  •  t{_state.Tick}  •  {(_paused ? "PAUSED" : $"{_speed:0.#}x")}" +
-            $"  •  jobs {_state.Jobs.Count}  •  {_checksum[..8]}" +
-            $"\n{RaidPhase()}  •  food {stock.Meals}+{stock.LooseMeals}" +
-            $"  •  raw {stock.RawMushroom}+{stock.LooseRawMushroom}" +
-            $"  •  stone {stock.LooseStone}L {stock.CarriedStone}C " +
-            $"{stock.StoredStone}/{stock.StockpileCapacity}S" +
-            $"  •  dug {_state.Economy.DigsCompleted}  •  marks {_state.DigDesignations.Count}";
-        var eventText = _state.Events.Count == 0
-            ? "EVENT FEEDBACK\nNo events yet. Step or unpause to watch autonomous choices."
-            : string.Join(
-                "\n",
-                _state.Events.TakeLast(3).Reverse().Select(@event =>
-                    $"t{@event.LastTick} · {CreatureName(@event.CreatureId)}\n{@event.ReasonCode}"));
-        _feedback!.Text =
-            "EVENT FEEDBACK\n" + eventText +
-            $"\n\nDiagnostics: {_diagnostics.Count} (structured JSON is emitted by smoke/capture).";
-        _roster!.Text = "CREW  " + string.Join("  •  ", _state.Creatures.Select(creature => $"{creature.Name} {CreatureStateShort(creature)}")) +
-            "\n" + _controlFeedback +
-            "\nLOG " + (_playerCommands.Count == 0 ? "empty" : string.Join(" | ", _playerCommands.TakeLast(2).Select(DescribeCommand)));
+        var panels = HudText.Build(CurrentHudView());
+        _inspector!.Text = panels.Inspector;
+        _summary!.Text = panels.Summary;
+        _feedback!.Text = panels.Feedback;
+        _roster!.Text = panels.Roster;
     }
 
-    private string BuildInspectorText()
-    {
-        if (_selectedCreatureId is { } creatureId)
-        {
-            var creature = _state!.Creatures.Single(item => item.Id == creatureId);
-            creature = creature with
-            {
-                Name = $"{creature.Name} — {CreatureLifeState(creature)} HP {creature.Hp}/{creature.MaxHp}",
-            };
-            var job = creature.CurrentJobId is { } jobId
-                ? _state.Jobs.SingleOrDefault(item => item.JobId == jobId)
-                : null;
-            var details = creature.LastDecision.Details.Count == 0
-                ? "none"
-                : string.Join(", ", creature.LastDecision.Details.Select(pair => $"{pair.Key}={pair.Value}"));
-            details = $"STATUS {CreatureLifeState(creature)} • HP {creature.Hp}/{creature.MaxHp}\n" + details;
-            return
-                $"CREATURE #{creature.Id} · {creature.Name}\n\n" +
-                $"satiety {creature.Satiety}   fatigue {creature.Fatigue}\n" +
-                $"martial form {creature.MartialForm}   readiness {creature.Readiness}\n" +
-                $"mode {creature.Mode}\n" +
-                $"job {(job is null ? "none" : $"#{job.JobId} {job.Kind}")}\n" +
-                $"carrying {(creature.Carrying is null ? "nothing" : $"{creature.CarryAmount} {creature.Carrying}")}\n" +
-                $"{DescribeCarrierRoute(creature, job)}\n" +
-                $"WHY\nt{creature.LastDecision.Tick} · {creature.LastDecision.ReasonCode}\n" +
-                $"{details}";
-        }
-
-        if (_selectedCell is { } cell)
-        {
-            var zones = _state!.Zones
-                .Where(pair => pair.Value.Contains(cell))
-                .Select(pair => pair.Key.ToString())
-                .ToArray();
-            if (zones.Contains(nameof(ZoneKind.Quarters), StringComparer.Ordinal))
-            {
-                zones = zones.Append("QUARTERS: rest only at fatigue 50+, free bunk").ToArray();
-            }
-            var jobs = _state.Jobs
-                .Where(job => job.Origin == cell || job.Target == cell || job.StoreCell == cell)
-                .ToArray();
-            var stockpile = _state.StockpileCells.FirstOrDefault(item => item.Position == cell);
-            var stockpileSection = stockpile is null
-                ? string.Empty
-                : $"STOCKPILE\n{BuildStockpileExplanation(stockpile)}\n\n";
-            var looseStone = _state.LooseItems.FirstOrDefault(
-                item => item.Position == cell && item.Resource == ResourceKind.Stone);
-            var looseSection = looseStone is null
-                ? string.Empty
-                : $"LOOSE STONE\n{BuildLooseStoneExplanation(looseStone, jobs)}\n\n";
-            return
-                $"CELL ({cell.X}, {cell.Y})\n\n" +
-                $"tile {TileDescription(cell)}\n" +
-                $"zones {(zones.Length == 0 ? "none" : string.Join(", ", zones))}\n" +
-                $"jobs {(jobs.Length == 0 ? "none" : string.Join(", ", jobs.Select(job => $"#{job.JobId} {job.Kind}")))}\n\n" +
-                looseSection +
-                stockpileSection +
-                $"DIG\n{BuildDigExplanation(cell)}";
-        }
-
-        return
-            "INSPECTOR\n\nClick a creature or map cell.\n\n" +
-            "The world is a read-only projection of PrototypeWorld; Godot owns only selection, UI tempo and drawing.";
-    }
+    /// <summary>
+    /// The adapter state the HUD text is allowed to depend on, gathered in one
+    /// place. Everything else about this node — labels, viewport, brushes,
+    /// pointer — stays on this side of the seam on purpose.
+    /// </summary>
+    private HudViewState CurrentHudView() => new(
+        _state!,
+        _fixture,
+        _checksum,
+        _paused,
+        _speed,
+        _selectedCreatureId,
+        _selectedCell,
+        _controlFeedback,
+        _playerCommands,
+        _diagnostics.Count);
 
     /// <summary>
     /// The four HUD panels the overflow guard and the golden UI state care about.
@@ -1292,20 +1228,10 @@ public partial class Main : Node2D
         return _state!.Map.StockpileFloorTiles.Contains(cell);
     }
 
-    private string UnstockpileableReason(GridPoint cell)
-    {
-        if (_state!.Map.RockTiles.Contains(cell))
-        {
-            return "it is still rock";
-        }
-
-        if (_state.Map.ExcavatedTiles.Contains(cell))
-        {
-            return "zoning freshly excavated ground is the next step of the experiment";
-        }
-
-        return "it is a bed, a station, the larder, a bunk, a post or the gate — not plain floor";
-    }
+    // Adapter-side alias for the pure explanation. Kept so the brush reads the
+    // same as before the seam landed.
+    private string UnstockpileableReason(GridPoint cell) =>
+        InspectorText.UnstockpileableReason(_state!, cell);
 
     /// <summary>
     /// A dragged stroke crosses tiles the player never meant to designate, so the
@@ -1325,7 +1251,7 @@ public partial class Main : Node2D
         if (!_state.Map.DiggableTiles.Contains(cell))
         {
             _controlFeedback =
-                $"({cell.X},{cell.Y}) cannot be dug: {UndiggableReason(cell)}.";
+                $"({cell.X},{cell.Y}) cannot be dug: {InspectorText.UndiggableReason(_state, cell)}.";
             UpdateHud();
             QueueRedraw();
             return;
@@ -1345,30 +1271,6 @@ public partial class Main : Node2D
         }
 
         TryApplyPlayerCommand(new DigCancelCommand(_state.Tick, [cell]));
-    }
-
-    private string UndiggableReason(GridPoint cell)
-    {
-        if (!_state!.Map.RockTiles.Contains(cell))
-        {
-            return _state.Map.ExcavatedTiles.Contains(cell)
-                ? "it has already been excavated"
-                : "it is floor, a feature or the gate, not rock";
-        }
-
-        return "the map boundary holds the dungeon in";
-    }
-
-    private string ShortUndiggableReason(GridPoint cell)
-    {
-        if (_state!.Map.RockTiles.Contains(cell))
-        {
-            return "map boundary";
-        }
-
-        return _state.Map.ExcavatedTiles.Contains(cell)
-            ? "already excavated"
-            : "floor, feature or gate";
     }
 
     /// <summary>
@@ -1464,7 +1366,7 @@ public partial class Main : Node2D
             candidateWorld.RunTicks(_state!.Tick);
             _playerCommands.Add(command);
             _world = candidateWorld;
-            _controlFeedback = $"accepted {DescribeCommand(command)}; activates on next tick";
+            _controlFeedback = $"accepted {HudText.DescribeCommand(command)}; activates on next tick";
             RefreshState();
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException)
@@ -1775,17 +1677,6 @@ public partial class Main : Node2D
 
     private static GridPoint PrototypeMapGate => new(27, 13);
 
-    private static string DescribeCommand(PrototypeCommand command) => command switch
-    {
-        ZonePaintCommand paint => $"t{paint.Tick} paint {paint.ZoneKind} ({paint.Tiles.Count})",
-        ZoneEraseCommand erase => $"t{erase.Tick} erase {erase.ZoneKind} ({erase.Tiles.Count})",
-        DigDesignateCommand designate => $"t{designate.Tick} dig_designate ({designate.Tiles.Count})",
-        DigCancelCommand cancel => $"t{cancel.Tick} dig_cancel ({cancel.Tiles.Count})",
-        SetPriorityCommand priority => $"t{priority.Tick} priority {priority.JobKind}={priority.Value}",
-        SetRuleCommand rule => $"t{rule.Tick} rule {rule.RuleId}={rule.Value}",
-        _ => command.GetType().Name,
-    };
-
     private void CaptureScreenshot(string path)
     {
         try
@@ -1895,55 +1786,9 @@ public partial class Main : Node2D
         throw new FileNotFoundException($"Could not locate prototype fixture '{fixture}'.");
     }
 
-    private static string? ReadArgument(IReadOnlyList<string> arguments, string name)
-    {
-        var index = -1;
-        for (var candidate = 0; candidate < arguments.Count; candidate++)
-        {
-            if (string.Equals(arguments[candidate], name, StringComparison.Ordinal))
-            {
-                index = candidate;
-                break;
-            }
-        }
-
-        if (index == -1)
-        {
-            return null;
-        }
-
-        if (index + 1 >= arguments.Count)
-        {
-            throw new ArgumentException($"Missing value after {name}.");
-        }
-
-        return arguments[index + 1];
-    }
-
-    private static int? ReadIntArgument(IReadOnlyList<string> arguments, string name)
-    {
-        var value = ReadArgument(arguments, name);
-        return value is null ? null : int.Parse(value);
-    }
-
-    private static GridPoint ParseCell(string value)
-    {
-        var parts = value.Split(',');
-        if (parts.Length != 2 ||
-            !int.TryParse(parts[0], out var x) ||
-            !int.TryParse(parts[1], out var y) ||
-            !IsMapCell(new GridPoint(x, y)))
-        {
-            throw new ArgumentException(
-                $"--select-cell expects X,Y inside the map, got '{value}'.",
-                "--select-cell");
-        }
-
-        return new GridPoint(x, y);
-    }
-
-    private static bool IsMapCell(GridPoint cell) =>
-        cell.X is >= 0 and < PrototypeTuning.MapWidth && cell.Y is >= 0 and < PrototypeTuning.MapHeight;
+    // Adapter-side alias for the pure bounds check, so hit testing and drawing
+    // read the same as before the seam landed.
+    private static bool IsMapCell(GridPoint cell) => MapBounds.Contains(cell);
 
     private static GridPoint? ToCell(Vector2 position)
     {
@@ -1982,169 +1827,6 @@ public partial class Main : Node2D
         return new Color("#243244");
     }
 
-    private string TileDescription(GridPoint cell)
-    {
-        if (_state!.Map.RockTiles.Contains(cell))
-        {
-            return _state.Map.DiggableTiles.Contains(cell)
-                ? "rock (internal)"
-                : "rock (map boundary)";
-        }
-
-        if (_state.Map.ExcavatedTiles.Contains(cell)) return "floor (excavated)";
-        if (_state.Beds.Any(bed => bed.Position == cell)) return "mushroom bed";
-        if (_state.Stations.Any(station => station.Position == cell)) return _state.Stations.Single(station => station.Position == cell).Kind.ToString();
-        if (cell == new GridPoint(27, 13)) return "gate";
-        return "floor";
-    }
-
-    /// <summary>
-    /// The player must be able to answer "why is nobody digging this?" from the
-    /// inspector alone. Every branch reports simulation state, not a UI guess.
-    /// </summary>
-    private string BuildDigExplanation(GridPoint cell)
-    {
-        if (_state!.DigDesignations.FirstOrDefault(item => item.Tile == cell) is { } designation)
-        {
-            var result =
-                $"\nresult → floor + {PrototypeTuning.DigStoneYield} loose stone";
-            return designation.StatusCode switch
-            {
-                "dig_unreachable" =>
-                    "designated, but no free neighbouring floor to work from.\n" +
-                    "Dig an adjacent tile first; nobody is teleported into rock." + result,
-                "dig_blocked_priority" =>
-                    $"designated, but the Dig priority is {_state.Priorities[JobKind.Dig]}.\n" +
-                    "Raise it with [J] and +/- to let creatures take the job." + result,
-                "dig_in_progress" =>
-                    $"digging {designation.ProgressTicks}/{designation.RequiredTicks} ticks by " +
-                    $"{CreatureName(designation.ReservedBy!.Value)} from " +
-                    $"({designation.WorkTile!.Value.X},{designation.WorkTile.Value.Y})." + result,
-                "dig_reserved" =>
-                    $"{CreatureName(designation.ReservedBy!.Value)} chose this job and is walking to " +
-                    $"({designation.WorkTile!.Value.X},{designation.WorkTile.Value.Y})." + result,
-                _ =>
-                    "designated and reachable; waiting for a creature to be free.\n" +
-                    "You mark intent, the crew decides who goes." + result,
-            };
-        }
-
-        if (_state.Map.DiggableTiles.Contains(cell))
-        {
-            return
-                "diggable internal rock. Press [D] and click or drag to designate.\n" +
-                $"result → floor + {PrototypeTuning.DigStoneYield} loose stone";
-        }
-
-        // Deliberately terse: on a stockpile cell this section is the least
-        // important one on the panel and must not push the rest out of the box.
-        return $"not diggable: {ShortUndiggableReason(cell)}.";
-    }
-
-    /// <summary>
-    /// The carrier half of the chain: where this creature is taking the stone and
-    /// why. Read straight from the job's booking, so the panel cannot claim a
-    /// destination the simulation is not holding.
-    /// </summary>
-    private string DescribeCarrierRoute(
-        PrototypeCreatureSnapshot creature,
-        PrototypeJobSnapshot? job)
-    {
-        if (job is not { Kind: JobKind.Haul, Resource: ResourceKind.Stone })
-        {
-            return creature.Carrying is ResourceKind.Stone
-                ? "stone in hand, no haul job: it will be put down here\n"
-                : string.Empty;
-        }
-
-        var cell = job.StoreCell;
-        var where = cell is null
-            ? "no stockpile cell booked"
-            : $"booked ({cell.Value.X},{cell.Value.Y}) x{job.StoreReserved}";
-        var stage = job.PickedUp
-            ? $"carrying to ({cell?.X},{cell?.Y})"
-            : $"walking to pile ({job.Origin.X},{job.Origin.Y})";
-        return $"stone haul: {stage}, {where}\n";
-    }
-
-    /// <summary>
-    /// "Why is that stone still lying here?" answered on the tile the player
-    /// clicked. The order of the branches is the order the simulation itself
-    /// checks them, so the panel and the reason codes never disagree.
-    /// </summary>
-    private string BuildLooseStoneExplanation(
-        PrototypeLooseItemSnapshot loose,
-        PrototypeJobSnapshot[] jobs)
-    {
-        var claim = jobs.FirstOrDefault(job =>
-            job.Origin == loose.Position &&
-            job.Kind == JobKind.Haul &&
-            job.Resource == ResourceKind.Stone);
-        var head = $"{loose.Quantity} loose here.";
-        if (claim is { ReservedBy: { } carrier })
-        {
-            var destination = claim.StoreCell is { } target
-                ? $"({target.X},{target.Y})"
-                : "a cell being chosen";
-            return $"{head} {CreatureName(carrier)} chose this job, taking it to {destination}.";
-        }
-
-        if (_state!.Priorities[JobKind.Haul] == 0)
-        {
-            return $"{head} Haul priority is 0: no carrying job exists. Raise it with [J] and +/-.";
-        }
-
-        var stock = _state.Stocks;
-        if (_state.StockpileCells.Count == 0)
-        {
-            return $"{head} No material stockpile yet. Press [M], paint plain floor.";
-        }
-
-        if (!_state.StockpileCells.Any(item => item.Reachable))
-        {
-            return $"{head} Every stockpile cell is Forbidden: nobody may step on it.";
-        }
-
-        var free = stock.StockpileCapacity - stock.StoredStone - stock.ReservedStone;
-        return free <= 0
-            ? $"{head} Stockpile full: {stock.StoredStone} stored + {stock.ReservedStone} booked " +
-                $"of {stock.StockpileCapacity}. Paint another cell with [M]."
-            : $"{head} {free} slot(s) free; waiting for a creature to be free.";
-    }
-
-    /// <summary>
-    /// The player must be able to answer "why is nothing arriving here?" from the
-    /// cell alone. Every branch reports simulation state, not a UI guess.
-    /// </summary>
-    private string BuildStockpileExplanation(PrototypeStockpileCellSnapshot cell)
-    {
-        var line = $"{cell.Stored}/{cell.Capacity} stored";
-        if (cell.IncomingReserved > 0)
-        {
-            line += $", {cell.IncomingReserved} booked";
-        }
-
-        var stock = _state!.Stocks;
-        return cell.StatusCode switch
-        {
-            "stockpile_unreachable" =>
-                $"{line}. Forbidden: nobody may step here. What is stored stays; " +
-                "nothing new arrives until you erase the Forbidden paint.",
-            "stockpile_full" =>
-                $"{line}. Full. Loose {stock.LooseStone} waits until you paint another cell with [M].",
-            "stockpile_incoming" =>
-                $"{line}. Every remaining slot is promised; a carrier is walking here.",
-            "stockpile_partial" =>
-                $"{line}. Room left. Erasing this cell drops the stored stone back " +
-                "here as a loose pile — it is never destroyed.",
-            _ =>
-                $"{line}. Empty and ready. " +
-                (stock.LooseStone > 0
-                    ? "Loose stone exists; a free creature will choose the Haul job."
-                    : "Dig rock and the stone will be brought here."),
-        };
-    }
-
     private static Color ZoneColor(ZoneKind zone) => zone switch
     {
         ZoneKind.Farm => new Color("#84cc16"),
@@ -2181,25 +1863,6 @@ public partial class Main : Node2D
         _ => new Color("#ffffff"),
     };
 
-    // Kept short on purpose: the excavation counters share this line, and the
-    // battle wording lives in the side-panel legend.
-    private string RaidPhase()
-    {
-        if (_state!.SessionResult.Outcome is { } outcome)
-        {
-            return $"RAID {outcome}";
-        }
-
-        if (_state.Raiders.Count > 0)
-        {
-            return "RAID ACTIVE";
-        }
-
-        return _state.Threat.Announced
-            ? $"RAID IN {_state.Threat.TicksRemaining}t"
-            : "RAID QUIET · warn t300";
-    }
-
     private string RaidLegend() =>
         "BATTLE LEGEND\n" +
         "teal = crew  •  red ring = raider\n" +
@@ -2207,23 +1870,10 @@ public partial class Main : Node2D
         "dot: green work, amber combat,\n" +
         "gray downed, pink fled";
 
-    private static string CreatureLifeState(PrototypeCreatureSnapshot creature) => creature.Mode switch
-    {
-        CreatureMode.Downed => "DOWNED",
-        CreatureMode.Fled => "FLED",
-        CreatureMode.Fighting => "ALIVE / FIGHTING",
-        _ => "ALIVE",
-    };
-
-    private static string CreatureStateShort(PrototypeCreatureSnapshot creature) => creature.Mode switch
-    {
-        CreatureMode.Downed => "DOWN",
-        CreatureMode.Fled => "FLED",
-        CreatureMode.Fighting => "FIGHT",
-        CreatureMode.Working => "WORK",
-        CreatureMode.Moving => "MOVE",
-        _ => "READY",
-    };
+    // Adapter-side alias for the pure state abbreviation, so the map name labels
+    // read the same as before the seam landed.
+    private static string CreatureStateShort(PrototypeCreatureSnapshot creature) =>
+        HudText.CreatureStateShort(creature);
 
     private static Color DefenderColor(PrototypeCreatureSnapshot creature) => creature.Mode switch
     {
@@ -2300,8 +1950,6 @@ public partial class Main : Node2D
 
         DrawString(ThemeDB.FallbackFont, CellTopLeft(anchor) + new Vector2(2, 10), text, HorizontalAlignment.Left, -1, 7, ZoneColor(zone));
     }
-
-    private string CreatureName(int id) => _state!.Creatures.SingleOrDefault(creature => creature.Id == id)?.Name ?? $"#{id}";
 
     private enum EditMode { Inspect, Paint, Erase, Dig, CancelDig }
 
