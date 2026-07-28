@@ -1,7 +1,7 @@
 # Godot graybox — Prototype 1
 
 Status: active
-Source: Issues #10–#12, #24, #26, #28, #36, #48, #55
+Source: Issues #10–#12, #24, #26, #28, #36, #48, #55, #58
 
 The graybox is the visual, top-down projection of the headless Prototype 1
 economy and raid. It starts with the `baseline` gameplay-v2 fixture.
@@ -90,8 +90,10 @@ zone with `Z` is where the intent gets lost. The command it emits is an ordinary
 Every accepted edit is appended to the visible in-memory log, fully validated,
 then replayed from the fixture to the current tick before replacing the Godot
 projection. Invalid edits leave both world and log unchanged and appear in the
-feedback/diagnostic buffer. A command applied at the current tick becomes active
-on the next simulation tick.
+feedback/diagnostic buffer. A command accepted at the current tick becomes
+active in canonical state on the next simulation tick, and is drawn on the map
+straight away — see
+[Marking while time is stopped](#marking-while-time-is-stopped-issue-58).
 
 Speed, pause and stepping are presentation controls only. They only choose how
 often the adapter calls `PrototypeWorld.RunTicks`; they are not gameplay
@@ -202,6 +204,162 @@ width budget is drawn against.
 `ui.summary` is untouched and stays a semantic dump, so `tests/golden/ui/*.json`
 pass **without regeneration**. A regenerated golden file here would be a defect
 report, not a chore.
+
+## Marking while time is stopped (Issue #58)
+
+Pause is the planning mode: the player stops time in order to lay out space
+calmly. Until Issue #58 that was the one mode with no feedback at all. A command
+carrying tick `T` is applied at the **start** of tick `T`, so a world stopped at
+`T` holds the intent in its log and not yet in its designations. Running, that
+gap lasts a sixth of a second and nobody sees it; paused it never closes, so the
+player marked rock and the rock stayed bare. The same thing made `STEP` — mark,
+advance one tick, see what happened — read as a broken control rather than as a
+way to learn the mechanic.
+
+Two ways out were possible: **show the intent before it is applied**, or **apply
+designation commands immediately**. The second moves the order of operations
+inside a tick, which is an invariant under
+[ADR 0010](../decisions/0010-contract-invariants-and-tuning.md) and would need an
+ADR of its own. The first was taken.
+
+`DungeonFortress.Presentation.MapProjection` is that layer. It is a pure function
+of one snapshot: it reads `pendingCommands`, keeps the ones whose tick is the
+tick the world is sitting on, and folds them over the canonical designations,
+blueprints, stockpile cells and zones. Nothing is written back, no simulation
+rule is copied to this side of the seam, and neither the tick order, the command
+vocabulary nor the canonical snapshot changes — which is why the checksum, the
+event log and a replay are the same whether or not the player was paused.
+
+Four properties follow, and each is a unit test in
+`DungeonFortress.Presentation.Tests`:
+
+- a mark, a withdrawal, a blueprint, a stockpile cell and a zone edit are on the
+  map the instant the command is accepted, at any speed and on `STEP`;
+- **the tick that finally applies the command changes neither which cells are
+  drawn nor how they read**, within the boundary stated below;
+- the brush reads the same projection, so a cell that already carries a waiting
+  mark is not offered again, the count above a drag is what the command will
+  really carry, and the legal-target outline matches;
+- a command a fixture scheduled for a *later* tick is **not** shown early. It is
+  in the log, but it is not an intent waiting for this frame.
+
+The fold follows the world's own tolerance: marking a tile that already carries
+the mark is a no-op, and withdrawing from a tile that carries nothing is skipped,
+exactly as `ApplyDigDesignate`, `ApplyDigCancel`, `ApplyBuildCancel` and
+`zone_erase` do. A command that would change nothing is not reported as waiting.
+
+### How a waiting mark reads, and where that still moves
+
+A colour is not a detail here: "it did not blink" is a claim about the accent,
+not only about the set of cells. The accent is therefore chosen in
+`DungeonFortress.Presentation.MapAccents` and not in the adapter, because
+`Main.cs` is not built by the "Pure .NET" CI job — a reading decided there is
+decided where nothing can check it. `MapAccents` states the two halves
+separately, and `MapAccentTests` compares them across the very tick that applies
+the command, running the real simulation:
+
+| Mark | While it waits | The world's answer |
+|---|---|---|
+| dig | grey when `Dig` priority is 0, else amber | `dig_blocked_priority`, else `dig_waiting` / `dig_reserved` |
+| blueprint | grey when `Build` or `Haul` priority is 0; red on `Forbidden`; amber when no free stone; else teal | `build_blocked_priority` / `build_haul_blocked`, `build_unreachable`, `build_no_stone` / `build_stone_reserved`, `build_waiting_carrier` |
+| stockpile cell | red on `Forbidden`, else grey | `stockpile_unreachable`, else `stockpile_empty` |
+
+Every gate above is a published snapshot fact — the priorities, the `Forbidden`
+zone, the stock counters and the job list. None of it re-derives map topology.
+
+The gates are read **through the projection, not from the snapshot**, and that
+holds for a mark the world already carries as much as for one still waiting.
+Switching digging off with `[J]` and then marking rock with `[D]` is one gesture
+to the player, and the tick applies both — the world sets the priority first and
+then asks about it on the first rung of its ladder. Correcting only the new mark
+would put two designations of different colours side by side on the same map,
+making opposite claims about the same fact. The same is true of a `Forbidden`
+paint over a blueprint or a stockpile cell, so neither reading uses the
+`reachable` field of the snapshot: that field was computed under the zones the
+world holds, and the zones the player is looking at are the folded ones.
+
+`MapAccents` is the only place that reads a folded value. Everything that
+explains what the world is doing *now* — the inspector's "the Dig priority is 0",
+the reason a pile is not moving — keeps reading canonical state, because those
+sentences explain a status the world produced under the old value.
+
+### Where the line is
+
+The line is a rule, not a list. It was written as a list of exceptions four times
+and the list turned out to be incomplete every time.
+
+> **The projection answers what follows from published facts folded through it.
+> The world answers what needs a tick to run.**
+
+So instead of a list of exceptions, here is the list of *inputs*. Every fact the
+three status ladders in `PrototypeWorld` ask about is below, and each one is
+folded, impossible to have waiting, or the world's to answer. The same table
+lives on `MapAccents`, next to the code that implements it.
+
+| Fact, and where the world asks it | Verdict |
+|---|---|
+| `priorities[Dig]`, `[Build]`, `[Haul]` — first rung of the dig ladder, first and next-to-last of the construction one | **Folded.** `set_priority` is folded by `MapProjection` and read through `MapProjection.Priority` |
+| `Forbidden` over a construction site or a stockpile cell — `IsBuildSiteWorkable`, `ToStockpileSnapshot` | **Folded.** `zone_paint` / `zone_erase` are folded like any other marking and read through `MapProjection.IsInZone` |
+| `Forbidden` over a tile marked for digging | **Impossible while waiting.** A zone on rock is refused before any world exists, by `PrototypeCommandValidator`, and again by `ValidateZoneTiles` on its tick |
+| buildable floor under a site, passable ground under a stockpile cell | **Impossible while waiting.** The only map mutations are rock → floor and floor → post, and both need a tick; no command moves them |
+| reachability of rock — has the tile any orthogonal neighbour that is passable, not the gate and not `Forbidden` | **The world's.** It is a question about a tile's neighbours, and answering it here would put map topology on both sides of the seam [ADR 0011](../decisions/0011-presentation-layer-without-engine.md) draws |
+| who volunteered, whether work started — `reservedBy`, `progressTicks` | **The world's.** Jobs are generated and matched inside the tick |
+| material on a site and stone in the world — `delivered`, `incomingReserved`, `looseStone`, `storedStone`, the booked part of `jobs` | **The world's.** No command delivers, picks up or books stone. Two commands move material as a *side effect* — `zone_erase` spills a cell, `build_cancel` spills a site — and the fold covers geometry, not side effects |
+| the world's split between `build_no_stone` and `build_stone_reserved` | **Never reaches a reading.** Both are the same accent |
+| tuning — `build_stone_cost`, `stockpile_cell_capacity` | **Impossible while waiting.** No command changes tuning |
+
+Two consequences of the third block are worth stating plainly, because they are
+the readings that can still move when the tick runs. Painting `Forbidden` on a
+floor tile *next to* marked rock changes that mark's reading on the applying
+tick — the neighbour question is the world's. And on the shipped `baseline` map
+two of the twelve diggable tiles, `(26,1)` and `(26,2)`, are walled in until a
+neighbour is dug, so marking the whole pocket while paused shows two amber cells
+that turn red one tick later. `dig_in_progress` is the gentle case: a creature
+already standing next to the rock starts work, which is the world answering the
+mark rather than the mark being redrawn.
+
+`MapAccentTests` pins the table from both ends. It names those two baseline
+tiles; it checks an old mark and a new one in the same frame under a waiting
+priority and under a waiting `Forbidden`, in both directions; and it sweeps a
+whole session comparing the layer's prediction against the world's own
+`statusCode` on every tick where nothing is waiting, so a rung that stops
+matching fails in CI rather than in a playtest.
+
+### What the fold does not model
+
+The projection folds **geometry**, not the side effects of applying a command.
+Erasing a stockpile cell that holds stone removes the square and its pips at
+once, but the loose pile the world drops on that tile appears only when the tick
+runs; withdrawing a blueprint that already holds delivered stone behaves the same
+way. Modelling those would mean predicting where the world puts material, which
+is exactly the rule this layer must not own. The geometry is what the player is
+marking, and the geometry is what answers immediately.
+
+The inspector states what the picture deliberately does not: a cell whose mark
+is still waiting reads `marked as … on this tick; the world applies it when time
+advances`. The top line counts such a mark in `marks`, because "the log has it
+and the HUD denies it" was the text half of the same defect.
+
+Two consequences are worth naming rather than leaving to a diff. **The brush now
+declines a cell that carries a waiting mark** — no legal-target list changed, the
+same "already marked" test is simply told the truth while time is stopped, and
+without it the player would re-mark what is already marked, which is the
+complaint Issue #58 was opened about. **Zone paint and erase go through the same
+fold as the rest**, so painting a room while paused shows its outline
+immediately; no colour, style or legend row changed, only where the tiles are
+read from.
+
+`ui.pending` reports the whole thing structurally — the waiting dig marks and
+withdrawals, blueprints, blueprint withdrawals, stockpile cells and priority
+changes — and is `null` whenever nothing waits, which is every frame of
+free-running time. So
+"the mark showed up straight away" is a field in a headless run rather than
+something judged from a screenshot. `--smoke-controls` asserts it end to end,
+including the no-blink property.
+
+`tests/golden/ui/*.json` is unaffected and passes **without regeneration**: the
+three frames it records are `--demo-stone` moments at ticks 190, 336 and 950,
+and no command in that session carries any of those ticks.
 
 ## Movement between ticks
 
@@ -486,6 +644,7 @@ Both structured outputs — `godot_headless_smoke` from `--smoke` and
 | `controlFeedback` | the raw control feedback string |
 | `editMode`, `brushZone` | which brush is held |
 | `selectedCell`, `selectedCreatureId` | what the inspector is pointed at |
+| `pending` | intent accepted for this tick that the tick has not applied yet — marks, withdrawals and priority changes — or `null` |
 
 This turns every inspector branch into an ordinary testable artifact: choose the
 moment with `--screenshot-ticks`, point at a tile with `--select-cell`, and assert

@@ -54,7 +54,7 @@ public sealed class MapBoundsTests
         foreach (var mode in Enum.GetValues<BrushMode>())
         {
             Assert.False(
-                BrushSelection.Accepts(state, mode, ZoneKind.TrainingGround, MapBounds.Gate),
+                BrushSelection.Accepts(state.Shown(), mode, ZoneKind.TrainingGround, MapBounds.Gate),
                 $"The {mode} brush would carry the gate.");
         }
     }

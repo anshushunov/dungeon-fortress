@@ -16,12 +16,19 @@ public static class InspectorText
     /// <summary>
     /// The whole panel for one selection: a creature if one is selected, else the
     /// selected cell, else the idle text.
+    ///
+    /// It reads a <see cref="MapProjection"/> rather than a snapshot, because a
+    /// mark accepted for this tick is already drawn on the map and the panel has
+    /// to agree with it: a cell that visibly carries a designation must not be
+    /// described as bare rock waiting to be marked.
     /// </summary>
     public static string Build(
-        PrototypeSnapshot state,
+        MapProjection view,
         int? selectedCreatureId,
         GridPoint? selectedCell)
     {
+        ArgumentNullException.ThrowIfNull(view);
+        var state = view.State;
         if (selectedCreatureId is { } creatureId)
         {
             var creature = state.Creatures.Single(item => item.Id == creatureId);
@@ -50,9 +57,8 @@ public static class InspectorText
 
         if (selectedCell is { } cell)
         {
-            var zones = state.Zones
-                .Where(pair => pair.Value.Contains(cell))
-                .Select(pair => pair.Key.ToString())
+            var zones = view.ZonesAt(cell)
+                .Select(zone => zone.ToString())
                 .ToArray();
             if (zones.Contains(nameof(ZoneKind.Quarters), StringComparer.Ordinal))
             {
@@ -61,10 +67,12 @@ public static class InspectorText
             var jobs = state.Jobs
                 .Where(job => job.Origin == cell || job.Target == cell || job.StoreCell == cell)
                 .ToArray();
-            var stockpile = state.StockpileCells.FirstOrDefault(item => item.Position == cell);
-            var stockpileSection = stockpile is null
-                ? string.Empty
-                : $"STOCKPILE\n{BuildStockpileExplanation(state, stockpile)}\n\n";
+            var stockpile = view.StockpileCells.FirstOrDefault(item => item.Position == cell);
+            var stockpileSection = stockpile is not null
+                ? $"STOCKPILE\n{BuildStockpileExplanation(state, stockpile)}\n\n"
+                : view.IsPendingStockpileCell(cell)
+                    ? $"STOCKPILE\n{PendingMarkLine("a stockpile cell")}\n\n"
+                    : string.Empty;
             var looseStone = state.LooseItems.FirstOrDefault(
                 item => item.Position == cell && item.Resource == ResourceKind.Stone);
             var looseSection = looseStone is null
@@ -73,21 +81,23 @@ public static class InspectorText
             // Only a cell that is part of the construction chain carries this
             // section. A tile that is neither a blueprint nor a built post reads
             // exactly as it did before the chain existed.
-            var site = state.BuildSites.FirstOrDefault(item => item.Tile == cell);
+            var site = view.BuildSites.FirstOrDefault(item => item.Tile == cell);
             var buildSection = site is not null
                 ? $"BUILD\n{BuildBlueprintExplanation(state, site)}\n\n"
-                : state.Map.BuiltPostTiles.Contains(cell)
-                    ? $"BUILD\n{BuildPostExplanation(state, cell)}\n\n"
-                    : string.Empty;
+                : view.IsPendingBuildMark(cell)
+                    ? $"BUILD\n{PendingMarkLine("a training-post blueprint")}\n\n"
+                    : state.Map.BuiltPostTiles.Contains(cell)
+                        ? $"BUILD\n{BuildPostExplanation(state, cell)}\n\n"
+                        : string.Empty;
             return
                 $"CELL ({cell.X}, {cell.Y})\n\n" +
-                $"tile {TileDescription(state, cell)}\n" +
+                $"tile {TileDescription(view, cell)}\n" +
                 $"zones {(zones.Length == 0 ? "none" : string.Join(", ", zones))}\n" +
                 $"jobs {(jobs.Length == 0 ? "none" : string.Join(", ", jobs.Select(job => $"#{job.JobId} {job.Kind}")))}\n\n" +
                 looseSection +
                 buildSection +
                 stockpileSection +
-                $"DIG\n{BuildDigExplanation(state, cell)}";
+                $"DIG\n{BuildDigExplanation(view, cell)}";
         }
 
         return
@@ -95,8 +105,10 @@ public static class InspectorText
             "The world is a read-only projection of PrototypeWorld; Godot owns only selection, UI tempo and drawing.";
     }
 
-    public static string TileDescription(PrototypeSnapshot state, GridPoint cell)
+    public static string TileDescription(MapProjection view, GridPoint cell)
     {
+        ArgumentNullException.ThrowIfNull(view);
+        var state = view.State;
         if (state.Map.RockTiles.Contains(cell))
         {
             return state.Map.DiggableTiles.Contains(cell)
@@ -105,7 +117,7 @@ public static class InspectorText
         }
 
         if (state.Map.BuiltPostTiles.Contains(cell)) return "Post (built)";
-        if (state.BuildSites.Any(site => site.Tile == cell)) return "floor (blueprint)";
+        if (view.CarriesBlueprint(cell)) return "floor (blueprint)";
         if (state.Map.ExcavatedTiles.Contains(cell)) return "floor (excavated)";
         if (state.Beds.Any(bed => bed.Position == cell)) return "mushroom bed";
         if (state.Stations.Any(station => station.Position == cell)) return state.Stations.Single(station => station.Position == cell).Kind.ToString();
@@ -117,9 +129,21 @@ public static class InspectorText
     /// The player must be able to answer "why is nobody digging this?" from the
     /// inspector alone. Every branch reports simulation state, not a UI guess.
     /// </summary>
-    public static string BuildDigExplanation(PrototypeSnapshot state, GridPoint cell)
+    public static string BuildDigExplanation(MapProjection view, GridPoint cell)
     {
-        if (state.DigDesignations.FirstOrDefault(item => item.Tile == cell) is { } designation)
+        ArgumentNullException.ThrowIfNull(view);
+        var state = view.State;
+        // A mark accepted for this tick has no status yet — the world assigns one
+        // when the tick runs. Saying so is honest and is the only wording here
+        // that is not read straight out of the simulation.
+        if (view.IsPendingDigMark(cell))
+        {
+            return
+                $"{PendingMarkLine("designated for excavation")}\n" +
+                $"result → floor + {PrototypeTuning.DigStoneYield} loose stone";
+        }
+
+        if (view.DigDesignations.FirstOrDefault(item => item.Tile == cell) is { } designation)
         {
             var result =
                 $"\nresult → floor + {PrototypeTuning.DigStoneYield} loose stone";
@@ -400,6 +424,18 @@ public static class InspectorText
             ? "already excavated"
             : "floor, feature or gate";
     }
+
+    /// <summary>
+    /// The one sentence a mark gets between being accepted and being applied.
+    ///
+    /// The map draws such a mark exactly as it will look once the tick runs, so
+    /// that unpausing refines it instead of redrawing it. The panel is where the
+    /// difference is stated, because "the log has it, the world does not have it
+    /// yet" is a fact about time and the picture has no room for it.
+    /// </summary>
+    private static string PendingMarkLine(string what) =>
+        $"marked as {what} on this tick; the world applies it when time advances.\n" +
+        "Press [S] to step one tick, or unpause.";
 
     /// <summary>
     /// Why a stockpile stroke over this tile produced no zone paint.

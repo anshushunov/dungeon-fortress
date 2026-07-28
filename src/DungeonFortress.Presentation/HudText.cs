@@ -17,11 +17,22 @@ public static class HudText
     /// nothing else, so "what the HUD says" and "how it is drawn" stop being the
     /// same code.
     /// </summary>
-    public static HudPanels Build(HudViewState view) => new(
-        Summary(view),
-        Inspector(view),
-        Feedback(view),
-        Roster(view));
+    /// <param name="view">The frame.</param>
+    /// <param name="projection">
+    /// The frame's map projection. A caller that already has one — the adapter
+    /// builds exactly one per snapshot — passes it so the HUD does not build a
+    /// second; omitting it derives the same value from the same snapshot.
+    /// </param>
+    public static HudPanels Build(HudViewState view, MapProjection? projection = null)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        projection ??= view.Projection;
+        return new(
+            Summary(view, projection),
+            Inspector(view, projection),
+            Feedback(view),
+            Roster(view));
+    }
 
     /// <summary>
     /// Two lines and no more: the summary label ends where the time toolbar
@@ -31,7 +42,9 @@ public static class HudText
     /// purpose — loose on the floor, on someone's back, put away — because one
     /// combined number would hide exactly the part of the chain this step adds.
     /// </summary>
-    public static string Summary(HudViewState view)
+    public static string Summary(HudViewState view) => Summary(view, view.Projection);
+
+    private static string Summary(HudViewState view, MapProjection projection)
     {
         var state = view.Snapshot;
         var stock = state.Stocks;
@@ -42,14 +55,19 @@ public static class HudText
             $"  •  raw {stock.RawMushroom}+{stock.LooseRawMushroom}" +
             $"  •  stone {stock.LooseStone}L {stock.CarriedStone}C " +
             $"{stock.StoredStone}/{stock.StockpileCapacity}S" +
-            $"  •  dug {state.Economy.DigsCompleted}  •  marks {state.DigDesignations.Count}";
+            // The mark the player just made counts here even though the tick that
+            // records it has not run: it is in the command log, and reporting it
+            // as absent is the same defect as not drawing it (Issue #58).
+            $"  •  dug {state.Economy.DigsCompleted}  •  marks {projection.DigDesignationCount}";
     }
 
     /// <summary>
     /// The whole side-panel explanation for the current selection.
     /// </summary>
-    public static string Inspector(HudViewState view) =>
-        InspectorText.Build(view.Snapshot, view.SelectedCreatureId, view.SelectedCell);
+    public static string Inspector(HudViewState view) => Inspector(view, view.Projection);
+
+    private static string Inspector(HudViewState view, MapProjection projection) =>
+        InspectorText.Build(projection, view.SelectedCreatureId, view.SelectedCell);
 
     /// <summary>
     /// The last three autonomous choices, newest first, plus the diagnostics
