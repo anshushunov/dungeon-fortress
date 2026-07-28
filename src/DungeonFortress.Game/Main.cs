@@ -862,7 +862,10 @@ public partial class Main : Node2D
     private Button CreateControlButton(UiControl control, int index)
     {
         var accent = control.Strip == UiControlStrip.Time ? "#1d4ed8" : "#b45309";
-        var button = new Button
+        // HudButton rather than Button: the default theme draws a tooltip at font
+        // size 16 with no width limit, which made it larger than the title of the
+        // game and wide enough to cover the map. See HudButton.
+        var button = new HudButton
         {
             Name = control.Id,
             ToggleMode = true,
