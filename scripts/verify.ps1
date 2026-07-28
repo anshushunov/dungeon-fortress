@@ -221,8 +221,9 @@ try {
         -ExpectedSuccessEvent "godot_controls_smoke"
 
     # Text before pixels: the HUD and the inspector are compared against committed
-    # reference state, and the label overflow guard is required to still react.
-    # Both run headless, because neither needs a window to be true.
+    # reference state. It runs headless, because it does not need a window to be
+    # true. The HUD overflow guard itself now runs inside every entry point and at
+    # five frame sizes, so there is nothing left here to hold it to.
     Write-Host "Comparing the golden UI state..."
     $goldenUiFrames = @()
     foreach ($frame in Get-GoldenUiFrames) {
@@ -238,8 +239,15 @@ try {
         $goldenUiFrames += $frame.Name
     }
 
-    Write-Host "Checking that the HUD overflow guard still reacts..."
-    Assert-HudFitGuardReacts -GodotPath $godot -ProjectPath $gameProjectPath
+    # Rendering was separated from the tick, so the simulation must not be able to
+    # tell. The same fixture is driven through the real _Process loop at two frame
+    # rates and both have to land on the checksum a frameless replay produces.
+    Write-Host "Comparing canonical state across frame rates..."
+    Assert-FramePacingIndependence `
+        -GodotPath $godot `
+        -ProjectPath $gameProjectPath `
+        -TargetTick 200 `
+        -FixedFps @(20, 60) | Out-Null
 
     $raidScreenshot = Join-Path $verifyRoot "prepared-raid.png"
     $baselineScreenshot = Join-Path $verifyRoot "baseline-t1.png"

@@ -266,48 +266,126 @@ function Write-GoldenUiDocument {
     [IO.File]::WriteAllText($Path, $json + "`n", [Text.UTF8Encoding]::new($false))
 }
 
-function Assert-HudFitGuardReacts {
+function Assert-FramePacingIndependence {
     [CmdletBinding()]
+    [OutputType([Collections.Specialized.OrderedDictionary])]
     param(
         [Parameter(Mandatory = $true)]
         [string]$GodotPath,
 
         [Parameter(Mandatory = $true)]
-        [string]$ProjectPath
+        [string]$ProjectPath,
+
+        [Parameter(Mandatory = $true)]
+        [int]$TargetTick,
+
+        [Parameter(Mandatory = $true)]
+        [int[]]$FixedFps
     )
 
-    # A guard nobody has ever seen fail is indistinguishable from a guard that
-    # cannot fail. `--strict-hud-fit` drops the deficit Issue #36 still owns and
-    # must therefore report the known overflow. The day this run starts passing,
-    # the HUD reflow has landed and the recorded allowances in Main.cs are due for
-    # deletion together with this check.
-    $previousErrorActionPreference = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try {
-        $output = @(& $GodotPath @(
-            "--headless", "--path", $ProjectPath,
-            "--", "--smoke", "--fixture", "baseline", "--strict-hud-fit"
-        ) 2>&1)
-        $exitCode = $LASTEXITCODE
-    }
-    finally {
-        $ErrorActionPreference = $previousErrorActionPreference
+    # Interpolation is only allowed to change the picture. `--frame-pacing` drives
+    # the real _Process loop to a fixed tick and reports the canonical checksum, so
+    # Godot's `--fixed-fps` turns "does the frame rate reach the simulation?" into
+    # an ordinary headless comparison instead of something a human judges from a
+    # video.
+    #
+    # Four claims are checked, and each maps to one acceptance criterion of
+    # Issue #36:
+    #   - both frame rates end on the same tick with the same canonical checksum,
+    #     and each equals the checksum of a frameless replay of the same log;
+    #   - the two runs really did use different frame rates (frame counts differ);
+    #   - interpolation never leads the simulation into a tile it has not reached;
+    #   - no single frame moves a body by a whole tile, which is the teleporting
+    #     the Issue was opened about.
+    $runs = @()
+    foreach ($fps in $FixedFps) {
+        $result = Invoke-GodotChecked `
+            -GodotPath $GodotPath `
+            -Arguments @(
+                "--headless", "--fixed-fps",
+                $fps.ToString([Globalization.CultureInfo]::InvariantCulture),
+                "--path", $ProjectPath,
+                "--", "--fixture", "baseline",
+                "--frame-pacing", $TargetTick.ToString([Globalization.CultureInfo]::InvariantCulture)
+            ) `
+            -ExpectedSuccessEvent "godot_frame_pacing"
+
+        $resultLine = $result.Output | Where-Object {
+            $_ -match '"event":"godot_frame_pacing"' -and $_ -match '"status":"ok"'
+        } | Select-Object -Last 1
+
+        $capture = ([string]$resultLine | ConvertFrom-Json)
+        if ([int]$capture.tick -ne $TargetTick) {
+            throw "Frame pacing run at $fps fps stopped at tick $($capture.tick) instead of $TargetTick."
+        }
+
+        if ($capture.checksum -cne $capture.replayChecksum) {
+            throw (
+                "Frame pacing run at $fps fps produced canonical checksum $($capture.checksum), " +
+                "but replaying the same log without any frames produced $($capture.replayChecksum). " +
+                "The render loop is writing to the simulation."
+            )
+        }
+
+        if ([int]$capture.interpolationLeadViolations -ne 0) {
+            throw (
+                "Frame pacing run at $fps fps drew a creature in a tile it had not moved to " +
+                "$($capture.interpolationLeadViolations) time(s). Interpolation must lag the " +
+                "simulation, never lead it."
+            )
+        }
+
+        if ([int]$capture.interpolatedFrames -le 0) {
+            throw (
+                "Frame pacing run at $fps fps never interpolated a frame, so it proves nothing " +
+                "about motion. Check that the presentation layer still lerps between ticks."
+            )
+        }
+
+        if ([double]$capture.maxRenderStepPixels -ge [double]$capture.tileSize) {
+            throw (
+                "Frame pacing run at $fps fps moved a creature $($capture.maxRenderStepPixels) px " +
+                "in one frame, which is a whole $($capture.tileSize) px tile. Movement is still " +
+                "teleporting between ticks."
+            )
+        }
+
+        $runs += [pscustomobject]@{
+            FixedFps            = $fps
+            Frames              = [long]$capture.frames
+            InterpolatedFrames  = [long]$capture.interpolatedFrames
+            Checksum            = [string]$capture.checksum
+            MaxRenderStepPixels = [double]$capture.maxRenderStepPixels
+        }
     }
 
-    $reported = @($output | Where-Object { $_ -match "HUD label" })
-    if ($exitCode -eq 0 -or $reported.Count -eq 0) {
-        $output | ForEach-Object { Write-Host $_ }
+    $checksums = @($runs | ForEach-Object { $_.Checksum } | Sort-Object -Unique)
+    if ($checksums.Count -ne 1) {
         throw (
-            "--strict-hud-fit exited with $exitCode and reported no overflow. " +
-            "Either the HUD now fits, in which case delete KnownLineDeficit in Main.cs " +
-            "and this check, or the fit guard has stopped measuring anything."
+            "Canonical state depends on the frame rate: " +
+            (($runs | ForEach-Object { "$($_.FixedFps) fps -> $($_.Checksum)" }) -join ", ") + "."
         )
     }
 
-    [ordered]@{
-        event            = "hud_fit_guard"
-        status           = "ok"
-        strictExitCode   = $exitCode
-        reportedOverflow = $reported.Count
-    } | ConvertTo-Json -Compress | Write-Host
+    $frameCounts = @($runs | ForEach-Object { $_.Frames } | Sort-Object -Unique)
+    if ($frameCounts.Count -lt $runs.Count) {
+        throw (
+            "The frame pacing runs produced the same number of frames, so they did not actually " +
+            "differ in frame rate and the comparison proves nothing."
+        )
+    }
+
+    $summary = [ordered]@{
+        event               = "frame_pacing"
+        status              = "ok"
+        targetTick          = $TargetTick
+        checksum            = $checksums[0]
+        frames              = @($runs | ForEach-Object { $_.Frames })
+        fixedFps            = @($runs | ForEach-Object { $_.FixedFps })
+        interpolatedFrames  = @($runs | ForEach-Object { $_.InterpolatedFrames })
+        maxRenderStepPixels = @($runs | ForEach-Object { $_.MaxRenderStepPixels })
+    }
+
+    $summary | ConvertTo-Json -Compress | Write-Host
+    return $summary
 }
