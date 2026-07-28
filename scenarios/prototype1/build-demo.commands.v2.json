@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 2,
+  "scenario": "custom",
+  "seed": 20260726,
+  "commands": [
+    {
+      "tick": 0,
+      "kind": "dig_designate",
+      "tiles": [[25,1],[25,2],[25,3],[26,1]]
+    },
+    {
+      "tick": 200,
+      "kind": "zone_paint",
+      "zoneKind": "MaterialStockpile",
+      "tiles": [[22,1],[23,1]]
+    },
+    {
+      "tick": 1000,
+      "kind": "build_designate",
+      "tiles": [[25,2]]
+    },
+    {
+      "tick": 1000,
+      "kind": "zone_paint",
+      "zoneKind": "TrainingGround",
+      "tiles": [[25,2]]
+    },
+    {
+      "tick": 1000,
+      "kind": "set_priority",
+      "jobKind": "Drill",
+      "value": 3
+    }
+  ]
+}

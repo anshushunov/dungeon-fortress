@@ -31,6 +31,7 @@ public static class PrototypeTuning
     public const int MapHeight = 16;
     public const int MaximumTilesPerCommand = 256;
     public const int MaximumDigDesignations = 256;
+    public const int MaximumBuildDesignations = 256;
 
     public const int StartSatiety = 70;
     public const int StartFatigue = 10;
@@ -74,6 +75,12 @@ public static class PrototypeTuning
     public const int StockpileCellCapacity = 2;
     public const int StoneCarryCapacity = 2;
 
+    // One training post costs exactly one carrier trip. Anything larger would make
+    // the first functional room a logistics exercise instead of a demonstration
+    // that the excavated stone finally turns into a working object.
+    public const int BuildStoneCost = 2;
+    public const int BuildTicks = 30;
+
     public const int DrillTicks = 30;
     public const int DrillGain = 12;
     public const int DrillFatigue = 6;
@@ -116,6 +123,10 @@ public static class PrototypeTuning
     // active. It ties with the food chain and loses the tie by enum order, which
     // keeps the existing food/raid vertical unchanged until rock is designated.
     public const int DefaultDigPriority = 3;
+    // Same reasoning as Dig: a blueprint must lead to work on its own. Build is
+    // last in enum order, so an equal score still loses to the food chain and to
+    // excavation, and the default priority changes nothing until a blueprint exists.
+    public const int DefaultBuildPriority = 3;
     public const int RationReserveMaximum = 20;
     public const int RationReserveDefault = 0;
     public const int DrillMinimumSatietyMaximum = 100;

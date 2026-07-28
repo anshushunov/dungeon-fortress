@@ -12,6 +12,7 @@ param(
     [switch]$DemoControls,
     [switch]$DemoDig,
     [switch]$DemoStone,
+    [switch]$DemoBuild,
     [switch]$VisibleSmoke,
     [ValidatePattern("^\d{3,5}x\d{3,5}$")]
     [string]$WindowSize
@@ -84,6 +85,9 @@ if ($DemoDig) {
 }
 if ($DemoStone) {
     $arguments += "--demo-stone"
+}
+if ($DemoBuild) {
+    $arguments += "--demo-build"
 }
 
 if ($VisibleSmoke -and -not [string]::IsNullOrWhiteSpace($ScreenshotPath)) {
