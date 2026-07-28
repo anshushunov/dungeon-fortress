@@ -299,17 +299,53 @@ public sealed class MapProjectionTests
     }
 
     /// <summary>
-    /// Time controls are not commands, so a priority or rule waiting for its tick
-    /// changes nothing that is drawn and must not make the map claim otherwise.
+    /// A waiting priority puts nothing on the map — it is not marking — but it is
+    /// waiting intent, and it decides how the marks beside it read, so the
+    /// projection carries it and a structured run reports it.
     /// </summary>
     [Fact]
-    public void A_waiting_priority_change_is_not_marking()
+    public void A_waiting_priority_change_is_intent_but_not_marking()
     {
         var view = MapProjection.Of(Stopped(
-            new SetPriorityCommand(MarkTick, JobKind.Dig, 4)));
+            new SetPriorityCommand(MarkTick, JobKind.Dig, 0)));
 
         Assert.False(view.HasPendingMarking);
+        Assert.True(view.HasPendingIntent);
+        Assert.Equal(0, view.Priority(JobKind.Dig));
+        Assert.NotEqual(view.State.Priorities[JobKind.Dig], view.Priority(JobKind.Dig));
+        Assert.Equal([JobKind.Dig], view.PendingPriorities.Keys);
+    }
+
+    /// <summary>
+    /// A rule is the one command kind the projection still ignores: it changes
+    /// neither what is drawn nor how it reads.
+    /// </summary>
+    [Fact]
+    public void A_waiting_rule_change_is_neither()
+    {
+        var view = MapProjection.Of(Stopped(
+            new SetRuleCommand(MarkTick, "ration_reserve", 4)));
+
+        Assert.False(view.HasPendingIntent);
         Assert.Equal(0, view.PendingCommandCount);
+    }
+
+    /// <summary>
+    /// Restating a priority the world already has is not a change, and setting one
+    /// back undoes the waiting change rather than recording a second.
+    /// </summary>
+    [Fact]
+    public void A_priority_set_back_to_its_canonical_value_leaves_nothing_waiting()
+    {
+        var state = PresentationFixtures.Baseline(1);
+        var canonical = state.Priorities[JobKind.Dig];
+        var view = MapProjection.Of(Stopped(
+            new SetPriorityCommand(MarkTick, JobKind.Dig, 0),
+            new SetPriorityCommand(MarkTick, JobKind.Dig, canonical)));
+
+        Assert.False(view.HasPendingIntent);
+        Assert.Empty(view.PendingPriorities);
+        Assert.Equal(canonical, view.Priority(JobKind.Dig));
     }
 
     /// <summary>

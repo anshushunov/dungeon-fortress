@@ -271,7 +271,7 @@ public sealed class InspectorExplanationTests
             "designated, but no free neighbouring floor to work from.\n" +
             "Dig an adjacent tile first; nobody is teleported into rock.\n" +
             "result → floor + 1 loose stone",
-            InspectorText.BuildDigExplanation(state.Shown(),new GridPoint(26, 1)));
+            InspectorText.BuildDigExplanation(state.Shown(), new GridPoint(26, 1)));
     }
 
     [Fact]
@@ -285,7 +285,7 @@ public sealed class InspectorExplanationTests
             "designated, but the Dig priority is 0.\n" +
             "Raise it with [J] and +/- to let creatures take the job.\n" +
             "result → floor + 1 loose stone",
-            InspectorText.BuildDigExplanation(state.Shown(),new GridPoint(25, 1)));
+            InspectorText.BuildDigExplanation(state.Shown(), new GridPoint(25, 1)));
     }
 
     [Fact]
@@ -306,7 +306,7 @@ public sealed class InspectorExplanationTests
         Assert.Equal(
             $"digging 7/20 ticks by {digger.Name} from (24,1).\n" +
             "result → floor + 1 loose stone",
-            InspectorText.BuildDigExplanation(state.Shown(),new GridPoint(25, 1)));
+            InspectorText.BuildDigExplanation(state.Shown(), new GridPoint(25, 1)));
     }
 
     [Fact]
@@ -325,7 +325,7 @@ public sealed class InspectorExplanationTests
         Assert.Equal(
             $"{digger.Name} chose this job and is walking to (24,1).\n" +
             "result → floor + 1 loose stone",
-            InspectorText.BuildDigExplanation(state.Shown(),new GridPoint(25, 1)));
+            InspectorText.BuildDigExplanation(state.Shown(), new GridPoint(25, 1)));
     }
 
     [Fact]
@@ -338,7 +338,7 @@ public sealed class InspectorExplanationTests
             "designated and reachable; waiting for a creature to be free.\n" +
             "You mark intent, the crew decides who goes.\n" +
             "result → floor + 1 loose stone",
-            InspectorText.BuildDigExplanation(state.Shown(),new GridPoint(25, 1)));
+            InspectorText.BuildDigExplanation(state.Shown(), new GridPoint(25, 1)));
     }
 
     [Fact]
@@ -350,7 +350,7 @@ public sealed class InspectorExplanationTests
         Assert.Equal(
             "diggable internal rock. Press [D] and click or drag to designate.\n" +
             "result → floor + 1 loose stone",
-            InspectorText.BuildDigExplanation(state.Shown(),rock));
+            InspectorText.BuildDigExplanation(state.Shown(), rock));
     }
 
     [Theory]
@@ -363,7 +363,7 @@ public sealed class InspectorExplanationTests
 
         Assert.Equal(
             $"not diggable: {reason}.",
-            InspectorText.BuildDigExplanation(state.Shown(),new GridPoint(x, y)));
+            InspectorText.BuildDigExplanation(state.Shown(), new GridPoint(x, y)));
     }
 
     [Fact]
@@ -374,7 +374,7 @@ public sealed class InspectorExplanationTests
 
         Assert.Equal(
             "not diggable: already excavated.",
-            InspectorText.BuildDigExplanation(state.Shown(),excavated));
+            InspectorText.BuildDigExplanation(state.Shown(), excavated));
         Assert.Equal("already excavated", InspectorText.ShortUndiggableReason(state, excavated));
         Assert.Equal("it has already been excavated", InspectorText.UndiggableReason(state, excavated));
     }
@@ -510,16 +510,16 @@ public sealed class InspectorExplanationTests
         var fresh = PresentationFixtures.Baseline(1);
         var dug = PresentationFixtures.DigOnly(700);
 
-        Assert.Equal("rock (internal)", InspectorText.TileDescription(fresh.Shown(),new GridPoint(25, 1)));
-        Assert.Equal("rock (map boundary)", InspectorText.TileDescription(fresh.Shown(),new GridPoint(0, 0)));
+        Assert.Equal("rock (internal)", InspectorText.TileDescription(fresh.Shown(), new GridPoint(25, 1)));
+        Assert.Equal("rock (map boundary)", InspectorText.TileDescription(fresh.Shown(), new GridPoint(0, 0)));
         Assert.Equal("floor (excavated)", InspectorText.TileDescription(dug.Shown(), dug.Map.ExcavatedTiles[0]));
-        Assert.Equal("mushroom bed", InspectorText.TileDescription(fresh.Shown(),fresh.Beds[0].Position));
-        Assert.Equal("gate", InspectorText.TileDescription(fresh.Shown(),new GridPoint(27, 13)));
-        Assert.Equal("floor", InspectorText.TileDescription(fresh.Shown(),new GridPoint(12, 12)));
+        Assert.Equal("mushroom bed", InspectorText.TileDescription(fresh.Shown(), fresh.Beds[0].Position));
+        Assert.Equal("gate", InspectorText.TileDescription(fresh.Shown(), new GridPoint(27, 13)));
+        Assert.Equal("floor", InspectorText.TileDescription(fresh.Shown(), new GridPoint(12, 12)));
         var station = fresh.Stations[0];
         Assert.Equal(
             station.Kind.ToString(),
-            InspectorText.TileDescription(fresh.Shown(),station.Position));
+            InspectorText.TileDescription(fresh.Shown(), station.Position));
     }
 
     // ------------------------------------------------------------- whole panel
@@ -545,7 +545,7 @@ public sealed class InspectorExplanationTests
 
         Assert.Contains(
             "zones Quarters, QUARTERS: rest only at fatigue 50+, free bunk\n",
-            InspectorText.Build(state.Shown(),null, quarters),
+            InspectorText.Build(state.Shown(), null, quarters),
             StringComparison.Ordinal);
     }
 
@@ -555,7 +555,7 @@ public sealed class InspectorExplanationTests
         var state = PresentationFixtures.Baseline(1);
         var creature = state.Creatures[0];
 
-        var text = InspectorText.Build(state.Shown(),creature.Id, creature.Position);
+        var text = InspectorText.Build(state.Shown(), creature.Id, creature.Position);
 
         Assert.StartsWith(
             $"CREATURE #{creature.Id} · {creature.Name} — ALIVE HP {creature.Hp}/{creature.MaxHp}\n\n",
@@ -577,7 +577,7 @@ public sealed class InspectorExplanationTests
         };
         state = state with { Creatures = [creature, .. state.Creatures.Skip(1)] };
 
-        var text = InspectorText.Build(state.Shown(),creature.Id, null);
+        var text = InspectorText.Build(state.Shown(), creature.Id, null);
 
         Assert.Contains("job none\n", text, StringComparison.Ordinal);
         Assert.EndsWith($"HP {creature.Hp}/{creature.MaxHp}\nnone", text, StringComparison.Ordinal);
@@ -594,7 +594,7 @@ public sealed class InspectorExplanationTests
             LooseItems = [new PrototypeLooseItemSnapshot(cell, ResourceKind.Stone, 1)],
         };
 
-        var text = InspectorText.Build(state.Shown(),null, cell);
+        var text = InspectorText.Build(state.Shown(), null, cell);
 
         Assert.True(
             text.IndexOf("LOOSE STONE", StringComparison.Ordinal) <

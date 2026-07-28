@@ -82,9 +82,13 @@ public static class MapAccents
     /// A dig mark whose tick has not run yet.
     ///
     /// <c>dig_blocked_priority</c> is the world's first branch and is a pure
-    /// function of <c>priorities[Dig]</c>, which the snapshot publishes — so a
-    /// mark made with digging switched off is grey immediately instead of turning
-    /// grey the moment time moves.
+    /// function of <c>priorities[Dig]</c> — so a mark made with digging switched
+    /// off is grey immediately instead of turning grey the moment time moves.
+    ///
+    /// The priority is read from the projection and not from the snapshot,
+    /// because switching digging off and marking rock in the same paused moment
+    /// is one gesture to the player. Reading the canonical value made the mark
+    /// blink in both directions, which is the same defect one level down.
     ///
     /// <c>dig_unreachable</c> is the one reading this side of the seam may not
     /// have. It asks whether any orthogonal neighbour of the rock is passable,
@@ -98,7 +102,7 @@ public static class MapAccents
     public static DigMarkAccent PendingDig(MapProjection view)
     {
         ArgumentNullException.ThrowIfNull(view);
-        return view.State.Priorities[JobKind.Dig] == 0
+        return view.Priority(JobKind.Dig) == 0
             ? DigMarkAccent.BlockedByPriority
             : DigMarkAccent.Waiting;
     }
@@ -120,16 +124,17 @@ public static class MapAccents
     /// so the reading follows the world's ladder for exactly that case, in the
     /// world's order.
     ///
-    /// Every gate is a published fact: the two priorities, membership of the
-    /// <c>Forbidden</c> zone (taken from the projection, so a <c>Forbidden</c>
-    /// paint accepted in the same paused moment counts), and the stone the crew
-    /// could still give a site. Nothing here re-derives map topology.
+    /// Every gate is a published fact: the two priorities and membership of the
+    /// <c>Forbidden</c> zone, both taken from the projection so that a priority
+    /// change or a <c>Forbidden</c> paint accepted in the same paused moment
+    /// counts, and the stone the crew could still give a site. Nothing here
+    /// re-derives map topology.
     /// </summary>
     public static BlueprintAccent PendingBlueprint(MapProjection view, GridPoint tile)
     {
         ArgumentNullException.ThrowIfNull(view);
         var state = view.State;
-        if (state.Priorities[JobKind.Build] == 0)
+        if (view.Priority(JobKind.Build) == 0)
         {
             return BlueprintAccent.BlockedByPriority;
         }
@@ -142,7 +147,7 @@ public static class MapAccents
             return BlueprintAccent.Unreachable;
         }
 
-        if (state.Priorities[JobKind.Haul] == 0)
+        if (view.Priority(JobKind.Haul) == 0)
         {
             return BlueprintAccent.BlockedByPriority;
         }

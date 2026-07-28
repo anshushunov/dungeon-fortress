@@ -267,6 +267,18 @@ the command, running the real simulation:
 Every gate above is a published snapshot fact — the priorities, the `Forbidden`
 zone, the stock counters and the job list. None of it re-derives map topology.
 
+The gates are read **through the projection, not from the snapshot**, so a
+priority change or a `Forbidden` paint accepted in the same paused moment counts.
+Switching digging off with `[J]` and then marking rock with `[D]` is one gesture
+to the player, and the tick applies both: the world sets the priority first and
+then asks about it on the first rung of its ladder. Reading the canonical value
+made every mark blink in both directions — which is why `set_priority` is folded
+by `MapProjection` even though it puts nothing on the map. `MapAccents` is the
+only place that reads the folded value; everything that explains what the world
+is doing *now* — the inspector's "the Dig priority is 0", the reason a pile is
+not moving — keeps reading canonical priorities, because those sentences explain
+a status the world produced under the old value.
+
 **Two readings still change when the tick runs, both deliberately.**
 
 `dig_unreachable` is the real boundary. It asks whether any orthogonal neighbour
@@ -308,8 +320,9 @@ immediately; no colour, style or legend row changed, only where the tiles are
 read from.
 
 `ui.pending` reports the whole thing structurally — the waiting dig marks and
-withdrawals, blueprints, blueprint withdrawals and stockpile cells — and is
-`null` whenever nothing waits, which is every frame of free-running time. So
+withdrawals, blueprints, blueprint withdrawals, stockpile cells and priority
+changes — and is `null` whenever nothing waits, which is every frame of
+free-running time. So
 "the mark showed up straight away" is a field in a headless run rather than
 something judged from a screenshot. `--smoke-controls` asserts it end to end,
 including the no-blink property.
@@ -601,7 +614,7 @@ Both structured outputs — `godot_headless_smoke` from `--smoke` and
 | `controlFeedback` | the raw control feedback string |
 | `editMode`, `brushZone` | which brush is held |
 | `selectedCell`, `selectedCreatureId` | what the inspector is pointed at |
-| `pending` | marking accepted for this tick that the tick has not applied yet, or `null` |
+| `pending` | intent accepted for this tick that the tick has not applied yet — marks, withdrawals and priority changes — or `null` |
 
 This turns every inspector branch into an ordinary testable artifact: choose the
 moment with `--screenshot-ticks`, point at a tile with `--select-cell`, and assert

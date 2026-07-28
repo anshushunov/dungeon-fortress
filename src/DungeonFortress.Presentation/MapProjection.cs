@@ -46,6 +46,7 @@ public sealed class MapProjection
     private readonly HashSet<GridPoint> _buildWithdrawals;
     private readonly Dictionary<ZoneKind, HashSet<GridPoint>> _zonePaints;
     private readonly Dictionary<ZoneKind, HashSet<GridPoint>> _zoneErasures;
+    private readonly Dictionary<JobKind, int> _priorities;
 
     private MapProjection(
         PrototypeSnapshot state,
@@ -55,7 +56,8 @@ public sealed class MapProjection
         HashSet<GridPoint> buildMarks,
         HashSet<GridPoint> buildWithdrawals,
         Dictionary<ZoneKind, HashSet<GridPoint>> zonePaints,
-        Dictionary<ZoneKind, HashSet<GridPoint>> zoneErasures)
+        Dictionary<ZoneKind, HashSet<GridPoint>> zoneErasures,
+        Dictionary<JobKind, int> priorities)
     {
         State = state;
         PendingCommandCount = pendingCommandCount;
@@ -65,6 +67,7 @@ public sealed class MapProjection
         _buildWithdrawals = buildWithdrawals;
         _zonePaints = zonePaints;
         _zoneErasures = zoneErasures;
+        _priorities = priorities;
     }
 
     /// <summary>
@@ -83,6 +86,7 @@ public sealed class MapProjection
         HashSet<GridPoint> buildWithdrawals = [];
         Dictionary<ZoneKind, HashSet<GridPoint>> zonePaints = new();
         Dictionary<ZoneKind, HashSet<GridPoint>> zoneErasures = new();
+        Dictionary<JobKind, int> priorities = new();
         var digTiles = state.DigDesignations.Select(item => item.Tile).ToHashSet();
         var siteTiles = state.BuildSites.Select(site => site.Tile).ToHashSet();
         var count = 0;
@@ -116,8 +120,16 @@ public sealed class MapProjection
                     Bucket(zonePaints, erased),
                     Bucket(zoneErasures, erased),
                     state.Zones[erased].Contains),
-                // set_priority and set_rule change how the crew reacts to the map,
-                // never what is drawn on it.
+                // A priority does not put anything on the map, but it decides how
+                // a mark reads — the world's own status ladder asks it first. A
+                // player who switches digging off and then marks rock in the same
+                // paused moment must not watch every mark change colour when time
+                // moves, so the change is folded here rather than left canonical.
+                // Applying it in the world is literally `_priorities[k] = v`; no
+                // rule crosses the seam.
+                "set_priority" when command.JobKind is { } job && command.Value is { } value =>
+                    SetPriority(priorities, state.Priorities, job, value),
+                // set_rule changes neither what is drawn nor how it reads.
                 _ => false,
             };
 
@@ -135,7 +147,8 @@ public sealed class MapProjection
             buildMarks,
             buildWithdrawals,
             zonePaints,
-            zoneErasures);
+            zoneErasures,
+            priorities);
     }
 
     /// <summary>The canonical snapshot this projection was taken from.</summary>
@@ -150,6 +163,24 @@ public sealed class MapProjection
     public int PendingCommandCount { get; }
 
     /// <summary>
+    /// The priority a job kind will have once this tick runs.
+    ///
+    /// It is deliberately used in one place only: predicting how a mark whose
+    /// tick has not run will read. Everything that explains what the world is
+    /// doing <em>now</em> — the inspector's "the Dig priority is 0", the reason a
+    /// pile is not moving — keeps reading canonical priorities, because those
+    /// sentences explain a status code the world produced under the old value.
+    /// </summary>
+    public int Priority(JobKind job) =>
+        _priorities.TryGetValue(job, out var value) ? value : State.Priorities[job];
+
+    /// <summary>
+    /// The priority changes accepted for this tick and not applied yet. Empty on
+    /// almost every frame.
+    /// </summary>
+    public IReadOnlyDictionary<JobKind, int> PendingPriorities => _priorities;
+
+    /// <summary>
     /// Whether the projection differs from the snapshot at all; false for almost
     /// every frame.
     /// </summary>
@@ -158,6 +189,12 @@ public sealed class MapProjection
         _buildMarks.Count > 0 || _buildWithdrawals.Count > 0 ||
         _zonePaints.Any(pair => pair.Value.Count > 0) ||
         _zoneErasures.Any(pair => pair.Value.Count > 0);
+
+    /// <summary>
+    /// Whether anything at all is waiting — a mark, or a priority that decides how
+    /// the marks read. This is what a structured run reports as <c>ui.pending</c>.
+    /// </summary>
+    public bool HasPendingIntent => HasPendingMarking || _priorities.Count > 0;
 
     /// <summary>
     /// The dig designations the world holds, minus the ones a withdrawal accepted
@@ -326,6 +363,32 @@ public sealed class MapProjection
         }
 
         return changed;
+    }
+
+    /// <summary>
+    /// A priority waiting for its tick. Restating the value the world already has
+    /// is not a change, and setting it back to the canonical value undoes an
+    /// earlier waiting change rather than recording a second one.
+    /// </summary>
+    /// <returns>Whether the projection actually moved.</returns>
+    private static bool SetPriority(
+        Dictionary<JobKind, int> pending,
+        IReadOnlyDictionary<JobKind, int> canonical,
+        JobKind job,
+        int value)
+    {
+        if (canonical[job] == value)
+        {
+            return pending.Remove(job);
+        }
+
+        if (pending.TryGetValue(job, out var current) && current == value)
+        {
+            return false;
+        }
+
+        pending[job] = value;
+        return true;
     }
 
     private static HashSet<GridPoint> Bucket(

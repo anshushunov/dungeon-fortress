@@ -96,6 +96,50 @@ public sealed class MapAccentTests
     }
 
     /// <summary>
+    /// A priority the player changed in the same paused moment counts.
+    ///
+    /// Switching digging off and then marking rock is one gesture, and the tick
+    /// applies both: the world sets the priority first and then reads it on the
+    /// first branch of its ladder. Reading the canonical value here made the mark
+    /// blink in both directions — amber then grey when digging was being switched
+    /// off, grey then amber when it was being switched back on — which is the
+    /// original defect one level down. Every earlier priority case in this file
+    /// puts the change on tick 0, where it is already applied; these two put it on
+    /// the tick of the mark, which is what a player does.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 3)]
+    [InlineData(3, 0)]
+    public void A_dig_mark_reads_the_priority_the_same_moment_accepted(int from, int to)
+    {
+        var (waiting, applied) = Across(
+            40,
+            new SetPriorityCommand(0, JobKind.Dig, from),
+            new SetPriorityCommand(40, JobKind.Dig, to),
+            new DigDesignateCommand(40, [Rock]));
+
+        Assert.Equal(from, waiting.State.Priorities[JobKind.Dig]);
+        Assert.Equal(to, waiting.Priority(JobKind.Dig));
+        Assert.Equal(MapAccents.PendingDig(waiting), AppliedDig(applied, Rock));
+    }
+
+    [Theory]
+    [InlineData(0, 3)]
+    [InlineData(3, 0)]
+    public void A_blueprint_reads_the_priority_the_same_moment_accepted(int from, int to)
+    {
+        var (waiting, applied) = Across(
+            40,
+            new SetPriorityCommand(0, JobKind.Build, from),
+            new SetPriorityCommand(40, JobKind.Build, to),
+            new BuildDesignateCommand(40, [Floor]));
+
+        Assert.Equal(from, waiting.State.Priorities[JobKind.Build]);
+        Assert.Equal(to, waiting.Priority(JobKind.Build));
+        Assert.Equal(MapAccents.PendingBlueprint(waiting, Floor), AppliedBlueprint(applied, Floor));
+    }
+
+    /// <summary>
     /// And the other side of the same gate: with stone lying about, the site really
     /// is only waiting for somebody to pick it up, and the waiting blueprint has to
     /// say so from the start.
@@ -167,6 +211,104 @@ public sealed class MapAccentTests
 
         Assert.Equal(StockpileCellAccent.Unreachable, MapAccents.PendingStockpile(waiting, cell));
         Assert.Equal(MapAccents.PendingStockpile(waiting, cell), AppliedStockpile(applied, cell));
+    }
+
+    /// <summary>
+    /// The gates are a ladder, so the order they are asked in is part of the
+    /// answer, and only a case where two of them fire at once can pin it. Every
+    /// defect found in this layer so far has been an unpinned rung.
+    ///
+    /// A tile nobody can reach is the one reading this side of the seam cannot
+    /// have — but only while digging is switched on. With <c>Dig</c> priority 0
+    /// the world never gets as far as reachability, so the waiting mark and the
+    /// applied one agree even here.
+    /// </summary>
+    [Fact]
+    public void Priority_is_asked_before_reachability_for_a_dig_mark()
+    {
+        var walledIn = new GridPoint(26, 2);
+        var (waiting, applied) = Across(
+            40,
+            new SetPriorityCommand(0, JobKind.Dig, 0),
+            new DigDesignateCommand(40, [walledIn]));
+
+        Assert.False(applied.DigDesignations.Single(item => item.Tile == walledIn).Reachable);
+        Assert.Equal(DigMarkAccent.BlockedByPriority, MapAccents.PendingDig(waiting));
+        Assert.Equal(MapAccents.PendingDig(waiting), AppliedDig(applied, walledIn));
+    }
+
+    /// <summary>
+    /// The same rung on the construction ladder: a site nobody may step on is
+    /// unreachable whether or not carrying is switched off, because the world asks
+    /// about the ground before it asks about the work.
+    /// </summary>
+    [Fact]
+    public void Reachability_is_asked_before_hauling_for_a_blueprint()
+    {
+        var (waiting, applied) = Across(
+            40,
+            new SetPriorityCommand(0, JobKind.Haul, 0),
+            new ZonePaintCommand(0, ZoneKind.Forbidden, [Floor]),
+            new BuildDesignateCommand(40, [Floor]));
+
+        Assert.Equal(BlueprintAccent.Unreachable, MapAccents.PendingBlueprint(waiting, Floor));
+        Assert.Equal(MapAccents.PendingBlueprint(waiting, Floor), AppliedBlueprint(applied, Floor));
+    }
+
+    /// <summary>
+    /// The one branch where the <c>− booked</c> term of "free stone for sites"
+    /// actually decides the answer.
+    ///
+    /// Stone that is in somebody's hands exists but cannot be given to a site, so
+    /// the world says <c>build_stone_reserved</c> — a different status from
+    /// <c>build_no_stone</c> and the same colour, which is exactly the kind of
+    /// pair that hides an arithmetic slip. Everywhere else in this file the term
+    /// is zero, so without this the subtraction is only weakly pinned.
+    ///
+    /// The moment is found by running the session rather than by guessing a tick:
+    /// dig one rock, paint one stockpile cell, and wait for the tick where the
+    /// single block is in transit and nowhere else.
+    /// </summary>
+    [Fact]
+    public void A_waiting_blueprint_whose_only_stone_is_already_booked_reads_as_waiting_for_material()
+    {
+        PrototypeCommand[] prelude =
+        [
+            new DigDesignateCommand(0, [Rock]),
+            new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [PresentationFixtures.StockLeft]),
+        ];
+        var tick = FirstTickWithEveryBlockInTransit(prelude);
+        var (waiting, applied) = Across(tick, [.. prelude, new BuildDesignateCommand(tick, [Floor])]);
+
+        Assert.True(waiting.State.Stocks.CarriedStone > 0);
+        Assert.Equal(0, waiting.State.Stocks.LooseStone + waiting.State.Stocks.StoredStone);
+        Assert.Equal(
+            "build_stone_reserved",
+            applied.BuildSites.Single(site => site.Tile == Floor).StatusCode);
+        Assert.Equal(BlueprintAccent.WaitingForMaterial, MapAccents.PendingBlueprint(waiting, Floor));
+        Assert.Equal(MapAccents.PendingBlueprint(waiting, Floor), AppliedBlueprint(applied, Floor));
+    }
+
+    /// <summary>
+    /// The first tick at which every block of stone in the world is on somebody's
+    /// back: none loose, none stored.
+    /// </summary>
+    private static int FirstTickWithEveryBlockInTransit(PrototypeCommand[] commands)
+    {
+        var world = new PrototypeWorld(PresentationFixtures.Log(commands));
+        for (var step = 0; step < 600; step++)
+        {
+            var stocks = world.GetSnapshot().Stocks;
+            if (stocks.CarriedStone > 0 && stocks.LooseStone == 0 && stocks.StoredStone == 0)
+            {
+                return world.CurrentTick;
+            }
+
+            world.Step();
+        }
+
+        throw new InvalidOperationException(
+            "The one-block haul session never reached a tick with the stone in transit.");
     }
 
     /// <summary>

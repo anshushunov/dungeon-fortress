@@ -1531,12 +1531,13 @@ public partial class Main : Node2D
                 refusal = stroke.Refusal,
             }
             : null,
-        // Marking accepted for this tick that the tick has not applied yet. It is
-        // what the map draws over canonical state while the world is paused, so
-        // "the mark showed up straight away" is a field in a structured run rather
-        // than something judged from a screenshot. Null whenever nothing waits,
-        // which is every frame of free-running time.
-        pending = _projection is { HasPendingMarking: true } waiting
+        // Intent accepted for this tick that the tick has not applied yet: the
+        // marking the map draws over canonical state, and the priority changes
+        // that decide how those marks read. "It showed up straight away" is then a
+        // field in a structured run rather than something judged from a
+        // screenshot. Null whenever nothing waits, which is every frame of
+        // free-running time.
+        pending = _projection is { HasPendingIntent: true } waiting
             ? (object)new
             {
                 tick = _state!.Tick,
@@ -1546,6 +1547,10 @@ public partial class Main : Node2D
                 buildMarks = Tiles(waiting.PendingBuildMarks),
                 buildWithdrawals = Tiles(waiting.PendingBuildWithdrawals),
                 stockpileCells = Tiles(waiting.PendingStockpileCells),
+                priorities = waiting.PendingPriorities
+                    .OrderBy(pair => pair.Key)
+                    .Select(pair => (object)new { job = pair.Key.ToString(), value = pair.Value })
+                    .ToArray(),
             }
             : null,
     };
