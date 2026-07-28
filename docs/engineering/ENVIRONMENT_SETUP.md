@@ -69,6 +69,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -GodotP
 7. проверку structured success event, process exit code и отсутствие любых
    строк `ERROR:` в выводе Godot.
 
+Проверку можно запускать с подключённым domain MCP: клиентская сессия исполняет
+собственную копию сервера и не держит открытым build output. Останавливать
+сессию перед `verify.ps1` не нужно — см. «Project-owned domain MCP».
+
 Временные NuGet-настройки, пакеты и результаты создаются под `.artifacts/`,
 который игнорируется Git. При первом запуске нужен доступ к NuGet.org для
 тестовых пакетов; Godot packages берутся из выбранного движка. Runtime Godot
@@ -193,13 +197,49 @@ fixture отвергаются, а не переопределяют сцена�
 snapshot и явные секции `economy`, `labor`, `stations`, пригодные для проверки
 агентом без анализа изображения.
 
+### Запуск сессии отделён от цели сборки
+
+Оба клиента поднимают сервер одной командой
+`cmd /c scripts\domain-mcp-server.cmd`. Launcher копирует
+`tools\DungeonFortress.DomainMcp\bin\Release\net8.0` в собственный каталог
+сессии `.artifacts\domain-mcp-sessions\<id>` и запускает копию. Отдельного шага
+подготовки нет: копия делается при старте сессии, поэтому сервер всегда
+исполняет последнюю Release-сборку, а при завершении сессии её каталог
+удаляется. Копии, оставшиеся после аварийно снятых сессий, удаляются при
+следующем старте; живая сессия не трогается, потому что её исполняемый файл
+открыт.
+
+Так сделано потому, что раньше сессия исполняла сам build output. Файл
+`bin\Release\net8.0\DungeonFortress.DomainMcp.exe` оставался открытым на всё
+время сессии, и шаг `dotnet build DungeonFortress.sln -c Release` в
+`verify.ps1` падал с `MSB3027`, не дойдя ни до одного теста (Issue #38). Теперь
+цель сборки и исполняемая копия — разные файлы, поэтому проверка проходит при
+любом числе подключённых клиентов и не требует ручной остановки сессии.
+
+Launcher написан на `.cmd`, а не на PowerShell, намеренно: клиент говорит с
+сервером по stdin/stdout, и `cmd` передаёт эти дескрипторы дочернему процессу
+без изменений. PowerShell так не может — `Process.Start` передаёт
+`bInheritHandles=false`, если ни один поток не перенаправлен, поэтому запущенный
+из PowerShell сервер получил бы новую консоль вместо каналов клиента, и протокол
+не соединился бы. По той же причине launcher ничего не пишет в stdout:
+диагностика идёт только в stderr. Это закреплено тестом:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-domain-mcp-config.ps1
+```
+
+Тест входит в `verify.ps1` и проверяет, что оба project config поднимают сервер
+через launcher, не содержат машинных абсолютных путей и не возвращаются к
+исполнению build output.
+
 Чтобы отключить domain MCP без удаления user-scope данных:
 
 - Codex: установить `mcp_servers.dungeon_fortress_domain.enabled = false`
   в local/user override либо удалить project config вместе с изменением;
 - Claude Code: не подтверждать project server либо удалить его entry из
   `.mcp.json` вместе с изменением;
-- остановить client session; закрытие stdin штатно завершает stdio process;
+- остановить client session; закрытие stdin штатно завершает stdio process, а
+  launcher удаляет каталог копии этой сессии;
 - удалить `.artifacts/` и обычные `bin/obj`, если нужна очистка производных
   файлов.
 

@@ -272,6 +272,12 @@ dotnet test .\tests\DungeonFortress.DomainMcp.Tests
 .\scripts\verify.ps1
 ```
 
+`verify.ps1` запускается при подключённом domain MCP и не требует остановки
+клиентской сессии: сессия исполняет собственную копию сервера из
+`.artifacts\domain-mcp-sessions\<id>`, а не build output, который перезаписывает
+сборка. Схема и её причина описаны в
+[`ENVIRONMENT_SETUP.md`](ENVIRONMENT_SETUP.md).
+
 Сценарные тесты дважды запускают каждый fixture, проверяют replay, закрытую
 схему и whole-document preflight, reason codes, conservation экономической
 цепочки, трудовой бюджет, занятость станций, движение не более чем на один тайл,

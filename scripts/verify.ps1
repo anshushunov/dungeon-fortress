@@ -26,6 +26,7 @@ $guardTestScript = Join-Path $repoRoot "scripts\test-godot-output-guard.ps1"
 $screenshotOutputPathTestScript = Join-Path $repoRoot "scripts\test-screenshot-output-path.ps1"
 $goblinImportTestScript = Join-Path $repoRoot "scripts\test-goblin-sprite-import.ps1"
 $ivanMcpConfigTestScript = Join-Path $repoRoot "scripts\test-ivan-mcp-config.ps1"
+$domainMcpConfigTestScript = Join-Path $repoRoot "scripts\test-domain-mcp-config.ps1"
 $domainMcpVerificationScript = Join-Path $repoRoot "scripts\verify-domain-mcp.ps1"
 
 $env:DOTNET_CLI_HOME = Join-Path $artifactsRoot "dotnet-home"
@@ -133,6 +134,12 @@ try {
     )
     Invoke-Checked -FilePath "powershell" -Arguments @(
         "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ivanMcpConfigTestScript
+    )
+    # A client session must run its own copy of the domain MCP server. If it ever
+    # goes back to executing the build output, the solution build below fails with
+    # MSB3027 whenever an agent has the server connected.
+    Invoke-Checked -FilePath "powershell" -Arguments @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $domainMcpConfigTestScript
     )
 
     Write-Host "Restoring and building the .NET 8 solution..."

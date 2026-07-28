@@ -2,18 +2,10 @@
   "mcpServers": {
     "dungeon-fortress-domain": {
       "type": "stdio",
-      "command": "dotnet",
+      "command": "cmd",
       "args": [
-        "run",
-        "--project",
-        "${CLAUDE_PROJECT_DIR:-.}/tools/DungeonFortress.DomainMcp/DungeonFortress.DomainMcp.csproj",
-        "--configuration",
-        "Release",
-        "--no-build",
-        "--no-restore",
-        "--",
-        "--root",
-        "${CLAUDE_PROJECT_DIR:-.}"
+        "/c",
+        "${CLAUDE_PROJECT_DIR:-.}\\scripts\\domain-mcp-server.cmd"
       ],
       "env": {
         "DOTNET_NOLOGO": "1",

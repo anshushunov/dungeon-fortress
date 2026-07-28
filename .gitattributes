@@ -1,5 +1,8 @@
 * text=auto eol=lf
 
+# Windows batch launchers are parsed by cmd.exe line by line.
+*.cmd text eol=crlf
+
 *.png binary
 *.jpg binary
 *.jpeg binary
