@@ -1,7 +1,7 @@
 # Godot graybox — Prototype 1
 
 Status: active
-Source: Issues #10–#12, #24, #26, #28, #36, #48
+Source: Issues #10–#12, #24, #26, #28, #36, #48, #55
 
 The graybox is the visual, top-down projection of the headless Prototype 1
 economy and raid. It starts with the `baseline` gameplay-v2 fixture.
@@ -39,30 +39,48 @@ visible and keeps initial inspection repeatable.
 
 ## Controls
 
+Both strips are `Button` nodes with an icon, a hotkey badge in the corner and a
+tooltip that names the button and says in one sentence what it does. Nothing is
+drawn into the canvas and hit-tested by hand any more; see
+[Icon toolbar and rectangle selection](#icon-toolbar-and-rectangle-selection-issue-55).
+
+The top strip is time: run/pause and step as icons, then `0.5x / 1x / 4x / 16x`,
+`BASE`, `NEGLECT` and `REPLAY` as text. Speeds stay digits because a digit is
+already universal, and the three that rebuild the world from a log are debug
+affordances rather than game actions.
+
 | Action | Mouse | Keyboard |
 |---|---|---|
-| Pause / run | `RUN` / `PAUSE` | `P` or `Space` |
-| Advance exactly one simulation tick | `STEP` | `S` |
+| Pause / run | play / pause icon | `P` or `Space` |
+| Advance exactly one simulation tick | step icon | `S` |
 | Select time speed | `0.5x`, `1x`, `4x`, `16x` | `1`, `2`, `3`, `4` |
 | Reset fixture | `BASE`, `NEGLECT` | `R`, `N` |
-| Inspect | click creature or cell | `I` |
-| Designate rock for digging | `DIG` | `D` |
-| Withdraw a dig designation | `CANCEL` | `X` |
-| Paint a material stockpile | `STOCK` | `M` |
-| Mark a training-post blueprint | `BUILD` | `C` |
-| Withdraw a blueprint | `UNBLD` | `V` |
+| Rebuild and replay the current log | `REPLAY` | `Y` |
+| Inspect | inspect icon | `I` |
+| Paint / erase the selected zone | brush / eraser icon | `B`, `E` |
+| Designate rock for digging | pick icon | `D` |
+| Withdraw a dig designation | crossed pick icon | `X` |
+| Paint a material stockpile | stockpile icon | `M` |
+| Mark a training-post blueprint | blueprint icon | `C` |
+| Withdraw a blueprint | crossed blueprint icon | `V` |
+| Cycle zone / job priority / rule | the three selectors | `Z`, `J`, `K` |
 
 ## Indirect controls (Phase B)
 
-The second control strip is a row of buttons: select `INSPECT`, `PAINT`, `ERASE`,
-`DIG`, `CANCEL`, `STOCK`, `BUILD` or `UNBLD` with the mouse (or `I`, `B`, `E`,
-`D`, `X`, `M`, `C`, `V`), choose the active zone with `Z`, and click a map cell.
-This produces a `zone_paint`, `zone_erase`, `dig_designate`, `dig_cancel`,
-`build_designate` or `build_cancel` v2 command; none of them addresses a
+The second strip is the brushes: eight actions as icons and three selectors.
+Pick a brush with the mouse (or `I`, `B`, `E`, `D`, `X`, `M`, `C`, `V`), choose
+the active zone with `Z`, and **drag a rectangle** on the map. This produces one
+`zone_paint`, `zone_erase`, `dig_designate`, `dig_cancel`, `build_designate` or
+`build_cancel` v2 command carrying the whole selection; none of them addresses a
 creature. `J` selects a global job priority — including `Dig` and `Build` — and
 `K` selects one of `ration_reserve`, `drill_min_satiety` or
-`muster_lead_ticks`; `+` / `-` changes the selected bounded value. `Y` rebuilds
-and replays the current log.
+`muster_lead_ticks`; `+` / `-` changes the selected bounded value.
+
+The three selectors — `zone <kind> [Z]`, `<job> <priority> [J]`,
+`<rule> <value> [K]` — are the only elements of the strip that keep text on
+screen, and they keep it deliberately. An icon can say "this is the zone
+selector"; it cannot say *which* zone. Their form is an icon plus the current
+value, and clicking one cycles it exactly as the key does.
 
 `STOCK [M]` is a shortcut, not a new mechanism: it selects the zone
 `MaterialStockpile` and the `PAINT` mode in one key, because hunting for that
@@ -78,6 +96,112 @@ on the next simulation tick.
 Speed, pause and stepping are presentation controls only. They only choose how
 often the adapter calls `PrototypeWorld.RunTicks`; they are not gameplay
 commands and never enter canonical state or a command log.
+
+## Icon toolbar and rectangle selection (Issue #55)
+
+The spec is [`UI_CONTROL_PASS.md`](../design/UI_CONTROL_PASS.md), written from
+the owner playtest after Issue #48: "very awkward to dig with buttons". Every
+brush worked one cell at a time, so a 4×3 pocket cost twelve clicks. For a game
+whose only way of expressing intent is marking space, that was the main source
+of friction in the minute-long loop.
+
+Nothing below changes the simulation, the contract, tuning, the canonical
+snapshot schema or the command vocabulary. `dig_designate`, `zone_paint` and
+`build_designate` have always taken a **list** of tiles; a rectangle collapses
+into one of them with a longer list.
+
+### Where a click goes
+
+The map is **not** a `Control`. Its input moved to `_UnhandledInput`, and Godot
+offers every event to the Control tree first, so only what nothing consumed
+reaches the map.
+
+This replaces a hand-written hit test. The strips used to be `DrawRect` plus
+`DrawString` in `_Draw()` next to a parallel table of rectangles that
+`TryHandleToolbarClick` compared the pointer against — two descriptions of where
+a button is, kept in step by nothing but care. Ownership of a click is now a
+property of the node tree, which makes "a click on a button fell through to the
+map" inexpressible rather than merely fixed.
+
+### Dragging a rectangle
+
+- pressing the left button starts a selection, dragging updates it;
+- the selection is drawn cell by cell: cells the command will carry in the brush
+  colour, cells it will skip in red, and the **count of carried cells** above the
+  rectangle. The count is the filtered one, so a drag across floor and rock says
+  how much of it the brush will actually take;
+- releasing applies the brush as **one atomic command** with the whole tile list.
+  The world validates every tile before it records the first mark, so a rejected
+  rectangle changes nothing and partially applied marking does not exist;
+- `Esc` or right-click during a drag cancels it. Nothing is emitted until the
+  button comes up, so a cancelled drag leaves no entry in the command log;
+- a single click is a 1×1 rectangle and goes through the same path, which is why
+  the `--demo-*` sessions and the golden UI frames are unchanged;
+- brushes are toggles and stay held. `Esc` during a drag cancels the drag; `Esc`
+  with no drag in progress puts the brush away.
+
+One command cannot carry more than `T.maximum_tiles_per_command` = 256 tiles, so
+a selection larger than that is refused whole and the feedback line asks for two
+strokes. Splitting it into several commands would put back exactly the partially
+applied marking the rectangle exists to remove.
+
+### Icons, and what happens before they exist
+
+Icons come from [Issue #54](https://github.com/anshushunov/dungeon-fortress/issues/54),
+which runs in parallel. The dependency is broken by a manifest —
+`DungeonFortress.Presentation.UiIconManifest` — that names sixteen files in
+`src/DungeonFortress.Game/assets/icons/` and the element that draws each one.
+The adapter loads by name and draws a placeholder for anything missing, so
+dropping the real PNGs in requires **no code change**. Every icon is resampled
+to its 24×24 drawn size on load rather than being scaled by the button: at the
+manifest's 48×48 that is an exact 2× downscale, and it is the lesson of the
+goblin pack, where 96×96 art squeezed into a 20×20 rectangle by the renderer
+turned to mush with nothing measuring it.
+
+Fourteen of the sixteen are toolbar buttons. `icon_food` and `icon_stone` belong
+to the resource header, which this step deliberately leaves as text: the header
+band ends where the time strip begins, and a row of icons does not fit it
+without moving the map. They are declared in the manifest with their owner and
+named by `UiIconManifestTests` as undrawn, which is the difference between a
+deferred decision and a silent one.
+
+### What is checked without reading pixels
+
+Three things, in the spirit of Issue #28: text stays the source of truth for
+checks even where it stops being the source of truth for the eye.
+
+**`ui.controls`** joins `ui` in every structured output: one entry per button
+with `{id, label, hotkey, tooltip, active, enabled, icon}`. "Which brushes exist,
+what do they do and which one is held" is an ordinary unit test in
+`DungeonFortress.Presentation.Tests`, so it runs on every pull request in the
+"Pure .NET" job. `ui.selection` reports the rectangle in progress — its mode,
+carried cells, area and refusal — and is `null` unless a button is actually
+down.
+
+**Manifest integrity** is `UiIconManifestTests`. It asserts the bijection in
+both directions: every control that draws an icon has a manifest entry, and
+every toolbar entry is drawn by exactly one control. Neither failure is visible
+in a diff — an unused icon is a file nobody mentions, and a button without one
+quietly draws its placeholder forever. Two filesystem checks come with it: a PNG
+in the assets folder that no entry names is a failure, and so is a *partial*
+pack, because a half-delivered set leaves some buttons on placeholders with
+nothing saying which.
+
+**Strip width.** `AssertControlStripsFit()` runs next to `AssertLabelsFit()`, on
+every entry point and at the same frame sizes, and requires each strip to be no
+wider than the 616 px map. The brush strip used to end at 676 px, wider than the
+map it marks. It is now **453 px**, and the time strip 306 px; both are published
+as `controlStrips` in every structured output next to `labelFit`, so a run states
+the widths instead of the guard being trusted.
+
+`REPLAY [Y]` moved from the brush strip to the time strip. It rebuilds the world
+from the command log, which is what `BASE` and `NEGLECT` do, and it is not a
+brush — so the brush strip is exactly the eight actions and three selectors the
+width budget is drawn against.
+
+`ui.summary` is untouched and stays a semantic dump, so `tests/golden/ui/*.json`
+pass **without regeneration**. A regenerated golden file here would be a defect
+report, not a chore.
 
 ## Movement between ticks
 
@@ -105,14 +229,14 @@ colored circle/square pairs and name labels distinguish all nine creatures.
 ## Excavation (Issue #24)
 
 `DIG [D]` marks internal rock for excavation; `CANCEL DIG [X]` withdraws a mark.
-Both brushes support click and drag, and `Esc` or right-click returns to Inspect.
-Neither brush chooses a worker: the player states intent, and a free creature
-picks the `Dig` job through the normal autonomous scoring.
+Both are dragged as a rectangle and both stay held until `Esc` or right-click
+puts them away. Neither brush chooses a worker: the player states intent, and a
+free creature picks the `Dig` job through the normal autonomous scoring.
 
-A stroke only emits a command for a tile the simulation would accept. Dragging
-across floor, the gate, the map boundary or an existing mark changes nothing and
-explains itself in the feedback line, so a drag never produces a rejected
-command.
+A stroke only carries a tile the simulation would accept. Floor, the gate, the
+map boundary and an already designated tile are dropped from the selection —
+they are not part of the count and not part of the command — so a drag never
+produces a rejected command and the refusal is explained in the feedback line.
 
 Reading the map without the log:
 
@@ -495,10 +619,10 @@ about for the camera. The HUD does not depend on that choice: it is laid out fro
 ## Readability pass
 
 `B` starts painting and `E` starts erasing the selected zone. A bright preview
-follows the cursor; click or drag to edit cells. `Esc`, `I`, or right-click
-returns to Inspect immediately, so painting never captures the cursor after the
-button is released. The current mode and its cancel key are shown in the second
-control strip.
+follows the cursor, and dragging turns it into a rectangle with the count of
+cells the command will carry. `Esc`, `I` or right-click puts the brush away —
+during a drag they cancel the drag first, so a misdrag is not also a lost brush.
+The held brush is the lit button in the second control strip.
 
 The purple room is `Quarters`: it contains bunks and is visited only when a
 creature has fatigue at least 50 and a bunk is free. Its empty early-economy

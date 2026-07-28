@@ -15,7 +15,10 @@ public partial class Main : Node2D
 {
     private const int TileSize = 22;
     private const double TicksPerSecond = 6.0;
-    private static readonly Vector2 MapOrigin = new(18, 118);
+    // The map hangs below the two control strips, so its origin is derived from
+    // the band they occupy rather than from a number nobody can re-derive. The
+    // strips grew when they stopped being 9pt text and became icon buttons.
+    private static readonly Vector2 MapOrigin = new(18, ToolbarStripTop + ControlStripsBandHeight);
     private static readonly Color[] CreatureColors =
     [
         new("#fb7185"), new("#f59e0b"), new("#eab308"),
@@ -28,6 +31,9 @@ public partial class Main : Node2D
     private readonly Dictionary<string, Texture2D> _goblinSprites = [];
     private readonly List<string> _loadedSpriteStates = [];
     private readonly List<string> _missingSpriteStates = [];
+    private readonly Dictionary<string, Texture2D> _icons = [];
+    private readonly List<string> _missingIcons = [];
+    private Texture2D? _iconPlaceholder;
     private PrototypeWorld? _world;
     private PrototypeSnapshot? _state;
     private Control? _hudRoot;
@@ -36,24 +42,30 @@ public partial class Main : Node2D
     private Label? _inspector;
     private Label? _feedback;
     private Label? _roster;
+    private Control? _timeStrip;
+    private Control? _brushStrip;
+    private readonly List<Button> _controlButtons = [];
     private readonly List<Label> _legendLines = [];
     private PrototypeCommandLog? _fixtureLog;
     private readonly List<PrototypeCommand> _playerCommands = [];
     private ZoneKind _brushZone = ZoneKind.Farm;
-    private EditMode _editMode = EditMode.Inspect;
+    private BrushMode _editMode = BrushMode.Inspect;
     private JobKind _selectedJob = JobKind.Harvest;
     private int _selectedRule;
     private bool _editingPriorities = true;
     private string _controlFeedback =
-        "PAINT/ERASE [B/E] shape zones; DIG/CANCEL DIG [D/X] mark rock for excavation.";
+        "Pick a brush, then drag a rectangle on the map: the whole area is marked by " +
+        "one command. Esc cancels a drag, then puts the brush away.";
     private string _fixture = "baseline";
     private string? _screenshotPath;
     private int? _selectedCreatureId;
     private GridPoint? _selectedCell;
     private int? _hoverCreatureId;
     private GridPoint? _hoverCell;
-    private GridPoint? _lastBrushCell;
-    private bool _brushPointerDown;
+    // The rectangle being dragged right now. Nothing is emitted while it exists,
+    // which is what makes a cancelled drag leave no trace in the command log.
+    private GridPoint? _dragAnchor;
+    private GridPoint? _dragCurrent;
     private bool _paused = true;
     private bool _visibleSmoke;
     private double _visibleSmokeElapsed;
@@ -94,6 +106,11 @@ public partial class Main : Node2D
             var strictHudFit = arguments.Contains("--strict-hud-fit", StringComparer.Ordinal);
             var requiresSprites = !headlessSmoke && !controlsSmoke;
 
+            // Before the HUD, because every toolbar button is created with the
+            // texture it draws. A file the icon pack has not delivered yet becomes
+            // a placeholder here and nowhere else, so dropping the real PNG in
+            // changes no code at all.
+            LoadIcons();
             CreateHud();
             LoadGoblinSprites();
             if (requiresSprites)
@@ -167,6 +184,7 @@ public partial class Main : Node2D
             // time a frame is drawn an unclipped label has re-expanded to its own
             // content and the check would silently pass on anything.
             AssertLabelsFit(strictHudFit);
+            AssertControlStripsFit();
 
             if (headlessSmoke || visibleSmoke)
             {
@@ -219,6 +237,7 @@ public partial class Main : Node2D
             try
             {
                 AssertLabelsFit();
+                AssertControlStripsFit();
             }
             catch (Exception exception)
             {
@@ -445,43 +464,76 @@ public partial class Main : Node2D
         }));
     }
 
-    public override void _Input(InputEvent @event)
+    /// <summary>
+    /// The map's share of the mouse — and only the map's.
+    ///
+    /// This used to be <c>_Input</c>, which runs <em>before</em> the GUI, so every
+    /// click had to be hit-tested against the drawn button rectangles by hand and
+    /// swallowed if it landed on one. Two descriptions of where a button is, kept
+    /// in step by nothing but care.
+    ///
+    /// Godot offers the event to the Control tree first and calls this only for
+    /// what nothing consumed, so a click on a button never reaches the map by
+    /// construction rather than by arithmetic. Ownership of a click is now a
+    /// property of the node tree.
+    /// </summary>
+    public override void _UnhandledInput(InputEvent @event)
     {
         switch (@event)
         {
             case InputEventMouseMotion motion:
                 UpdatePointer(motion.Position);
-                if (_brushPointerDown && _editMode != EditMode.Inspect)
+                if (_dragAnchor is not null && ToCell(motion.Position) is { } dragged &&
+                    IsMapCell(dragged) && _dragCurrent != dragged)
                 {
-                    ApplyBrushAt(motion.Position);
+                    _dragCurrent = dragged;
+                    UpdateHud();
+                    QueueRedraw();
                 }
+
                 break;
 
+            // During a drag the right button cancels the selection and nothing
+            // else: putting the brush away as well would punish a misdrag twice.
             case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true }:
-                CancelBrush("right-click");
+                if (_dragAnchor is not null)
+                {
+                    CancelDrag("right-click");
+                }
+                else
+                {
+                    CancelBrush("right-click");
+                }
+
                 break;
 
             case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
-                _brushPointerDown = false;
-                _lastBrushCell = null;
+                if (_dragAnchor is { } anchor)
+                {
+                    var release = _dragCurrent ?? anchor;
+                    _dragAnchor = null;
+                    _dragCurrent = null;
+                    ApplyBrushStroke(anchor, release);
+                }
+
                 break;
 
             case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click:
                 UpdatePointer(click.Position);
-                if (TryHandleToolbarClick(click.Position))
-                {
-                    return;
-                }
-
-                if (_editMode == EditMode.Inspect)
+                if (_editMode == BrushMode.Inspect)
                 {
                     SelectAt(click.Position);
-                    return;
+                    break;
                 }
 
-                _brushPointerDown = true;
-                _lastBrushCell = null;
-                ApplyBrushAt(click.Position);
+                if (ToCell(click.Position) is { } start && IsMapCell(start))
+                {
+                    _dragAnchor = start;
+                    _dragCurrent = start;
+                    UpdateHud();
+                    QueueRedraw();
+                }
+
                 break;
         }
     }
@@ -521,44 +573,37 @@ public partial class Main : Node2D
                 LoadFixture("neglected", 1);
                 break;
             case Key.I:
-                CancelBrush("I");
+                SelectEditMode(BrushMode.Inspect);
                 break;
             case Key.B:
-                _editMode = EditMode.Paint;
-                RefreshState();
+                SelectEditMode(BrushMode.Paint);
                 break;
             case Key.E:
-                _editMode = EditMode.Erase;
-                RefreshState();
+                SelectEditMode(BrushMode.Erase);
                 break;
             case Key.D:
-                SelectEditMode(EditMode.Dig);
+                SelectEditMode(BrushMode.Dig);
                 break;
             case Key.X:
-                SelectEditMode(EditMode.CancelDig);
+                SelectEditMode(BrushMode.CancelDig);
                 break;
             case Key.M:
                 SelectStockpileBrush();
                 break;
             case Key.C:
-                SelectEditMode(EditMode.Build);
+                SelectEditMode(BrushMode.Build);
                 break;
             case Key.V:
-                SelectEditMode(EditMode.CancelBuild);
+                SelectEditMode(BrushMode.CancelBuild);
                 break;
             case Key.Z:
-                _brushZone = (ZoneKind)(((int)_brushZone + 1) % Enum.GetValues<ZoneKind>().Length);
-                RefreshState();
+                CycleZone();
                 break;
             case Key.J:
-                _selectedJob = (JobKind)(((int)_selectedJob + 1) % Enum.GetValues<JobKind>().Length);
-                _editingPriorities = true;
-                RefreshState();
+                CycleJob();
                 break;
             case Key.K:
-                _selectedRule = (_selectedRule + 1) % RuleIds.Length;
-                _editingPriorities = false;
-                RefreshState();
+                CycleRule();
                 break;
             case Key.Plus:
             case Key.Equal:
@@ -570,8 +615,20 @@ public partial class Main : Node2D
             case Key.Y:
                 ReplayCurrentLog();
                 break;
+            // Two jobs, in the order a player expects them: while a rectangle is
+            // being dragged Esc withdraws the rectangle; with no rectangle in
+            // progress it puts the brush away. The brush stays held across strokes
+            // otherwise, which is what a toggled tool means.
             case Key.Escape:
-                CancelBrush("Esc");
+                if (_dragAnchor is not null)
+                {
+                    CancelDrag("Esc");
+                }
+                else
+                {
+                    CancelBrush("Esc");
+                }
+
                 break;
         }
     }
@@ -583,9 +640,9 @@ public partial class Main : Node2D
             return;
         }
 
+        // The two control strips used to be drawn here. They are Control nodes
+        // now, so the only thing left on the canvas is the map.
         DrawRect(new Rect2(Vector2.Zero, GetViewportRect().Size), new Color("#07111d"));
-        DrawToolbar();
-        DrawControlToolbar();
         DrawMap();
     }
 
@@ -603,14 +660,29 @@ public partial class Main : Node2D
     // goes away, and it is what makes the overflow guard measure the layout the
     // player actually gets rather than a rectangle nobody has laid out.
     //
-    // Two things are deliberately still pinned to constants: the map keeps
-    // MapOrigin and TileSize, and the two control strips keep the offsets
-    // TryHandleToolbarClick hit-tests. Replacing those belongs to ADR 0008's
-    // camera, not here, so the left column reserves exactly the band they use.
+    // One thing is deliberately still pinned to constants: the map keeps
+    // MapOrigin and TileSize. Replacing that belongs to ADR 0008's camera, not
+    // here. The control strips no longer are: they are Buttons in a container, so
+    // the band below reserves the height they lay themselves out into instead of
+    // repeating the offsets a hit test used to check.
     // ---------------------------------------------------------------------
     private const int ToolbarStripTop = 74;
-    private const int ControlStripTop = 96;
-    private const int ControlStripHeight = 20;
+
+    /// <summary>
+    /// A toolbar button. The icons are generated at 48x48 and drawn at 24x24 —
+    /// exactly 2x, a clean downscale — so the button is that plus room to breathe.
+    /// </summary>
+    private const int ControlButtonSize = 28;
+
+    /// <summary>The size an icon is resampled to and drawn at.</summary>
+    private const int IconDrawSize = 24;
+
+    private const int ControlStripPadding = 2;
+    private const int ControlButtonSeparation = 2;
+    private const int ControlStripHeight = ControlButtonSize + (ControlStripPadding * 2);
+    private const int ControlStripSeparation = 4;
+    private const int ControlStripsBandHeight =
+        (ControlStripHeight * 2) + ControlStripSeparation + 4;
     private const int HudTopMargin = 8;
     private const int HudRightMargin = 16;
     private const int HudBottomMargin = 8;
@@ -696,12 +768,7 @@ public partial class Main : Node2D
         // must never be squeezed: the line under it is the time toolbar.
         _summary.CustomMinimumSize = new Vector2(0, HudTextHeight(_summary, 2));
 
-        column.AddChild(new Control
-        {
-            Name = "ControlStrips",
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-            CustomMinimumSize = new Vector2(0, MapOrigin.Y - ToolbarStripTop),
-        });
+        column.AddChild(CreateControlStrips());
         column.AddChild(new Control
         {
             Name = "Map",
@@ -714,6 +781,411 @@ public partial class Main : Node2D
         column.AddChild(_roster);
         return column;
     }
+
+    // ---------------------------------------------------------------------
+    // The two control strips
+    //
+    // They used to be DrawRect plus DrawString in _Draw(), with a parallel table
+    // of rectangles that TryHandleToolbarClick hit-tested by hand. Two
+    // descriptions of the same button, and the only thing keeping them in step
+    // was that one function produced both. That is a defect by construction, and
+    // deleting it is worth more than decorating it with icons.
+    //
+    // Every button is now a Button with an icon, a hotkey badge and a tooltip. It
+    // owns its own click, so the map cannot receive one that landed on a button,
+    // and it owns its own rectangle, so nothing has to agree with it.
+    //
+    // What each button says is decided in DungeonFortress.Presentation, which
+    // does not reference Godot and is covered by unit tests running in CI. This
+    // side does layout and dispatch and nothing else.
+    // ---------------------------------------------------------------------
+    private Control CreateControlStrips()
+    {
+        var band = new VBoxContainer
+        {
+            Name = "ControlStrips",
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            CustomMinimumSize = new Vector2(0, ControlStripsBandHeight),
+        };
+        band.AddThemeConstantOverride("separation", ControlStripSeparation);
+
+        var time = CreateStrip(band, "TimeStrip", "#0f1d2d");
+        var brush = CreateStrip(band, "BrushStrip", "#102338");
+        _timeStrip = (Control)time.GetParent();
+        _brushStrip = (Control)brush.GetParent();
+
+        var controls = UiControls.Build(CurrentControlsView());
+        for (var index = 0; index < controls.Count; index++)
+        {
+            var control = controls[index];
+            var button = CreateControlButton(control, index);
+            (control.Strip == UiControlStrip.Time ? time : brush).AddChild(button);
+            _controlButtons.Add(button);
+        }
+
+        RefreshControls();
+        return band;
+    }
+
+    /// <summary>
+    /// One strip: a panel that hugs its buttons. It shrinks to its content on
+    /// purpose — a strip stretched to the column would make "does the brush strip
+    /// fit inside the map?" unmeasurable, and that question is the whole point of
+    /// moving eight labelled rectangles to eight icons.
+    /// </summary>
+    private static HBoxContainer CreateStrip(Control parent, string name, string background)
+    {
+        var panel = new PanelContainer
+        {
+            Name = name,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin,
+            SizeFlagsVertical = Control.SizeFlags.Fill,
+        };
+        var style = new StyleBoxFlat { BgColor = new Color(background) };
+        style.SetContentMarginAll(ControlStripPadding);
+        panel.AddThemeStyleboxOverride("panel", style);
+        parent.AddChild(panel);
+
+        var row = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        row.AddThemeConstantOverride("separation", ControlButtonSeparation);
+        panel.AddChild(row);
+        return row;
+    }
+
+    /// <summary>
+    /// A toolbar button: the icon it is, the hotkey badge in the corner and the
+    /// tooltip that names it. All three together, because a row of unlabelled
+    /// symbols would be <em>less</em> friendly than the text it replaces — which
+    /// is why RimWorld and Prison Architect ship all three too.
+    /// </summary>
+    private Button CreateControlButton(UiControl control, int index)
+    {
+        var accent = control.Strip == UiControlStrip.Time ? "#1d4ed8" : "#b45309";
+        var button = new Button
+        {
+            Name = control.Id,
+            ToggleMode = true,
+            FocusMode = Control.FocusModeEnum.None,
+            ClipText = false,
+            TooltipText = control.Tooltip,
+            CustomMinimumSize = new Vector2(ControlButtonSize, ControlButtonSize),
+        };
+        button.AddThemeFontSizeOverride("font_size", 10);
+        button.AddThemeColorOverride("font_color", new Color("#dbeafe"));
+        button.AddThemeColorOverride("font_pressed_color", new Color("#fef3c7"));
+        button.AddThemeColorOverride("font_hover_color", new Color("#f8fafc"));
+        button.AddThemeStyleboxOverride("normal", ControlButtonStyle("#1b2f45", "#24364b"));
+        button.AddThemeStyleboxOverride("hover", ControlButtonStyle("#25415f", "#3b82f6"));
+        button.AddThemeStyleboxOverride("pressed", ControlButtonStyle(accent, "#f8fafc"));
+        button.AddThemeStyleboxOverride("disabled", ControlButtonStyle("#151f2b", "#1f2c3a"));
+        button.Pressed += () => HandleControlPressed(index);
+
+        // Full-rect anchors rather than a corner offset: the badge then sits in the
+        // corner of whatever size the layout gives the button, instead of the size
+        // it was authored against.
+        var badge = new Label
+        {
+            Text = control.Hotkey,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Bottom,
+        };
+        badge.AddThemeFontSizeOverride("font_size", 8);
+        badge.AddThemeColorOverride("font_color", new Color("#e0f2fe"));
+        // The badge sits on top of the icon, so it needs to be legible against
+        // whatever the icon happens to put in that corner rather than against the
+        // button background.
+        badge.AddThemeColorOverride("font_outline_color", new Color("#0b1622"));
+        badge.AddThemeConstantOverride("outline_size", 3);
+        button.AddChild(badge);
+        badge.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        badge.OffsetRight = -2;
+        return button;
+    }
+
+    private static StyleBoxFlat ControlButtonStyle(string fill, string border)
+    {
+        var style = new StyleBoxFlat { BgColor = new Color(fill), BorderColor = new Color(border) };
+        style.SetBorderWidthAll(1);
+        style.SetContentMarginAll(2);
+        style.SetCornerRadiusAll(2);
+        return style;
+    }
+
+    /// <summary>
+    /// Puts the current state on the buttons. Nothing about which buttons exist or
+    /// what they say is decided here: this walks the list
+    /// <see cref="UiControls.Build"/> returns, in the order it returns it, so the
+    /// toolbar a player sees and the <c>ui.controls</c> an automated check reads
+    /// are the same list.
+    /// </summary>
+    private void RefreshControls()
+    {
+        if (_controlButtons.Count == 0)
+        {
+            return;
+        }
+
+        var controls = UiControls.Build(CurrentControlsView());
+        // Buttons are matched to controls by position, and a press dispatches on
+        // the id at that position, so a list whose length depends on the state
+        // would silently wire buttons to the wrong actions. It does not; this is
+        // what says so out loud if it ever starts to.
+        if (controls.Count != _controlButtons.Count)
+        {
+            throw new InvalidOperationException(
+                $"The toolbar has {_controlButtons.Count} buttons but UiControls.Build " +
+                $"returned {controls.Count} controls.");
+        }
+
+        for (var index = 0; index < _controlButtons.Count; index++)
+        {
+            var control = controls[index];
+            var button = _controlButtons[index];
+            button.Text = control.Label;
+            button.TooltipText = control.Tooltip;
+            button.Icon = control.Icon is null ? null : IconTexture(control.Icon);
+            button.Disabled = !control.Enabled;
+            // No signal: the state on the button is a projection of the game, not
+            // an input to it, exactly like every other thing this adapter draws.
+            button.SetPressedNoSignal(control.Active);
+        }
+    }
+
+    /// <summary>
+    /// The adapter state the toolbar is allowed to depend on. It is readable
+    /// before a fixture exists, because <c>_Ready</c> builds the HUD first and
+    /// loads the world after.
+    /// </summary>
+    private UiControlsViewState CurrentControlsView() => new(
+        _editMode,
+        _brushZone,
+        _selectedJob,
+        _state?.Priorities[_selectedJob] ?? 0,
+        UiControls.RuleIds[_selectedRule],
+        _state?.Rules[UiControls.RuleIds[_selectedRule]] ?? 0,
+        _paused,
+        _speed,
+        _fixture,
+        _state is not null && _state.Tick >= PrototypeTuning.SessionTicks);
+
+    /// <summary>
+    /// What a press does. Dispatch is by control id read from the current list,
+    /// not by a number baked into the handler, so the one button whose identity
+    /// changes with the state — run versus pause — needs no special case.
+    /// </summary>
+    private void HandleControlPressed(int index)
+    {
+        var controls = UiControls.Build(CurrentControlsView());
+        if (index < 0 || index >= controls.Count)
+        {
+            return;
+        }
+
+        switch (controls[index].Id)
+        {
+            case UiControlIds.Run:
+            case UiControlIds.Pause:
+                TogglePause();
+                break;
+            case UiControlIds.Step:
+                Advance(1);
+                break;
+            case UiControlIds.Speed0_5:
+                SetSpeed(0.5);
+                break;
+            case UiControlIds.Speed1:
+                SetSpeed(1.0);
+                break;
+            case UiControlIds.Speed4:
+                SetSpeed(4.0);
+                break;
+            case UiControlIds.Speed16:
+                SetSpeed(16.0);
+                break;
+            case UiControlIds.FixtureBaseline:
+                LoadFixture("baseline", 1);
+                break;
+            case UiControlIds.FixtureNeglected:
+                LoadFixture("neglected", 1);
+                break;
+            case UiControlIds.Replay:
+                ReplayCurrentLog();
+                break;
+            case UiControlIds.Inspect:
+                SelectEditMode(BrushMode.Inspect);
+                break;
+            case UiControlIds.Paint:
+                SelectEditMode(BrushMode.Paint);
+                break;
+            case UiControlIds.Erase:
+                SelectEditMode(BrushMode.Erase);
+                break;
+            case UiControlIds.Dig:
+                SelectEditMode(BrushMode.Dig);
+                break;
+            case UiControlIds.DigCancel:
+                SelectEditMode(BrushMode.CancelDig);
+                break;
+            case UiControlIds.Stockpile:
+                SelectStockpileBrush();
+                break;
+            case UiControlIds.Build:
+                SelectEditMode(BrushMode.Build);
+                break;
+            case UiControlIds.BuildCancel:
+                SelectEditMode(BrushMode.CancelBuild);
+                break;
+            case UiControlIds.Zone:
+                CycleZone();
+                break;
+            case UiControlIds.Priority:
+                CycleJob();
+                break;
+            case UiControlIds.Rule:
+                CycleRule();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// The icon pack of Issue #54, loaded by name from
+    /// <see cref="UiIconManifest"/>. A file that has not been generated yet gets a
+    /// placeholder, so the toolbar is complete and clickable before the art
+    /// exists and dropping the real PNG in requires no code change.
+    ///
+    /// Every icon is resampled to its drawn size here rather than being scaled by
+    /// the button. That is the lesson of the goblin pack: 96x96 art squeezed into
+    /// a 20x20 rectangle by the renderer turned into mush, and nothing measured
+    /// it. At the manifest's 48x48 this is an exact 2x downscale.
+    /// </summary>
+    private void LoadIcons()
+    {
+        foreach (var icon in UiIconManifest.Toolbar)
+        {
+            var path = UiIconManifest.ResourcePath(icon.FileName);
+            if (!ResourceLoader.Exists(path) || GD.Load<Texture2D>(path) is not { } texture)
+            {
+                _missingIcons.Add(icon.FileName);
+                continue;
+            }
+
+            _icons[icon.FileName] = Resample(texture);
+        }
+    }
+
+    private static Texture2D Resample(Texture2D texture)
+    {
+        var image = texture.GetImage();
+        if (image is null)
+        {
+            return texture;
+        }
+
+        if (image.GetWidth() != IconDrawSize || image.GetHeight() != IconDrawSize)
+        {
+            image.Resize(IconDrawSize, IconDrawSize, Image.Interpolation.Bilinear);
+        }
+
+        return ImageTexture.CreateFromImage(image);
+    }
+
+    /// <summary>
+    /// The texture a button draws: the generated icon, or the shared placeholder
+    /// while the pack is still being produced. A placeholder button keeps its
+    /// hotkey badge and its tooltip, so it still says what it is.
+    /// </summary>
+    private Texture2D IconTexture(string fileName) =>
+        _icons.TryGetValue(fileName, out var texture) ? texture : PlaceholderIcon();
+
+    private Texture2D PlaceholderIcon()
+    {
+        if (_iconPlaceholder is not null)
+        {
+            return _iconPlaceholder;
+        }
+
+        var image = Image.CreateEmpty(IconDrawSize, IconDrawSize, false, Image.Format.Rgba8);
+        var fill = new Color("#334155");
+        var edge = new Color("#7dd3fc");
+        for (var y = 0; y < IconDrawSize; y++)
+        {
+            for (var x = 0; x < IconDrawSize; x++)
+            {
+                var border = x is 2 or IconDrawSize - 3 || y is 2 or IconDrawSize - 3;
+                var inside = x is >= 2 and <= IconDrawSize - 3 && y is >= 2 and <= IconDrawSize - 3;
+                image.SetPixel(x, y, inside ? (border ? edge : fill) : new Color(0, 0, 0, 0));
+            }
+        }
+
+        _iconPlaceholder = ImageTexture.CreateFromImage(image);
+        return _iconPlaceholder;
+    }
+
+    /// <summary>
+    /// The measurable claim of this step: the brush strip is narrower than the map
+    /// it marks. It used to end at 676px against a 616px map, which is what a row
+    /// of eleven text buttons costs.
+    ///
+    /// Measured at every frame size the HUD guard uses, and for the same reason: a
+    /// check that only ever saw one size cannot tell a layout that fits from one
+    /// that happens to.
+    /// </summary>
+    private void AssertControlStripsFit()
+    {
+        var live = GetViewportRect().Size;
+        var failures = new List<string>();
+        foreach (var viewport in HudFitViewports())
+        {
+            LayoutHud(viewport);
+            foreach (var (name, strip) in ControlStrips())
+            {
+                if (strip is null || strip.Size.X <= MapPixelSize.X)
+                {
+                    continue;
+                }
+
+                failures.Add(
+                    $"'{name}' is {strip.Size.X}px wide at viewport {viewport}, " +
+                    $"wider than the {MapPixelSize.X}px map it marks");
+            }
+        }
+
+        LayoutHud(live);
+
+        if (failures.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"A control strip is wider than the map in {failures.Count} place(s): " +
+                string.Join("; ", failures) +
+                ". A strip that overhangs the map puts controls where the player is " +
+                "not looking and breaks the column the HUD is laid out in.");
+        }
+    }
+
+    private (string Name, Control? Strip)[] ControlStrips() =>
+    [
+        ("time", _timeStrip),
+        ("brush", _brushStrip),
+    ];
+
+    /// <summary>
+    /// The strip measurements published next to <see cref="LabelFit"/>, so a run
+    /// states the widths instead of the guard being trusted, and the icons that
+    /// are still placeholders are named rather than merely absent from a picture.
+    /// </summary>
+    private object ControlStripFit() => new
+    {
+        mapWidth = MapPixelSize.X,
+        widths = ControlStrips()
+            .Where(entry => entry.Strip is not null)
+            .Select(entry => (object)new { name = entry.Name, width = entry.Strip!.Size.X })
+            .ToArray(),
+        iconDrawSize = IconDrawSize,
+        loadedIcons = _icons.Keys.OrderBy(name => name, StringComparer.Ordinal).ToArray(),
+        placeholderIcons = _missingIcons,
+    };
 
     /// <summary>
     /// The side panel: heading, inspector, legend, event feedback. The legend is
@@ -964,6 +1436,7 @@ public partial class Main : Node2D
         _summary!.Text = panels.Summary;
         _feedback!.Text = panels.Feedback;
         _roster!.Text = panels.Roster;
+        RefreshControls();
     }
 
     /// <summary>
@@ -1020,6 +1493,33 @@ public partial class Main : Node2D
         brushZone = _brushZone.ToString(),
         selectedCell = _selectedCell is { } selected ? new[] { selected.X, selected.Y } : null,
         selectedCreatureId = _selectedCreatureId,
+        // The toolbar as text. "Which brushes are available, what do they do and
+        // which one is held" stops being a question only a screenshot answers,
+        // which is what makes the icon pass checkable at all.
+        controls = UiControls.Build(CurrentControlsView())
+            .Select(control => (object)new
+            {
+                id = control.Id,
+                label = control.Label,
+                hotkey = control.Hotkey,
+                tooltip = control.Tooltip,
+                active = control.Active,
+                enabled = control.Enabled,
+                icon = control.Icon,
+            })
+            .ToArray(),
+        // The rectangle in progress, so a drag is observable without a picture.
+        // It is null unless the button is actually down, which is also the claim
+        // "a cancelled drag left nothing behind".
+        selection = PendingStroke() is { } stroke
+            ? (object)new
+            {
+                mode = stroke.Mode.ToString(),
+                tiles = stroke.Tiles.Count,
+                rectangle = stroke.RectangleTiles,
+                refusal = stroke.Refusal,
+            }
+            : null,
     };
 
     /// <summary>
@@ -1158,101 +1658,6 @@ public partial class Main : Node2D
         };
     }
 
-    private void DrawToolbar()
-    {
-        DrawRect(
-            new Rect2(MapOrigin.X, ToolbarStripTop, MapPixelSize.X + 10, ControlStripHeight),
-            new Color("#0f1d2d"));
-        var buttons = new[]
-        {
-            (_paused ? "RUN [P]" : "PAUSE [P]", 18, 72),
-            ("STEP [S]", 96, 70),
-            ("0.5x [1]", 168, 72),
-            ("1x [2]", 242, 62),
-            ("4x [3]", 306, 62),
-            ("16x [4]", 370, 66),
-            ("BASE [R]", 438, 78),
-            ("NEGLECT [N]", 518, 104),
-        };
-        foreach (var (text, x, width) in buttons)
-        {
-            var active = text.StartsWith("1x") && _speed == 1 ||
-                text.StartsWith("0.5") && _speed == 0.5 ||
-                text.StartsWith("4x") && _speed == 4 ||
-                text.StartsWith("16x") && _speed == 16 ||
-                text.StartsWith("BASE") && _fixture == "baseline" ||
-                text.StartsWith("NEGLECT") && _fixture == "neglected";
-            DrawRect(new Rect2(x, 74, width - 3, 18), active ? new Color("#1d4ed8") : new Color("#24364b"));
-            DrawString(ThemeDB.FallbackFont, new Vector2(x + 4, 88), text, HorizontalAlignment.Left, -1, 10, new Color("#dbeafe"));
-        }
-    }
-
-    /// <summary>
-    /// One description of the control strip drives both drawing and hit testing,
-    /// so a visible button and its click zone cannot drift apart.
-    /// </summary>
-    private (string Label, int X, int Width, bool Active)[] ControlButtons() =>
-    [
-        ("INSPECT [I]", 18, 56, _editMode == EditMode.Inspect),
-        ("PAINT [B]", 74, 46, _editMode == EditMode.Paint),
-        ("ERASE [E]", 120, 46, _editMode == EditMode.Erase),
-        ("DIG [D]", 166, 40, _editMode == EditMode.Dig),
-        ("CANCEL [X]", 206, 56, _editMode == EditMode.CancelDig),
-        ("STOCK [M]", 262, 58,
-            _editMode == EditMode.Paint && _brushZone == ZoneKind.MaterialStockpile),
-        ("BUILD [C]", 320, 52, _editMode == EditMode.Build),
-        ("UNBLD [V]", 372, 54, _editMode == EditMode.CancelBuild),
-        ($"zone {ShortZone(_brushZone)} [Z]", 426, 66, false),
-        ($"job {_selectedJob} {_state!.Priorities[_selectedJob]} [J]", 492, 94, false),
-        ($"{ShortRuleId(RuleIds[_selectedRule])} {_state.Rules[RuleIds[_selectedRule]]} [K]",
-            586, 90, false),
-        ("REPLAY [Y]", 676, 62, false),
-    ];
-
-    private static string ShortZone(ZoneKind zone) => zone switch
-    {
-        ZoneKind.Kitchen => "Kitch",
-        ZoneKind.Quarters => "Quart",
-        ZoneKind.TrainingGround => "Train",
-        ZoneKind.Forbidden => "Forbid",
-        ZoneKind.MaterialStockpile => "Stock",
-        _ => zone.ToString(),
-    };
-
-    private static string ShortRuleId(string ruleId) => ruleId switch
-    {
-        "ration_reserve" => "ration",
-        "drill_min_satiety" => "drillSat",
-        _ => "muster",
-    };
-
-    private void DrawControlToolbar()
-    {
-        // The strip has to reach past the last button, and the button row is now
-        // wider than the map: the two brushes this step adds do not fit under it.
-        var buttons = ControlButtons();
-        var stripWidth = Math.Max(
-            MapPixelSize.X + 10,
-            buttons[^1].X + buttons[^1].Width + 6 - MapOrigin.X);
-        DrawRect(
-            new Rect2(MapOrigin.X, ControlStripTop, stripWidth, ControlStripHeight),
-            new Color("#102338"));
-        foreach (var (label, x, width, active) in buttons)
-        {
-            DrawRect(
-                new Rect2(x, 97, width - 3, 18),
-                active ? new Color("#b45309") : new Color("#1b2f45"));
-            DrawString(
-                ThemeDB.FallbackFont,
-                new Vector2(x + 3, 110),
-                label,
-                HorizontalAlignment.Left,
-                width - 6,
-                9,
-                active ? new Color("#fef3c7") : new Color("#bae6fd"));
-        }
-    }
-
     private void DrawMap()
     {
         DrawRect(new Rect2(MapOrigin, MapPixelSize), new Color("#111827"));
@@ -1280,28 +1685,14 @@ public partial class Main : Node2D
                     DrawRect(rect.Grow(-3), ZoneColor(zone), false, 1.5f);
                 }
 
-                // While the dig brush is active every legal target is outlined,
-                // so the player never has to guess where a stroke would land.
-                if (_editMode == EditMode.Dig && _state.Map.DiggableTiles.Contains(cell))
+                // While a marking brush is held every legal target is outlined, so
+                // the player never has to guess where a stroke would land. The
+                // rule is read from the same function the stroke itself uses, so
+                // an outlined cell and an accepted cell cannot be different sets.
+                if (LegalTargetOutline() is { } outline &&
+                    BrushSelection.Accepts(_state, _editMode, _brushZone, cell))
                 {
-                    DrawRect(rect.Grow(-2), new Color("#fbbf24") with { A = 0.75f }, false, 1.0f);
-                }
-
-                // Same affordance for the stockpile brush: every legal target is
-                // outlined, so the player never has to guess where a stroke lands.
-                if (_editMode == EditMode.Paint &&
-                    _brushZone == ZoneKind.MaterialStockpile &&
-                    IsStockpileFloor(cell) &&
-                    !_state.StockpileCells.Any(item => item.Position == cell))
-                {
-                    DrawRect(rect.Grow(-2), new Color("#cbd5e1") with { A = 0.55f }, false, 1.0f);
-                }
-
-                // And for the construction brush, which is the only one whose legal
-                // targets include ground the player created by digging.
-                if (_editMode == EditMode.Build && IsBuildFloor(cell))
-                {
-                    DrawRect(rect.Grow(-2), new Color("#5eead4") with { A = 0.55f }, false, 1.0f);
+                    DrawRect(rect.Grow(-2), outline, false, 1.0f);
                 }
 
                 if (_selectedCell == cell)
@@ -1419,34 +1810,114 @@ public partial class Main : Node2D
         }
 
         DrawZoneLabels();
-        if (_editMode != EditMode.Inspect && _hoverCell is { } brushCell && IsMapCell(brushCell))
+        DrawBrushPreview();
+    }
+
+    /// <summary>
+    /// The colour every legal target of the held brush is outlined with, or
+    /// <c>null</c> for a brush whose targets are already obvious on the map — a
+    /// dig mark and a blueprint are drawn as themselves, so outlining them again
+    /// would add noise rather than an affordance.
+    /// </summary>
+    private Color? LegalTargetOutline() => _editMode switch
+    {
+        BrushMode.Dig => new Color("#fbbf24") with { A = 0.75f },
+        BrushMode.Build => new Color("#5eead4") with { A = 0.55f },
+        BrushMode.Paint when _brushZone == ZoneKind.MaterialStockpile =>
+            new Color("#cbd5e1") with { A = 0.55f },
+        _ => null,
+    };
+
+    /// <summary>The colour a brush marks with when the cell is a legal target.</summary>
+    private Color BrushAccent() => _editMode switch
+    {
+        BrushMode.Dig => new Color("#f59e0b"),
+        BrushMode.CancelDig => new Color("#38bdf8"),
+        BrushMode.Build => new Color("#2dd4bf"),
+        BrushMode.CancelBuild => new Color("#38bdf8"),
+        _ => ZoneColor(_brushZone),
+    };
+
+    /// <summary>
+    /// What the brush would do if the button were released now.
+    ///
+    /// While a rectangle is being dragged this is the whole selection, cell by
+    /// cell — accepted cells in the brush colour, cells the command will skip in
+    /// red — plus the count, because "how many cells will this affect?" is the one
+    /// question a highlighted area does not answer. With no drag in progress it is
+    /// the single cell under the cursor, which is the same thing with one cell in
+    /// it.
+    /// </summary>
+    private void DrawBrushPreview()
+    {
+        if (_editMode == BrushMode.Inspect || _state is null)
         {
-            var preview = new Rect2(CellTopLeft(brushCell), new Vector2(TileSize - 1, TileSize - 1));
-            var previewColor = _editMode switch
-            {
-                EditMode.Dig => _state.Map.DiggableTiles.Contains(brushCell) &&
-                    !_state.DigDesignations.Any(item => item.Tile == brushCell)
-                        ? new Color("#f59e0b")
-                        : new Color("#ef4444"),
-                EditMode.CancelDig => _state.DigDesignations.Any(item => item.Tile == brushCell)
-                    ? new Color("#38bdf8")
-                    : new Color("#ef4444"),
-                EditMode.Paint when _brushZone == ZoneKind.MaterialStockpile =>
-                    IsStockpileFloor(brushCell) &&
-                    !_state.StockpileCells.Any(item => item.Position == brushCell)
-                        ? ZoneColor(ZoneKind.MaterialStockpile)
-                        : new Color("#ef4444"),
-                EditMode.Build => IsBuildFloor(brushCell)
-                    ? new Color("#2dd4bf")
-                    : new Color("#ef4444"),
-                EditMode.CancelBuild => _state.BuildSites.Any(site => site.Tile == brushCell)
-                    ? new Color("#38bdf8")
-                    : new Color("#ef4444"),
-                _ => ZoneColor(_brushZone),
-            };
-            DrawRect(preview.Grow(-1), previewColor with { A = 0.32f });
-            DrawRect(preview.Grow(-1), new Color("#f8fafc"), false, 1.5f);
+            return;
         }
+
+        if (PendingStroke() is { } stroke && _dragAnchor is { } anchor)
+        {
+            var corner = _dragCurrent ?? anchor;
+            var accepted = stroke.Tiles.ToHashSet();
+            foreach (var cell in BrushSelection.Rectangle(anchor, corner))
+            {
+                var color = accepted.Contains(cell) ? BrushAccent() : new Color("#ef4444");
+                var tile = new Rect2(CellTopLeft(cell), new Vector2(TileSize - 1, TileSize - 1));
+                DrawRect(tile.Grow(-1), color with { A = 0.32f });
+            }
+
+            var topLeft = CellTopLeft(new GridPoint(
+                Math.Min(anchor.X, corner.X),
+                Math.Min(anchor.Y, corner.Y)));
+            var size = new Vector2(
+                (Math.Abs(anchor.X - corner.X) + 1) * TileSize,
+                (Math.Abs(anchor.Y - corner.Y) + 1) * TileSize);
+            DrawRect(new Rect2(topLeft, size - new Vector2(1, 1)), new Color("#f8fafc"), false, 1.5f);
+            DrawSelectionCount(topLeft, stroke);
+            return;
+        }
+
+        if (_hoverCell is not { } hovered || !IsMapCell(hovered))
+        {
+            return;
+        }
+
+        var preview = new Rect2(CellTopLeft(hovered), new Vector2(TileSize - 1, TileSize - 1));
+        var previewColor = BrushSelection.Accepts(_state, _editMode, _brushZone, hovered)
+            ? BrushAccent()
+            : new Color("#ef4444");
+        DrawRect(preview.Grow(-1), previewColor with { A = 0.32f });
+        DrawRect(preview.Grow(-1), new Color("#f8fafc"), false, 1.5f);
+    }
+
+    /// <summary>
+    /// The number of cells the command will carry, drawn on the selection itself.
+    /// It is the accepted count and not the area of the rectangle: a drag across
+    /// floor and rock states how much of it the brush will actually take.
+    /// </summary>
+    private void DrawSelectionCount(Vector2 topLeft, BrushStroke stroke)
+    {
+        const float width = 58;
+        const float height = 14;
+        var text = stroke.Tiles.Count == 1 ? "1 cell" : $"{stroke.Tiles.Count} cells";
+
+        // Kept inside the map on both axes. Above the selection when there is room
+        // and inside its first cell when there is not: the control strips are
+        // Control nodes and draw over the canvas, so a caption that overhangs the
+        // top of the map would be covered by the strip rather than clipped.
+        var box = new Vector2(
+            Math.Clamp(topLeft.X, MapOrigin.X, MapOrigin.X + MapPixelSize.X - width),
+            topLeft.Y - height - 3 >= MapOrigin.Y ? topLeft.Y - height - 3 : topLeft.Y + 3);
+
+        DrawRect(new Rect2(box, new Vector2(width, height)), new Color("#0b1622"));
+        DrawString(
+            ThemeDB.FallbackFont,
+            box + new Vector2(3, height - 3),
+            text,
+            HorizontalAlignment.Left,
+            width - 6,
+            11,
+            stroke.Tiles.Count == 0 ? new Color("#fca5a5") : new Color("#f8fafc"));
     }
 
     /// <summary>
@@ -1681,67 +2152,24 @@ public partial class Main : Node2D
         }
     }
 
-    private bool TryHandleToolbarClick(Vector2 position)
+    private void CycleZone()
     {
-        if (position.Y >= ControlStripTop && position.Y <= ControlStripTop + ControlStripHeight)
-        {
-            var buttons = ControlButtons();
-            for (var index = 0; index < buttons.Length; index++)
-            {
-                var (_, x, width, _) = buttons[index];
-                if (position.X < x || position.X >= x + width)
-                {
-                    continue;
-                }
+        _brushZone = (ZoneKind)(((int)_brushZone + 1) % Enum.GetValues<ZoneKind>().Length);
+        RefreshState();
+    }
 
-                switch (index)
-                {
-                    case 0: SelectEditMode(EditMode.Inspect); return true;
-                    case 1: SelectEditMode(EditMode.Paint); return true;
-                    case 2: SelectEditMode(EditMode.Erase); return true;
-                    case 3: SelectEditMode(EditMode.Dig); return true;
-                    case 4: SelectEditMode(EditMode.CancelDig); return true;
-                    case 5: SelectStockpileBrush(); return true;
-                    case 6: SelectEditMode(EditMode.Build); return true;
-                    case 7: SelectEditMode(EditMode.CancelBuild); return true;
-                    case 8:
-                        _brushZone = (ZoneKind)(((int)_brushZone + 1) % Enum.GetValues<ZoneKind>().Length);
-                        break;
-                    case 9:
-                        _selectedJob = (JobKind)(((int)_selectedJob + 1) % Enum.GetValues<JobKind>().Length);
-                        _editingPriorities = true;
-                        break;
-                    case 10:
-                        _selectedRule = (_selectedRule + 1) % RuleIds.Length;
-                        _editingPriorities = false;
-                        break;
-                    default:
-                        ReplayCurrentLog();
-                        break;
-                }
+    private void CycleJob()
+    {
+        _selectedJob = (JobKind)(((int)_selectedJob + 1) % Enum.GetValues<JobKind>().Length);
+        _editingPriorities = true;
+        RefreshState();
+    }
 
-                RefreshState();
-                return true;
-            }
-
-            return true;
-        }
-
-        if (position.Y < ToolbarStripTop || position.Y > ToolbarStripTop + ControlStripHeight)
-        {
-            return false;
-        }
-
-        if (position.X is >= 18 and < 93) TogglePause();
-        else if (position.X is >= 96 and < 165) Advance(1);
-        else if (position.X is >= 168 and < 239) SetSpeed(0.5);
-        else if (position.X is >= 242 and < 303) SetSpeed(1.0);
-        else if (position.X is >= 306 and < 367) SetSpeed(4.0);
-        else if (position.X is >= 370 and < 435) SetSpeed(16.0);
-        else if (position.X is >= 438 and < 515) LoadFixture("baseline", 1);
-        else if (position.X is >= 518 and < 644) LoadFixture("neglected", 1);
-        else return false;
-        return true;
+    private void CycleRule()
+    {
+        _selectedRule = (_selectedRule + 1) % UiControls.RuleIds.Count;
+        _editingPriorities = false;
+        RefreshState();
     }
 
     private void UpdatePointer(Vector2 position)
@@ -1772,175 +2200,61 @@ public partial class Main : Node2D
         QueueRedraw();
     }
 
-    private void ApplyBrushAt(Vector2 position)
-    {
-        var cell = ToCell(position);
-        if (cell is not { } selected || !IsMapCell(selected))
-        {
-            return;
-        }
-
-        if (_lastBrushCell == selected)
-        {
-            return;
-        }
-
-        _lastBrushCell = selected;
-
-        switch (_editMode)
-        {
-            case EditMode.Paint:
-                ApplyZonePaintBrush(selected);
-                break;
-            case EditMode.Erase:
-                TryApplyPlayerCommand(new ZoneEraseCommand(_state!.Tick, _brushZone, [selected]));
-                break;
-            case EditMode.Dig:
-                ApplyDigBrush(selected);
-                break;
-            case EditMode.CancelDig:
-                ApplyCancelDigBrush(selected);
-                break;
-            case EditMode.Build:
-                ApplyBuildBrush(selected);
-                break;
-            case EditMode.CancelBuild:
-                ApplyCancelBuildBrush(selected);
-                break;
-        }
-    }
+    /// <summary>
+    /// What the rectangle the player is dragging would do right now. It is the
+    /// same value the release applies, so the highlighted area, the cell count
+    /// above the cursor and the command that lands cannot disagree.
+    /// </summary>
+    private BrushStroke? PendingStroke() =>
+        _state is null || _dragAnchor is not { } anchor
+            ? null
+            : BrushSelection.Resolve(
+                _state,
+                _editMode,
+                _brushZone,
+                anchor,
+                _dragCurrent ?? anchor);
 
     /// <summary>
-    /// A stockpile stroke crosses rock, features and the gate on the way to the
-    /// floor the player wants, so it is filtered the same way the dig brush is: a
-    /// tile the simulation would reject never becomes a command, it becomes an
-    /// explanation. Other zones keep their existing, more permissive behaviour.
+    /// A released rectangle. Every cell the simulation would accept goes into
+    /// <em>one</em> command, and a cell it would refuse never becomes a command at
+    /// all — it becomes an explanation in the feedback line.
+    ///
+    /// One command rather than one per cell is what makes partially applied
+    /// marking impossible: the world validates the whole tile list before it
+    /// records the first designation, so a rejected rectangle changes nothing.
+    ///
+    /// A single click is a 1x1 rectangle and goes through exactly this path, so
+    /// the click and the drag cannot drift apart either.
     /// </summary>
-    private void ApplyZonePaintBrush(GridPoint cell)
+    private void ApplyBrushStroke(GridPoint from, GridPoint to)
     {
-        if (_brushZone == ZoneKind.MaterialStockpile)
+        if (_state is null)
         {
-            if (_state!.StockpileCells.Any(item => item.Position == cell))
-            {
-                _controlFeedback = $"({cell.X},{cell.Y}) is already a material stockpile cell.";
-                UpdateHud();
-                QueueRedraw();
-                return;
-            }
-
-            if (!IsStockpileFloor(cell))
-            {
-                _controlFeedback =
-                    $"({cell.X},{cell.Y}) cannot store material: {UnstockpileableReason(cell)}.";
-                UpdateHud();
-                QueueRedraw();
-                return;
-            }
+            return;
         }
 
-        TryApplyPlayerCommand(new ZonePaintCommand(_state!.Tick, _brushZone, [cell]));
+        var stroke = BrushSelection.Resolve(_state, _editMode, _brushZone, from, to);
+        if (BrushSelection.ToCommand(stroke, _state.Tick) is { } command)
+        {
+            TryApplyPlayerCommand(command);
+            return;
+        }
+
+        _controlFeedback = stroke.Refusal ?? "Nothing to mark there.";
+        UpdateHud();
+        QueueRedraw();
     }
 
-    /// <summary>
-    /// The simulation publishes which tiles may hold material, exactly as it
-    /// publishes which rock may be dug, so the adapter never re-derives the rule.
-    /// </summary>
-    private bool IsStockpileFloor(GridPoint cell)
+    private void CancelDrag(string source)
     {
-        return _state!.Map.StockpileFloorTiles.Contains(cell);
-    }
-
-    // Adapter-side alias for the pure explanation. Kept so the brush reads the
-    // same as before the seam landed.
-    private string UnstockpileableReason(GridPoint cell) =>
-        InspectorText.UnstockpileableReason(_state!, cell);
-
-    /// <summary>
-    /// A dragged stroke crosses tiles the player never meant to designate, so the
-    /// brush only emits a command for a tile the simulation would accept. Refusals
-    /// are explained in the feedback line instead of becoming rejected commands.
-    /// </summary>
-    private void ApplyDigBrush(GridPoint cell)
-    {
-        if (_state!.DigDesignations.Any(item => item.Tile == cell))
-        {
-            _controlFeedback = $"({cell.X},{cell.Y}) is already designated for digging.";
-            UpdateHud();
-            QueueRedraw();
-            return;
-        }
-
-        if (!_state.Map.DiggableTiles.Contains(cell))
-        {
-            _controlFeedback =
-                $"({cell.X},{cell.Y}) cannot be dug: {InspectorText.UndiggableReason(_state, cell)}.";
-            UpdateHud();
-            QueueRedraw();
-            return;
-        }
-
-        TryApplyPlayerCommand(new DigDesignateCommand(_state.Tick, [cell]));
-    }
-
-    /// <summary>
-    /// The construction brush is filtered exactly like the dig and stockpile
-    /// brushes: a tile the simulation would reject never becomes a command, it
-    /// becomes an explanation. The legal targets come from
-    /// <c>map.buildFloorTiles</c>, so the adapter holds no copy of the rule.
-    /// </summary>
-    private void ApplyBuildBrush(GridPoint cell)
-    {
-        if (_state!.BuildSites.Any(site => site.Tile == cell))
-        {
-            _controlFeedback = $"({cell.X},{cell.Y}) already carries a blueprint.";
-            UpdateHud();
-            QueueRedraw();
-            return;
-        }
-
-        if (!IsBuildFloor(cell))
-        {
-            _controlFeedback =
-                $"({cell.X},{cell.Y}) cannot hold a training post: " +
-                $"{InspectorText.UnbuildableReason(_state, cell)}.";
-            UpdateHud();
-            QueueRedraw();
-            return;
-        }
-
-        TryApplyPlayerCommand(new BuildDesignateCommand(_state.Tick, [cell]));
-    }
-
-    private void ApplyCancelBuildBrush(GridPoint cell)
-    {
-        if (!_state!.BuildSites.Any(site => site.Tile == cell))
-        {
-            _controlFeedback = $"({cell.X},{cell.Y}) carries no blueprint.";
-            UpdateHud();
-            QueueRedraw();
-            return;
-        }
-
-        TryApplyPlayerCommand(new BuildCancelCommand(_state.Tick, [cell]));
-    }
-
-    /// <summary>
-    /// The simulation publishes where a post may be placed, exactly as it
-    /// publishes which rock may be dug, so the adapter never re-derives the rule.
-    /// </summary>
-    private bool IsBuildFloor(GridPoint cell) => _state!.Map.BuildFloorTiles.Contains(cell);
-
-    private void ApplyCancelDigBrush(GridPoint cell)
-    {
-        if (!_state!.DigDesignations.Any(item => item.Tile == cell))
-        {
-            _controlFeedback = $"({cell.X},{cell.Y}) carries no dig designation.";
-            UpdateHud();
-            QueueRedraw();
-            return;
-        }
-
-        TryApplyPlayerCommand(new DigCancelCommand(_state.Tick, [cell]));
+        _dragAnchor = null;
+        _dragCurrent = null;
+        // Nothing was emitted while the rectangle was being dragged, so there is
+        // nothing to undo: a cancelled selection leaves no entry in the log.
+        _controlFeedback = $"Selection cancelled ({source}); nothing was marked.";
+        UpdateHud();
+        QueueRedraw();
     }
 
     /// <summary>
@@ -1952,35 +2266,38 @@ public partial class Main : Node2D
     private void SelectStockpileBrush()
     {
         _brushZone = ZoneKind.MaterialStockpile;
-        SelectEditMode(EditMode.Paint);
+        SelectEditMode(BrushMode.Paint);
         _controlFeedback =
-            "STOCKPILE [M]: painting MaterialStockpile. Click or drag pre-existing floor; " +
-            $"each cell holds {PrototypeTuning.StockpileCellCapacity} stone. " +
-            "[E] erases and drops stored stone back on the tile. Esc returns to Inspect.";
+            "STOCKPILE [M]: painting MaterialStockpile. Drag a rectangle over pre-existing " +
+            $"floor; each cell holds {PrototypeTuning.StockpileCellCapacity} stone. " +
+            "[E] erases and drops stored stone back on the tile. Esc puts the brush away.";
         UpdateHud();
         QueueRedraw();
     }
 
-    private void SelectEditMode(EditMode mode)
+    private void SelectEditMode(BrushMode mode)
     {
         _editMode = mode;
-        _brushPointerDown = false;
-        _lastBrushCell = null;
+        // A brush change abandons whatever rectangle was in progress, and abandons
+        // it the same way Esc does: nothing was emitted, so nothing is undone.
+        _dragAnchor = null;
+        _dragCurrent = null;
         _controlFeedback = mode switch
         {
-            EditMode.Dig =>
-                "DIG: click or drag rock to mark it for excavation. A free creature " +
-                "chooses the job on its own. Esc/right-click returns to Inspect.",
-            EditMode.CancelDig =>
-                "CANCEL DIG: click or drag a designation to withdraw it. " +
-                "Esc/right-click returns to Inspect.",
-            EditMode.Build =>
-                "BUILD [C]: click or drag plain floor — including ground you dug — to " +
-                $"mark a training post. It costs {PrototypeTuning.BuildStoneCost} stone, " +
-                "which the crew brings on its own. Esc/right-click returns to Inspect.",
-            EditMode.CancelBuild =>
-                "UNBUILD [V]: click or drag a blueprint to withdraw it. Stone already " +
-                "delivered drops back onto that tile. Esc/right-click returns to Inspect.",
+            BrushMode.Dig =>
+                "DIG: drag a rectangle over rock to mark it for excavation in one command. " +
+                "A free creature chooses the job on its own. Esc cancels a drag, then the brush.",
+            BrushMode.CancelDig =>
+                "CANCEL DIG: drag a rectangle over designations to withdraw them. " +
+                "Esc cancels a drag, then the brush.",
+            BrushMode.Build =>
+                "BUILD [C]: drag a rectangle over plain floor — including ground you dug — to " +
+                $"mark training posts. Each costs {PrototypeTuning.BuildStoneCost} stone, " +
+                "which the crew brings on its own. Esc cancels a drag, then the brush.",
+            BrushMode.CancelBuild =>
+                "UNBUILD [V]: drag a rectangle over blueprints to withdraw them. Stone already " +
+                "delivered drops back onto that tile. Esc cancels a drag, then the brush.",
+            BrushMode.Inspect => "Inspect mode; brush put away.",
             _ => _controlFeedback,
         };
         RefreshState();
@@ -1988,10 +2305,10 @@ public partial class Main : Node2D
 
     private void CancelBrush(string source)
     {
-        _editMode = EditMode.Inspect;
-        _brushPointerDown = false;
-        _lastBrushCell = null;
-        _controlFeedback = $"Inspect mode ({source}); brush cancelled.";
+        _editMode = BrushMode.Inspect;
+        _dragAnchor = null;
+        _dragCurrent = null;
+        _controlFeedback = $"Inspect mode ({source}); brush put away.";
         RefreshState();
     }
 
@@ -2010,8 +2327,6 @@ public partial class Main : Node2D
         QueueRedraw();
     }
 
-    private static readonly string[] RuleIds = ["ration_reserve", "drill_min_satiety", "muster_lead_ticks"];
-
     private void AdjustSelectedControl(int delta)
     {
         if (_editingPriorities)
@@ -2021,7 +2336,7 @@ public partial class Main : Node2D
             return;
         }
 
-        var ruleId = RuleIds[_selectedRule];
+        var ruleId = UiControls.RuleIds[_selectedRule];
         var maximum = ruleId switch
         {
             "ration_reserve" => PrototypeTuning.RationReserveMaximum,
@@ -2096,23 +2411,23 @@ public partial class Main : Node2D
     /// </summary>
     private void ApplyDemoDig()
     {
-        _editMode = EditMode.Dig;
+        _editMode = BrushMode.Dig;
         foreach (var tile in new GridPoint[]
                  {
                      new(25, 1), new(25, 2), new(25, 3), new(26, 1), new(26, 3),
                  })
         {
-            ApplyDigBrush(tile);
+            ApplyBrushStroke(tile, tile);
         }
 
         // A command issued at tick T is applied at the start of tick T, so the
         // designations only become visible to the brush after one step.
         Advance(1);
-        _editMode = EditMode.CancelDig;
-        ApplyCancelDigBrush(new GridPoint(26, 3));
+        _editMode = BrushMode.CancelDig;
+        ApplyBrushStroke(new GridPoint(26, 3), new GridPoint(26, 3));
         // Left holding the dig brush on purpose: the capture then also shows the
         // outline every still-diggable tile gets while the brush is active.
-        _editMode = EditMode.Dig;
+        _editMode = BrushMode.Dig;
         _selectedCell = new GridPoint(25, 3);
         _selectedCreatureId = null;
         _controlFeedback =
@@ -2130,10 +2445,10 @@ public partial class Main : Node2D
     /// </summary>
     private void ApplyDemoStone()
     {
-        _editMode = EditMode.Dig;
+        _editMode = BrushMode.Dig;
         foreach (var tile in new GridPoint[] { new(25, 1), new(25, 2), new(25, 3), new(26, 1) })
         {
-            ApplyDigBrush(tile);
+            ApplyBrushStroke(tile, tile);
         }
 
         // The stockpile is painted at a fixed future tick, after the pocket is
@@ -2168,10 +2483,10 @@ public partial class Main : Node2D
     /// </summary>
     private void ApplyDemoBuild()
     {
-        _editMode = EditMode.Dig;
+        _editMode = BrushMode.Dig;
         foreach (var tile in new GridPoint[] { new(25, 1), new(25, 2), new(25, 3), new(26, 1) })
         {
-            ApplyDigBrush(tile);
+            ApplyBrushStroke(tile, tile);
         }
 
         SelectStockpileBrush();
@@ -2192,7 +2507,7 @@ public partial class Main : Node2D
         TryApplyPlayerCommand(
             new SetPriorityCommand(DemoBuildBlueprintTick, JobKind.Drill, 3));
 
-        _editMode = EditMode.Build;
+        _editMode = BrushMode.Build;
         _brushZone = ZoneKind.TrainingGround;
         _selectedCell = DemoBuildSite;
         _selectedCreatureId = null;
@@ -2210,7 +2525,7 @@ public partial class Main : Node2D
         // brush stroke accepts multiple cells and that cancelling never leaves
         // the UI in a mouse-capturing edit mode.
         var strokeStart = _playerCommands.Count;
-        _editMode = EditMode.Paint;
+        _editMode = BrushMode.Paint;
         TryApplyPlayerCommand(new ZonePaintCommand(_state!.Tick, ZoneKind.TrainingGround, [new GridPoint(10, 11)]));
         TryApplyPlayerCommand(new ZonePaintCommand(_state!.Tick, ZoneKind.TrainingGround, [new GridPoint(11, 11)]));
         Advance(1); // Commands at the current tick become visible on the next simulation tick.
@@ -2221,10 +2536,12 @@ public partial class Main : Node2D
             throw new InvalidOperationException("Brush smoke did not apply two independent cells.");
         }
         CancelBrush("smoke");
-        if (_editMode != EditMode.Inspect || _brushPointerDown)
+        if (_editMode != BrushMode.Inspect)
         {
             throw new InvalidOperationException("Brush smoke did not return to inspect mode.");
         }
+
+        VerifyRectangleSelectionSmoke();
 
         var beforeChecksum = _checksum;
         var beforeCount = _playerCommands.Count;
@@ -2252,6 +2569,66 @@ public partial class Main : Node2D
     }
 
     /// <summary>
+    /// The input seam of the rectangle brush, checked through the same path the
+    /// mouse drives.
+    ///
+    /// Two claims, and they are the two the whole step rests on: a released
+    /// rectangle emits <em>exactly one</em> command carrying every cell of the
+    /// selection, and a cancelled rectangle emits none and changes nothing. The
+    /// second is why nothing is emitted until the button comes back up.
+    /// </summary>
+    private void VerifyRectangleSelectionSmoke()
+    {
+        // Plain floor clear of every authored feature, of the internal rock and of
+        // the two cells the zone stroke above already painted.
+        var from = new GridPoint(12, 10);
+        var to = new GridPoint(15, 12);
+        _brushZone = ZoneKind.TrainingGround;
+        SelectEditMode(BrushMode.Paint);
+
+        var cancelledCount = _playerCommands.Count;
+        var cancelledChecksum = _checksum;
+        _dragAnchor = from;
+        _dragCurrent = to;
+        CancelDrag("smoke");
+        if (_dragAnchor is not null ||
+            _playerCommands.Count != cancelledCount ||
+            _checksum != cancelledChecksum)
+        {
+            throw new InvalidOperationException(
+                "A cancelled selection left a trace in the command log or in the world.");
+        }
+
+        var before = _playerCommands.Count;
+        ApplyBrushStroke(from, to);
+        Advance(1);
+        if (_playerCommands.Count != before + 1)
+        {
+            throw new InvalidOperationException(
+                $"A 4x3 drag emitted {_playerCommands.Count - before} commands instead of one.");
+        }
+
+        if (_playerCommands[^1] is not ZonePaintCommand { Tiles.Count: 12 })
+        {
+            throw new InvalidOperationException(
+                "The rectangle command did not carry all twelve cells of the selection.");
+        }
+
+        // Partially applied marking must not exist: either the whole rectangle is
+        // zoned or none of it is.
+        foreach (var tile in BrushSelection.Rectangle(from, to))
+        {
+            if (!_state!.Zones[ZoneKind.TrainingGround].Contains(tile))
+            {
+                throw new InvalidOperationException(
+                    $"({tile.X},{tile.Y}) is inside the applied rectangle but is not zoned.");
+            }
+        }
+
+        CancelBrush("rectangle smoke");
+    }
+
+    /// <summary>
     /// An input-seam check for the excavation brushes: a stroke marks several
     /// tiles, a stroke over floor and over the map boundary changes nothing, the
     /// cancel brush withdraws exactly one mark, and Esc leaves edit mode.
@@ -2259,10 +2636,10 @@ public partial class Main : Node2D
     private void VerifyDigBrushSmoke()
     {
         var strokeStart = _playerCommands.Count;
-        _editMode = EditMode.Dig;
+        _editMode = BrushMode.Dig;
         foreach (var tile in new GridPoint[] { new(25, 1), new(26, 1), new(25, 2) })
         {
-            ApplyDigBrush(tile);
+            ApplyBrushStroke(tile, tile);
         }
 
         Advance(1);
@@ -2282,19 +2659,19 @@ public partial class Main : Node2D
 
         var guardedChecksum = _checksum;
         var guardedCount = _playerCommands.Count;
-        ApplyDigBrush(new GridPoint(12, 12));
-        ApplyDigBrush(new GridPoint(0, 0));
-        ApplyDigBrush(PrototypeMapGate);
-        ApplyDigBrush(new GridPoint(25, 1));
+        ApplyBrushStroke(new GridPoint(12, 12), new GridPoint(12, 12));
+        ApplyBrushStroke(new GridPoint(0, 0), new GridPoint(0, 0));
+        ApplyBrushStroke(PrototypeMapGate, PrototypeMapGate);
+        ApplyBrushStroke(new GridPoint(25, 1), new GridPoint(25, 1));
         if (_playerCommands.Count != guardedCount || _checksum != guardedChecksum)
         {
             throw new InvalidOperationException(
                 "The dig brush emitted a command for a tile the simulation forbids.");
         }
 
-        _editMode = EditMode.CancelDig;
-        ApplyCancelDigBrush(new GridPoint(26, 1));
-        ApplyCancelDigBrush(new GridPoint(12, 12));
+        _editMode = BrushMode.CancelDig;
+        ApplyBrushStroke(new GridPoint(26, 1), new GridPoint(26, 1));
+        ApplyBrushStroke(new GridPoint(12, 12), new GridPoint(12, 12));
         Advance(1);
         if (_playerCommands.Count != guardedCount + 1 ||
             _state!.DigDesignations.Any(item => item.Tile == new GridPoint(26, 1)) ||
@@ -2304,7 +2681,7 @@ public partial class Main : Node2D
         }
 
         CancelBrush("dig smoke");
-        if (_editMode != EditMode.Inspect || _brushPointerDown)
+        if (_editMode != BrushMode.Inspect)
         {
             throw new InvalidOperationException("The dig brush did not return to inspect mode.");
         }
@@ -2331,18 +2708,18 @@ public partial class Main : Node2D
     private void VerifyStockpileBrushSmoke()
     {
         SelectStockpileBrush();
-        if (_editMode != EditMode.Paint || _brushZone != ZoneKind.MaterialStockpile)
+        if (_editMode != BrushMode.Paint || _brushZone != ZoneKind.MaterialStockpile)
         {
             throw new InvalidOperationException("[M] did not select MaterialStockpile and Paint.");
         }
 
         var guardedChecksum = _checksum;
         var guardedCount = _playerCommands.Count;
-        ApplyZonePaintBrush(new GridPoint(9, 4));   // internal rock
-        ApplyZonePaintBrush(new GridPoint(0, 0));   // map boundary
-        ApplyZonePaintBrush(PrototypeMapGate);
-        ApplyZonePaintBrush(new GridPoint(14, 7));  // larder feature
-        ApplyZonePaintBrush(new GridPoint(2, 1));   // mushroom bed
+        ApplyBrushStroke(new GridPoint(9, 4), new GridPoint(9, 4));   // internal rock
+        ApplyBrushStroke(new GridPoint(0, 0), new GridPoint(0, 0));   // map boundary
+        ApplyBrushStroke(PrototypeMapGate, PrototypeMapGate);
+        ApplyBrushStroke(new GridPoint(14, 7), new GridPoint(14, 7));  // larder feature
+        ApplyBrushStroke(new GridPoint(2, 1), new GridPoint(2, 1));   // mushroom bed
         if (_playerCommands.Count != guardedCount || _checksum != guardedChecksum)
         {
             throw new InvalidOperationException(
@@ -2352,8 +2729,7 @@ public partial class Main : Node2D
         var stockpile = new GridPoint[] { new(22, 1), new(23, 1) };
         foreach (var tile in stockpile)
         {
-            _lastBrushCell = null;
-            ApplyZonePaintBrush(tile);
+            ApplyBrushStroke(tile, tile);
         }
 
         Advance(1);
@@ -2372,7 +2748,7 @@ public partial class Main : Node2D
         }
 
         CancelBrush("stockpile smoke");
-        if (_editMode != EditMode.Inspect || _brushPointerDown)
+        if (_editMode != BrushMode.Inspect)
         {
             throw new InvalidOperationException("The stockpile brush did not return to inspect mode.");
         }
@@ -2409,20 +2785,20 @@ public partial class Main : Node2D
     /// </summary>
     private void VerifyBuildBrushSmoke()
     {
-        SelectEditMode(EditMode.Build);
-        if (_editMode != EditMode.Build)
+        SelectEditMode(BrushMode.Build);
+        if (_editMode != BrushMode.Build)
         {
             throw new InvalidOperationException("[C] did not select the build brush.");
         }
 
         var guardedChecksum = _checksum;
         var guardedCount = _playerCommands.Count;
-        ApplyBuildBrush(new GridPoint(9, 4));   // internal rock
-        ApplyBuildBrush(new GridPoint(0, 0));   // map boundary
-        ApplyBuildBrush(PrototypeMapGate);
-        ApplyBuildBrush(new GridPoint(14, 7));  // larder feature
-        ApplyBuildBrush(new GridPoint(8, 12));  // an existing post
-        ApplyBuildBrush(new GridPoint(22, 1));  // a stockpile cell
+        ApplyBrushStroke(new GridPoint(9, 4), new GridPoint(9, 4));   // internal rock
+        ApplyBrushStroke(new GridPoint(0, 0), new GridPoint(0, 0));   // map boundary
+        ApplyBrushStroke(PrototypeMapGate, PrototypeMapGate);
+        ApplyBrushStroke(new GridPoint(14, 7), new GridPoint(14, 7));  // larder feature
+        ApplyBrushStroke(new GridPoint(8, 12), new GridPoint(8, 12));  // an existing post
+        ApplyBrushStroke(new GridPoint(22, 1), new GridPoint(22, 1));  // a stockpile cell
         if (_playerCommands.Count != guardedCount || _checksum != guardedChecksum)
         {
             throw new InvalidOperationException(
@@ -2432,10 +2808,8 @@ public partial class Main : Node2D
         // (25,1) and (25,2) are floor only because the dig smoke above excavated
         // them, which is the claim this step makes: a room out of carved space.
         var site = new GridPoint(25, 2);
-        _lastBrushCell = null;
-        ApplyBuildBrush(new GridPoint(25, 1));
-        _lastBrushCell = null;
-        ApplyBuildBrush(site);
+        ApplyBrushStroke(new GridPoint(25, 1), new GridPoint(25, 1));
+        ApplyBrushStroke(site, site);
         Advance(1);
         if (_playerCommands.Count != guardedCount + 2 ||
             !_state!.BuildSites.Any(item => item.Tile == site))
@@ -2443,9 +2817,9 @@ public partial class Main : Node2D
             throw new InvalidOperationException("The build brush did not mark two blueprints.");
         }
 
-        SelectEditMode(EditMode.CancelBuild);
-        ApplyCancelBuildBrush(new GridPoint(25, 1));
-        ApplyCancelBuildBrush(new GridPoint(12, 12));
+        SelectEditMode(BrushMode.CancelBuild);
+        ApplyBrushStroke(new GridPoint(25, 1), new GridPoint(25, 1));
+        ApplyBrushStroke(new GridPoint(12, 12), new GridPoint(12, 12));
         Advance(1);
         if (_playerCommands.Count != guardedCount + 3 ||
             _state!.BuildSites.Count != 1)
@@ -2453,12 +2827,12 @@ public partial class Main : Node2D
             throw new InvalidOperationException("The unbuild brush did not withdraw one blueprint.");
         }
 
-        _editMode = EditMode.Paint;
+        _editMode = BrushMode.Paint;
         _brushZone = ZoneKind.TrainingGround;
-        ApplyZonePaintBrush(site);
+        ApplyBrushStroke(site, site);
         TryApplyPlayerCommand(new SetPriorityCommand(_state!.Tick, JobKind.Drill, 3));
         CancelBrush("build smoke");
-        if (_editMode != EditMode.Inspect || _brushPointerDown)
+        if (_editMode != BrushMode.Inspect)
         {
             throw new InvalidOperationException("The build brush did not return to inspect mode.");
         }
@@ -2535,6 +2909,7 @@ public partial class Main : Node2D
                 buildsCompleted = _state.Economy.BuildsCompleted,
                 ui = UiText(),
                 labelFit = LabelFit(),
+                controlStrips = ControlStripFit(),
                 loadedSpriteStates = _loadedSpriteStates,
                 missingSpriteStates = _missingSpriteStates,
                 fallbackSpriteDraws = _fallbackSpriteDraws,
@@ -2583,6 +2958,7 @@ public partial class Main : Node2D
             buildsCompleted = _state?.Economy.BuildsCompleted,
             ui = UiText(),
             labelFit = LabelFit(),
+            controlStrips = ControlStripFit(),
             loadedSpriteStates = _loadedSpriteStates,
             missingSpriteStates = _missingSpriteStates,
             fallbackSpriteDraws = _fallbackSpriteDraws,
@@ -2785,7 +3161,10 @@ public partial class Main : Node2D
         DrawString(ThemeDB.FallbackFont, CellTopLeft(anchor) + new Vector2(2, 10), text, HorizontalAlignment.Left, -1, 7, ZoneColor(zone));
     }
 
-    private enum EditMode { Inspect, Paint, Erase, Dig, CancelDig, Build, CancelBuild }
+    // EditMode used to be declared here. It is DungeonFortress.Presentation's
+    // BrushMode now, because everything that has to be said about a brush — its
+    // name, its tooltip, which cells a stroke over it would take — is text, and
+    // text on this side of the seam is text no test in CI can read.
 
     private sealed record RuntimeDiagnostic(string Scope, string Type, string Message);
 }
