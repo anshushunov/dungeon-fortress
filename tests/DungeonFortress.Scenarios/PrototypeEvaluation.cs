@@ -121,7 +121,7 @@ internal static class PrototypeEvaluation
         return new EvaluationReport(
             1,
             "tests/DungeonFortress.Scenarios --evaluate-prototype",
-            "fc2a9bd",
+            "f7f94e9",
             Ticks,
             Seeds,
             MatrixScenarios,
@@ -204,6 +204,9 @@ internal static class PrototypeEvaluation
                 state.Domain.Strength,
                 state.Domain.LivingCreatures,
                 state.SessionResult.WavesResolved,
+                // The number the end of a party now hinges on: waves turned
+                // back, not waves that merely finished.
+                state.SessionResult.WavesRepelled,
                 state.SessionResult.WaveCount,
                 state.Waves
                     .Select(wave => new WaveMetrics(
@@ -277,7 +280,7 @@ internal static class PrototypeEvaluation
     private sealed record EconomyMetrics(int HarvestsCompleted, int RawHaulsCompleted, int CookBatchesCompleted, int MealHaulsCompleted, int MealsProduced, int MealsEaten, int MealsCurrent);
     private sealed record LaborMetrics(int FoodWorkTicks, int RestTicks, int EatTicks, int DrillTicks, int WatchTicks, int MusterTicks, int IdleTicks, int PostOccupancyPercent);
     private sealed record CreatureMetrics(int Count, int AverageSatiety, int AverageFatigue, int AverageMartialForm, int? AverageReadinessAtRaid, IReadOnlyDictionary<string, int> Modes, int Injured, int Downed, int Fled, IReadOnlyList<string> Names);
-    private sealed record SessionMetrics(string? Outcome, int? EndTick, bool Unresolved, int DefendersDowned, int DefendersFled, int RaidersDowned, int MealsStolen, int MealsLeft, int Renown, int Strength, int LivingCreatures, int WavesResolved, int WaveCount, IReadOnlyList<WaveMetrics> Waves);
+    private sealed record SessionMetrics(string? Outcome, int? EndTick, bool Unresolved, int DefendersDowned, int DefendersFled, int RaidersDowned, int MealsStolen, int MealsLeft, int Renown, int Strength, int LivingCreatures, int WavesResolved, int WavesRepelled, int WaveCount, IReadOnlyList<WaveMetrics> Waves);
     private sealed record WaveMetrics(int Number, int ArriveTick, int RaiderCount, int RaiderMight, int RenownAtAnnounce, string? Outcome, int? EndTick, int RaidersDowned, int DefendersDowned, int DefendersFled, int MealsStolen);
     private sealed record ExplainabilityMetrics(int EventCount, int DistinctReasonCodes, IReadOnlyDictionary<string, int> ReasonCodeOccurrences);
 }
