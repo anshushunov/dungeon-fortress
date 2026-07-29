@@ -245,7 +245,7 @@ public sealed class PrototypeStoneHaulTests
             stillFrozen.Economy.StoneProduced,
             stillFrozen.Stocks.LooseStone + stillFrozen.Stocks.StoredStone);
 
-        world.RunTicks(PrototypeTuning.RaidTick - world.CurrentTick);
+        world.RunTicks(PrototypeTuning.FirstRaidTick - world.CurrentTick);
         var resumed = world.GetSnapshot();
         Assert.Equal(PrototypeTuning.DefaultHaulPriority, resumed.Priorities[JobKind.Haul]);
         Assert.True(
@@ -750,10 +750,10 @@ public sealed class PrototypeStoneHaulTests
     [Fact]
     public void Stone_and_food_share_one_haul_priority_without_starving_the_food_chain()
     {
-        var withStone = PrototypeScenario.Run(FullChain(), PrototypeTuning.RaidTick + 1).State;
+        var withStone = PrototypeScenario.Run(FullChain(), PrototypeTuning.FirstRaidTick + 1).State;
         var withoutStone = PrototypeScenario.Run(
             new PrototypeCommandLog("baseline", PrototypeTuning.DefaultSeed, []),
-            PrototypeTuning.RaidTick + 1).State;
+            PrototypeTuning.FirstRaidTick + 1).State;
 
         // Both resource kinds really did move in the same session.
         Assert.True(withStone.Economy.StoneHaulsCompleted > 0);

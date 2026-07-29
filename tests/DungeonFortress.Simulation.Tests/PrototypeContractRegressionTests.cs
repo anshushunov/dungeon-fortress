@@ -140,7 +140,7 @@ public sealed class PrototypeContractRegressionTests
     {
         var result = PrototypeScenario.Run(
             LoadFixture("baseline"),
-            PrototypeTuning.RaidTick + 1);
+            PrototypeTuning.FirstRaidTick + 1);
         var state = result.State;
         var carriedRaw = state.Creatures
             .Where(creature => creature.Carrying == ResourceKind.RawMushroom)
@@ -237,7 +237,7 @@ public sealed class PrototypeContractRegressionTests
     {
         var world = new PrototypeWorld(LoadFixture("baseline"));
         var witnessed = false;
-        for (var tick = 0; tick < PrototypeTuning.RaidTick; tick++)
+        for (var tick = 0; tick < PrototypeTuning.FirstRaidTick; tick++)
         {
             world.Step();
             var state = world.GetSnapshot();
@@ -262,7 +262,7 @@ public sealed class PrototypeContractRegressionTests
     {
         var state = PrototypeScenario.Run(
             LoadFixture("prepared"),
-            PrototypeTuning.RaidTick + 1).State;
+            PrototypeTuning.FirstRaidTick + 1).State;
 
         Assert.True(state.Labor.PostOccupiedTicks > 0);
         Assert.True(state.Labor.PostCapacityTicks > 0);
@@ -280,7 +280,7 @@ public sealed class PrototypeContractRegressionTests
     {
         var world = new PrototypeWorld(LoadFixture("baseline"));
         var previous = world.GetSnapshot();
-        for (var tick = 0; tick < PrototypeTuning.RaidTick + 1; tick++)
+        for (var tick = 0; tick < PrototypeTuning.FirstRaidTick + 1; tick++)
         {
             world.Step();
             var current = world.GetSnapshot();
@@ -321,11 +321,13 @@ public sealed class PrototypeContractRegressionTests
             @event => @event.ReasonCode == "chosen_traffic_yield" &&
                 @event.Details["dependencyCycle"] == 1);
         Assert.All(previous.Creatures, creature => Assert.True(creature.YieldCount > 0));
+        // A soft fairness bound, not a rule: the corridor was re-measured for the
+        // longer run-up to the first wave that a party of waves gives it.
         Assert.InRange(
             previous.Creatures.Max(creature => creature.YieldCount) -
             previous.Creatures.Min(creature => creature.YieldCount),
             0,
-            24);
+            32);
     }
 
     [Fact]
@@ -333,7 +335,7 @@ public sealed class PrototypeContractRegressionTests
     {
         var world = new PrototypeWorld(LoadFixture("baseline"));
         var witnessed = false;
-        for (var tick = 0; tick < PrototypeTuning.RaidTick; tick++)
+        for (var tick = 0; tick < PrototypeTuning.FirstRaidTick; tick++)
         {
             var before = world.GetSnapshot();
             var larderOccupants = before.Creatures

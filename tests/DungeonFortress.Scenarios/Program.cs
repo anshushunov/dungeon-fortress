@@ -160,6 +160,25 @@ public static class Program
                 ? (int?)creatures.Average(creature => creature.ReadinessAtRaid!.Value)
                 : null,
             creatureCount = creatures.Count,
+            // The party is a sequence now, so a headless run has to be able to
+            // read the whole sequence, the two numbers it is scored by and how
+            // it ended, without opening a snapshot file or a picture.
+            threat = result.State.Threat,
+            waves = result.State.Waves,
+            domain = result.State.Domain,
+            sessionResult = result.State.SessionResult,
+            injuries = creatures
+                .Select(creature => new
+                {
+                    creature.Id,
+                    creature.Name,
+                    creature.Hp,
+                    creature.MaxHp,
+                    injury = creature.Injury.ToString(),
+                    mode = creature.Mode.ToString(),
+                    creature.RecoveryTicks,
+                })
+                .ToArray(),
             jobCount = result.State.Jobs.Count,
             eventCount = result.State.Events.Count,
             economy = result.State.Economy,

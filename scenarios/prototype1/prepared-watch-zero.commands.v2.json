@@ -28,16 +28,16 @@
       "value": 6
     },
     {
+      "tick": 880,
+      "kind": "set_rule",
+      "ruleId": "muster_lead_ticks",
+      "value": 60
+    },
+    {
       "tick": 900,
       "kind": "set_priority",
       "jobKind": "Watch",
       "value": 0
-    },
-    {
-      "tick": 1380,
-      "kind": "set_rule",
-      "ruleId": "muster_lead_ticks",
-      "value": 120
     }
   ]
 }

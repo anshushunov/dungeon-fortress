@@ -407,7 +407,7 @@ public sealed class PrototypeDigTests
     {
         var state = PrototypeScenario.Run(
             LoadFixture(fixtureName),
-            PrototypeTuning.RaidTick + 1).State;
+            PrototypeTuning.FirstRaidTick + 1).State;
 
         Assert.Empty(state.Map.ExcavatedTiles);
         Assert.Empty(state.DigDesignations);

@@ -217,12 +217,15 @@ public sealed class ProtocolIntegrationTests
                 .GetProperty("economy")
                 .GetProperty("cookBatchesCompleted")
                 .GetInt32() > 0);
+        // Re-measured for a party of waves: the prepared domain now musters
+        // ahead of every wave and stands watch for far longer than it did in a
+        // single-raid session, so a smaller share of its labour is food work.
         Assert.InRange(
             prototypeResult
                 .GetProperty("labor")
                 .GetProperty("foodWorkPercent")
                 .GetInt32(),
-            30,
+            18,
             70);
         Assert.Equal(
             6,

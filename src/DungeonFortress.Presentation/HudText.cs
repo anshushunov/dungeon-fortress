@@ -37,10 +37,19 @@ public static class HudText
     /// <summary>
     /// Two lines and no more: the summary label ends where the time toolbar
     /// begins, so a third wrapped line would be drawn over the buttons.
-    /// Session identity and bookkeeping go on the first line; the second line
-    /// is the resource line. Stone is reported as three separate facts on
-    /// purpose — loose on the floor, on someone's back, put away — because one
-    /// combined number would hide exactly the part of the chain this step adds.
+    /// Session identity, the two numbers the party is read by and the head count
+    /// go on the first line; the second line is the wave and the resources.
+    ///
+    /// Renown and domain strength are printed as numbers with a trend arrow and
+    /// never as bars. A bar states a share of a maximum, and neither the head
+    /// count nor the strength of a domain has one, so a bar would be a lie. The
+    /// arrow answers the only question that has an answer — better or worse than
+    /// at the previous wave — and the gap between the two numbers is left for
+    /// the player to read. Nothing here says "you are doing badly".
+    ///
+    /// Stone is reported as three separate facts on purpose — loose on the
+    /// floor, on someone's back, put away — because one combined number would
+    /// hide exactly the part of the chain that is moving.
     /// </summary>
     public static string Summary(HudViewState view) => Summary(view, view.Projection);
 
@@ -48,10 +57,14 @@ public static class HudText
     {
         var state = view.Snapshot;
         var stock = state.Stocks;
+        var domain = state.Domain;
         return
             $"{view.Fixture.ToUpperInvariant()}  •  t{state.Tick}  •  {(view.Paused ? "PAUSED" : $"{view.Speed:0.#}x")}" +
             $"  •  jobs {state.Jobs.Count}  •  {view.Checksum[..8]}" +
-            $"\n{RaidPhase(state)}  •  food {stock.Meals}+{stock.LooseMeals}" +
+            $"  •  renown {domain.Renown}{Trend(domain.Renown, domain.RenownAtPreviousWave)}" +
+            $"  •  strength {domain.Strength}{Trend(domain.Strength, domain.StrengthAtPreviousWave)}" +
+            $"  •  crew {domain.LivingCreatures}" +
+            $"\n{WavePhase(state)}  •  food {stock.Meals}+{stock.LooseMeals}" +
             $"  •  raw {stock.RawMushroom}+{stock.LooseRawMushroom}" +
             $"  •  stone {stock.LooseStone}L {stock.CarriedStone}C " +
             $"{stock.StoredStone}/{stock.StockpileCapacity}S" +
@@ -60,6 +73,19 @@ public static class HudText
             // as absent is the same defect as not drawing it (Issue #58).
             $"  •  dug {state.Economy.DigsCompleted}  •  marks {projection.DigDesignationCount}";
     }
+
+    /// <summary>
+    /// Better, worse or unchanged since the previous wave landed. Empty before
+    /// the first wave, because "compared to what?" has no answer yet and an
+    /// arrow that always points somewhere would be decoration.
+    /// </summary>
+    public static string Trend(int current, int? atPreviousWave) => atPreviousWave switch
+    {
+        null => string.Empty,
+        { } previous when current > previous => "↑",
+        { } previous when current < previous => "↓",
+        _ => "→",
+    };
 
     /// <summary>
     /// The whole side-panel explanation for the current selection.
@@ -101,23 +127,34 @@ public static class HudText
                 : string.Join(" | ", view.PlayerCommands.TakeLast(2).Select(DescribeCommand)));
     }
 
-    // Kept short on purpose: the excavation counters share this line, and the
-    // battle wording lives in the side-panel legend.
-    public static string RaidPhase(PrototypeSnapshot state)
+    /// <summary>
+    /// Which wave the domain is dealing with and when it lands, or how the party
+    /// ended. Kept short on purpose: the excavation counters share this line, and
+    /// the battle wording lives in the side-panel legend.
+    ///
+    /// The end of the party outranks the wave in hand, and an arriving wave
+    /// outranks its own countdown.
+    /// </summary>
+    public static string WavePhase(PrototypeSnapshot state)
     {
+        ArgumentNullException.ThrowIfNull(state);
+        var threat = state.Threat;
+        var waves = $"{threat.WaveNumber}/{threat.WaveCount}";
         if (state.SessionResult.Outcome is { } outcome)
         {
-            return $"RAID {outcome}";
+            return outcome == "held"
+                ? $"DOMAIN HELD {threat.WaveCount}/{threat.WaveCount}"
+                : $"DOMAIN FELL · wave {waves}";
         }
 
-        if (state.Raiders.Count > 0)
+        if (threat.Active)
         {
-            return "RAID ACTIVE";
+            return $"WAVE {waves} ACTIVE ×{threat.RaiderCount}";
         }
 
-        return state.Threat.Announced
-            ? $"RAID IN {state.Threat.TicksRemaining}t"
-            : "RAID QUIET · warn t300";
+        return threat.Announced
+            ? $"WAVE {waves} IN {threat.TicksRemaining}t ×{threat.RaiderCount}"
+            : $"WAVE {waves} · warn t{threat.AnnounceTick}";
     }
 
     public static string CreatureStateShort(PrototypeCreatureSnapshot creature) => creature.Mode switch

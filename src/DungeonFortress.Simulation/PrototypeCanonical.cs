@@ -6,7 +6,11 @@ namespace DungeonFortress.Simulation;
 
 public static class PrototypeCanonical
 {
-    public const int SchemaVersion = 2;
+    // 3: the session became a sequence of waves. `threat` names the wave in
+    // hand, `waves` carries the whole sequence, `domain` carries renown and
+    // domain strength, and `sessionResult` describes the end of the party rather
+    // than the end of the single raid.
+    public const int SchemaVersion = 3;
 
     public static byte[] Serialize(PrototypeSnapshot state)
     {
@@ -183,6 +187,7 @@ public static class PrototypeCanonical
                 writer.WriteNull("readinessAtRaid");
             }
 
+            writer.WriteNumber("recoveryTicks", creature.RecoveryTicks);
             writer.WriteEndObject();
         }
 
@@ -493,16 +498,92 @@ public static class PrototypeCanonical
 
         writer.WriteStartObject("threat");
         writer.WriteBoolean("announced", state.Threat.Announced);
+        writer.WriteNumber("waveNumber", state.Threat.WaveNumber);
+        writer.WriteNumber("waveCount", state.Threat.WaveCount);
         writer.WriteNumber("announceTick", state.Threat.AnnounceTick);
-        writer.WriteNumber("raidTick", state.Threat.RaidTick);
+        writer.WriteNumber("arriveTick", state.Threat.ArriveTick);
         writer.WriteNumber("raiderCount", state.Threat.RaiderCount);
+        writer.WriteNumber("raiderMight", state.Threat.RaiderMight);
         writer.WriteNumber("ticksRemaining", state.Threat.TicksRemaining);
+        writer.WriteBoolean("active", state.Threat.Active);
         writer.WriteEndObject();
+
+        // The whole sequence, not only the wave in hand: a replay has to be able
+        // to say what the third wave was made of after the fourth has landed.
+        writer.WriteStartArray("waves");
+        foreach (var wave in state.Waves.OrderBy(wave => wave.Number))
+        {
+            writer.WriteStartObject();
+            writer.WriteNumber("number", wave.Number);
+            writer.WriteNumber("announceTick", wave.AnnounceTick);
+            writer.WriteNumber("arriveTick", wave.ArriveTick);
+            writer.WriteBoolean("announced", wave.Announced);
+            writer.WriteBoolean("arrived", wave.Arrived);
+            writer.WriteNumber("raiderCount", wave.RaiderCount);
+            writer.WriteNumber("raiderMight", wave.RaiderMight);
+            if (wave.Outcome is { } waveOutcome)
+            {
+                writer.WriteString("outcome", waveOutcome);
+            }
+            else
+            {
+                writer.WriteNull("outcome");
+            }
+
+            if (wave.EndTick is { } waveEndTick)
+            {
+                writer.WriteNumber("endTick", waveEndTick);
+            }
+            else
+            {
+                writer.WriteNull("endTick");
+            }
+
+            writer.WriteNumber("raidersDowned", wave.RaidersDowned);
+            writer.WriteNumber("defendersDowned", wave.DefendersDowned);
+            writer.WriteNumber("defendersFled", wave.DefendersFled);
+            writer.WriteNumber("mealsStolen", wave.MealsStolen);
+            writer.WriteNumber("renownAtAnnounce", wave.RenownAtAnnounce);
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
+        writer.WriteStartObject("domain");
+        writer.WriteNumber("renown", state.Domain.Renown);
+        writer.WriteNumber("strength", state.Domain.Strength);
+        if (state.Domain.RenownAtPreviousWave is { } previousRenown)
+        {
+            writer.WriteNumber("renownAtPreviousWave", previousRenown);
+        }
+        else
+        {
+            writer.WriteNull("renownAtPreviousWave");
+        }
+
+        if (state.Domain.StrengthAtPreviousWave is { } previousStrength)
+        {
+            writer.WriteNumber("strengthAtPreviousWave", previousStrength);
+        }
+        else
+        {
+            writer.WriteNull("strengthAtPreviousWave");
+        }
+
+        writer.WriteNumber("livingCreatures", state.Domain.LivingCreatures);
+        writer.WriteNumber("downedCreatures", state.Domain.DownedCreatures);
+        writer.WriteNumber("injuredCreatures", state.Domain.InjuredCreatures);
+        writer.WriteNumber("peakMeals", state.Domain.PeakMeals);
+        writer.WriteNumber("wavesArrived", state.Domain.WavesArrived);
+        writer.WriteNumber("wavesResolved", state.Domain.WavesResolved);
+        writer.WriteNumber("waveCount", state.Domain.WaveCount);
+        writer.WriteEndObject();
+
         writer.WriteStartArray("raiders");
         foreach (var raider in state.Raiders.OrderBy(raider => raider.Id))
         {
             writer.WriteStartObject();
             writer.WriteNumber("id", raider.Id);
+            writer.WriteNumber("wave", raider.Wave);
             writer.WriteNumber("hp", raider.Hp);
             writer.WriteNumber("might", raider.Might);
             WritePoint(writer, "position", raider.Position);
@@ -517,6 +598,19 @@ public static class PrototypeCanonical
         if (state.SessionResult.Outcome is { } outcome) writer.WriteString("outcome", outcome); else writer.WriteNull("outcome");
         if (state.SessionResult.EndTick is { } endTick) writer.WriteNumber("endTick", endTick); else writer.WriteNull("endTick");
         writer.WriteBoolean("unresolved", state.SessionResult.Unresolved);
+        if (state.SessionResult.LastWaveOutcome is { } lastWaveOutcome)
+        {
+            writer.WriteString("lastWaveOutcome", lastWaveOutcome);
+        }
+        else
+        {
+            writer.WriteNull("lastWaveOutcome");
+        }
+
+        writer.WriteNumber("wavesResolved", state.SessionResult.WavesResolved);
+        writer.WriteNumber("waveCount", state.SessionResult.WaveCount);
+        writer.WriteNumber("renown", state.SessionResult.Renown);
+        writer.WriteNumber("strength", state.SessionResult.Strength);
         writer.WriteNumber("defendersDowned", state.SessionResult.DefendersDowned);
         writer.WriteNumber("defendersFled", state.SessionResult.DefendersFled);
         writer.WriteNumber("raidersDowned", state.SessionResult.RaidersDowned);

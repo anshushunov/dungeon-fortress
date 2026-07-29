@@ -41,23 +41,26 @@ CLI и `prototype_run`.
 
 ## CLI
 
-Прогоны fixtures до тика набега:
+Прогоны fixtures до прибытия первой волны (`T.first_raid_tick` = 1300). Полная
+партия прогоняется `--ticks 2700`: она заканчивается сама, когда последняя волна
+получила исход или владение пало, и `prototype_result` печатает `waves`,
+`domain` и `sessionResult` рядом с экономикой.
 
 ```powershell
 dotnet run --project .\tests\DungeonFortress.Scenarios -- `
   --prototype `
   --commands .\scenarios\prototype1\baseline.commands.v2.json `
-  --ticks 1501
+  --ticks 1301
 
 dotnet run --project .\tests\DungeonFortress.Scenarios -- `
   --prototype `
   --commands .\scenarios\prototype1\prepared.commands.v2.json `
-  --ticks 1501
+  --ticks 1301
 
 dotnet run --project .\tests\DungeonFortress.Scenarios -- `
   --prototype `
   --commands .\scenarios\prototype1\neglected.commands.v2.json `
-  --ticks 1501
+  --ticks 1301
 ```
 
 Добавьте `--print-snapshot`, чтобы вывести канонический JSON, или

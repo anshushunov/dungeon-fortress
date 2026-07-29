@@ -728,7 +728,7 @@ public sealed class PrototypeBuildTests
     {
         var state = PrototypeScenario.Run(
             LoadFixture("prepared"),
-            PrototypeTuning.RaidTick + 1).State;
+            PrototypeTuning.FirstRaidTick + 1).State;
 
         Assert.Equal(
             4,
