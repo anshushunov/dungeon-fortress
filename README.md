@@ -21,6 +21,12 @@ Dungeon Fortress — игра с непрямым управлением, стр
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
 ```
 
+Проверка разделена на стадии: во время итерации можно проверить только
+затронутое (`-Stage ui`, `-Stage tests,sim`, `-Skip load,screenshots`), а перед
+handoff и merge выполняется полный прогон. Список стадий печатает
+`-ListStages`, а `scope` в итоговой строке `verification_result` отличает
+частичный прогон от полного.
+
 Видимый thin host запускается отдельно:
 
 ```powershell
