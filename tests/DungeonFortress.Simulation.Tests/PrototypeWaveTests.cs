@@ -342,38 +342,52 @@ public sealed class PrototypeWaveTests
     }
 
     /// <summary>
-    /// Strength counts creatures who could actually take the field, by combat's
-    /// own admission rule, and scales what they bring by their readiness. Both
-    /// halves are asserted against the snapshot rather than restated as a second
-    /// copy of the formula.
+    /// Strength leaves out creatures the fight itself would turn away. The tick
+    /// is chosen so the rule actually discriminates: `neglected` at 450 is still
+    /// a living domain, but part of it is already too hungry to be let into a
+    /// fight and the rest is not.
+    ///
+    /// What is asserted is the consequence of the filter, not the filter: that
+    /// the published strength is strictly below what the same creatures would
+    /// add up to if everyone still standing were counted, and that each excluded
+    /// creature would have added something. Remove the filter from the
+    /// simulation and both fail; restate the formula here and neither would.
     /// </summary>
     [Fact]
-    public void Strength_counts_only_those_who_could_answer_the_call()
+    public void Strength_leaves_out_those_the_fight_would_turn_away()
     {
-        var state = PrototypeScenario.Run(
-            LoadFixture("prepared"),
-            PrototypeTuning.FirstRaidTick + 1).State;
+        const int discriminatingTick = 450;
+        var state = PrototypeScenario.Run(LoadFixture("neglected"), discriminatingTick).State;
+        Assert.Null(state.SessionResult.Outcome);
 
-        var eligible = state.Creatures
-            .Where(creature =>
-                creature.Mode != CreatureMode.Downed &&
-                creature.Injury != InjuryKind.Heavy &&
-                creature.Satiety >= PrototypeTuning.CombatMinSatiety)
+        int Potential(PrototypeCreatureSnapshot creature) =>
+            (creature.Might * PrototypeTuning.StrengthPerMight +
+             creature.MartialForm / PrototypeTuning.StrengthMartialDivisor) *
+            creature.Readiness / PrototypeTuning.StrengthReadinessScale;
+
+        var standing = state.Creatures
+            .Where(creature => creature.Mode != CreatureMode.Downed)
             .ToArray();
-        Assert.NotEmpty(eligible);
-        Assert.Equal(
-            eligible.Sum(creature =>
-                (creature.Might * PrototypeTuning.StrengthPerMight +
-                 creature.MartialForm / PrototypeTuning.StrengthMartialDivisor) *
-                creature.Readiness / PrototypeTuning.StrengthReadinessScale),
-            state.Domain.Strength);
-
-        // A creature too hungry to be let into a fight contributes nothing, so
-        // the mirror can never show strength the fight would refuse to use.
-        var starving = state.Creatures
+        var turnedAway = standing
             .Where(creature => creature.Satiety < PrototypeTuning.CombatMinSatiety)
             .ToArray();
-        Assert.DoesNotContain(starving, creature => eligible.Contains(creature));
+
+        // The tick has to contain both kinds and the excluded ones have to be
+        // worth something, otherwise the assertion below would pass on a domain
+        // the rule never touched. Individually some of them round to nothing —
+        // a creature of might 2 with no training and readiness 19 contributes
+        // zero either way — so what has to be non-zero is their total.
+        Assert.NotEmpty(turnedAway);
+        Assert.NotEmpty(standing.Except(turnedAway));
+        Assert.True(
+            turnedAway.Sum(Potential) > 0,
+            "at this tick everyone the fight would turn away would have added " +
+            "nothing anyway, so the tick cannot witness the exclusion");
+
+        Assert.True(
+            state.Domain.Strength < standing.Sum(Potential),
+            $"strength {state.Domain.Strength} is not below the {standing.Sum(Potential)} " +
+            "that counting everyone still standing would give");
     }
 
     [Fact]

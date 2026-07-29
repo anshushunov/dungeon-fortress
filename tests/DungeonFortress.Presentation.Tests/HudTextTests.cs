@@ -173,6 +173,16 @@ public sealed class HudTextTests
         };
 
         Assert.Equal("DOMAIN RAIDED · 2/4 repelled", HudText.WavePhase(raided));
+
+        // An end of a party the HUD has not been taught is refused, not drawn.
+        // The catch-all this replaced rendered anything unknown as "the domain
+        // fell", which is the worst wording to arrive at by accident.
+        var unknown = raided with
+        {
+            SessionResult = raided.SessionResult with { Outcome = "besieged" },
+        };
+        var refused = Assert.Throws<ArgumentOutOfRangeException>(() => HudText.WavePhase(unknown));
+        Assert.Contains("besieged", refused.Message, StringComparison.Ordinal);
         Assert.NotEqual(HudText.WavePhase(raided), HudText.WavePhase(raided with
         {
             SessionResult = raided.SessionResult with { Outcome = "held" },

@@ -146,12 +146,22 @@ public static class HudText
             // one happened is read at a glance and never needs the inspector.
             // "Raided" carries how many waves were actually turned back, because
             // that is the number the player will want next.
+            //
+            // A fourth outcome is a defect and is refused rather than drawn. A
+            // catch-all arm would render an end nobody taught the HUD about as
+            // one of the ends it knows — and the one it used to pick was "the
+            // domain fell", which is the worst thing to say by accident.
             return outcome switch
             {
                 "held" => $"DOMAIN HELD {threat.WaveCount}/{threat.WaveCount}",
                 "raided" =>
                     $"DOMAIN RAIDED · {state.SessionResult.WavesRepelled}/{threat.WaveCount} repelled",
-                _ => $"DOMAIN FELL · wave {waves}",
+                "fallen" => $"DOMAIN FELL · wave {waves}",
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(state),
+                    outcome,
+                    "The HUD has no wording for this end of a party and will not " +
+                    "guess one. Teach it the new outcome instead."),
             };
         }
 
