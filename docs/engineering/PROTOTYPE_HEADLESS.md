@@ -280,6 +280,14 @@ dotnet test .\tests\DungeonFortress.DomainMcp.Tests
 .\scripts\verify.ps1
 ```
 
+`verify.ps1` без параметров — полный прогон. Во время итерации его можно
+ограничить стадиями: `-Stage tests,sim` для правок ядра, `-Stage ui` для текста
+HUD и инспектора, `-Stage godot,ui` для Godot-адаптера, `-Skip load,screenshots`
+для всего остального. Полный прогон остаётся обязательным перед handoff и merge,
+а поле `scope` в `verification_result` показывает, каким был последний прогон.
+Таблица стадий и правило выбора — в
+[`ENVIRONMENT_SETUP.md`](ENVIRONMENT_SETUP.md#стадии).
+
 `verify.ps1` запускается при подключённом domain MCP и не требует остановки
 клиентской сессии: сессия исполняет собственную копию сервера из
 `.artifacts\domain-mcp-sessions\<id>`, а не build output, который перезаписывает
