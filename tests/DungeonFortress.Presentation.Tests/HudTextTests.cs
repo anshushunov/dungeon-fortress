@@ -11,7 +11,7 @@ namespace DungeonFortress.Presentation.Tests;
 public sealed class HudTextTests
 {
     [Fact]
-    public void The_summary_puts_identity_and_bookkeeping_on_the_first_line()
+    public void The_summary_puts_identity_bookkeeping_and_the_two_domain_numbers_on_the_first_line()
     {
         var state = PresentationFixtures.Baseline(190);
 
@@ -20,8 +20,45 @@ public sealed class HudTextTests
         var lines = summary.Split('\n');
         Assert.Equal(2, lines.Length);
         Assert.Equal(
-            $"BASELINE  •  t190  •  PAUSED  •  jobs {state.Jobs.Count}  •  0123abcd",
+            $"BASELINE  •  t190  •  PAUSED  •  jobs {state.Jobs.Count}  •  0123abcd" +
+            $"  •  renown {state.Domain.Renown}" +
+            $"  •  strength {state.Domain.Strength}" +
+            $"  •  crew {state.Domain.LivingCreatures}",
             lines[0]);
+    }
+
+    /// <summary>
+    /// Numbers and a trend arrow, never a bar. Neither the head count nor the
+    /// strength of a domain has a maximum, so a bar would state a share of
+    /// something that does not exist.
+    /// </summary>
+    [Fact]
+    public void The_domain_numbers_carry_a_trend_arrow_only_once_a_wave_has_landed()
+    {
+        var state = PresentationFixtures.Baseline(190);
+        Assert.Null(state.Domain.RenownAtPreviousWave);
+        Assert.DoesNotContain('↑', HudText.Summary(View(state)));
+        Assert.DoesNotContain('↓', HudText.Summary(View(state)));
+        Assert.DoesNotContain('→', HudText.Summary(View(state)));
+
+        Assert.Equal(string.Empty, HudText.Trend(10, null));
+        Assert.Equal("↑", HudText.Trend(11, 10));
+        Assert.Equal("↓", HudText.Trend(9, 10));
+        Assert.Equal("→", HudText.Trend(10, 10));
+
+        var afterWave = state with
+        {
+            Domain = state.Domain with
+            {
+                Renown = 40,
+                RenownAtPreviousWave = 20,
+                Strength = 50,
+                StrengthAtPreviousWave = 58,
+            },
+        };
+        var first = HudText.Summary(View(afterWave)).Split('\n')[0];
+        Assert.Contains("renown 40↑", first, StringComparison.Ordinal);
+        Assert.Contains("strength 50↓", first, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -80,34 +117,80 @@ public sealed class HudTextTests
             checksum: "abcdef0123456789"));
 
         Assert.StartsWith("NEGLECTED  •", summary, StringComparison.Ordinal);
-        Assert.Contains("  •  abcdef01\n", summary, StringComparison.Ordinal);
+        Assert.Contains("  •  abcdef01  •  renown", summary, StringComparison.Ordinal);
         Assert.DoesNotContain("abcdef012", summary, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData(1, "RAID QUIET · warn t300")]
-    [InlineData(400, "RAID IN 1100t")]
-    public void The_raid_phase_is_quiet_then_counts_down(int tick, string expected)
+    [InlineData(1, "WAVE 1/4 · warn t300")]
+    [InlineData(400, "WAVE 1/4 IN 900t ×4")]
+    public void The_wave_phase_is_quiet_then_counts_the_named_wave_down(int tick, string expected)
     {
-        Assert.Equal(expected, HudText.RaidPhase(PresentationFixtures.Baseline(tick)));
+        Assert.Equal(expected, HudText.WavePhase(PresentationFixtures.Baseline(tick)));
     }
 
     [Fact]
-    public void An_active_raid_outranks_the_countdown_and_an_outcome_outranks_the_raid()
+    public void An_arriving_wave_outranks_its_countdown_and_the_end_of_the_party_outranks_both()
     {
         var state = PresentationFixtures.Baseline(1);
-        var raiding = state with
+        var arriving = state with
         {
-            Raiders = [new PrototypeRaiderSnapshot(0, 10, 3, new GridPoint(27, 13), 0, 0, false, RaiderMode.Raiding)],
+            Threat = state.Threat with { Announced = true, Active = true, RaiderCount = 6 },
         };
 
-        Assert.Equal("RAID ACTIVE", HudText.RaidPhase(raiding));
+        Assert.Equal("WAVE 1/4 ACTIVE ×6", HudText.WavePhase(arriving));
         Assert.Equal(
-            "RAID HELD",
-            HudText.RaidPhase(raiding with
+            "DOMAIN HELD 4/4",
+            HudText.WavePhase(arriving with
             {
-                SessionResult = state.SessionResult with { Outcome = "HELD" },
+                SessionResult = state.SessionResult with { Outcome = "held" },
             }));
+        Assert.Equal(
+            "DOMAIN FELL · wave 1/4",
+            HudText.WavePhase(arriving with
+            {
+                SessionResult = state.SessionResult with { Outcome = "fallen" },
+            }));
+    }
+
+    /// <summary>
+    /// Three ends, three different words in the same place, so which one
+    /// happened is read at a glance. "Raided" also carries how many waves were
+    /// actually turned back, which is the number a player asks for next — and it
+    /// comes from canonical state rather than being counted again here.
+    /// </summary>
+    [Fact]
+    public void A_domain_that_survived_a_wave_getting_through_reads_as_raided()
+    {
+        var state = PresentationFixtures.Baseline(1);
+        var raided = state with
+        {
+            SessionResult = state.SessionResult with
+            {
+                Outcome = "raided",
+                WavesRepelled = 2,
+            },
+        };
+
+        Assert.Equal("DOMAIN RAIDED · 2/4 repelled", HudText.WavePhase(raided));
+
+        // An end of a party the HUD has not been taught is refused, not drawn.
+        // The catch-all this replaced rendered anything unknown as "the domain
+        // fell", which is the worst wording to arrive at by accident.
+        var unknown = raided with
+        {
+            SessionResult = raided.SessionResult with { Outcome = "besieged" },
+        };
+        var refused = Assert.Throws<ArgumentOutOfRangeException>(() => HudText.WavePhase(unknown));
+        Assert.Contains("besieged", refused.Message, StringComparison.Ordinal);
+        Assert.NotEqual(HudText.WavePhase(raided), HudText.WavePhase(raided with
+        {
+            SessionResult = raided.SessionResult with { Outcome = "held" },
+        }));
+        Assert.NotEqual(HudText.WavePhase(raided), HudText.WavePhase(raided with
+        {
+            SessionResult = raided.SessionResult with { Outcome = "fallen" },
+        }));
     }
 
     /// <summary>

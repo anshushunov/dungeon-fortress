@@ -4,7 +4,14 @@ param(
     [ValidateSet("baseline", "prepared", "neglected")]
     [string]$Fixture = "baseline",
     [string]$ScreenshotPath,
-    [ValidateRange(0, 1800)]
+    # Upper bound = T.session_ticks, the fuse a party can never run past. A
+    # PowerShell attribute argument has to be a literal, so this number is a copy
+    # and not a reference: the source of truth is PrototypeTuning.SessionTicks in
+    # src\DungeonFortress.Simulation\PrototypeTuning.cs, and the two must be
+    # changed together. A party normally ends by itself well before the fuse —
+    # around tick 2400 with today's four waves — so this bound exists to catch a
+    # typo, not to describe the length of a session.
+    [ValidateRange(0, 2700)]
     [int]$ScreenshotTicks = 180,
     [int]$SelectCreature = -1,
     [ValidatePattern("^\d{1,2},\d{1,2}$")]
