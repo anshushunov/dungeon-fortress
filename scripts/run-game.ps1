@@ -21,8 +21,17 @@ param(
     [switch]$DemoStone,
     [switch]$DemoBuild,
     [switch]$VisibleSmoke,
+    [ValidateRange(32, 48)]
+    [int]$TileSize = 40,
+    [ValidateScript({ $_ -in @(0.5, 0.75, 1.0, 1.5, 2.0) })]
+    [double]$CameraZoom = 0.75,
+    [ValidatePattern("^-?\d+(\.\d+)?,-?\d+(\.\d+)?$")]
+    [string]$CameraPosition = "560,320",
+    [ValidateRange(0.75, 2.0)]
+    [double]$UiScale = 1.0,
+    [Alias("WindowSize")]
     [ValidatePattern("^\d{3,5}x\d{3,5}$")]
-    [string]$WindowSize
+    [string]$FrameSize = "1280x720"
 )
 
 Set-StrictMode -Version Latest
@@ -34,6 +43,21 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $artifactsRoot = Join-Path $repoRoot ".artifacts"
 $projectPath = Join-Path $repoRoot "src\DungeonFortress.Game"
 $projectFile = Join-Path $projectPath "DungeonFortress.Game.csproj"
+$frameParts = $FrameSize -split "x", 2
+$frameWidth = [int]::Parse($frameParts[0], [Globalization.CultureInfo]::InvariantCulture)
+$frameHeight = [int]::Parse($frameParts[1], [Globalization.CultureInfo]::InvariantCulture)
+$minimumLogicalWidth = 1024
+$minimumLogicalHeight = 720
+if (($frameWidth / $UiScale) -lt $minimumLogicalWidth -or
+    ($frameHeight / $UiScale) -lt $minimumLogicalHeight) {
+    throw (
+        "FrameSize $FrameSize at UiScale " +
+        $UiScale.ToString([Globalization.CultureInfo]::InvariantCulture) +
+        " is too small: the HUD requires at least ${minimumLogicalWidth}x" +
+        "${minimumLogicalHeight} logical pixels. Increase FrameSize or reduce UiScale."
+    )
+}
+
 $resolvedScreenshotPath = if ([string]::IsNullOrWhiteSpace($ScreenshotPath)) {
     $null
 } else {
@@ -68,10 +92,17 @@ Initialize-GodotRuntimeEnvironment -RepositoryRoot $repoRoot
 Import-GodotProjectAssets -GodotPath $godot -ProjectPath $projectPath
 
 $arguments = @("--path", $projectPath)
-if (-not [string]::IsNullOrWhiteSpace($WindowSize)) {
-    $arguments += "--resolution", $WindowSize
+if (-not [string]::IsNullOrWhiteSpace($FrameSize)) {
+    $arguments += "--resolution", $FrameSize
 }
-$arguments += "--", "--fixture", $Fixture
+$arguments += @(
+    "--", "--fixture", $Fixture,
+    "--tile-size", $TileSize.ToString([Globalization.CultureInfo]::InvariantCulture),
+    "--camera-zoom", $CameraZoom.ToString([Globalization.CultureInfo]::InvariantCulture),
+    "--camera-position", $CameraPosition,
+    "--ui-scale", $UiScale.ToString([Globalization.CultureInfo]::InvariantCulture),
+    "--frame-size", $FrameSize
+)
 if ($VisibleSmoke) {
     $arguments += "--visible-smoke"
 }

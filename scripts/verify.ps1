@@ -120,6 +120,26 @@ function Assert-FilesEqual {
     }
 }
 
+function Get-GodotEvent {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$OutputLines,
+
+        [Parameter(Mandatory = $true)]
+        [string]$EventName
+    )
+
+    $line = $OutputLines | Where-Object {
+        $_ -match ('"event":"' + [regex]::Escape($EventName) + '"') -and
+        $_ -match '"status":"ok"'
+    } | Select-Object -Last 1
+    if ($null -eq $line) {
+        throw "Godot output did not contain successful event '$EventName'."
+    }
+
+    return [string]$line | ConvertFrom-Json
+}
+
 # Prerequisites are the shared work that several stages need: a restore, a build
 # or an imported Godot project. They are not stages, because running one proves
 # nothing on its own, and they are memoised, so a full run pays for each exactly
@@ -351,7 +371,7 @@ $stageCatalog = [ordered]@{
     }
 
     godot = [pscustomobject]@{
-        Summary = "Godot host Debug build, isolated sprite import, headless smoke, controls smoke and frame pacing independence."
+        Summary = "Godot host, sprite import, smoke, camera input, view-state checksum and frame pacing independence."
         Body = {
             Initialize-GameHostBuild
 
@@ -378,6 +398,173 @@ $stageCatalog = [ordered]@{
                 ) `
                 -ExpectedSuccessEvent "godot_controls_smoke"
 
+            Write-Host "Proving invalid startup parameters report JSON and exit instead of hanging..."
+            $invalidViewCases = @(
+                [pscustomobject]@{
+                    Name = "zoom"
+                    Arguments = @("--smoke", "--camera-zoom", "1.1")
+                    Message = "Zoom must be one of"
+                },
+                [pscustomobject]@{
+                    Name = "tile-size"
+                    Arguments = @("--smoke", "--tile-size", "50")
+                    Message = "Tile size must be between"
+                },
+                [pscustomobject]@{
+                    Name = "ui-scale"
+                    Arguments = @("--smoke", "--ui-scale", "3")
+                    Message = "UI scale must be between"
+                },
+                [pscustomobject]@{
+                    Name = "camera-position"
+                    Arguments = @("--smoke", "--camera-position", "invalid")
+                    Message = "camera-position"
+                },
+                [pscustomobject]@{
+                    Name = "fixture"
+                    Arguments = @("--smoke", "--fixture")
+                    Message = "Missing value after --fixture"
+                }
+            )
+            foreach ($invalidViewCase in $invalidViewCases) {
+                $invalidArguments = @(
+                    "--headless", "--path", $gameProjectPath, "--"
+                ) + @($invalidViewCase.Arguments)
+                Invoke-GodotExpectedFailure `
+                    -GodotPath $godot `
+                    -Arguments $invalidArguments `
+                    -ExpectedErrorEvent "godot_headless_smoke" `
+                    -MessagePattern $invalidViewCase.Message | Out-Null
+            }
+
+            Write-Host "Proving the HUD guard rejects overflow at logical width 1024..."
+            $hudGuardFailure = Invoke-GodotExpectedFailure `
+                -GodotPath $godot `
+                -Arguments @(
+                    "--headless", "--resolution", "1024x768", "--path", $gameProjectPath,
+                    "--", "--smoke", "--smoke-hud-guard-regression",
+                    "--tile-size", "40",
+                    "--camera-zoom", "1",
+                    "--camera-position", "560,320",
+                    "--ui-scale", "1",
+                    "--frame-size", "1024x768"
+                ) `
+                -ExpectedErrorEvent "godot_headless_smoke" `
+                -MessagePattern "HUD loses text.*1024"
+
+            Write-Host "Proving a misplaced Camera2D fails the independent transform check..."
+            $cameraTransformFailure = Invoke-GodotExpectedFailure `
+                -GodotPath $godot `
+                -Arguments @(
+                    "--headless", "--resolution", "1280x720", "--path", $gameProjectPath,
+                    "--", "--smoke-camera-transform-regression",
+                    "--tile-size", "40",
+                    "--camera-zoom", "1",
+                    "--camera-position", "560,320",
+                    "--ui-scale", "1",
+                    "--frame-size", "1280x720"
+                ) `
+                -ExpectedErrorEvent "godot_camera_smoke" `
+                -MessagePattern "Camera2D transform disagrees with CameraFrame"
+
+            Write-Host "Checking Camera2D input at every discrete zoom against the pure frame..."
+            $cameraResult = Invoke-GodotChecked `
+                -GodotPath $godot `
+                -Arguments @(
+                    "--headless", "--resolution", "1280x720", "--path", $gameProjectPath,
+                    "--", "--smoke-camera",
+                    "--tile-size", "40",
+                    "--camera-zoom", "1",
+                    "--camera-position", "560,320",
+                    "--ui-scale", "1",
+                    "--frame-size", "1280x720"
+                ) `
+                -ExpectedSuccessEvent "godot_camera_smoke"
+            $cameraEvent = Get-GodotEvent `
+                -OutputLines $cameraResult.Output `
+                -EventName "godot_camera_smoke"
+            if ([string]$cameraEvent.view.displayServer -ne "headless" -or
+                [int]$cameraEvent.view.cameraInputChecks -ne 15 -or
+                [int]$cameraEvent.view.cameraTransformChecks -ne 15 -or
+                [int]$cameraEvent.view.cameraBoundsChecks -ne 10 -or
+                [int]$cameraEvent.view.cameraPanChecks -ne 5 -or
+                -not [bool]$cameraEvent.view.hudInputRejected) {
+                throw "Camera smoke did not prove live transform agreement, input mapping, map bounds, panning and HUD rejection."
+            }
+
+            Write-Host "Comparing canonical checksum across camera, frame and UI parameters..."
+            $viewCases = @(
+                [pscustomobject]@{
+                    Name = "base"
+                    Frame = "1280x720"
+                    Zoom = "1"
+                    Position = "560,320"
+                    UiScale = "1"
+                },
+                [pscustomobject]@{
+                    Name = "overview-shifted"
+                    Frame = "1024x768"
+                    Zoom = "0.5"
+                    Position = "420,280"
+                    UiScale = "0.8"
+                },
+                [pscustomobject]@{
+                    Name = "detail-scaled-ui"
+                    Frame = "1920x1080"
+                    Zoom = "1.5"
+                    Position = "720,400"
+                    UiScale = "1.25"
+                },
+                [pscustomobject]@{
+                    Name = "large-same-zoom"
+                    Frame = "1600x900"
+                    Zoom = "1"
+                    Position = "560,320"
+                    UiScale = "1"
+                }
+            )
+            $viewEvents = @{}
+            foreach ($viewCase in $viewCases) {
+                $result = Invoke-GodotChecked `
+                    -GodotPath $godot `
+                    -Arguments @(
+                        "--headless", "--resolution", $viewCase.Frame, "--path", $gameProjectPath,
+                        "--", "--smoke", "--fixture", "baseline",
+                        "--demo-stone", "--screenshot-ticks", "190",
+                        "--tile-size", "40",
+                        "--camera-zoom", $viewCase.Zoom,
+                        "--camera-position", $viewCase.Position,
+                        "--ui-scale", $viewCase.UiScale,
+                        "--frame-size", $viewCase.Frame
+                    ) `
+                    -ExpectedSuccessEvent "godot_headless_smoke"
+                $viewEvents[$viewCase.Name] = Get-GodotEvent `
+                    -OutputLines $result.Output `
+                    -EventName "godot_headless_smoke"
+                if ([string]$viewEvents[$viewCase.Name].view.displayServer -ne "headless") {
+                    throw "View case '$($viewCase.Name)' did not run on the headless display server."
+                }
+            }
+
+            $viewChecksum = Assert-SameNonEmptyValue `
+                -Values @($viewEvents.Values | ForEach-Object { $_.checksum }) `
+                -Description "Canonical checksum across camera position, zoom, frame size and UI scale"
+            if ([double]$viewEvents["large-same-zoom"].view.visibleWorldSize[0] -le
+                [double]$viewEvents["base"].view.visibleWorldSize[0] -or
+                [double]$viewEvents["large-same-zoom"].view.visibleWorldSize[1] -le
+                [double]$viewEvents["base"].view.visibleWorldSize[1]) {
+                throw "A larger frame did not expose more world at the same zoom."
+            }
+            $overviewGoblinPixels = [double]$viewEvents["overview-shifted"].view.goblinScreenSize
+            $baseGoblinPixels = [double]$viewEvents["base"].view.goblinScreenSize
+            $detailGoblinPixels = [double]$viewEvents["detail-scaled-ui"].view.goblinScreenSize
+            if ($overviewGoblinPixels -lt 18 -or
+                $baseGoblinPixels -le $overviewGoblinPixels -or
+                $detailGoblinPixels -le $baseGoblinPixels -or
+                $detailGoblinPixels -ge 96) {
+                throw "Tile-relative goblin art is not readable across overview, base and detail views."
+            }
+
             # Rendering was separated from the tick, so the simulation must not be able to
             # tell. The same fixture is driven through the real _Process loop at two frame
             # rates and both have to land on the checksum a frameless replay produces.
@@ -391,6 +578,21 @@ $stageCatalog = [ordered]@{
             $script:godotStageResult = [pscustomobject]@{
                 SmokeExitCode = $godotResult.ExitCode
                 ControlsExitCode = $controlsResult.ExitCode
+                CameraExitCode = $cameraResult.ExitCode
+                InvalidViewFailuresChecked = $invalidViewCases.Count
+                HudGuardRegressionExitCode = $hudGuardFailure.ExitCode
+                CameraTransformRegressionExitCode = $cameraTransformFailure.ExitCode
+                CameraInputChecks = [int]$cameraEvent.view.cameraInputChecks
+                CameraTransformChecks = [int]$cameraEvent.view.cameraTransformChecks
+                CameraBoundsChecks = [int]$cameraEvent.view.cameraBoundsChecks
+                CameraPanChecks = [int]$cameraEvent.view.cameraPanChecks
+                ViewChecksum = [string]$viewChecksum
+                ViewCases = @($viewCases.Name)
+                GoblinScreenPixels = [pscustomobject]@{
+                    Overview = $overviewGoblinPixels
+                    Base = $baseGoblinPixels
+                    Detail = $detailGoblinPixels
+                }
             }
         }
     }
@@ -404,7 +606,8 @@ $stageCatalog = [ordered]@{
             # Text before pixels: the HUD and the inspector are compared against committed
             # reference state. It runs headless, because it does not need a window to be
             # true. The HUD overflow guard itself now runs inside every entry point and at
-            # five frame sizes, so there is nothing left here to hold it to.
+            # the live pair plus six fixed frame/UI-scale pairs, so there is nothing
+            # left here to hold it to.
             Write-Host "Comparing the golden UI state..."
             $goldenUiFrames = @()
             foreach ($frame in Get-GoldenUiFrames) {
@@ -425,24 +628,57 @@ $stageCatalog = [ordered]@{
     }
 
     screenshots = [pscustomobject]@{
-        Summary = "Windowed baseline and prepared-raid screenshot runs with the goblin sprite diagnostics."
+        Summary = "Explicit-frame baseline captured twice byte-for-byte, plus prepared-raid sprite diagnostics."
         Body = {
             Initialize-GameHostBuild
             Initialize-EngineRuntime
 
             $baselineScreenshot = Join-Path $verifyRoot "baseline-t1.png"
+            $baselineRepeatScreenshot = Join-Path $verifyRoot "baseline-t1-repeat.png"
             $raidScreenshot = Join-Path $verifyRoot "prepared-raid.png"
             $baselineResult = Invoke-GodotChecked `
                 -GodotPath $godot `
                 -Arguments @(
-                    "--path", $gameProjectPath,
-                    "--", "--fixture", "baseline", "--screenshot", $baselineScreenshot, "--screenshot-ticks", "1"
+                    "--path", $gameProjectPath, "--resolution", "1280x720",
+                    "--", "--fixture", "baseline",
+                    "--screenshot", $baselineScreenshot, "--screenshot-ticks", "1",
+                    "--tile-size", "40",
+                    "--camera-zoom", "0.5",
+                    "--camera-position", "560,320",
+                    "--ui-scale", "1",
+                    "--frame-size", "1280x720"
                 ) `
                 -ExpectedSuccessEvent "godot_graybox_screenshot"
             Assert-GoblinSpriteDiagnostics -OutputLines $baselineResult.Output -EventName "godot_graybox_screenshot"
+            $baselineEvent = Get-GodotEvent `
+                -OutputLines $baselineResult.Output `
+                -EventName "godot_graybox_screenshot"
             if (-not (Test-Path -LiteralPath $baselineScreenshot -PathType Leaf)) {
                 throw "Baseline visual smoke did not write its screenshot."
             }
+            $baselineRepeatResult = Invoke-GodotChecked `
+                -GodotPath $godot `
+                -Arguments @(
+                    "--path", $gameProjectPath, "--resolution", "1280x720",
+                    "--", "--fixture", "baseline",
+                    "--screenshot", $baselineRepeatScreenshot, "--screenshot-ticks", "1",
+                    "--tile-size", "40",
+                    "--camera-zoom", "0.5",
+                    "--camera-position", "560,320",
+                    "--ui-scale", "1",
+                    "--frame-size", "1280x720"
+                ) `
+                -ExpectedSuccessEvent "godot_graybox_screenshot"
+            Assert-GoblinSpriteDiagnostics `
+                -OutputLines $baselineRepeatResult.Output `
+                -EventName "godot_graybox_screenshot"
+            $baselineRepeatEvent = Get-GodotEvent `
+                -OutputLines $baselineRepeatResult.Output `
+                -EventName "godot_graybox_screenshot"
+            Assert-FilesEqual `
+                -ExpectedPath $baselineScreenshot `
+                -ActualPath $baselineRepeatScreenshot `
+                -Description "Repeated explicit camera screenshot"
             # Tick 1670 is twenty ticks into the *second* wave of the prepared
             # party (waves arrive at 1300, 1650, 2000 and 2350). Three reasons
             # for that tick rather than the old 1540, which now falls in the
@@ -463,17 +699,32 @@ $stageCatalog = [ordered]@{
             $raidResult = Invoke-GodotChecked `
                 -GodotPath $godot `
                 -Arguments @(
-                    "--path", $gameProjectPath,
-                    "--", "--fixture", "prepared", "--screenshot", $raidScreenshot, "--screenshot-ticks", "1670"
+                    "--path", $gameProjectPath, "--resolution", "1280x720",
+                    "--", "--fixture", "prepared",
+                    "--screenshot", $raidScreenshot, "--screenshot-ticks", "1670",
+                    "--tile-size", "40",
+                    "--camera-zoom", "0.75",
+                    "--camera-position", "720,400",
+                    "--ui-scale", "1",
+                    "--frame-size", "1280x720"
                 ) `
                 -ExpectedSuccessEvent "godot_graybox_screenshot"
             Assert-GoblinSpriteDiagnostics -OutputLines $raidResult.Output -EventName "godot_graybox_screenshot"
+            $raidEvent = Get-GodotEvent `
+                -OutputLines $raidResult.Output `
+                -EventName "godot_graybox_screenshot"
             if (-not (Test-Path -LiteralPath $raidScreenshot -PathType Leaf)) {
                 throw "Prepared raid smoke did not write its screenshot."
+            }
+            foreach ($captureEvent in @($baselineEvent, $baselineRepeatEvent, $raidEvent)) {
+                if (-not [bool]$captureEvent.view.cameraSynchronizedAfterLayout) {
+                    throw "A screenshot was captured before Camera2D followed deferred HUD layout."
+                }
             }
 
             $script:screenshotResult = [pscustomobject]@{
                 RaidExitCode = $raidResult.ExitCode
+                Repeatable = $true
             }
         }
     }
@@ -615,9 +866,22 @@ try {
     if ($executedStages -contains "godot") {
         $summary["godotExitCode"] = $godotStageResult.SmokeExitCode
         $summary["godotControlsExitCode"] = $godotStageResult.ControlsExitCode
+        $summary["godotCameraExitCode"] = $godotStageResult.CameraExitCode
+        $summary["invalidViewFailuresChecked"] = $godotStageResult.InvalidViewFailuresChecked
+        $summary["hudGuardRegressionExitCode"] = $godotStageResult.HudGuardRegressionExitCode
+        $summary["cameraTransformRegressionExitCode"] =
+            $godotStageResult.CameraTransformRegressionExitCode
+        $summary["cameraInputChecks"] = $godotStageResult.CameraInputChecks
+        $summary["cameraTransformChecks"] = $godotStageResult.CameraTransformChecks
+        $summary["cameraBoundsChecks"] = $godotStageResult.CameraBoundsChecks
+        $summary["cameraPanChecks"] = $godotStageResult.CameraPanChecks
+        $summary["viewInvariantChecksum"] = $godotStageResult.ViewChecksum
+        $summary["viewCases"] = @($godotStageResult.ViewCases)
+        $summary["goblinScreenPixels"] = $godotStageResult.GoblinScreenPixels
     }
     if ($executedStages -contains "screenshots") {
         $summary["godotRaidExitCode"] = $screenshotResult.RaidExitCode
+        $summary["screenshotRepeatable"] = $screenshotResult.Repeatable
     }
     if ($executedStages -contains "ui") {
         $summary["goldenUiFrames"] = @($goldenUiResult)

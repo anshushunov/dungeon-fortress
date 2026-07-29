@@ -1,5 +1,7 @@
 using DungeonFortress.Simulation;
 
+using System.Globalization;
+
 namespace DungeonFortress.Presentation;
 
 /// <summary>
@@ -43,7 +45,47 @@ public static class CommandLineArguments
     public static int? ReadInt(IReadOnlyList<string> arguments, string name)
     {
         var value = Read(arguments, name);
-        return value is null ? null : int.Parse(value);
+        return value is null ? null : int.Parse(value, CultureInfo.InvariantCulture);
+    }
+
+    public static double? ReadDouble(IReadOnlyList<string> arguments, string name)
+    {
+        var value = Read(arguments, name);
+        return value is null ? null : double.Parse(value, CultureInfo.InvariantCulture);
+    }
+
+    public static ViewPoint ParsePoint(string value, string parameterName)
+    {
+        var parts = value.Split(',');
+        if (parts.Length != 2 ||
+            !double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x) ||
+            !double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y) ||
+            !double.IsFinite(x) ||
+            !double.IsFinite(y))
+        {
+            throw new ArgumentException(
+                $"{parameterName} expects finite X,Y, got '{value}'.",
+                parameterName);
+        }
+
+        return new ViewPoint(x, y);
+    }
+
+    public static ViewSize ParseSize(string value, string parameterName)
+    {
+        var parts = value.Split('x');
+        if (parts.Length != 2 ||
+            !int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var width) ||
+            !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var height) ||
+            width <= 0 ||
+            height <= 0)
+        {
+            throw new ArgumentException(
+                $"{parameterName} expects positive integer WIDTHxHEIGHT, got '{value}'.",
+                parameterName);
+        }
+
+        return new ViewSize(width, height);
     }
 
     /// <summary>

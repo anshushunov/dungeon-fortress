@@ -2,7 +2,7 @@
 
 Статус: действует для bootstrap-spike из Issue #3
 
-Дата проверки: 2026-07-27
+Дата проверки: 2026-07-29
 
 ## Закреплённые версии
 
@@ -74,12 +74,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -GodotP
 | `mcp` | реальный запуск launcher domain MCP и stdio-контракт `verify-domain-mcp.ps1` | 4 с |
 | `sim` | детерминизм: 32 агента × 256 тиков дважды на одном seed и один раз на другом | 0,4 с |
 | `load` | 1 000 агентов × 10 000 fixed ticks дважды с побайтовым сравнением | 0,6 с |
-| `godot` | `Debug` build Godot-host, изолированный импорт спрайтов, headless smoke, controls smoke, независимость канонического состояния от частоты кадров | 18 с |
+| `godot` | `Debug` build Godot-host, изолированный импорт спрайтов, smoke, camera/input smoke, независимость checksum от камеры/кадра/UI scale и канонического состояния от частоты кадров | 30 с |
 | `ui` | эталонные кадры `tests/golden/ui/*.json`, снятые headless и сравнённые с коммитом | 4 с |
-| `screenshots` | два оконных прогона со съёмкой кадра и диагностикой спрайтов | 5 с |
+| `screenshots` | baseline-кадр дважды с побайтовым сравнением и prepared-raid кадр; все параметры кадра явные | 12 с |
 
 \* Замер на машине владельца при прогретых сборках; полный прогон в тех же
-условиях — 68 с. Первый прогон в свежем worktree дольше за счёт restore.
+условиях — около 90 с. Первый прогон в свежем worktree дольше за счёт restore.
 
 Что покрывает каждая стадия, печатает сам скрипт:
 
@@ -102,7 +102,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -Skip l
 | `scripts/**`, конфигурация MCP-клиентов | `scripts`; плюс `mcp` при правке launcher или `verify-domain-mcp.ps1` |
 | `src/DungeonFortress.Simulation/**` | `tests,sim`; плюс `load` при изменении стоимости тика или структур данных; плюс `mcp` при изменении ответа `prototype_run` |
 | `src/DungeonFortress.Presentation/**` | `tests,ui` |
-| `src/DungeonFortress.Game/**`, сцены, ввод | `godot,ui` |
+| `src/DungeonFortress.Game/**`, сцены, ввод | `godot,ui`; плюс `screenshots` при изменении кадра или визуального слоя |
 | спрайты и другие ассеты | `godot,screenshots` |
 | `.csproj`, `global.json`, версии зависимостей | полный прогон |
 | только документация | ничего |
@@ -230,8 +230,10 @@ git grep -n 'uid://' -- src/DungeonFortress.Game
 импорт выдал скрипту **другой** случайный идентификатор
 (`uid://du80nvw2ghu16` → `uid://cw3gvuoooy3xo`), `Main.tscn` при этом не
 изменился, а полный `verify.ps1` остался зелёным — включая headless smoke,
-`--smoke-controls`, три golden UI frame, сравнение checksum на 20 и 60 fps и оба
-screenshot-прогона, которые загружают сцену и все PNG.
+`--smoke-controls`, camera/input smoke с независимой проверкой live Camera2D,
+отрицательные startup/HUD/camera проверки, четыре camera/frame/UI варианта, три
+golden UI frame, сравнение checksum на 20 и 60 fps и три screenshot-прогона,
+которые загружают сцену и все PNG.
 
 **Почему не коммитим.** Вариант «коммитить все `*.uid`» проверен тем же
 способом и технически работает: уже закоммиченный `.uid` импорт сохраняет и не

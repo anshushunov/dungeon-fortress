@@ -47,10 +47,55 @@ if (-not $exitZeroErrorRejected) {
     throw "The Godot output guard accepted ERROR output with exit code 0."
 }
 
+$sameValue = Assert-SameNonEmptyValue `
+    -Values @("checksum-a", "checksum-a") `
+    -Description "Synthetic checksum"
+if ($sameValue -ne "checksum-a") {
+    throw "The non-empty equality guard changed the accepted value."
+}
+
+$emptyRejected = $false
+try {
+    Assert-SameNonEmptyValue `
+        -Values @("", "") `
+        -Description "Synthetic checksum" | Out-Null
+}
+catch {
+    if ($_.Exception.Message -match "non-empty") {
+        $emptyRejected = $true
+    }
+    else {
+        throw
+    }
+}
+if (-not $emptyRejected) {
+    throw "The checksum guard accepted two empty values as invariant."
+}
+
+$mismatchRejected = $false
+try {
+    Assert-SameNonEmptyValue `
+        -Values @("checksum-a", "checksum-b") `
+        -Description "Synthetic checksum" | Out-Null
+}
+catch {
+    if ($_.Exception.Message -match "differs") {
+        $mismatchRejected = $true
+    }
+    else {
+        throw
+    }
+}
+if (-not $mismatchRejected) {
+    throw "The checksum guard accepted different values as invariant."
+}
+
 [ordered]@{
     event = "godot_output_guard_test"
     status = "ok"
     cleanLines = $cleanOutput.Count
     detectedErrorLines = $detectedErrors.Count
     exitZeroErrorRejected = $exitZeroErrorRejected
+    emptyInvariantRejected = $emptyRejected
+    mismatchedInvariantRejected = $mismatchRejected
 } | ConvertTo-Json -Compress | Write-Host
