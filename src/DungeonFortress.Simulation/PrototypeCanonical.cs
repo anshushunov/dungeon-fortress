@@ -608,6 +608,7 @@ public static class PrototypeCanonical
         }
 
         writer.WriteNumber("wavesResolved", state.SessionResult.WavesResolved);
+        writer.WriteNumber("wavesRepelled", state.SessionResult.WavesRepelled);
         writer.WriteNumber("waveCount", state.SessionResult.WaveCount);
         writer.WriteNumber("renown", state.SessionResult.Renown);
         writer.WriteNumber("strength", state.SessionResult.Strength);

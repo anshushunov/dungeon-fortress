@@ -154,6 +154,36 @@ public sealed class HudTextTests
     }
 
     /// <summary>
+    /// Three ends, three different words in the same place, so which one
+    /// happened is read at a glance. "Raided" also carries how many waves were
+    /// actually turned back, which is the number a player asks for next — and it
+    /// comes from canonical state rather than being counted again here.
+    /// </summary>
+    [Fact]
+    public void A_domain_that_survived_a_wave_getting_through_reads_as_raided()
+    {
+        var state = PresentationFixtures.Baseline(1);
+        var raided = state with
+        {
+            SessionResult = state.SessionResult with
+            {
+                Outcome = "raided",
+                WavesRepelled = 2,
+            },
+        };
+
+        Assert.Equal("DOMAIN RAIDED · 2/4 repelled", HudText.WavePhase(raided));
+        Assert.NotEqual(HudText.WavePhase(raided), HudText.WavePhase(raided with
+        {
+            SessionResult = raided.SessionResult with { Outcome = "held" },
+        }));
+        Assert.NotEqual(HudText.WavePhase(raided), HudText.WavePhase(raided with
+        {
+            SessionResult = raided.SessionResult with { Outcome = "fallen" },
+        }));
+    }
+
+    /// <summary>
     /// The empty panel repeats its own header. That is what the shipped HUD does,
     /// so it is what this asserts; changing it is a product decision, not a tidy-up.
     /// </summary>

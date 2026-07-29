@@ -272,11 +272,108 @@ public sealed class PrototypeWaveTests
 
         Assert.True(world.IsComplete);
         Assert.True(state.Tick < PrototypeTuning.SessionTicks, "the party ran into the fuse");
-        Assert.Equal("held", state.SessionResult.Outcome);
+        Assert.Equal("raided", state.SessionResult.Outcome);
         Assert.False(state.SessionResult.Unresolved);
         Assert.Equal(state.Waves.Count, state.SessionResult.WavesResolved);
         Assert.Equal(state.Tick - 1, state.SessionResult.EndTick);
         Assert.Throws<InvalidOperationException>(world.Step);
+    }
+
+    /// <summary>
+    /// The end of a party has three forms, and the line between the two that
+    /// survive is drawn on whether every wave was actually repelled. A domain
+    /// that let a wave through is `raided` however many portions happened to be
+    /// left in the larder for it to lose — otherwise an already empty pantry
+    /// would be reported as a victory.
+    /// </summary>
+    [Fact]
+    public void Surviving_a_wave_that_got_through_is_reported_as_raided_and_not_as_held()
+    {
+        var state = PrototypeScenario.Run(LoadFixture("baseline"), PrototypeTuning.SessionTicks).State;
+
+        Assert.Equal("raided", state.SessionResult.Outcome);
+        Assert.Contains(
+            state.Waves,
+            wave => wave.Outcome is "larder_raided" or "overrun");
+        Assert.DoesNotContain(state.Waves, wave => wave.Outcome is null);
+
+        // `held` is reachable only when nothing got through, which is exactly
+        // what the four wave outcomes already say.
+        var repelled = state.Waves.Count(
+            wave => wave.Outcome is "repelled_clean" or "repelled_costly");
+        Assert.True(repelled < state.Waves.Count);
+        Assert.Equal(repelled, state.SessionResult.WavesRepelled);
+    }
+
+    /// <summary>
+    /// The mirror must not flatter. A domain dying of hunger used to report the
+    /// best strength of its whole party, because inborn might and drilled form
+    /// survive starvation on paper; the summary then read "renown 4 against
+    /// strength 86" at the very moment the domain died, which is the one place
+    /// the panel actively misled — and it did it in the negative example.
+    /// </summary>
+    [Fact]
+    public void A_starving_domain_cannot_report_its_best_strength_of_the_party()
+    {
+        var dying = new PrototypeWorld(LoadFixture("neglected"));
+        var peak = dying.GetSnapshot().Domain.Strength;
+        while (!dying.IsComplete)
+        {
+            dying.Step();
+            peak = Math.Max(peak, dying.GetSnapshot().Domain.Strength);
+        }
+
+        var fall = dying.GetSnapshot();
+        Assert.Equal("fallen", fall.SessionResult.Outcome);
+        Assert.True(
+            fall.Domain.Strength < peak,
+            $"strength at the fall {fall.Domain.Strength} is not below the peak {peak}");
+
+        // ... and it is below what the domains that were still alive showed on
+        // that very tick, so the number ranks the three the way a player would.
+        var atTheSameTick = fall.Tick;
+        var baseline = PrototypeScenario.Run(LoadFixture("baseline"), atTheSameTick).State;
+        var prepared = PrototypeScenario.Run(LoadFixture("prepared"), atTheSameTick).State;
+        Assert.True(
+            fall.Domain.Strength < baseline.Domain.Strength &&
+            fall.Domain.Strength < prepared.Domain.Strength,
+            $"at tick {atTheSameTick}: fallen={fall.Domain.Strength}, " +
+            $"baseline={baseline.Domain.Strength}, prepared={prepared.Domain.Strength}");
+    }
+
+    /// <summary>
+    /// Strength counts creatures who could actually take the field, by combat's
+    /// own admission rule, and scales what they bring by their readiness. Both
+    /// halves are asserted against the snapshot rather than restated as a second
+    /// copy of the formula.
+    /// </summary>
+    [Fact]
+    public void Strength_counts_only_those_who_could_answer_the_call()
+    {
+        var state = PrototypeScenario.Run(
+            LoadFixture("prepared"),
+            PrototypeTuning.FirstRaidTick + 1).State;
+
+        var eligible = state.Creatures
+            .Where(creature =>
+                creature.Mode != CreatureMode.Downed &&
+                creature.Injury != InjuryKind.Heavy &&
+                creature.Satiety >= PrototypeTuning.CombatMinSatiety)
+            .ToArray();
+        Assert.NotEmpty(eligible);
+        Assert.Equal(
+            eligible.Sum(creature =>
+                (creature.Might * PrototypeTuning.StrengthPerMight +
+                 creature.MartialForm / PrototypeTuning.StrengthMartialDivisor) *
+                creature.Readiness / PrototypeTuning.StrengthReadinessScale),
+            state.Domain.Strength);
+
+        // A creature too hungry to be let into a fight contributes nothing, so
+        // the mirror can never show strength the fight would refuse to use.
+        var starving = state.Creatures
+            .Where(creature => creature.Satiety < PrototypeTuning.CombatMinSatiety)
+            .ToArray();
+        Assert.DoesNotContain(starving, creature => eligible.Contains(creature));
     }
 
     [Fact]
@@ -364,15 +461,14 @@ public sealed class PrototypeWaveTests
             world.Step();
         }
 
+        // The baseline the arrow measures from moved on to the second wave, and
+        // it is a sample taken at that wave rather than a running value. How the
+        // strength itself is computed is asserted by
+        // Strength_counts_only_those_who_could_answer_the_call; restating the
+        // formula here would only make two copies of it to keep in step.
         var atSecondWave = world.GetSnapshot().Domain;
         Assert.True(atSecondWave.RenownAtPreviousWave > atFirstWave.RenownAtPreviousWave);
-        Assert.Equal(
-            atSecondWave.Strength,
-            world.GetSnapshot().Creatures
-                .Where(creature => creature.Mode != CreatureMode.Downed)
-                .Sum(creature =>
-                    creature.Might * PrototypeTuning.StrengthPerMight +
-                    creature.MartialForm / PrototypeTuning.StrengthMartialDivisor));
+        Assert.NotEqual(atSecondWave.StrengthAtPreviousWave, atFirstWave.StrengthAtPreviousWave);
     }
 
     private static PrototypeCommandLog LoadFixture(string name)

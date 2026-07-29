@@ -44,9 +44,13 @@ public static class PrototypeTuning
     public const int RenownMealsPerPoint = 2;
 
     // Domain strength: the mirror number. Inborn might weighs more per point
-    // than trained form, because might is 1..5 and martialForm is 0..100.
+    // than trained form, because might is 1..5 and martialForm is 0..100. What
+    // each creature brings is then scaled by its readiness, so the mirror shows
+    // condition and not potential — a domain dying of hunger must not be able to
+    // report the best strength of its party.
     public const int StrengthPerMight = 2;
     public const int StrengthMartialDivisor = 10;
+    public const int StrengthReadinessScale = 100;
 
     // Healing between waves. A light wound closes only while its owner lies in a
     // bunk and is fed; the domain pays for it in labour, which is what makes the

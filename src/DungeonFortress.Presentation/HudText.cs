@@ -142,9 +142,17 @@ public static class HudText
         var waves = $"{threat.WaveNumber}/{threat.WaveCount}";
         if (state.SessionResult.Outcome is { } outcome)
         {
-            return outcome == "held"
-                ? $"DOMAIN HELD {threat.WaveCount}/{threat.WaveCount}"
-                : $"DOMAIN FELL · wave {waves}";
+            // Three outcomes, three different words in the same place, so which
+            // one happened is read at a glance and never needs the inspector.
+            // "Raided" carries how many waves were actually turned back, because
+            // that is the number the player will want next.
+            return outcome switch
+            {
+                "held" => $"DOMAIN HELD {threat.WaveCount}/{threat.WaveCount}",
+                "raided" =>
+                    $"DOMAIN RAIDED · {state.SessionResult.WavesRepelled}/{threat.WaveCount} repelled",
+                _ => $"DOMAIN FELL · wave {waves}",
+            };
         }
 
         if (threat.Active)

@@ -394,6 +394,7 @@ public sealed class PrototypeWorld
                 _sessionOutcome is null && CurrentTick >= PrototypeTuning.SessionTicks,
                 _waves.LastOrDefault(wave => wave.Outcome is not null)?.Outcome,
                 _waves.Count(wave => wave.Outcome is not null),
+                _waves.Count(WasRepelled),
                 _waves.Count,
                 Renown(),
                 DomainStrength(),
@@ -2322,8 +2323,22 @@ public sealed class PrototypeWorld
 
     /// <summary>
     /// The end of the party, checked once a tick after everything else has
-    /// happened. Two forms and no third: the domain saw every wave through, or
-    /// nobody is left who can work and defend.
+    /// happened. Three forms, because two were telling a lie: a domain that lost
+    /// a wave outright, watched its larder carried off twice and ended with an
+    /// empty pantry was still reported as having held, and slice 1 exists to
+    /// make that feedback honest.
+    ///
+    /// - `fallen`  — nobody left who can work and defend;
+    /// - `held`    — survived, and every wave was actually repelled;
+    /// - `raided`  — survived, but at least one wave got through.
+    ///
+    /// The line between the last two is drawn on the wave outcomes rather than
+    /// on the number of portions carried away, for two reasons. It is what ADR
+    /// 0015 says literally — "отражены все волны" — and `repelled_clean` and
+    /// `repelled_costly` are precisely the outcomes whose names say the wave was
+    /// repelled. And counting portions instead would let a domain whose larder
+    /// was already empty be called victorious for losing nothing: the raiders
+    /// walked in and out unopposed, which is not holding.
     /// </summary>
     private void ResolveSession()
     {
@@ -2341,10 +2356,13 @@ public sealed class PrototypeWorld
 
         if (_waves.All(wave => wave.Outcome is not null))
         {
-            _sessionOutcome = "held";
+            _sessionOutcome = _waves.All(WasRepelled) ? "held" : "raided";
             _sessionEndTick = CurrentTick;
         }
     }
+
+    private static bool WasRepelled(WaveState wave) =>
+        wave.Outcome is "repelled_clean" or "repelled_costly";
 
     /// <summary>
     /// "Nobody left who can work and defend", stated so that it is a fact about
@@ -2433,17 +2451,40 @@ public sealed class PrototypeWorld
         _peakMeals / PrototypeTuning.RenownMealsPerPoint;
 
     /// <summary>
-    /// How ready the domain is to meet the next wave: inborn might plus trained
-    /// form over everyone still standing. It influences nothing — it is the
-    /// mirror the player holds next to renown, and the gap between the two is
-    /// the answer to "am I doing well?".
+    /// How ready the domain is to meet the next wave. It influences nothing — it
+    /// is the mirror the player holds next to renown, and the gap between the
+    /// two is the answer to "am I doing well?".
+    ///
+    /// It counts readiness and not potential, which is the difference between a
+    /// mirror and a flattering one. A domain starving to death used to show the
+    /// best number of its whole party, because inborn might and drilled form
+    /// survive hunger on paper; the summary then read "renown 4 against strength
+    /// 86" at the exact moment the domain died. Two things stop that:
+    ///
+    /// - only creatures who could actually answer the call are counted, by the
+    ///   same admission rule combat itself uses (10.2) minus the distance test,
+    ///   which is about where somebody happens to stand rather than about the
+    ///   condition of the domain;
+    /// - what each of them brings is scaled by their readiness, so hunger,
+    ///   exhaustion and wounds show up in the number rather than beside it.
     /// </summary>
     private int DomainStrength() =>
         _creatures
-            .Where(creature => creature.Mode != CreatureMode.Downed)
+            .Where(CanAnswerTheCall)
             .Sum(creature =>
-                creature.Might * PrototypeTuning.StrengthPerMight +
-                creature.MartialForm / PrototypeTuning.StrengthMartialDivisor);
+                (creature.Might * PrototypeTuning.StrengthPerMight +
+                 creature.MartialForm / PrototypeTuning.StrengthMartialDivisor) *
+                ComputeReadiness(creature) / PrototypeTuning.StrengthReadinessScale);
+
+    /// <summary>
+    /// Could this creature take the field if a wave arrived right now? The rule
+    /// is combat's own, so the mirror cannot report strength that the fight
+    /// would refuse to use.
+    /// </summary>
+    private static bool CanAnswerTheCall(CreatureState creature) =>
+        creature.Mode != CreatureMode.Downed &&
+        creature.Injury != InjuryKind.Heavy &&
+        creature.Satiety >= PrototypeTuning.CombatMinSatiety;
 
     private int CombatJitter(int amplitude) => _combatRandom.NextInt32(amplitude * 2 + 1) - amplitude;
 

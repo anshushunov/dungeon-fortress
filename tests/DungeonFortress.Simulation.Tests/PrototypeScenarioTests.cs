@@ -286,25 +286,96 @@ public sealed class PrototypeScenarioTests
             $"prepared={preparedEnd.State.Stocks.MealsProduced}, " +
             $"neglected={neglected.State.Stocks.MealsProduced}");
 
-        // The two numbers the party is scored by rank the three plans the way
-        // the plans deserve, and preparation shows up as the gap between them:
-        // prepared is the most notorious domain and also the readiest one.
-        Assert.Equal("held", baselineEnd.State.SessionResult.Outcome);
-        Assert.Equal("held", preparedEnd.State.SessionResult.Outcome);
+        // Neither fixture holds the domain: both let a wave through, so both end
+        // `raided`. That is the honest reading of what they actually did, and it
+        // is why the third end form exists.
+        Assert.Equal("raided", baselineEnd.State.SessionResult.Outcome);
+        Assert.Equal("raided", preparedEnd.State.SessionResult.Outcome);
         Assert.Equal("fallen", neglected.State.SessionResult.Outcome);
-        Assert.True(
-            preparedEnd.State.Domain.Renown > baselineEnd.State.Domain.Renown,
-            $"renown prepared={preparedEnd.State.Domain.Renown}, " +
-            $"baseline={baselineEnd.State.Domain.Renown}");
-        Assert.True(
-            baselineEnd.State.Domain.Renown > neglected.State.Domain.Renown,
-            $"renown baseline={baselineEnd.State.Domain.Renown}, " +
-            $"neglected={neglected.State.Domain.Renown}");
-        Assert.True(
-            preparedEnd.State.Domain.Strength > baselineEnd.State.Domain.Strength,
-            $"strength prepared={preparedEnd.State.Domain.Strength}, " +
-            $"baseline={baselineEnd.State.Domain.Strength}");
+        AssertEndOfPartyInvariants(baselineEnd.State, preparedEnd.State, neglected.State);
+        AssertFirstWaveInvariants(baseline.State, prepared.State);
     }
+
+    /// <summary>
+    /// Contract 13.4 says its invariants hold "for any seed of the matrix". That
+    /// sentence used to be prose while the test ran one seed, which is how a
+    /// broken invariant survived: `renown(prepared) > renown(baseline)` is false
+    /// on seed 20260727 and nothing said so. The claim is now executed.
+    /// </summary>
+    [Theory]
+    [InlineData(20_260_726UL)]
+    [InlineData(20_260_727UL)]
+    [InlineData(20_260_728UL)]
+    public void The_contract_invariants_hold_on_every_seed_of_the_matrix(ulong seed)
+    {
+        AssertEndOfPartyInvariants(
+            RunAtSeed("baseline", seed, PrototypeTuning.SessionTicks),
+            RunAtSeed("prepared", seed, PrototypeTuning.SessionTicks),
+            RunAtSeed("neglected", seed, PrototypeTuning.SessionTicks));
+        AssertFirstWaveInvariants(
+            RunAtSeed("baseline", seed, PrototypeTuning.FirstRaidTick + 1),
+            RunAtSeed("prepared", seed, PrototypeTuning.FirstRaidTick + 1));
+    }
+
+    /// <summary>
+    /// The invariants read where the fixtures are still comparable: the arrival
+    /// of the first wave. Both are condition numbers, and condition is only
+    /// comparable at the same moment of the same story — read at the end of the
+    /// party, every fixture is starving and every number collapses towards zero.
+    /// </summary>
+    private static void AssertFirstWaveInvariants(
+        PrototypeSnapshot baseline,
+        PrototypeSnapshot prepared)
+    {
+        Assert.True(
+            AverageReadiness(prepared) > AverageReadiness(baseline),
+            $"readiness at wave 1 prepared={AverageReadiness(prepared)}, " +
+            $"baseline={AverageReadiness(baseline)}");
+        Assert.True(
+            prepared.Domain.Strength > baseline.Domain.Strength,
+            $"strength at wave 1 prepared={prepared.Domain.Strength}, " +
+            $"baseline={baseline.Domain.Strength}");
+    }
+
+    /// <summary>
+    /// The invariants of 13.4 read at the end of the party. What is deliberately
+    /// absent is as load-bearing as what is here: renown ranks a domain that
+    /// lives against one that died, and does not reliably rank two living plans
+    /// on a single party, because it leans on raiders put down and that number
+    /// swings with combat jitter.
+    /// </summary>
+    private static void AssertEndOfPartyInvariants(
+        PrototypeSnapshot baseline,
+        PrototypeSnapshot prepared,
+        PrototypeSnapshot neglected)
+    {
+        Assert.True(
+            baseline.Domain.Renown > neglected.Domain.Renown &&
+            prepared.Domain.Renown > neglected.Domain.Renown,
+            $"renown baseline={baseline.Domain.Renown}, prepared={prepared.Domain.Renown}, " +
+            $"neglected={neglected.Domain.Renown}");
+
+        // Preparation buys the price of the raid, not attendance at it. The
+        // comparison excludes `neglected` on purpose: it never meets a wave, so
+        // its zeroes are an absence of the event and not a better result.
+        Assert.True(
+            prepared.SessionResult.MealsStolen < baseline.SessionResult.MealsStolen,
+            $"meals stolen prepared={prepared.SessionResult.MealsStolen}, " +
+            $"baseline={baseline.SessionResult.MealsStolen}");
+        Assert.True(
+            CountEvents(prepared, "combat_fled_morale") < CountEvents(baseline, "combat_fled_morale"),
+            $"broken by morale prepared={CountEvents(prepared, "combat_fled_morale")}, " +
+            $"baseline={CountEvents(baseline, "combat_fled_morale")}");
+    }
+
+    private static int CountEvents(PrototypeSnapshot state, string reasonCode) =>
+        state.Events.Where(@event => @event.ReasonCode == reasonCode).Sum(@event => @event.Repeats);
+
+    private static PrototypeSnapshot RunAtSeed(string fixtureName, ulong seed, int ticks) =>
+        PrototypeScenario.Run(LoadFixture(fixtureName) with { Seed = seed }, ticks).State;
+
+    private static int AverageReadiness(PrototypeSnapshot state) =>
+        (int)state.Creatures.Average(creature => creature.ReadinessAtRaid!.Value);
 
     [Fact]
     public void Replay_from_loaded_command_log_is_byte_identical()

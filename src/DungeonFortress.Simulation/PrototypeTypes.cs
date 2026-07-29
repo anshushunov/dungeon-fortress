@@ -392,10 +392,11 @@ public sealed record PrototypeRaiderSnapshot(
 
 /// <summary>
 /// The end of the party, not the end of a wave. <see cref="Outcome"/> is
-/// <c>held</c> when every wave was seen through, <c>fallen</c> when nobody is
-/// left who can work and defend, and <c>null</c> while the party is still being
-/// played. <see cref="LastWaveOutcome"/> keeps the four wave outcomes reachable
-/// from the same place they always were.
+/// <c>held</c> when every wave was actually repelled, <c>raided</c> when the
+/// domain survived but at least one wave got through, <c>fallen</c> when nobody
+/// is left who can work and defend, and <c>null</c> while the party is still
+/// being played. <see cref="LastWaveOutcome"/> keeps the four wave outcomes
+/// reachable from the same place they always were.
 /// </summary>
 public sealed record PrototypeSessionResultSnapshot(
     string? Outcome,
@@ -403,6 +404,10 @@ public sealed record PrototypeSessionResultSnapshot(
     bool Unresolved,
     string? LastWaveOutcome,
     int WavesResolved,
+    // Waves actually turned back, as opposed to waves that merely finished. The
+    // two stopped being the same number when the end of a party grew its third
+    // form, so the one the player is told is canonical rather than re-derived.
+    int WavesRepelled,
     int WaveCount,
     int Renown,
     int Strength,
