@@ -84,6 +84,12 @@ Pan stops when the camera focus reaches the center of an edge tile. This keeps
 the focus on the ownership map without cancelling movement at overview zooms
 where the whole map fits in the world viewport.
 
+`UiScale` is independent of the native frame, but the declared combination must
+leave at least 1024x720 logical pixels after scaling. The default 1280x720 frame
+therefore supports scale 1 (and smaller), while scale 2 requires at least a
+2048x1440 frame. `run-game.ps1` rejects an impossible combination before restore
+or engine startup; the game performs the same validation for direct launches.
+
 Camera input is presentation-only. A map click first has to land in the explicit
 world viewport, then the live Godot canvas transform is inverted and the
 resulting world point is converted to a grid cell. Clicks on the title,
@@ -509,12 +515,15 @@ inspector at the tile each frame is about.
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -Fixture baseline -DemoStone -ScreenshotTicks 190 -SelectCell 25,3 `
+  -TileSize 40 -CameraZoom 0.75 -CameraPosition '560,320' -UiScale 1 -FrameSize 1280x720 `
   -ScreenshotPath issue26\stone-1-loose-no-stockpile.png
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -Fixture baseline -DemoStone -ScreenshotTicks 336 -SelectCell 25,1 `
+  -TileSize 40 -CameraZoom 0.75 -CameraPosition '560,320' -UiScale 1 -FrameSize 1280x720 `
   -ScreenshotPath issue26\stone-2-in-transit.png
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -Fixture baseline -DemoStone -ScreenshotTicks 950 -SelectCell 23,1 `
+  -TileSize 40 -CameraZoom 0.75 -CameraPosition '560,320' -UiScale 1 -FrameSize 1280x720 `
   -ScreenshotPath issue26\stone-3-stockpile-full.png
 ```
 
@@ -584,12 +593,15 @@ out of the stockpile.
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -Fixture baseline -DemoBuild -ScreenshotTicks 1001 -SelectCell 25,2 `
+  -TileSize 40 -CameraZoom 0.75 -CameraPosition '560,320' -UiScale 1 -FrameSize 1280x720 `
   -ScreenshotPath issue48\build-1-blueprint-waiting.png
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -Fixture baseline -DemoBuild -ScreenshotTicks 1030 -SelectCell 25,2 `
+  -TileSize 40 -CameraZoom 0.75 -CameraPosition '560,320' -UiScale 1 -FrameSize 1280x720 `
   -ScreenshotPath issue48\build-2-carrier-on-the-way.png
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -Fixture baseline -DemoBuild -ScreenshotTicks 1150 -SelectCell 25,2 `
+  -TileSize 40 -CameraZoom 0.75 -CameraPosition '560,320' -UiScale 1 -FrameSize 1280x720 `
   -ScreenshotPath issue48\build-3-post-and-drill.png
 ```
 
@@ -609,12 +621,15 @@ captures the before, during and after frames:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -Fixture baseline -DemoDig -ScreenshotTicks 3 `
+  -TileSize 40 -CameraZoom 0.75 -CameraPosition '560,320' -UiScale 1 -FrameSize 1280x720 `
   -ScreenshotPath issue24\dig-before.png
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -Fixture baseline -DemoDig -ScreenshotTicks 30 `
+  -TileSize 40 -CameraZoom 0.75 -CameraPosition '560,320' -UiScale 1 -FrameSize 1280x720 `
   -ScreenshotPath issue24\dig-during.png
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -Fixture baseline -DemoDig -ScreenshotTicks 120 `
+  -TileSize 40 -CameraZoom 0.75 -CameraPosition '560,320' -UiScale 1 -FrameSize 1280x720 `
   -ScreenshotPath issue24\dig-after.png
 ```
 
@@ -645,7 +660,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -DemoControls `
   -TileSize 40 `
   -CameraZoom 0.75 `
-  -CameraPosition 560,320 `
+  -CameraPosition '560,320' `
   -UiScale 1 `
   -FrameSize 1280x720 `
   -ScreenshotPath visual\graybox-baseline-t180.png
@@ -751,10 +766,15 @@ label its size, so that size is the designed one and an unclipped label can no
 longer re-expand to its own content. Godot sorts containers on a deferred pass, so
 `LayoutHud()` notifies the subtree and gets the same placement a frame would
 produce, synchronously. It then repeats the whole check at 1280x720@1,
-1366x768@1, 1600x900@1, 1024x768@0.8, 1920x1080@1.25 and 2560x1440@2, so "the
+1366x768@1, 1600x900@1, 1024x768@1, 1920x1080@1.25 and 2048x1440@2, so "the
 layout follows the viewport and UI scale" is a checked claim rather than an
 intention — a guard that only ever saw one pair cannot tell a responsive layout
 from a lucky one.
+
+The Godot stage also injects an 80-line inspector at 1024x768@1 and requires the
+guard to emit a structured error and exit 1. This negative proof pins the
+required logical width to 1024 and shows that a layout regression is actually
+distinguishable from a fitting layout.
 
 A size that is absent from that list is not unsupported, it is unmeasured. The old
 960x540 frame is absent because the current text does not fit it: the side column
@@ -820,14 +840,25 @@ The golden UI state is unaffected on purpose — it holds no camera-dependent va
 It is what proved the Issue #36 reflow changed where the HUD text sits and not
 what it says: all three frames passed without regeneration.
 
-`scripts/verify.ps1 -Stage godot` proves the canonical checksum is identical
+`scripts/verify.ps1 -Stage godot` proves one non-empty canonical checksum is identical
 across four combinations of camera position, zoom, frame size and UI scale. The
-same stage drives a real `Camera2D` transform through all five zoom levels at
-three requested positions (15 click checks), drives both map extremes at every
-zoom (10 bounds checks), proves a pan moves at every zoom (5 pan checks), and
-rejects a point in the HUD. It also compares
+same stage compares a pure `CameraFrame` prediction with the live `Camera2D`
+transform through all five zoom levels at three requested positions (15
+transform checks and 15 click checks), drives both map extremes at every zoom
+(10 bounds checks), proves a pan moves at every zoom (5 pan checks), and rejects
+a point in the HUD. A separate fault-injection run offsets the actual Camera2D
+node and must fail that comparison, so the transform evidence does not invert
+the same value on both sides. Every camera and view case also reports the
+`headless` display server. Screenshot verification waits through the deferred
+container layout, then requires the actual Camera2D node to match the frame
+derived from that final world viewport. The stage also compares
 1280x720 and 1600x900 at zoom 1 and requires the latter to expose a larger world
 rectangle.
+
+Five invalid startup cases (zoom, tile size, UI scale, camera position and
+fixture) must each emit a `"status":"error"` event and exit 1 within 20 seconds.
+This proves structured error reporting remains usable even when parsing or
+fixture loading fails before the HUD or canonical snapshot exists.
 
 `scripts/verify.ps1 -Stage screenshots` captures the same explicit baseline
 frame twice and requires the PNG files to be byte-for-byte identical before it

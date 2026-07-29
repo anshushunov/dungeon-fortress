@@ -43,6 +43,21 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $artifactsRoot = Join-Path $repoRoot ".artifacts"
 $projectPath = Join-Path $repoRoot "src\DungeonFortress.Game"
 $projectFile = Join-Path $projectPath "DungeonFortress.Game.csproj"
+$frameParts = $FrameSize -split "x", 2
+$frameWidth = [int]::Parse($frameParts[0], [Globalization.CultureInfo]::InvariantCulture)
+$frameHeight = [int]::Parse($frameParts[1], [Globalization.CultureInfo]::InvariantCulture)
+$minimumLogicalWidth = 1024
+$minimumLogicalHeight = 720
+if (($frameWidth / $UiScale) -lt $minimumLogicalWidth -or
+    ($frameHeight / $UiScale) -lt $minimumLogicalHeight) {
+    throw (
+        "FrameSize $FrameSize at UiScale " +
+        $UiScale.ToString([Globalization.CultureInfo]::InvariantCulture) +
+        " is too small: the HUD requires at least ${minimumLogicalWidth}x" +
+        "${minimumLogicalHeight} logical pixels. Increase FrameSize or reduce UiScale."
+    )
+}
+
 $resolvedScreenshotPath = if ([string]::IsNullOrWhiteSpace($ScreenshotPath)) {
     $null
 } else {

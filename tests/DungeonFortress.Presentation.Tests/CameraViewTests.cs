@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using DungeonFortress.Simulation;
 
 using Xunit;
@@ -72,6 +74,22 @@ public sealed class CameraViewTests
 
         Assert.Equal(WorldViewport.Center, frame.WorldToScreen(center));
         Assert.Equal(center, frame.ScreenToWorld(WorldViewport.Center));
+    }
+
+    [Fact]
+    public void Camera_frame_places_a_known_world_point_at_an_independently_calculated_pixel()
+    {
+        var frame = new CameraFrame(
+            new ViewPoint(560, 320),
+            0.75,
+            WorldViewport,
+            FrameSize);
+
+        // These coordinates are worked from the camera equation, not from the
+        // inverse method under test. Moving the Camera2D node by even one pixel
+        // makes the engine smoke disagree with the same fixed expectation.
+        Assert.Equal(new ViewPoint(463, 419), frame.WorldToScreen(new ViewPoint(580, 340)));
+        Assert.Equal(new ViewPoint(580, 340), frame.ScreenToWorld(new ViewPoint(463, 419)));
     }
 
     [Fact]
@@ -178,5 +196,25 @@ public sealed class CameraViewTests
         Assert.Equal(1.5, CameraView.StepZoom(1.0, 1));
         Assert.Equal(2.0, CameraView.StepZoom(2.0, 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => CameraView.ValidateZoom(1.1));
+    }
+
+    [Fact]
+    public void View_validation_messages_do_not_depend_on_the_process_culture()
+    {
+        var originalCulture = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ru-RU");
+
+            var failure = Assert.Throws<ArgumentOutOfRangeException>(
+                () => CameraView.ValidateZoom(1.1));
+
+            Assert.Contains("0.5, 0.75, 1, 1.5, 2", failure.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("0,5", failure.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
     }
 }

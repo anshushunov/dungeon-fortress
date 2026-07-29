@@ -230,7 +230,8 @@ git grep -n 'uid://' -- src/DungeonFortress.Game
 импорт выдал скрипту **другой** случайный идентификатор
 (`uid://du80nvw2ghu16` → `uid://cw3gvuoooy3xo`), `Main.tscn` при этом не
 изменился, а полный `verify.ps1` остался зелёным — включая headless smoke,
-`--smoke-controls`, camera/input smoke, четыре camera/frame/UI варианта, три
+`--smoke-controls`, camera/input smoke с независимой проверкой live Camera2D,
+отрицательные startup/HUD/camera проверки, четыре camera/frame/UI варианта, три
 golden UI frame, сравнение checksum на 20 и 60 fps и три screenshot-прогона,
 которые загружают сцену и все PNG.
 

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using DungeonFortress.Simulation;
 
 namespace DungeonFortress.Presentation;
@@ -111,8 +113,12 @@ public static class CameraView
         {
             throw new ArgumentOutOfRangeException(
                 nameof(zoom),
-                zoom,
-                $"Zoom must be one of: {string.Join(", ", DiscreteZoomLevels)}.");
+                "Zoom must be one of: " +
+                string.Join(
+                    ", ",
+                    DiscreteZoomLevels.Select(value =>
+                        value.ToString("G17", CultureInfo.InvariantCulture))) +
+                ".");
         }
 
         return zoom;
@@ -126,8 +132,11 @@ public static class CameraView
         {
             throw new ArgumentOutOfRangeException(
                 nameof(uiScale),
-                uiScale,
-                $"UI scale must be between {MinimumUiScale} and {MaximumUiScale}.");
+                "UI scale must be between " +
+                MinimumUiScale.ToString("G17", CultureInfo.InvariantCulture) +
+                " and " +
+                MaximumUiScale.ToString("G17", CultureInfo.InvariantCulture) +
+                ".");
         }
 
         return uiScale;

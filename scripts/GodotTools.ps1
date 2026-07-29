@@ -328,6 +328,131 @@ function Invoke-GodotChecked {
     }
 }
 
+function Invoke-GodotExpectedFailure {
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$GodotPath,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedErrorEvent,
+
+        [string]$MessagePattern,
+
+        [ValidateRange(1, 120)]
+        [int]$TimeoutSeconds = 20
+    )
+
+    # Direct invocation cannot enforce a deadline. Use a no-window process with
+    # redirected streams so a regression that hangs after its startup exception
+    # fails verification instead of hanging verification too.
+    $quotedArguments = @($Arguments | ForEach-Object {
+        $argument = [string]$_
+        if ($argument -match '[\s"]') {
+            '"' + $argument.Replace('"', '\"') + '"'
+        }
+        else {
+            $argument
+        }
+    })
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $GodotPath
+    $startInfo.Arguments = $quotedArguments -join " "
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+
+    try {
+        if (-not $process.Start()) {
+            throw "Godot failure process did not start."
+        }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+            $process.Kill()
+            $process.WaitForExit()
+            throw "Godot did not exit within $TimeoutSeconds second(s) after the expected failure."
+        }
+        $process.WaitForExit()
+        $exitCode = $process.ExitCode
+        $stdout = @($stdoutTask.Result -split "\r?\n" | Where-Object { $_ -ne "" })
+        $stderr = @($stderrTask.Result -split "\r?\n" | Where-Object { $_ -ne "" })
+        $output = @($stdout) + @($stderr)
+        $output | ForEach-Object { Write-Host $_ }
+
+        if ($exitCode -ne 1) {
+            throw "Godot failure exited with code $exitCode; expected exactly 1."
+        }
+
+        $eventPattern = '"event":"' + [Regex]::Escape($ExpectedErrorEvent) + '"'
+        $eventLine = $output | Where-Object {
+            $_ -match $eventPattern -and $_ -match '"status":"error"'
+        } | Select-Object -Last 1
+        if ($null -eq $eventLine) {
+            throw "Godot did not emit the expected '$ExpectedErrorEvent' error event."
+        }
+
+        $event = $eventLine | ConvertFrom-Json
+        if (-not [string]::IsNullOrWhiteSpace($MessagePattern) -and
+            [string]$event.message -notmatch $MessagePattern) {
+            throw (
+                "Godot error event message '$($event.message)' did not match " +
+                "'$MessagePattern'."
+            )
+        }
+
+        [ordered]@{
+            event = "godot_expected_failure_guard"
+            status = "ok"
+            exitCode = $exitCode
+            expectedEvent = $ExpectedErrorEvent
+            message = $event.message
+        } | ConvertTo-Json -Compress | Write-Host
+
+        return [pscustomobject]@{
+            ExitCode = $exitCode
+            Output = $output
+            Event = $event
+        }
+    }
+    finally {
+        $process.Dispose()
+    }
+}
+
+function Assert-SameNonEmptyValue {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [object[]]$Values,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Description
+    )
+
+    $texts = @($Values | ForEach-Object { [string]$_ })
+    if ($texts.Count -eq 0 -or
+        @($texts | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
+        throw "$Description must contain one non-empty value from every case."
+    }
+
+    $distinct = @($texts | Select-Object -Unique)
+    if ($distinct.Count -ne 1) {
+        throw "$Description differs between cases."
+    }
+
+    return $distinct[0]
+}
+
 function Assert-GoblinSpriteDiagnostics {
     [CmdletBinding()]
     param(

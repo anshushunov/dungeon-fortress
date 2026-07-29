@@ -119,4 +119,28 @@ public sealed class ViewLaunchOptionsTests
 
         Assert.Equal("--frame-size", failure.ParamName);
     }
+
+    [Fact]
+    public void Ui_scale_is_rejected_when_the_declared_frame_cannot_hold_the_required_logical_HUD()
+    {
+        var failure = Assert.Throws<ArgumentException>(
+            () => ViewLaunchOptions.Parse(
+                ["--ui-scale", "2", "--frame-size", "1280x720"],
+                requireExplicitCaptureParameters: false));
+
+        Assert.Equal("--ui-scale", failure.ParamName);
+        Assert.Contains("640x360 logical pixels", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("1024x720", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Ui_scale_two_is_supported_when_the_frame_preserves_the_logical_HUD()
+    {
+        var options = ViewLaunchOptions.Parse(
+            ["--ui-scale", "2", "--frame-size", "2048x1440"],
+            requireExplicitCaptureParameters: false);
+
+        Assert.Equal(2, options.UiScale);
+        Assert.Equal(new ViewSize(2048, 1440), options.FrameSize);
+    }
 }

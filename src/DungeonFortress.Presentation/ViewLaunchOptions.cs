@@ -12,6 +12,12 @@ public sealed record ViewLaunchOptions(
     double UiScale,
     ViewSize? FrameSize)
 {
+    // The HUD guard's required 1024 logical width is also the smallest frame
+    // that leaves enough height for the current panels. UI scale remains
+    // independent of native resolution, but a declared frame must provide this
+    // much logical room after scaling.
+    public static readonly ViewSize MinimumLogicalFrameSize = new(1024, 720);
+
     private static readonly string[] CaptureParameterNames =
     [
         "--tile-size",
@@ -52,6 +58,15 @@ public sealed record ViewLaunchOptions(
         ViewSize? frame = frameValue is null
             ? null
             : CommandLineArguments.ParseSize(frameValue, "--frame-size");
+        if (frame is { } declared &&
+            (declared.Width / uiScale < MinimumLogicalFrameSize.Width ||
+             declared.Height / uiScale < MinimumLogicalFrameSize.Height))
+        {
+            throw new ArgumentException(
+                FormattableString.Invariant(
+                    $"Frame {declared.Width}x{declared.Height} at UI scale {uiScale} provides only {declared.Width / uiScale}x{declared.Height / uiScale} logical pixels; at least {MinimumLogicalFrameSize.Width}x{MinimumLogicalFrameSize.Height} are required."),
+                "--ui-scale");
+        }
 
         return new ViewLaunchOptions(tileSize, zoom, position, uiScale, frame);
     }

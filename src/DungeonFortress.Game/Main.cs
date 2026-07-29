@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 using DungeonFortress.Presentation;
@@ -95,13 +96,35 @@ public partial class Main : Node2D
     private int _cameraInputChecks;
     private int _cameraBoundsChecks;
     private int _cameraPanChecks;
+    private int _cameraTransformChecks;
     private bool _hudInputRejected;
+    private bool _cameraSynchronizedAfterLayout;
 
     public override void _Ready()
     {
+        var failureEventName = "godot_headless_smoke";
         try
         {
             var arguments = OS.GetCmdlineUserArgs();
+            var headlessSmoke = arguments.Contains("--smoke", StringComparer.Ordinal);
+            var visibleSmoke = arguments.Contains("--visible-smoke", StringComparer.Ordinal);
+            var controlsSmoke = arguments.Contains("--smoke-controls", StringComparer.Ordinal);
+            var cameraTransformRegression =
+                arguments.Contains("--smoke-camera-transform-regression", StringComparer.Ordinal);
+            var cameraSmoke =
+                arguments.Contains("--smoke-camera", StringComparer.Ordinal) ||
+                cameraTransformRegression;
+            var hudGuardRegression =
+                arguments.Contains("--smoke-hud-guard-regression", StringComparer.Ordinal);
+            failureEventName = cameraSmoke
+                ? "godot_camera_smoke"
+                : controlsSmoke
+                    ? "godot_controls_smoke"
+                    : headlessSmoke
+                        ? "godot_headless_smoke"
+                        : visibleSmoke
+                            ? "godot_visible_smoke"
+                            : failureEventName;
             var fixture = CommandLineArguments.Read(arguments, "--fixture") ?? "baseline";
             var screenshotTicks = CommandLineArguments.ReadInt(arguments, "--screenshot-ticks") ?? 1;
             _screenshotPath = CommandLineArguments.Read(arguments, "--screenshot");
@@ -117,10 +140,6 @@ public partial class Main : Node2D
             ConfigureRequestedFrame();
             var selectCreature = CommandLineArguments.ReadInt(arguments, "--select-creature");
             var selectCell = CommandLineArguments.Read(arguments, "--select-cell");
-            var headlessSmoke = arguments.Contains("--smoke", StringComparer.Ordinal);
-            var visibleSmoke = arguments.Contains("--visible-smoke", StringComparer.Ordinal);
-            var controlsSmoke = arguments.Contains("--smoke-controls", StringComparer.Ordinal);
-            var cameraSmoke = arguments.Contains("--smoke-camera", StringComparer.Ordinal);
             var demoControls = arguments.Contains("--demo-controls", StringComparer.Ordinal);
             var demoDig = arguments.Contains("--demo-dig", StringComparer.Ordinal);
             var demoStone = arguments.Contains("--demo-stone", StringComparer.Ordinal);
@@ -155,6 +174,11 @@ public partial class Main : Node2D
                 _screenshotPath is null
                     ? 1
                     : screenshotTicks);
+            if (hudGuardRegression)
+            {
+                InjectHudGuardRegression();
+            }
+
             if (demoControls || controlsSmoke)
             {
                 ApplyDemoControls();
@@ -217,11 +241,12 @@ public partial class Main : Node2D
             // content and the check would silently pass on anything.
             AssertLabelsFit(strictHudFit);
             AssertControlStripsFit();
+            ApplyCameraView();
             AssertRequestedFrameSize();
 
             if (cameraSmoke)
             {
-                VerifyCameraInputSmoke();
+                VerifyCameraInputSmoke(cameraTransformRegression);
                 VerifyDeterministicFixture(fixture);
                 PrintResult("godot_camera_smoke", "ok", null);
                 GetTree().Quit();
@@ -250,7 +275,7 @@ public partial class Main : Node2D
         catch (Exception exception)
         {
             RecordDiagnostic("startup", exception);
-            PrintResult("godot_headless_smoke", "error", exception);
+            PrintResult(failureEventName, "error", exception);
             GD.PushError(exception.ToString());
             GetTree().Quit(1);
         }
@@ -262,6 +287,17 @@ public partial class Main : Node2D
         {
             _framePacingArgumentsRead = true;
             BeginFramePacingProbe();
+        }
+
+        // Containers complete one deferred layout after _Ready. Re-derive the
+        // Camera2D node from that real geometry once, so the live camera cannot
+        // retain the position computed from a provisional world viewport.
+        if (!_cameraSynchronizedAfterLayout && _camera is not null && _worldViewport is not null)
+        {
+            LayoutHud(GetViewportRect().Size, _uiScale);
+            ApplyCameraView();
+            AssertCameraNodeMatchesFrame();
+            _cameraSynchronizedAfterLayout = true;
         }
 
         if (_screenshotPath is not null)
@@ -279,6 +315,7 @@ public partial class Main : Node2D
             {
                 AssertLabelsFit();
                 AssertControlStripsFit();
+                ApplyCameraView();
             }
             catch (Exception exception)
             {
@@ -915,9 +952,15 @@ public partial class Main : Node2D
             return;
         }
 
-        GetWindow().ContentScaleSize = new Vector2I(
+        var frame = new Vector2I(
             checked((int)requested.Width),
             checked((int)requested.Height));
+        var window = GetWindow();
+        // With canvas_items/expand, Godot's --resolution is not applied to the
+        // headless root window. Set both rectangles so the same explicit frame
+        // is real in headless verification and in a visible capture.
+        window.Size = frame;
+        window.ContentScaleSize = frame;
     }
 
     private void OnViewportResized()
@@ -975,6 +1018,25 @@ public partial class Main : Node2D
         _camera.Position = new Vector2((float)node.X, (float)node.Y);
         _camera.Zoom = Vector2.One * (float)_cameraZoom;
         _camera.ForceUpdateScroll();
+    }
+
+    private void AssertCameraNodeMatchesFrame()
+    {
+        if (_camera is null || _worldViewport is null)
+        {
+            throw new InvalidOperationException(
+                "Camera layout synchronization ran before the camera and world viewport existed.");
+        }
+
+        var expected = CurrentCameraFrame().CameraNodePosition;
+        var actual = _camera.Position;
+        if (Math.Abs(actual.X - expected.X) > 0.01 ||
+            Math.Abs(actual.Y - expected.Y) > 0.01)
+        {
+            throw new InvalidOperationException(
+                $"Camera2D did not follow deferred HUD layout: expected " +
+                $"{FormatPoint(expected)}, actual {FormatVector(actual)}.");
+        }
     }
 
     private Rect2 WorldViewportScreenRect()
@@ -1045,25 +1107,27 @@ public partial class Main : Node2D
             !Mathf.IsEqualApprox(actual.Y, (float)requested.Height))
         {
             throw new InvalidOperationException(
-                $"Requested frame {requested.Width}x{requested.Height}, " +
-                $"but Godot created {actual.X}x{actual.Y}.");
+                $"Requested frame {FormatNumber(requested.Width)}x{FormatNumber(requested.Height)}, " +
+                $"but Godot created {FormatNumber(actual.X)}x{FormatNumber(actual.Y)}.");
         }
     }
 
     /// <summary>
-    /// Engine-level evidence for the input seam: the real Camera2D canvas
-    /// transform is inverted at every discrete zoom and three requested camera
-    /// positions. The same smoke drives both map extremes and one real pan at
-    /// every zoom, proving ApplyCameraView clamps the focus without cancelling
-    /// overview movement. A point in the side HUD is rejected before the inverse
-    /// can become a map click.
+    /// Engine-level evidence for the input seam: an engine-free
+    /// <see cref="CameraFrame"/> predicts where a world point belongs, and the
+    /// live Camera2D canvas transform must independently place it there before
+    /// the adapter inverts that predicted screen point back to a cell. The same
+    /// smoke drives all zooms and requested positions, both map extremes and one
+    /// real pan at every zoom. A point in the side HUD is rejected before the
+    /// inverse can become a map click.
     /// </summary>
-    private void VerifyCameraInputSmoke()
+    private void VerifyCameraInputSmoke(bool injectTransformRegression)
     {
         var originalCenter = _cameraCenter;
         var originalZoom = _cameraZoom;
         var target = new GridPoint(14, 8);
         var targetWorld = CellCenter(target);
+        var targetView = new ViewPoint(targetWorld.X, targetWorld.Y);
         ViewPoint[] centers =
         [
             CameraView.MapCenter(_tileSize),
@@ -1074,6 +1138,7 @@ public partial class Main : Node2D
         _cameraInputChecks = 0;
         _cameraBoundsChecks = 0;
         _cameraPanChecks = 0;
+        _cameraTransformChecks = 0;
         foreach (var zoom in CameraView.ZoomLevels)
         {
             foreach (var center in centers)
@@ -1081,12 +1146,32 @@ public partial class Main : Node2D
                 _cameraZoom = zoom;
                 _cameraCenter = center;
                 ApplyCameraView();
-                var screen = GetViewport().GetCanvasTransform() * targetWorld;
-                if (ScreenToCell(screen) != target)
+                var expectedScreen = CurrentCameraFrame().WorldToScreen(targetView);
+                if (injectTransformRegression && _cameraTransformChecks == 0)
+                {
+                    _camera!.Position += new Vector2(17, -11);
+                    _camera.ForceUpdateScroll();
+                }
+
+                var actualScreen = GetViewport().GetCanvasTransform() * targetWorld;
+                if (Math.Abs(actualScreen.X - expectedScreen.X) > 0.01 ||
+                    Math.Abs(actualScreen.Y - expectedScreen.Y) > 0.01)
                 {
                     throw new InvalidOperationException(
-                        $"Camera input mapped cell {target} incorrectly at zoom {zoom} " +
-                        $"and center {center}.");
+                        $"Camera2D transform disagrees with CameraFrame at zoom {FormatNumber(zoom)}: " +
+                        $"expected screen {FormatPoint(expectedScreen)}, " +
+                        $"actual {FormatVector(actualScreen)}, center {FormatPoint(center)}.");
+                }
+
+                _cameraTransformChecks++;
+                var predictedScreen = new Vector2(
+                    (float)expectedScreen.X,
+                    (float)expectedScreen.Y);
+                if (ScreenToCell(predictedScreen) != target)
+                {
+                    throw new InvalidOperationException(
+                        $"Camera input mapped cell {target} incorrectly at zoom {FormatNumber(zoom)} " +
+                        $"and center {FormatPoint(center)}.");
                 }
 
                 _cameraInputChecks++;
@@ -1110,8 +1195,9 @@ public partial class Main : Node2D
                     Math.Abs(_cameraCenter.Y - expected.Y) > 0.001)
                 {
                     throw new InvalidOperationException(
-                        $"Camera escaped map bounds at zoom {zoom}: " +
-                        $"requested {outsideCenter}, applied {_cameraCenter}, expected {expected}.");
+                        $"Camera escaped map bounds at zoom {FormatNumber(zoom)}: " +
+                        $"requested {FormatPoint(outsideCenter)}, " +
+                        $"applied {FormatPoint(_cameraCenter)}, expected {FormatPoint(expected)}.");
                 }
 
                 _cameraBoundsChecks++;
@@ -1131,8 +1217,9 @@ public partial class Main : Node2D
             if (_cameraCenter == beforePan || _cameraCenter != expected)
             {
                 throw new InvalidOperationException(
-                    $"Camera pan was cancelled at zoom {zoom}: " +
-                    $"before {beforePan}, applied {_cameraCenter}, expected {expected}.");
+                    $"Camera pan was cancelled at zoom {FormatNumber(zoom)}: " +
+                    $"before {FormatPoint(beforePan)}, applied {FormatPoint(_cameraCenter)}, " +
+                    $"expected {FormatPoint(expected)}.");
             }
 
             _cameraPanChecks++;
@@ -1571,16 +1658,18 @@ public partial class Main : Node2D
         {
             LayoutHud(frame.Viewport, frame.UiScale);
             var worldWidth = _worldViewport!.Size.X;
+            var allowedWidth = Math.Min(worldWidth, MapPixelSize.X);
             foreach (var (name, strip) in ControlStrips())
             {
-                if (strip is null || strip.Size.X <= worldWidth)
+                if (strip is null || strip.Size.X <= allowedWidth)
                 {
                     continue;
                 }
 
                 failures.Add(
-                    $"'{name}' is {strip.Size.X}px wide at viewport {frame.Viewport} " +
-                    $"and UI scale {frame.UiScale}, wider than the {worldWidth}px world viewport");
+                    $"'{name}' is {FormatNumber(strip.Size.X)}px wide at viewport " +
+                    $"{FormatVector(frame.Viewport)} and UI scale {FormatNumber(frame.UiScale)}, " +
+                    $"wider than the {FormatNumber(allowedWidth)}px usable world width");
             }
         }
 
@@ -1607,18 +1696,28 @@ public partial class Main : Node2D
     /// states the widths instead of the guard being trusted, and the icons that
     /// are still placeholders are named rather than merely absent from a picture.
     /// </summary>
-    private object ControlStripFit() => new
+    private object? ControlStripFit()
     {
-        mapWidth = MapPixelSize.X,
-        worldViewportWidth = _worldViewport!.Size.X,
-        widths = ControlStrips()
-            .Where(entry => entry.Strip is not null)
-            .Select(entry => (object)new { name = entry.Name, width = entry.Strip!.Size.X })
-            .ToArray(),
-        iconDrawSize = IconDrawSize,
-        loadedIcons = _icons.Keys.OrderBy(name => name, StringComparer.Ordinal).ToArray(),
-        placeholderIcons = _missingIcons,
-    };
+        if (_worldViewport is null)
+        {
+            return null;
+        }
+
+        var usableWidth = Math.Min(_worldViewport.Size.X, MapPixelSize.X);
+        return new
+        {
+            mapWidth = MapPixelSize.X,
+            worldViewportWidth = _worldViewport.Size.X,
+            usableWorldWidth = usableWidth,
+            widths = ControlStrips()
+                .Where(entry => entry.Strip is not null)
+                .Select(entry => (object)new { name = entry.Name, width = entry.Strip!.Size.X })
+                .ToArray(),
+            iconDrawSize = IconDrawSize,
+            loadedIcons = _icons.Keys.OrderBy(name => name, StringComparer.Ordinal).ToArray(),
+            placeholderIcons = _missingIcons,
+        };
+    }
 
     /// <summary>
     /// The side panel: heading, inspector, legend, event feedback. The legend is
@@ -1905,6 +2004,18 @@ public partial class Main : Node2D
     }
 
     /// <summary>
+    /// Verification-only fault injection. It changes no game state and exists so
+    /// the HUD guard proves it rejects a real overflow at the required logical
+    /// width instead of merely reporting that today's layout happens to fit.
+    /// </summary>
+    private void InjectHudGuardRegression()
+    {
+        _inspector!.Text = string.Join(
+            "\n",
+            Enumerable.Range(1, 80).Select(line => $"HUD guard regression line {line}"));
+    }
+
+    /// <summary>
     /// The adapter state the HUD text is allowed to depend on, gathered in one
     /// place. Everything else about this node — labels, viewport, brushes,
     /// pointer — stays on this side of the seam on purpose.
@@ -2079,7 +2190,10 @@ public partial class Main : Node2D
     /// side column needs about 33 lines and that frame offers about 29 — which is
     /// exactly the deficit Issue #28 measured and this Issue had to clear.
     /// </summary>
-    private readonly record struct HudFitFrame(Vector2 Viewport, double UiScale);
+    private readonly record struct HudFitFrame(Vector2 Viewport, double UiScale)
+    {
+        public Vector2 LogicalViewport => Viewport / (float)UiScale;
+    }
 
     private HudFitFrame[] HudFitFrames() =>
         new[]
@@ -2088,10 +2202,12 @@ public partial class Main : Node2D
             new HudFitFrame(new Vector2(1280, 720), 1.0),
             new HudFitFrame(new Vector2(1366, 768), 1.0),
             new HudFitFrame(new Vector2(1600, 900), 1.0),
-            new HudFitFrame(new Vector2(1024, 768), 0.8),
+            new HudFitFrame(new Vector2(1024, 768), 1.0),
             new HudFitFrame(new Vector2(1920, 1080), 1.25),
-            new HudFitFrame(new Vector2(2560, 1440), 2.0),
-        }.Distinct().ToArray();
+            new HudFitFrame(new Vector2(2048, 1440), 2.0),
+        }
+        .DistinctBy(frame => (frame.LogicalViewport.X, frame.LogicalViewport.Y))
+        .ToArray();
 
     /// <summary>
     /// Lays the HUD out at a given frame size and waits for nothing. Godot sorts
@@ -2163,7 +2279,8 @@ public partial class Main : Node2D
                 {
                     failures.Add(
                         $"'{name}' needs {needed} lines but only {shown} fit in " +
-                        $"{label.Size} at viewport {frame.Viewport}, UI scale {frame.UiScale}");
+                        $"{FormatVector(label.Size)} at viewport {FormatVector(frame.Viewport)}, " +
+                        $"UI scale {FormatNumber(frame.UiScale)}");
                 }
             }
 
@@ -2174,8 +2291,8 @@ public partial class Main : Node2D
                 {
                     failures.Add(
                         $"summary at the end of a party ('{outcome}') needs {needed} " +
-                        $"lines but only {shown} fit at viewport {frame.Viewport}, " +
-                        $"UI scale {frame.UiScale}");
+                        $"lines but only {shown} fit at viewport {FormatVector(frame.Viewport)}, " +
+                        $"UI scale {FormatNumber(frame.UiScale)}");
                 }
             }
         }
@@ -2214,6 +2331,11 @@ public partial class Main : Node2D
                 .Select(frame => (object)new
                 {
                     viewport = new[] { frame.Viewport.X, frame.Viewport.Y },
+                    logicalViewport = new[]
+                    {
+                        frame.LogicalViewport.X,
+                        frame.LogicalViewport.Y,
+                    },
                     uiScale = frame.UiScale,
                 })
                 .ToArray(),
@@ -2265,43 +2387,49 @@ public partial class Main : Node2D
     private object ViewState()
     {
         var viewport = GetViewportRect().Size;
-        var world = WorldViewportScreenRect();
-        var camera = CurrentCameraFrame();
+        var world = _worldViewport is null ? (Rect2?)null : WorldViewportScreenRect();
+        var camera = _worldViewport is null ? (CameraFrame?)null : CurrentCameraFrame();
+        var cameraNodePosition = _camera?.Position;
         return new
         {
             frameSize = new[] { viewport.X, viewport.Y },
             requestedFrameSize = _requestedFrameSize is { } requested
                 ? new[] { requested.Width, requested.Height }
                 : null,
-            worldViewport = new[]
-            {
-                world.Position.X,
-                world.Position.Y,
-                world.Size.X,
-                world.Size.Y,
-            },
+            worldViewport = world is { } worldRect
+                ? new[]
+                {
+                    worldRect.Position.X,
+                    worldRect.Position.Y,
+                    worldRect.Size.X,
+                    worldRect.Size.Y,
+                }
+                : null,
             tileSize = _tileSize,
             goblinWorldSize = CameraView.GoblinDrawSize(_tileSize),
             goblinScreenSize = CameraView.GoblinDrawSize(_tileSize) * _cameraZoom,
             cameraPosition = new[] { _cameraCenter.X, _cameraCenter.Y },
-            cameraNodePosition = new[]
-            {
-                camera.CameraNodePosition.X,
-                camera.CameraNodePosition.Y,
-            },
+            cameraNodePosition = cameraNodePosition is { } nodePosition
+                ? new[] { nodePosition.X, nodePosition.Y }
+                : null,
             cameraZoom = _cameraZoom,
             zoomLevel = Array.IndexOf(CameraView.ZoomLevels.ToArray(), _cameraZoom),
-            visibleWorldSize = new[]
-            {
-                camera.VisibleWorldSize.Width,
-                camera.VisibleWorldSize.Height,
-            },
+            visibleWorldSize = camera is { } frame
+                ? new[]
+                {
+                    frame.VisibleWorldSize.Width,
+                    frame.VisibleWorldSize.Height,
+                }
+                : null,
             uiScale = _uiScale,
+            displayServer = DisplayServer.GetName(),
             textureFilter = TextureFilter.ToString(),
             spriteMipmaps = _spritesHaveMipmaps,
             cameraInputChecks = _cameraInputChecks,
             cameraBoundsChecks = _cameraBoundsChecks,
             cameraPanChecks = _cameraPanChecks,
+            cameraTransformChecks = _cameraTransformChecks,
+            cameraSynchronizedAfterLayout = _cameraSynchronizedAfterLayout,
             hudInputRejected = _hudInputRejected,
         };
     }
@@ -2607,9 +2735,9 @@ public partial class Main : Node2D
         var text = stroke.Tiles.Count == 1 ? "1 cell" : $"{stroke.Tiles.Count} cells";
 
         // Kept inside the map on both axes. Above the selection when there is room
-        // and inside its first cell when there is not: the control strips are
-        // Control nodes and draw over the canvas, so a caption that overhangs the
-        // top of the map would be covered by the strip rather than clipped.
+        // and inside its first cell when there is not: HUD masks cover every
+        // canvas pixel outside the explicit world viewport, so an overhanging
+        // caption would be hidden rather than appear inside the HUD.
         var box = new Vector2(
             Math.Clamp(topLeft.X, 0, MapPixelSize.X - width),
             topLeft.Y - height - ScaleWorld(3) >= 0
@@ -3867,38 +3995,65 @@ public partial class Main : Node2D
 
     private void PrintResult(string eventName, string status, Exception? exception)
     {
-        GD.Print(JsonSerializer.Serialize(new
+        try
         {
-            @event = eventName,
-            status,
-            fixture = _fixture,
-            seed = _state?.Seed,
-            tick = _state?.Tick,
-            checksum = _checksum,
-            canonicalStateOwner = "DungeonFortress.Simulation.PrototypeWorld",
-            view = ViewState(),
-            // The same conservation evidence a screenshot carries. A headless run
-            // is now a complete frame report, so the golden UI state does not need
-            // a window to be captured.
-            stoneProduced = _state?.Economy.StoneProduced,
-            looseStone = _state?.Stocks.LooseStone,
-            carriedStone = _state?.Stocks.CarriedStone,
-            storedStone = _state?.Stocks.StoredStone,
-            siteStone = _state?.Stocks.SiteStone,
-            stoneConsumed = _state?.Economy.StoneConsumed,
-            stockpileCapacity = _state?.Stocks.StockpileCapacity,
-            buildsCompleted = _state?.Economy.BuildsCompleted,
-            ui = UiText(),
-            labelFit = LabelFit(),
-            controlStrips = ControlStripFit(),
-            loadedSpriteStates = _loadedSpriteStates,
-            missingSpriteStates = _missingSpriteStates,
-            fallbackSpriteDraws = _fallbackSpriteDraws,
-            runtimeDiagnostics = _diagnostics,
-            errorType = exception?.GetType().Name,
-            message = exception?.Message,
-        }));
+            GD.Print(JsonSerializer.Serialize(new
+            {
+                @event = eventName,
+                status,
+                fixture = _fixture,
+                seed = _state?.Seed,
+                tick = _state?.Tick,
+                checksum = _checksum,
+                canonicalStateOwner = "DungeonFortress.Simulation.PrototypeWorld",
+                view = ViewState(),
+                // The same conservation evidence a screenshot carries. A headless run
+                // is now a complete frame report, so the golden UI state does not need
+                // a window to be captured.
+                stoneProduced = _state?.Economy.StoneProduced,
+                looseStone = _state?.Stocks.LooseStone,
+                carriedStone = _state?.Stocks.CarriedStone,
+                storedStone = _state?.Stocks.StoredStone,
+                siteStone = _state?.Stocks.SiteStone,
+                stoneConsumed = _state?.Economy.StoneConsumed,
+                stockpileCapacity = _state?.Stocks.StockpileCapacity,
+                buildsCompleted = _state?.Economy.BuildsCompleted,
+                ui = _state is null ? null : UiText(),
+                labelFit = _state is null || _hudRoot is null ? null : LabelFit(),
+                controlStrips = ControlStripFit(),
+                loadedSpriteStates = _loadedSpriteStates,
+                missingSpriteStates = _missingSpriteStates,
+                fallbackSpriteDraws = _fallbackSpriteDraws,
+                runtimeDiagnostics = _diagnostics,
+                errorType = exception?.GetType().Name,
+                message = exception?.Message,
+            }));
+        }
+        catch (Exception reportingException) when (exception is not null)
+        {
+            // Error reporting must not hide the original startup failure. Keep
+            // this fallback independent of nodes and snapshots that may not exist.
+            GD.Print(JsonSerializer.Serialize(new
+            {
+                @event = eventName,
+                status = "error",
+                fixture = _fixture,
+                errorType = exception.GetType().Name,
+                message = exception.Message,
+                reportingErrorType = reportingException.GetType().Name,
+                reportingMessage = reportingException.Message,
+            }));
+        }
     }
+
+    private static string FormatNumber(double value) =>
+        value.ToString("G17", CultureInfo.InvariantCulture);
+
+    private static string FormatPoint(ViewPoint point) =>
+        $"({FormatNumber(point.X)}, {FormatNumber(point.Y)})";
+
+    private static string FormatVector(Vector2 vector) =>
+        $"({FormatNumber(vector.X)}, {FormatNumber(vector.Y)})";
 
     private void RecordDiagnostic(string scope, Exception exception)
     {

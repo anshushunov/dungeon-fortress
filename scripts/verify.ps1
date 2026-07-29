@@ -398,11 +398,80 @@ $stageCatalog = [ordered]@{
                 ) `
                 -ExpectedSuccessEvent "godot_controls_smoke"
 
-            Write-Host "Checking Camera2D inverse input at every discrete zoom..."
+            Write-Host "Proving invalid startup parameters report JSON and exit instead of hanging..."
+            $invalidViewCases = @(
+                [pscustomobject]@{
+                    Name = "zoom"
+                    Arguments = @("--smoke", "--camera-zoom", "1.1")
+                    Message = "Zoom must be one of"
+                },
+                [pscustomobject]@{
+                    Name = "tile-size"
+                    Arguments = @("--smoke", "--tile-size", "50")
+                    Message = "Tile size must be between"
+                },
+                [pscustomobject]@{
+                    Name = "ui-scale"
+                    Arguments = @("--smoke", "--ui-scale", "3")
+                    Message = "UI scale must be between"
+                },
+                [pscustomobject]@{
+                    Name = "camera-position"
+                    Arguments = @("--smoke", "--camera-position", "invalid")
+                    Message = "camera-position"
+                },
+                [pscustomobject]@{
+                    Name = "fixture"
+                    Arguments = @("--smoke", "--fixture")
+                    Message = "Missing value after --fixture"
+                }
+            )
+            foreach ($invalidViewCase in $invalidViewCases) {
+                $invalidArguments = @(
+                    "--headless", "--path", $gameProjectPath, "--"
+                ) + @($invalidViewCase.Arguments)
+                Invoke-GodotExpectedFailure `
+                    -GodotPath $godot `
+                    -Arguments $invalidArguments `
+                    -ExpectedErrorEvent "godot_headless_smoke" `
+                    -MessagePattern $invalidViewCase.Message | Out-Null
+            }
+
+            Write-Host "Proving the HUD guard rejects overflow at logical width 1024..."
+            $hudGuardFailure = Invoke-GodotExpectedFailure `
+                -GodotPath $godot `
+                -Arguments @(
+                    "--headless", "--resolution", "1024x768", "--path", $gameProjectPath,
+                    "--", "--smoke", "--smoke-hud-guard-regression",
+                    "--tile-size", "40",
+                    "--camera-zoom", "1",
+                    "--camera-position", "560,320",
+                    "--ui-scale", "1",
+                    "--frame-size", "1024x768"
+                ) `
+                -ExpectedErrorEvent "godot_headless_smoke" `
+                -MessagePattern "HUD loses text.*1024"
+
+            Write-Host "Proving a misplaced Camera2D fails the independent transform check..."
+            $cameraTransformFailure = Invoke-GodotExpectedFailure `
+                -GodotPath $godot `
+                -Arguments @(
+                    "--headless", "--resolution", "1280x720", "--path", $gameProjectPath,
+                    "--", "--smoke-camera-transform-regression",
+                    "--tile-size", "40",
+                    "--camera-zoom", "1",
+                    "--camera-position", "560,320",
+                    "--ui-scale", "1",
+                    "--frame-size", "1280x720"
+                ) `
+                -ExpectedErrorEvent "godot_camera_smoke" `
+                -MessagePattern "Camera2D transform disagrees with CameraFrame"
+
+            Write-Host "Checking Camera2D input at every discrete zoom against the pure frame..."
             $cameraResult = Invoke-GodotChecked `
                 -GodotPath $godot `
                 -Arguments @(
-                    "--resolution", "1280x720", "--path", $gameProjectPath,
+                    "--headless", "--resolution", "1280x720", "--path", $gameProjectPath,
                     "--", "--smoke-camera",
                     "--tile-size", "40",
                     "--camera-zoom", "1",
@@ -414,11 +483,13 @@ $stageCatalog = [ordered]@{
             $cameraEvent = Get-GodotEvent `
                 -OutputLines $cameraResult.Output `
                 -EventName "godot_camera_smoke"
-            if ([int]$cameraEvent.view.cameraInputChecks -ne 15 -or
+            if ([string]$cameraEvent.view.displayServer -ne "headless" -or
+                [int]$cameraEvent.view.cameraInputChecks -ne 15 -or
+                [int]$cameraEvent.view.cameraTransformChecks -ne 15 -or
                 [int]$cameraEvent.view.cameraBoundsChecks -ne 10 -or
                 [int]$cameraEvent.view.cameraPanChecks -ne 5 -or
                 -not [bool]$cameraEvent.view.hudInputRejected) {
-                throw "Camera smoke did not prove input mapping, map bounds, panning and HUD rejection."
+                throw "Camera smoke did not prove live transform agreement, input mapping, map bounds, panning and HUD rejection."
             }
 
             Write-Host "Comparing canonical checksum across camera, frame and UI parameters..."
@@ -457,7 +528,7 @@ $stageCatalog = [ordered]@{
                 $result = Invoke-GodotChecked `
                     -GodotPath $godot `
                     -Arguments @(
-                        "--resolution", $viewCase.Frame, "--path", $gameProjectPath,
+                        "--headless", "--resolution", $viewCase.Frame, "--path", $gameProjectPath,
                         "--", "--smoke", "--fixture", "baseline",
                         "--demo-stone", "--screenshot-ticks", "190",
                         "--tile-size", "40",
@@ -470,12 +541,14 @@ $stageCatalog = [ordered]@{
                 $viewEvents[$viewCase.Name] = Get-GodotEvent `
                     -OutputLines $result.Output `
                     -EventName "godot_headless_smoke"
+                if ([string]$viewEvents[$viewCase.Name].view.displayServer -ne "headless") {
+                    throw "View case '$($viewCase.Name)' did not run on the headless display server."
+                }
             }
 
-            $viewChecksums = @($viewEvents.Values | ForEach-Object { $_.checksum } | Select-Object -Unique)
-            if ($viewChecksums.Count -ne 1) {
-                throw "Camera position, zoom, frame size or UI scale changed the canonical checksum."
-            }
+            $viewChecksum = Assert-SameNonEmptyValue `
+                -Values @($viewEvents.Values | ForEach-Object { $_.checksum }) `
+                -Description "Canonical checksum across camera position, zoom, frame size and UI scale"
             if ([double]$viewEvents["large-same-zoom"].view.visibleWorldSize[0] -le
                 [double]$viewEvents["base"].view.visibleWorldSize[0] -or
                 [double]$viewEvents["large-same-zoom"].view.visibleWorldSize[1] -le
@@ -506,10 +579,14 @@ $stageCatalog = [ordered]@{
                 SmokeExitCode = $godotResult.ExitCode
                 ControlsExitCode = $controlsResult.ExitCode
                 CameraExitCode = $cameraResult.ExitCode
+                InvalidViewFailuresChecked = $invalidViewCases.Count
+                HudGuardRegressionExitCode = $hudGuardFailure.ExitCode
+                CameraTransformRegressionExitCode = $cameraTransformFailure.ExitCode
                 CameraInputChecks = [int]$cameraEvent.view.cameraInputChecks
+                CameraTransformChecks = [int]$cameraEvent.view.cameraTransformChecks
                 CameraBoundsChecks = [int]$cameraEvent.view.cameraBoundsChecks
                 CameraPanChecks = [int]$cameraEvent.view.cameraPanChecks
-                ViewChecksum = [string]$viewChecksums[0]
+                ViewChecksum = [string]$viewChecksum
                 ViewCases = @($viewCases.Name)
                 GoblinScreenPixels = [pscustomobject]@{
                     Overview = $overviewGoblinPixels
@@ -573,6 +650,9 @@ $stageCatalog = [ordered]@{
                 ) `
                 -ExpectedSuccessEvent "godot_graybox_screenshot"
             Assert-GoblinSpriteDiagnostics -OutputLines $baselineResult.Output -EventName "godot_graybox_screenshot"
+            $baselineEvent = Get-GodotEvent `
+                -OutputLines $baselineResult.Output `
+                -EventName "godot_graybox_screenshot"
             if (-not (Test-Path -LiteralPath $baselineScreenshot -PathType Leaf)) {
                 throw "Baseline visual smoke did not write its screenshot."
             }
@@ -590,6 +670,9 @@ $stageCatalog = [ordered]@{
                 ) `
                 -ExpectedSuccessEvent "godot_graybox_screenshot"
             Assert-GoblinSpriteDiagnostics `
+                -OutputLines $baselineRepeatResult.Output `
+                -EventName "godot_graybox_screenshot"
+            $baselineRepeatEvent = Get-GodotEvent `
                 -OutputLines $baselineRepeatResult.Output `
                 -EventName "godot_graybox_screenshot"
             Assert-FilesEqual `
@@ -627,8 +710,16 @@ $stageCatalog = [ordered]@{
                 ) `
                 -ExpectedSuccessEvent "godot_graybox_screenshot"
             Assert-GoblinSpriteDiagnostics -OutputLines $raidResult.Output -EventName "godot_graybox_screenshot"
+            $raidEvent = Get-GodotEvent `
+                -OutputLines $raidResult.Output `
+                -EventName "godot_graybox_screenshot"
             if (-not (Test-Path -LiteralPath $raidScreenshot -PathType Leaf)) {
                 throw "Prepared raid smoke did not write its screenshot."
+            }
+            foreach ($captureEvent in @($baselineEvent, $baselineRepeatEvent, $raidEvent)) {
+                if (-not [bool]$captureEvent.view.cameraSynchronizedAfterLayout) {
+                    throw "A screenshot was captured before Camera2D followed deferred HUD layout."
+                }
             }
 
             $script:screenshotResult = [pscustomobject]@{
@@ -776,7 +867,12 @@ try {
         $summary["godotExitCode"] = $godotStageResult.SmokeExitCode
         $summary["godotControlsExitCode"] = $godotStageResult.ControlsExitCode
         $summary["godotCameraExitCode"] = $godotStageResult.CameraExitCode
+        $summary["invalidViewFailuresChecked"] = $godotStageResult.InvalidViewFailuresChecked
+        $summary["hudGuardRegressionExitCode"] = $godotStageResult.HudGuardRegressionExitCode
+        $summary["cameraTransformRegressionExitCode"] =
+            $godotStageResult.CameraTransformRegressionExitCode
         $summary["cameraInputChecks"] = $godotStageResult.CameraInputChecks
+        $summary["cameraTransformChecks"] = $godotStageResult.CameraTransformChecks
         $summary["cameraBoundsChecks"] = $godotStageResult.CameraBoundsChecks
         $summary["cameraPanChecks"] = $godotStageResult.CameraPanChecks
         $summary["viewInvariantChecksum"] = $godotStageResult.ViewChecksum
