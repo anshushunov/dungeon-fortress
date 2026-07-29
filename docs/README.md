@@ -37,7 +37,9 @@ Prototype 1; `design/GDD.md` описывает игру шире и на уро
 в `engineering/TECH_RADAR.md`.
 
 Воспроизводимая настройка проверяемого Godot/.NET spike описана в
-`engineering/ENVIRONMENT_SETUP.md`.
+`engineering/ENVIRONMENT_SETUP.md`. Там же правило о производных файлах Godot:
+`.godot/`, `*.import` и `*.uid` не отслеживаются, поэтому после импорта проекта
+`git status` остаётся пустым.
 
 Запуск и наблюдение headless-экономики Prototype 1 описаны в
 `engineering/PROTOTYPE_HEADLESS.md`.

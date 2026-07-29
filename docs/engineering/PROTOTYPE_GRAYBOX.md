@@ -28,6 +28,11 @@ automatic and creates the worktree-local `.godot/imported` cache required for
 generated goblin sprites in a clean checkout; it is a no-op when that cache is
 current.
 
+That pass also writes a `*.png.import` next to every asset and a `*.uid` next to
+every script. None of it is tracked, so a clean checkout plus an import leaves
+`git status` empty; the rule and the reason are in
+[`ENVIRONMENT_SETUP.md`](ENVIRONMENT_SETUP.md#производные-файлы-godot-и-git).
+
 The default is `baseline`. To contrast the starvation-prone setup:
 
 ```powershell
