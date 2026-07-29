@@ -8,7 +8,9 @@ namespace DungeonFortress.Scenarios;
 
 internal static class PrototypeEvaluation
 {
-    private const int Ticks = 1_800;
+    // A party ends on its own tick now, so the runner asks for the fuse and gets
+    // whatever the party actually took.
+    private static readonly int Ticks = PrototypeTuning.SessionTicks;
     private static readonly ulong[] Seeds = [20_260_726UL, 20_260_727UL, 20_260_728UL];
     private static readonly string[] MatrixScenarios = ["baseline", "prepared", "neglected"];
     private static readonly string[] PairScenarios = ["prepared-ration-zero", "prepared-watch-zero"];
@@ -119,7 +121,7 @@ internal static class PrototypeEvaluation
         return new EvaluationReport(
             1,
             "tests/DungeonFortress.Scenarios --evaluate-prototype",
-            "20e31e1",
+            "f7f94e9",
             Ticks,
             Seeds,
             MatrixScenarios,
@@ -194,7 +196,32 @@ internal static class PrototypeEvaluation
                 state.SessionResult.DefendersFled,
                 state.SessionResult.RaidersDowned,
                 state.SessionResult.MealsStolen,
-                state.SessionResult.MealsLeft),
+                state.SessionResult.MealsLeft,
+                // The two numbers the party is scored by, and the shape of the
+                // pressure that produced them. Without these the evidence would
+                // still be measuring a single raid.
+                state.Domain.Renown,
+                state.Domain.Strength,
+                state.Domain.LivingCreatures,
+                state.SessionResult.WavesResolved,
+                // The number the end of a party now hinges on: waves turned
+                // back, not waves that merely finished.
+                state.SessionResult.WavesRepelled,
+                state.SessionResult.WaveCount,
+                state.Waves
+                    .Select(wave => new WaveMetrics(
+                        wave.Number,
+                        wave.ArriveTick,
+                        wave.RaiderCount,
+                        wave.RaiderMight,
+                        wave.RenownAtAnnounce,
+                        wave.Outcome,
+                        wave.EndTick,
+                        wave.RaidersDowned,
+                        wave.DefendersDowned,
+                        wave.DefendersFled,
+                        wave.MealsStolen))
+                    .ToArray()),
             new ExplainabilityMetrics(state.Events.Count, reasonCoverage.Count, reasonCoverage));
     }
 
@@ -253,6 +280,7 @@ internal static class PrototypeEvaluation
     private sealed record EconomyMetrics(int HarvestsCompleted, int RawHaulsCompleted, int CookBatchesCompleted, int MealHaulsCompleted, int MealsProduced, int MealsEaten, int MealsCurrent);
     private sealed record LaborMetrics(int FoodWorkTicks, int RestTicks, int EatTicks, int DrillTicks, int WatchTicks, int MusterTicks, int IdleTicks, int PostOccupancyPercent);
     private sealed record CreatureMetrics(int Count, int AverageSatiety, int AverageFatigue, int AverageMartialForm, int? AverageReadinessAtRaid, IReadOnlyDictionary<string, int> Modes, int Injured, int Downed, int Fled, IReadOnlyList<string> Names);
-    private sealed record SessionMetrics(string? Outcome, int? EndTick, bool Unresolved, int DefendersDowned, int DefendersFled, int RaidersDowned, int MealsStolen, int MealsLeft);
+    private sealed record SessionMetrics(string? Outcome, int? EndTick, bool Unresolved, int DefendersDowned, int DefendersFled, int RaidersDowned, int MealsStolen, int MealsLeft, int Renown, int Strength, int LivingCreatures, int WavesResolved, int WavesRepelled, int WaveCount, IReadOnlyList<WaveMetrics> Waves);
+    private sealed record WaveMetrics(int Number, int ArriveTick, int RaiderCount, int RaiderMight, int RenownAtAnnounce, string? Outcome, int? EndTick, int RaidersDowned, int DefendersDowned, int DefendersFled, int MealsStolen);
     private sealed record ExplainabilityMetrics(int EventCount, int DistinctReasonCodes, IReadOnlyDictionary<string, int> ReasonCodeOccurrences);
 }

@@ -143,7 +143,11 @@ public sealed record PrototypeCreatureSnapshot(
     int? LastYieldTick,
     PrototypeDecision LastDecision,
     int Readiness,
-    int? ReadinessAtRaid);
+    int? ReadinessAtRaid,
+    // Ticks already spent mending. It is canonical state and not a UI counter,
+    // because "this one is halfway healed" is the answer the window between two
+    // waves exists to give.
+    int RecoveryTicks);
 
 public sealed record PrototypeJobSnapshot(
     long JobId,
@@ -310,15 +314,74 @@ public sealed record PrototypeStockSnapshot(
     int MealsProduced,
     int MealsEaten);
 
+/// <summary>
+/// The wave the player is currently dealing with: the one that has arrived and
+/// is not over, otherwise the next one that has not arrived yet. When every wave
+/// is resolved it stays on the last one, so the panel never reports a wave that
+/// will never come.
+/// </summary>
 public sealed record PrototypeThreatSnapshot(
     bool Announced,
+    int WaveNumber,
+    int WaveCount,
     int AnnounceTick,
-    int RaidTick,
+    int ArriveTick,
     int RaiderCount,
-    int TicksRemaining);
+    int RaiderMight,
+    int TicksRemaining,
+    bool Active);
+
+/// <summary>
+/// One wave of the session. Its composition is decided at
+/// <see cref="AnnounceTick"/> from the renown standing at that moment, which is
+/// why it is canonical state and not a function of the wave number.
+/// </summary>
+public sealed record PrototypeWaveSnapshot(
+    int Number,
+    int AnnounceTick,
+    int ArriveTick,
+    bool Announced,
+    bool Arrived,
+    int RaiderCount,
+    int RaiderMight,
+    string? Outcome,
+    int? EndTick,
+    int RaidersDowned,
+    int DefendersDowned,
+    int DefendersFled,
+    int MealsStolen,
+    int RenownAtAnnounce);
+
+/// <summary>
+/// The two numbers the player reads the session by. <see cref="Renown"/> says
+/// how visible the domain is from outside and sets the strength of the next
+/// wave; <see cref="Strength"/> says how ready it is and influences nothing. The
+/// meaning lives in the gap between them, and the player is the one who reads
+/// it — nothing here interprets it for them.
+///
+/// <see cref="Renown"/> is monotone by construction: every term it is built from
+/// is a counter that only grows. Losing creatures, stock or buildings can never
+/// improve the score, only weaken the answer to the next wave.
+/// </summary>
+public sealed record PrototypeDomainSnapshot(
+    int Renown,
+    int Strength,
+    // The same two numbers as they stood when the previous wave arrived. The HUD
+    // draws the trend arrow from these instead of keeping its own history, so a
+    // headless check and the panel can never disagree about the direction.
+    int? RenownAtPreviousWave,
+    int? StrengthAtPreviousWave,
+    int LivingCreatures,
+    int DownedCreatures,
+    int InjuredCreatures,
+    int PeakMeals,
+    int WavesArrived,
+    int WavesResolved,
+    int WaveCount);
 
 public sealed record PrototypeRaiderSnapshot(
     int Id,
+    int Wave,
     int Hp,
     int Might,
     GridPoint Position,
@@ -327,10 +390,27 @@ public sealed record PrototypeRaiderSnapshot(
     bool ReturningToGate,
     RaiderMode Mode);
 
+/// <summary>
+/// The end of the party, not the end of a wave. <see cref="Outcome"/> is
+/// <c>held</c> when every wave was actually repelled, <c>raided</c> when the
+/// domain survived but at least one wave got through, <c>fallen</c> when nobody
+/// is left who can work and defend, and <c>null</c> while the party is still
+/// being played. <see cref="LastWaveOutcome"/> keeps the four wave outcomes
+/// reachable from the same place they always were.
+/// </summary>
 public sealed record PrototypeSessionResultSnapshot(
     string? Outcome,
     int? EndTick,
     bool Unresolved,
+    string? LastWaveOutcome,
+    int WavesResolved,
+    // Waves actually turned back, as opposed to waves that merely finished. The
+    // two stopped being the same number when the end of a party grew its third
+    // form, so the one the player is told is canonical rather than re-derived.
+    int WavesRepelled,
+    int WaveCount,
+    int Renown,
+    int Strength,
     int DefendersDowned,
     int DefendersFled,
     int RaidersDowned,
@@ -361,6 +441,8 @@ public sealed record PrototypeSnapshot(
     IReadOnlyList<PrototypeStationSnapshot> Stations,
     IReadOnlyList<PrototypeEvent> Events,
     PrototypeThreatSnapshot Threat,
+    IReadOnlyList<PrototypeWaveSnapshot> Waves,
+    PrototypeDomainSnapshot Domain,
     IReadOnlyList<PrototypeRaiderSnapshot> Raiders,
     PrototypeSessionResultSnapshot SessionResult);
 

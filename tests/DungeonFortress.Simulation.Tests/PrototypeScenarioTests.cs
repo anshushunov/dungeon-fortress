@@ -16,8 +16,8 @@ public sealed class PrototypeScenarioTests
         string fixtureName)
     {
         var commands = LoadFixture(fixtureName);
-        var first = PrototypeScenario.Run(commands, PrototypeTuning.RaidTick + 1);
-        var second = PrototypeScenario.Run(commands, PrototypeTuning.RaidTick + 1);
+        var first = PrototypeScenario.Run(commands, PrototypeTuning.FirstRaidTick + 1);
+        var second = PrototypeScenario.Run(commands, PrototypeTuning.FirstRaidTick + 1);
 
         Assert.Equal(first.CanonicalJson, second.CanonicalJson);
         Assert.Equal(first.CanonicalEventLog, second.CanonicalEventLog);
@@ -198,7 +198,7 @@ public sealed class PrototypeScenarioTests
     {
         var result = PrototypeScenario.Run(
             LoadFixture("baseline"),
-            PrototypeTuning.RaidTick + 1);
+            PrototypeTuning.FirstRaidTick + 1);
 
         Assert.True(result.State.Stocks.MealsProduced > 0);
         Assert.True(result.State.Stocks.MealsEaten > 0);
@@ -220,64 +220,162 @@ public sealed class PrototypeScenarioTests
             @event => @event.JobKind is not null);
     }
 
+    /// <summary>
+    /// The contract corridors of 13.4, re-measured for a party of waves. The
+    /// comparison moment is the arrival of the first wave, because that is the
+    /// last tick at which all three scenarios are still comparable: after it the
+    /// three domains stop living the same life.
+    ///
+    /// <c>neglected</c> no longer reaches a wave at all. Forbidding the harvest
+    /// empties the larder by tick ~500 and leaves nobody above the exhaustion
+    /// threshold to refill it, which is now stated as an end of the party
+    /// instead of being played out as eight hundred ticks of standing still.
+    /// </summary>
     [Fact]
-    public void Contract_scenarios_satisfy_issue_9_precombat_invariants()
+    public void Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party()
     {
         var baseline = PrototypeScenario.Run(
             LoadFixture("baseline"),
-            PrototypeTuning.RaidTick + 1);
+            PrototypeTuning.FirstRaidTick + 1);
         var prepared = PrototypeScenario.Run(
             LoadFixture("prepared"),
-            PrototypeTuning.RaidTick + 1);
+            PrototypeTuning.FirstRaidTick + 1);
         var neglected = PrototypeScenario.Run(
             LoadFixture("neglected"),
-            PrototypeTuning.RaidTick + 1);
+            PrototypeTuning.SessionTicks);
         var baselineEnd = PrototypeScenario.Run(
             LoadFixture("baseline"),
             PrototypeTuning.SessionTicks);
         var preparedEnd = PrototypeScenario.Run(
             LoadFixture("prepared"),
             PrototypeTuning.SessionTicks);
-        var neglectedEnd = PrototypeScenario.Run(
-            LoadFixture("neglected"),
-            PrototypeTuning.SessionTicks);
 
         var readiness = (
             Baseline: AverageReadiness(baseline),
-            Prepared: AverageReadiness(prepared),
-            Neglected: AverageReadiness(neglected));
+            Prepared: AverageReadiness(prepared));
         Assert.True(
             readiness.Prepared > readiness.Baseline,
-            Describe(baseline, prepared, neglected, readiness));
-        Assert.True(
-            readiness.Baseline > readiness.Neglected,
             Describe(baseline, prepared, neglected, readiness));
         Assert.All(baseline.State.Creatures, creature => Assert.Equal(0, creature.MartialForm));
         Assert.Contains(
             neglected.State.Events,
             @event => @event.ReasonCode == "refused_rule_min_satiety");
         Assert.Contains(
+            neglected.State.Events,
+            @event => @event.ReasonCode == "refused_too_exhausted");
+        Assert.Contains(
             prepared.State.Events,
             @event => @event.ReasonCode == "chosen_muster");
         Assert.Contains(
             prepared.State.Events,
             @event => @event.ReasonCode == "chosen_ration");
-        Assert.InRange(baseline.State.Creatures.Average(c => c.Satiety), 40, 70);
-        Assert.InRange(prepared.State.Creatures.Average(c => c.Satiety), 28, 60);
+        Assert.Contains(
+            preparedEnd.State.Events,
+            @event => @event.ReasonCode == "combat_refused_starving");
+        Assert.InRange(baseline.State.Creatures.Average(c => c.Satiety), 45, 75);
+        Assert.InRange(prepared.State.Creatures.Average(c => c.Satiety), 45, 75);
         Assert.InRange(neglected.State.Creatures.Average(c => c.Satiety), 0, 15);
-        Assert.InRange(AverageReadiness(baseline), 32, 48);
-        Assert.InRange(AverageReadiness(prepared), 50, 75);
-        Assert.InRange(AverageReadiness(neglected), 15, 30);
-        Assert.True(prepared.State.Creatures.Average(c => c.MartialForm) >= 45);
-        Assert.True(neglected.State.Creatures.Average(c => c.MartialForm) <= 35);
+        Assert.InRange(readiness.Baseline, 38, 58);
+        Assert.InRange(readiness.Prepared, 58, 78);
+        Assert.True(prepared.State.Creatures.Average(c => c.MartialForm) >= 60);
         Assert.True(
-            baselineEnd.State.Stocks.MealsProduced is >= 68 and <= 78 &&
-            preparedEnd.State.Stocks.MealsProduced is >= 58 and <= 68 &&
-            neglectedEnd.State.Stocks.MealsProduced is >= 0 and <= 6,
+            baselineEnd.State.Stocks.MealsProduced is >= 95 and <= 130 &&
+            preparedEnd.State.Stocks.MealsProduced is >= 90 and <= 125 &&
+            neglected.State.Stocks.MealsProduced is >= 0 and <= 6,
             $"end production baseline={baselineEnd.State.Stocks.MealsProduced}, " +
             $"prepared={preparedEnd.State.Stocks.MealsProduced}, " +
-            $"neglected={neglectedEnd.State.Stocks.MealsProduced}");
+            $"neglected={neglected.State.Stocks.MealsProduced}");
+
+        // Neither fixture holds the domain: both let a wave through, so both end
+        // `raided`. That is the honest reading of what they actually did, and it
+        // is why the third end form exists.
+        Assert.Equal("raided", baselineEnd.State.SessionResult.Outcome);
+        Assert.Equal("raided", preparedEnd.State.SessionResult.Outcome);
+        Assert.Equal("fallen", neglected.State.SessionResult.Outcome);
+        AssertEndOfPartyInvariants(baselineEnd.State, preparedEnd.State, neglected.State);
+        AssertFirstWaveInvariants(baseline.State, prepared.State);
     }
+
+    /// <summary>
+    /// Contract 13.4 says its invariants hold "for any seed of the matrix". That
+    /// sentence used to be prose while the test ran one seed, which is how a
+    /// broken invariant survived: `renown(prepared) > renown(baseline)` is false
+    /// on seed 20260727 and nothing said so. The claim is now executed.
+    /// </summary>
+    [Theory]
+    [InlineData(20_260_726UL)]
+    [InlineData(20_260_727UL)]
+    [InlineData(20_260_728UL)]
+    public void The_contract_invariants_hold_on_every_seed_of_the_matrix(ulong seed)
+    {
+        AssertEndOfPartyInvariants(
+            RunAtSeed("baseline", seed, PrototypeTuning.SessionTicks),
+            RunAtSeed("prepared", seed, PrototypeTuning.SessionTicks),
+            RunAtSeed("neglected", seed, PrototypeTuning.SessionTicks));
+        AssertFirstWaveInvariants(
+            RunAtSeed("baseline", seed, PrototypeTuning.FirstRaidTick + 1),
+            RunAtSeed("prepared", seed, PrototypeTuning.FirstRaidTick + 1));
+    }
+
+    /// <summary>
+    /// The invariants read where the fixtures are still comparable: the arrival
+    /// of the first wave. Both are condition numbers, and condition is only
+    /// comparable at the same moment of the same story — read at the end of the
+    /// party, every fixture is starving and every number collapses towards zero.
+    /// </summary>
+    private static void AssertFirstWaveInvariants(
+        PrototypeSnapshot baseline,
+        PrototypeSnapshot prepared)
+    {
+        Assert.True(
+            AverageReadiness(prepared) > AverageReadiness(baseline),
+            $"readiness at wave 1 prepared={AverageReadiness(prepared)}, " +
+            $"baseline={AverageReadiness(baseline)}");
+        Assert.True(
+            prepared.Domain.Strength > baseline.Domain.Strength,
+            $"strength at wave 1 prepared={prepared.Domain.Strength}, " +
+            $"baseline={baseline.Domain.Strength}");
+    }
+
+    /// <summary>
+    /// The invariants of 13.4 read at the end of the party. What is deliberately
+    /// absent is as load-bearing as what is here: renown ranks a domain that
+    /// lives against one that died, and does not reliably rank two living plans
+    /// on a single party, because it leans on raiders put down and that number
+    /// swings with combat jitter.
+    /// </summary>
+    private static void AssertEndOfPartyInvariants(
+        PrototypeSnapshot baseline,
+        PrototypeSnapshot prepared,
+        PrototypeSnapshot neglected)
+    {
+        Assert.True(
+            baseline.Domain.Renown > neglected.Domain.Renown &&
+            prepared.Domain.Renown > neglected.Domain.Renown,
+            $"renown baseline={baseline.Domain.Renown}, prepared={prepared.Domain.Renown}, " +
+            $"neglected={neglected.Domain.Renown}");
+
+        // Preparation buys the price of the raid, not attendance at it. The
+        // comparison excludes `neglected` on purpose: it never meets a wave, so
+        // its zeroes are an absence of the event and not a better result.
+        Assert.True(
+            prepared.SessionResult.MealsStolen < baseline.SessionResult.MealsStolen,
+            $"meals stolen prepared={prepared.SessionResult.MealsStolen}, " +
+            $"baseline={baseline.SessionResult.MealsStolen}");
+        Assert.True(
+            CountEvents(prepared, "combat_fled_morale") < CountEvents(baseline, "combat_fled_morale"),
+            $"broken by morale prepared={CountEvents(prepared, "combat_fled_morale")}, " +
+            $"baseline={CountEvents(baseline, "combat_fled_morale")}");
+    }
+
+    private static int CountEvents(PrototypeSnapshot state, string reasonCode) =>
+        state.Events.Where(@event => @event.ReasonCode == reasonCode).Sum(@event => @event.Repeats);
+
+    private static PrototypeSnapshot RunAtSeed(string fixtureName, ulong seed, int ticks) =>
+        PrototypeScenario.Run(LoadFixture(fixtureName) with { Seed = seed }, ticks).State;
+
+    private static int AverageReadiness(PrototypeSnapshot state) =>
+        (int)state.Creatures.Average(creature => creature.ReadinessAtRaid!.Value);
 
     [Fact]
     public void Replay_from_loaded_command_log_is_byte_identical()
@@ -285,44 +383,55 @@ public sealed class PrototypeScenarioTests
         var path = FixturePath("prepared");
         var first = PrototypeScenario.Run(
             PrototypeCommandDocument.Load(path),
-            PrototypeTuning.RaidTick + 1);
+            PrototypeTuning.FirstRaidTick + 1);
         var replay = PrototypeScenario.Run(
             PrototypeCommandDocument.Load(path),
-            PrototypeTuning.RaidTick + 1);
+            PrototypeTuning.FirstRaidTick + 1);
 
         Assert.Equal(first.CanonicalJson, replay.CanonicalJson);
     }
 
     [Fact]
-    public void Performance_sanity_completes_three_raid_tick_runs()
+    public void Performance_sanity_completes_three_full_parties()
     {
         var results = new List<PrototypeRunResult>();
         foreach (var scenario in new[] { "baseline", "prepared", "neglected" })
         {
             results.Add(PrototypeScenario.Run(
                 LoadFixture(scenario),
-                PrototypeTuning.RaidTick + 1));
+                PrototypeTuning.SessionTicks));
         }
 
         Assert.Equal(3, results.Count);
-        Assert.All(results, result => Assert.Equal(PrototypeTuning.RaidTick + 1, result.Tick));
+        // A party ends on its own tick, so what is asserted is that it ended at
+        // all and inside the fuse — not that all three ended together.
+        Assert.All(results, result => Assert.NotNull(result.State.SessionResult.Outcome));
+        Assert.All(results, result => Assert.InRange(result.Tick, 1, PrototypeTuning.SessionTicks));
     }
 
     [Fact]
-    public void Preparation_changes_the_deterministic_raid_result_without_direct_orders()
+    public void Preparation_changes_the_deterministic_party_without_direct_orders()
     {
         var prepared = PrototypeScenario.Run(LoadFixture("prepared"), PrototypeTuning.SessionTicks);
-        var neglected = PrototypeScenario.Run(LoadFixture("neglected"), PrototypeTuning.SessionTicks);
+        var baseline = PrototypeScenario.Run(LoadFixture("baseline"), PrototypeTuning.SessionTicks);
         var preparedReplay = PrototypeScenario.Run(LoadFixture("prepared"), PrototypeTuning.SessionTicks);
 
-        Assert.Equal(PrototypeTuning.RaiderCount, prepared.State.Raiders.Count);
-        Assert.Equal(PrototypeTuning.RaiderCount, neglected.State.Raiders.Count);
-        Assert.NotNull(prepared.State.SessionResult.Outcome);
-        Assert.NotNull(neglected.State.SessionResult.Outcome);
-        Assert.NotEqual(prepared.State.SessionResult.Outcome, neglected.State.SessionResult.Outcome);
+        Assert.Equal(
+            prepared.State.Waves.Where(wave => wave.Arrived).Sum(wave => wave.RaiderCount),
+            prepared.State.Raiders.Count);
+        Assert.Equal(
+            baseline.State.Waves.Where(wave => wave.Arrived).Sum(wave => wave.RaiderCount),
+            baseline.State.Raiders.Count);
+        Assert.All(prepared.State.Waves, wave => Assert.NotNull(wave.Outcome));
+        Assert.All(baseline.State.Waves, wave => Assert.NotNull(wave.Outcome));
+        Assert.True(
+            prepared.State.SessionResult.RaidersDowned >
+            baseline.State.SessionResult.RaidersDowned,
+            $"prepared put down {prepared.State.SessionResult.RaidersDowned} raiders, " +
+            $"baseline {baseline.State.SessionResult.RaidersDowned}");
         Assert.True(
             prepared.State.Creatures.Average(creature => creature.ReadinessAtRaid!.Value) >
-            neglected.State.Creatures.Average(creature => creature.ReadinessAtRaid!.Value));
+            baseline.State.Creatures.Average(creature => creature.ReadinessAtRaid!.Value));
         Assert.Equal(prepared.Checksum, preparedReplay.Checksum);
     }
 
@@ -374,17 +483,25 @@ public sealed class PrototypeScenarioTests
     [Fact]
     public void Defender_max_hp_comes_from_might_tuning()
     {
-        var state = PrototypeScenario.Run(LoadFixture("prepared"), PrototypeTuning.RaidTick).State;
+        var state = PrototypeScenario.Run(LoadFixture("prepared"), PrototypeTuning.FirstRaidTick).State;
         Assert.All(state.Creatures, creature =>
             Assert.Equal(
                 PrototypeTuning.DefenderHpBase + creature.Might * PrototypeTuning.DefenderHpPerMight,
                 creature.MaxHp));
     }
 
+    /// <summary>
+    /// A raider that reaches an empty larder turns round instead of standing
+    /// there. The witness used to be the <c>neglected</c> fixture, whose larder
+    /// was empty before the raid ever started; that domain now falls from hunger
+    /// long before a wave arrives, so the branch is witnessed where it actually
+    /// happens in a party — in a later wave, after an earlier one has carried
+    /// the larder away.
+    /// </summary>
     [Fact]
-    public void Empty_larder_raider_returns_to_gate_before_escape_and_theft_accounting()
+    public void Empty_larder_raider_turns_back_to_the_gate_instead_of_waiting()
     {
-        var world = new PrototypeWorld(LoadFixture("neglected"));
+        var world = new PrototypeWorld(LoadFixture("baseline"));
         var observedReturn = false;
 
         while (!world.IsComplete && !observedReturn)
@@ -393,6 +510,8 @@ public sealed class PrototypeScenarioTests
             var beforeReturn = world.GetSnapshot();
             var raider = beforeReturn.Raiders.FirstOrDefault(item =>
                 item.Mode == RaiderMode.Raiding &&
+                !item.ReturningToGate &&
+                item.CarryingMeals == 0 &&
                 item.Position == new GridPoint(14, 7) &&
                 beforeReturn.Stocks.Meals == 0);
             if (raider is null)
@@ -404,12 +523,12 @@ public sealed class PrototypeScenarioTests
             var afterReturn = world.GetSnapshot();
             var moved = afterReturn.Raiders.Single(item => item.Id == raider.Id);
             Assert.Equal(RaiderMode.Raiding, moved.Mode);
-            Assert.NotEqual(new GridPoint(27, 13), moved.Position);
-            Assert.Equal(0, afterReturn.SessionResult.MealsStolen);
+            Assert.True(moved.ReturningToGate);
+            Assert.Equal(0, moved.CarryingMeals);
             observedReturn = true;
         }
 
-        Assert.True(observedReturn, "Neglected fixture did not reach the empty-larder return branch.");
+        Assert.True(observedReturn, "Baseline party did not reach the empty-larder return branch.");
     }
 
     private static int AverageReadiness(PrototypeRunResult result)
@@ -421,7 +540,7 @@ public sealed class PrototypeScenarioTests
         PrototypeRunResult baseline,
         PrototypeRunResult prepared,
         PrototypeRunResult neglected,
-        (int Baseline, int Prepared, int Neglected) readiness)
+        (int Baseline, int Prepared) readiness)
     {
         static string One(PrototypeRunResult result, int ready) =>
             $"ready={ready},sat={result.State.Creatures.Average(c => c.Satiety):F1}," +
@@ -432,7 +551,7 @@ public sealed class PrototypeScenarioTests
             $"looseRaw={result.State.Stocks.LooseRawMushroom}";
         return $"baseline[{One(baseline, readiness.Baseline)}] " +
             $"prepared[{One(prepared, readiness.Prepared)}] " +
-            $"neglected[{One(neglected, readiness.Neglected)}]";
+            $"neglected[{One(neglected, 0)}]";
     }
 
     private static PrototypeCommandLog LoadFixture(string name)

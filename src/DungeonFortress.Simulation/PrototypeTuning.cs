@@ -2,10 +2,62 @@ namespace DungeonFortress.Simulation;
 
 public static class PrototypeTuning
 {
-    public const int SessionTicks = 1_800;
+    // The session no longer ends here: a party ends when the last wave is
+    // resolved or when nobody is left standing. This is the fuse that keeps a
+    // pathological run finite, so it sits well above the last wave.
+    public const int SessionTicks = 2_700;
     public const int ThreatAnnounceTick = 300;
-    public const int RaidTick = 1_500;
-    public const int RaiderCount = 4;
+
+    // The first wave keeps a long runway so the player can learn the levers
+    // before anything is at stake; every later wave is announced on the short
+    // lead, which is what turns the session into a rhythm instead of one event.
+    public const int FirstRaidTick = 1_300;
+    public const int WaveCount = 4;
+    public const int WaveIntervalTicks = 350;
+    public const int WaveAnnounceLead = 200;
+
+    // Composition of a wave is derived from renown, never from the wave number.
+    // The base is what an unknown domain attracts; every 20 points of renown
+    // buys the raiders one more body, and every 60 one more point of might.
+    public const int WaveBaseRaiders = 4;
+    public const int WaveMaxRaiders = 12;
+    public const int RenownPerExtraRaider = 20;
+    public const int RenownPerRaiderMight = 60;
+
+    // Renown never decreases: every term below is itself a monotone counter, so
+    // losing creatures, stock or buildings can never buy a better score. That is
+    // the guard against the degeneracy that made `overrun` the best outcome.
+    //
+    // RenownPerWaveArrived equals RenownPerExtraRaider on purpose: having been
+    // reached by a wave at all is worth exactly one more raider next time, so
+    // every wave is strictly stronger than the one before it whatever the player
+    // did. Everything else is weighted well above it, so the score still
+    // separates a domain that dug, built, cooked and fought from one that sat
+    // still, by roughly two to one over a full party.
+    public const int RenownPerWaveArrived = 20;
+    public const int RenownPerRaiderDowned = 5;
+    public const int RenownPerExcavation = 3;
+    public const int RenownPerConstruction = 10;
+
+    // Stock counts through the high-water mark of the larder, divided down so a
+    // fat pantry is noticed without drowning out everything else the domain did.
+    public const int RenownMealsPerPoint = 2;
+
+    // Domain strength: the mirror number. Inborn might weighs more per point
+    // than trained form, because might is 1..5 and martialForm is 0..100. What
+    // each creature brings is then scaled by its readiness, so the mirror shows
+    // condition and not potential — a domain dying of hunger must not be able to
+    // report the best strength of its party.
+    public const int StrengthPerMight = 2;
+    public const int StrengthMartialDivisor = 10;
+    public const int StrengthReadinessScale = 100;
+
+    // Healing between waves. A light wound closes only while its owner lies in a
+    // bunk and is fed; the domain pays for it in labour, which is what makes the
+    // gap between two waves a decision instead of dead time.
+    public const int RecoveryMinSatiety = 30;
+    public const int HpRecoveryPeriod = 6;
+
     public const int RaiderHp = 30;
     public const int RaiderMightBase = 3;
     public const int RaiderMightJitter = 1;
@@ -16,6 +68,12 @@ public static class PrototypeTuning
     public const int CombatMinSatiety = 20;
     public const int CombatJoinRecheck = 20;
     public const int EngageRadius = 8;
+
+    // Reach is a property of the attack, not a constant of combat resolution.
+    // Everything today is a brawler at one tile; raising this number is the only
+    // edit a bow would need on this side of the seam.
+    public const int MeleeAttackRange = 1;
+    public const int RaiderAttackRange = 1;
     public const int DamageFloor = 1;
     public const int DamageReadinessDivisor = 25;
     public const int ArmourReadinessDivisor = 50;
@@ -44,13 +102,24 @@ public static class PrototypeTuning
     public const int HarvestOutput = 3;
     public const int CookTicks = 24;
     public const int CookInput = 3;
-    public const int CookOutput = 2;
+    // A party is now four waves long instead of one raid, and raiders carry
+    // portions out of the larder every time. Two portions a batch fed a single
+    // 1800-tick session and starves a four-wave one, so the batch is three.
+    public const int CookOutput = 3;
     public const int EatTicks = 8;
-    public const int MealSatiety = 46;
+    // The larder has two lanes and the domain has nine mouths, so every trip to
+    // it is queued as well as walked. Over a four-wave party that queue was
+    // costing more labour than the work it interrupted, which is why one portion
+    // now carries a creature further.
+    public const int MealSatiety = 62;
     public const int CarryCapacity = 3;
     public const int HaulTransferTicks = 2;
     public const int LarderCapacity = 90;
-    public const int MealTarget = 18;
+    // A wave of raiders can carry three portions each out of the larder, so a
+    // stock that stops at eighteen is emptied by one visit. The domain has to be
+    // able to build a buffer that survives being raided — and a fat larder is
+    // also what makes it more famous, which is the trade this number sets.
+    public const int MealTarget = 30;
     public const int RawTarget = 30;
 
     public const int SatietyDecayPeriod = 5;

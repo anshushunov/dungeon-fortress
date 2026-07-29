@@ -1468,6 +1468,63 @@ public partial class Main : Node2D
         _diagnostics.Count);
 
     /// <summary>
+    /// The summary as it will read when the party is over, one string per end.
+    ///
+    /// No entry point ever draws this frame: a smoke run stops at tick 1 and a
+    /// screenshot run stops wherever it was told to, so the one frame the owner
+    /// actually reads their result in was the one frame nothing measured. It is
+    /// also the widest the line ever gets — `DOMAIN RAIDED · N/4 repelled` runs
+    /// eight characters past the longest countdown — so it is precisely the case
+    /// that would wrap onto a third line over the time toolbar.
+    ///
+    /// The strings come from the real <see cref="HudText"/> on the real snapshot
+    /// with only the session result substituted, so this measures the shipping
+    /// wording rather than a hand-written imitation of it.
+    /// </summary>
+    private (string Outcome, string Text)[] TerminalSummaries()
+    {
+        if (_state is null)
+        {
+            return [];
+        }
+
+        var view = CurrentHudView();
+        return new[] { ("held", _state.Waves.Count), ("raided", 1), ("fallen", 0) }
+            .Select(end => (end.Item1, HudText.Summary(view with
+            {
+                Snapshot = _state with
+                {
+                    SessionResult = _state.SessionResult with
+                    {
+                        Outcome = end.Item1,
+                        WavesRepelled = end.Item2,
+                    },
+                },
+            })))
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Puts a candidate summary into the real label and measures it at a given
+    /// frame size. The text is left in place for the caller to keep measuring
+    /// and is put back by <see cref="RestoreSummary"/>.
+    /// </summary>
+    private (int Needed, int Shown) MeasureSummary(string text, Vector2 viewport)
+    {
+        _summary!.Text = text;
+        LayoutHud(viewport);
+        return (_summary.GetLineCount(), _summary.GetVisibleLineCount());
+    }
+
+    private void RestoreSummary()
+    {
+        if (_state is not null)
+        {
+            _summary!.Text = HudText.Summary(CurrentHudView());
+        }
+    }
+
+    /// <summary>
     /// Every piece of HUD text the overflow guard measures. The four panels the
     /// golden UI state records come first; the header and the legend rows are
     /// here too, because a Control layout can squeeze them just as easily and
@@ -1631,6 +1688,7 @@ public partial class Main : Node2D
         _ = strict;
         var live = GetViewportRect().Size;
         var failures = new List<string>();
+        var terminal = TerminalSummaries();
         foreach (var viewport in HudFitViewports())
         {
             LayoutHud(viewport);
@@ -1650,8 +1708,20 @@ public partial class Main : Node2D
                         $"{label.Size} at viewport {viewport}");
                 }
             }
+
+            foreach (var (outcome, text) in terminal)
+            {
+                var (needed, shown) = MeasureSummary(text, viewport);
+                if (needed > shown)
+                {
+                    failures.Add(
+                        $"summary at the end of a party ('{outcome}') needs {needed} " +
+                        $"lines but only {shown} fit at viewport {viewport}");
+                }
+            }
         }
 
+        RestoreSummary();
         LayoutHud(live);
 
         if (failures.Count > 0)
@@ -1691,7 +1761,34 @@ public partial class Main : Node2D
                     height = entry.Label.Size.Y,
                 })
                 .ToArray(),
+            // The frame the owner reads their result in, stated rather than
+            // trusted: what each end of a party needs and what fits, at the
+            // narrowest frame the guard checks.
+            terminalSummaries = TerminalSummaryFit(),
         };
+    }
+
+    private object[] TerminalSummaryFit()
+    {
+        var live = GetViewportRect().Size;
+        var narrowest = HudFitViewports().OrderBy(size => size.X).First();
+        var measured = TerminalSummaries()
+            .Select(end =>
+            {
+                var (needed, shown) = MeasureSummary(end.Text, narrowest);
+                return (object)new
+                {
+                    outcome = end.Outcome,
+                    viewport = new[] { narrowest.X, narrowest.Y },
+                    neededLines = needed,
+                    visibleLines = shown,
+                    text = end.Text,
+                };
+            })
+            .ToArray();
+        RestoreSummary();
+        LayoutHud(live);
+        return measured;
     }
 
     private void DrawMap()

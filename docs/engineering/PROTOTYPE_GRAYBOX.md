@@ -599,13 +599,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -ScreenshotPath issue24\dig-after.png
 ```
 
-## Raid checkpoint
+## Wave checkpoints
 
-At tick 300 the HUD announces the fixed raid countdown. From tick 1500 it shows
-the live raid outcome and draws red `R0`–`R3` raiders with health bars. The
-projection reads `raiders` and `sessionResult` from the same `PrototypeWorld`
-snapshot as the economy; it never owns combat state. Capture a deterministic
-raid frame with `-ScreenshotTicks 1540` (or a later resolved outcome).
+A party is a sequence of waves, not one raid. At tick 300 the HUD announces wave
+1 with the composition its renown earned; every later wave is announced 200 ticks
+before it lands. The summary line names the wave in hand
+(`WAVE 2/4 IN 120t ×6`), and the first line carries the two numbers the party is
+read by — `renown` and `strength`, each with a trend arrow against the previous
+wave — plus the head count.
+
+The projection reads `threat`, `waves`, `domain`, `raiders` and `sessionResult`
+from the same `PrototypeWorld` snapshot as the economy; it never owns combat
+state. Capture a deterministic wave frame with `-ScreenshotTicks 1340` (wave 1 in
+progress) or `-ScreenshotTicks 1700` (wave 2).
 
 ## Deterministic visual evidence
 
