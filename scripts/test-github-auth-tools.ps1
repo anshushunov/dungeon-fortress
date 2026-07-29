@@ -73,8 +73,27 @@ if (-not (Test-GitHubAuthReady `
     throw "Auth readiness rejected a fully proven setup."
 }
 
-$report = Get-GitHubAuthReport -RepositoryRoot $repoRoot -SkipRemoteProbe
-$serialized = $report | ConvertTo-Json -Depth 8 -Compress
+$reportArguments = @{
+    InCodexSandbox = $true
+    GhCliAvailable = $true
+    GhState = "authenticated"
+    GitCliAvailable = $true
+    OriginConfigured = $false
+    OriginProtocol = $null
+    OriginHost = $null
+    EmbeddedCredential = $false
+    CredentialHelperConfigured = $true
+    CredentialHelperCount = 1
+    GitWriteState = "missing_remote"
+}
+$missingOriginReport = New-GitHubAuthReport @reportArguments
+$reportArguments.OriginConfigured = $true
+$reportArguments.OriginProtocol = "other"
+$reportArguments.OriginHost = $null
+$reportArguments.GitWriteState = "not_checked"
+$otherOriginReport = New-GitHubAuthReport @reportArguments
+$serialized = @($missingOriginReport, $otherOriginReport) |
+    ConvertTo-Json -Depth 8 -Compress
 foreach ($forbidden in @(
     '"Text"',
     '"ExitCode"',
@@ -87,10 +106,16 @@ foreach ($forbidden in @(
         throw "Structured auth diagnostic leaked forbidden raw probe material '$forbidden'."
     }
 }
-if ($report.git.writeAuthState -cne "not_checked" -or
-    -not $report.git.originConfigured -or
-    $report.git.originHost -cne "github.com") {
-    throw "Auth diagnostic does not preserve safe remote metadata."
+if ($missingOriginReport.git.writeAuthState -cne "missing_remote" -or
+    $missingOriginReport.git.originConfigured -or
+    $missingOriginReport.status -cne "action_required") {
+    throw "Pure auth report mishandled a repository with no origin."
+}
+if ($otherOriginReport.git.writeAuthState -cne "not_checked" -or
+    -not $otherOriginReport.git.originConfigured -or
+    $otherOriginReport.git.originProtocol -cne "other" -or
+    $otherOriginReport.status -cne "action_required") {
+    throw "Pure auth report mishandled a non-GitHub origin."
 }
 $authToolsText = [IO.File]::ReadAllText(
     (Join-Path $repoRoot "scripts\GitHubAuthTools.ps1"),
@@ -100,12 +125,42 @@ if ($authToolsText -match '"ls-remote"' -or
     throw "Auth diagnostic does not use a non-mutating Git write probe."
 }
 
+$oldPermissionProfile = [Environment]::GetEnvironmentVariable("CODEX_PERMISSION_PROFILE")
+try {
+    [Environment]::SetEnvironmentVariable("CODEX_PERMISSION_PROFILE", "test")
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $setupOutput = @(& powershell `
+            -NoProfile `
+            -ExecutionPolicy Bypass `
+            -File (Join-Path $repoRoot "scripts\github-auth.ps1") `
+            -Action Setup 2>&1)
+        $setupExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+}
+finally {
+    [Environment]::SetEnvironmentVariable("CODEX_PERMISSION_PROFILE", $oldPermissionProfile)
+}
+$setupText = ($setupOutput | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+if ($setupExitCode -ne 1 -or
+    $setupText -cnotmatch "GitHub login must run in the owner's normal PowerShell") {
+    throw "github-auth Setup did not reject execution inside the Codex sandbox."
+}
+
 [ordered]@{
     event = "github_auth_tools_test"
     status = "ok"
     ghCases = $ghCases.Count
     gitCases = $gitCases.Count
     liveRemoteProbe = $false
+    externalAuthCommandsRun = $false
+    missingOriginCovered = $true
+    nonGitHubOriginCovered = $true
+    sandboxSetupRejected = $true
     writeProbe = "git_push_dry_run"
     rawProbeMaterialEmitted = $false
 } | ConvertTo-Json -Compress | Write-Host

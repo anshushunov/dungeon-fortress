@@ -17,8 +17,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\capture-evidence.p
   -OutputRoot evidence\baseline
 ```
 
-`OutputRoot` всегда относителен к `.artifacts/`. Абсолютный путь и `..`
-отвергаются до запуска Godot. Для каждого элемента `captures` скрипт:
+`OutputRoot` всегда относителен к `.artifacts/`. Абсолютный путь и выход за
+границу `.artifacts/` отвергаются до запуска Godot. Для каждого элемента
+`captures` скрипт:
+
+Проверка границы пути лексическая: она нормализует `.` и `..`, но не разрешает
+junction или symbolic link. Поэтому `.artifacts/` должен оставаться доверенным
+локальным каталогом без reparse points; каноническая защита от них — отдельное
+усиление, не гарантия этого workflow.
 
 1. запускает `scripts/run-game.ps1` с явными параметрами кадра;
 2. повторяет тот же capture в отдельный PNG;
@@ -42,6 +48,11 @@ commit, признак dirty worktree, fixture/seed/tick, canonical checksum, о
 SHA-256 и структурированный `view`. `manifest.md` — сокращённый handoff для PR.
 Публикуемый финальный bundle снимается после commit и должен иметь
 `sourceDirty: false`.
+
+Явный `-GodotPath` используется только для поиска исполняемого файла на машине,
+где снимается кадр. В команды `command` и `repeatCommand` manifest этот
+машинно-зависимый абсолютный путь не попадает: воспроизведение снова разрешает
+Godot стандартным способом или принимает локальный override отдельно.
 
 По умолчанию dirty worktree отвергается до запуска Godot. Для локальной
 диагностики можно явно добавить `-AllowDirtySource`; такой manifest получит
@@ -119,6 +130,10 @@ Codex sandbox `-Action Setup` намеренно отвергается: коп�
 успешен, а sandbox сообщает `sandbox_credential_unavailable`, API-операции
 выполняются GitHub connector'ом, а `git push` — разрешённой/elevated командой.
 Это граница изоляции, а не сломанный credential helper.
+
+`gh auth login --web` может показать владельцу короткоживущий pairing code.
+Агент не должен захватывать, пересылать или вставлять этот код в логи, Issue или
+PR; ввод выполняет сам владелец в обычном PowerShell/браузере.
 
 ## Точный расход токенов
 

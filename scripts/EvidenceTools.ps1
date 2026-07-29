@@ -370,7 +370,8 @@ function Resolve-EvidenceOutputRoot {
     $probe = Join-Path $RelativeOutputRoot "manifest.json"
     $resolvedProbe = Resolve-RepositoryArtifactPath `
         -RepositoryRoot $RepositoryRoot `
-        -RelativePath $probe
+        -RelativePath $probe `
+        -ParameterName "OutputRoot"
     return [IO.Path]::GetDirectoryName($resolvedProbe)
 }
 
@@ -448,6 +449,29 @@ function New-EvidenceCaptureArguments {
     }
 
     return @($arguments)
+}
+
+function New-EvidenceReproductionArguments {
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Capture,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ScreenshotPath
+    )
+
+    return @(
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        ".\scripts\run-game.ps1"
+    ) + @(New-EvidenceCaptureArguments `
+        -Capture $Capture `
+        -ScreenshotPath $ScreenshotPath)
 }
 
 function ConvertTo-PowerShellCommand {
@@ -646,10 +670,7 @@ function Write-EvidenceManifest {
             $(if ($manifest.reproducible) { "yes" } else { "no" })),
         ('- Publishable evidence: **{0}**' -f
             $(if ($manifest.publishable) { "yes" } else { "no" })),
-        "- Repeated byte-for-byte: **yes**",
-        "",
-        "| Capture | Fixture / tick | Canonical checksum | PNG SHA-256 |",
-        "|---|---:|---|---|"
+        "- Repeated byte-for-byte: **yes**"
     )
     if ($SourceDirty) {
         $markdown += @(
@@ -657,6 +678,11 @@ function Write-EvidenceManifest {
             "> Warning: the source worktree was dirty. This diagnostic bundle is not publishable."
         )
     }
+    $markdown += @(
+        "",
+        "| Capture | Fixture / tick | Canonical checksum | PNG SHA-256 |",
+        "|---|---:|---|---|"
+    )
     foreach ($capture in $Captures) {
         $markdown += (
             '| `{0}` | `{1}` / `{2}` | `{3}` | `{4}` |' -f

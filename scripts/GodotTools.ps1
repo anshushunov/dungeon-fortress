@@ -201,13 +201,16 @@ function Resolve-RepositoryArtifactPath {
         [string]$RepositoryRoot,
 
         [Parameter(Mandatory = $true)]
-        [string]$RelativePath
+        [string]$RelativePath,
+
+        [ValidateSet("ScreenshotPath", "OutputRoot")]
+        [string]$ParameterName = "ScreenshotPath"
     )
 
     if ([string]::IsNullOrWhiteSpace($RelativePath) -or
         [IO.Path]::IsPathRooted($RelativePath) -or
         $RelativePath -match '^[A-Za-z]:') {
-        throw "ScreenshotPath must be a non-empty relative path inside repository .artifacts."
+        throw "$ParameterName must be a non-empty relative path inside repository .artifacts."
     }
 
     $artifactsRoot = [IO.Path]::GetFullPath((Join-Path $RepositoryRoot ".artifacts"))
@@ -217,7 +220,7 @@ function Resolve-RepositoryArtifactPath {
     $candidate = [IO.Path]::GetFullPath((Join-Path $artifactsRoot $RelativePath))
 
     if (-not $candidate.StartsWith($artifactsPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "ScreenshotPath resolves outside repository .artifacts."
+        throw "$ParameterName resolves outside repository .artifacts."
     }
 
     return $candidate

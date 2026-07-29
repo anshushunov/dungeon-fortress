@@ -129,6 +129,104 @@ function Test-GitHubAuthReady {
     )
 }
 
+function New-GitHubAuthReport {
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [bool]$InCodexSandbox,
+
+        [Parameter(Mandatory = $true)]
+        [bool]$GhCliAvailable,
+
+        [Parameter(Mandatory = $true)]
+        [string]$GhState,
+
+        [Parameter(Mandatory = $true)]
+        [bool]$GitCliAvailable,
+
+        [Parameter(Mandatory = $true)]
+        [bool]$OriginConfigured,
+
+        [AllowNull()]
+        [string]$OriginProtocol,
+
+        [AllowNull()]
+        [string]$OriginHost,
+
+        [Parameter(Mandatory = $true)]
+        [bool]$EmbeddedCredential,
+
+        [Parameter(Mandatory = $true)]
+        [bool]$CredentialHelperConfigured,
+
+        [Parameter(Mandatory = $true)]
+        [int]$CredentialHelperCount,
+
+        [Parameter(Mandatory = $true)]
+        [string]$GitWriteState
+    )
+
+    $remediation = @()
+    if ($GhState -in @("missing", "invalid", "error")) {
+        $remediation += "Run outside the sandbox: gh auth login -h github.com"
+        $remediation += "Then run: gh auth setup-git"
+    }
+    elseif ($GhState -eq "missing_cli") {
+        $remediation += "Install GitHub CLI, then run gh auth login -h github.com."
+    }
+    if (-not $CredentialHelperConfigured -and $GitCliAvailable) {
+        $remediation += "Configure Git credential access with: gh auth setup-git"
+    }
+    if ($EmbeddedCredential) {
+        $remediation += "Remove credentials embedded in the origin URL; use a credential helper."
+    }
+    if ($GitWriteState -eq "sandbox_credential_unavailable") {
+        $remediation += (
+            "Windows credentials are not mounted in this Codex sandbox. " +
+            "Use the GitHub connector for API mutations and an approved/elevated git push; " +
+            "do not copy a token into the repository or command line."
+        )
+    }
+    elseif ($GitWriteState -in @("credential_unavailable", "rejected")) {
+        $remediation += "Refresh GitHub CLI login outside the sandbox, then run gh auth setup-git."
+    }
+    elseif ($GitWriteState -eq "missing_remote") {
+        $remediation += "Configure the repository origin remote before probing Git authentication."
+    }
+    elseif ($GitWriteState -eq "not_checked") {
+        $remediation += "Run without -SkipRemoteProbe to prove Git write authentication."
+    }
+
+    $ready = Test-GitHubAuthReady `
+        -GhState $GhState `
+        -GitWriteState $GitWriteState `
+        -CredentialHelperConfigured $CredentialHelperConfigured `
+        -EmbeddedCredential $EmbeddedCredential
+    return [pscustomobject][ordered]@{
+        event = "github_auth_diagnostic"
+        status = if ($ready) { "ok" } else { "action_required" }
+        inCodexSandbox = $InCodexSandbox
+        gh = [ordered]@{
+            cliAvailable = $GhCliAvailable
+            authState = $GhState
+        }
+        git = [ordered]@{
+            cliAvailable = $GitCliAvailable
+            originConfigured = $OriginConfigured
+            originProtocol = $OriginProtocol
+            originHost = $OriginHost
+            embeddedCredential = $EmbeddedCredential
+            credentialHelperConfigured = $CredentialHelperConfigured
+            credentialHelperCount = $CredentialHelperCount
+            writeAuthState = $GitWriteState
+            writeProbe = "git_push_dry_run"
+        }
+        ready = $ready
+        remediation = @($remediation | Select-Object -Unique)
+    }
+}
+
 function Get-GitHubAuthReport {
     [CmdletBinding()]
     [OutputType([pscustomobject])]
@@ -252,62 +350,16 @@ function Get-GitHubAuthReport {
         }
     }
 
-    $remediation = @()
-    if ($ghState -in @("missing", "invalid", "error")) {
-        $remediation += "Run outside the sandbox: gh auth login -h github.com"
-        $remediation += "Then run: gh auth setup-git"
-    }
-    elseif ($ghState -eq "missing_cli") {
-        $remediation += "Install GitHub CLI, then run gh auth login -h github.com."
-    }
-    if (-not $helperConfigured -and $null -ne $gitCommand) {
-        $remediation += "Configure Git credential access with: gh auth setup-git"
-    }
-    if ($embeddedCredential) {
-        $remediation += "Remove credentials embedded in the origin URL; use a credential helper."
-    }
-    if ($gitState -eq "sandbox_credential_unavailable") {
-        $remediation += (
-            "Windows credentials are not mounted in this Codex sandbox. " +
-            "Use the GitHub connector for API mutations and an approved/elevated git push; " +
-            "do not copy a token into the repository or command line."
-        )
-    }
-    elseif ($gitState -in @("credential_unavailable", "rejected")) {
-        $remediation += "Refresh GitHub CLI login outside the sandbox, then run gh auth setup-git."
-    }
-    elseif ($gitState -eq "missing_remote") {
-        $remediation += "Configure the repository origin remote before probing Git authentication."
-    }
-    elseif ($gitState -eq "not_checked") {
-        $remediation += "Run without -SkipRemoteProbe to prove Git write authentication."
-    }
-
-    $ready = Test-GitHubAuthReady `
+    return New-GitHubAuthReport `
+        -InCodexSandbox $inCodexSandbox `
+        -GhCliAvailable ($null -ne $ghCommand) `
         -GhState $ghState `
-        -GitWriteState $gitState `
+        -GitCliAvailable ($null -ne $gitCommand) `
+        -OriginConfigured $remoteConfigured `
+        -OriginProtocol $remoteProtocol `
+        -OriginHost $remoteHost `
+        -EmbeddedCredential $embeddedCredential `
         -CredentialHelperConfigured $helperConfigured `
-        -EmbeddedCredential $embeddedCredential
-    return [pscustomobject][ordered]@{
-        event = "github_auth_diagnostic"
-        status = if ($ready) { "ok" } else { "action_required" }
-        inCodexSandbox = $inCodexSandbox
-        gh = [ordered]@{
-            cliAvailable = $null -ne $ghCommand
-            authState = $ghState
-        }
-        git = [ordered]@{
-            cliAvailable = $null -ne $gitCommand
-            originConfigured = $remoteConfigured
-            originProtocol = $remoteProtocol
-            originHost = $remoteHost
-            embeddedCredential = $embeddedCredential
-            credentialHelperConfigured = $helperConfigured
-            credentialHelperCount = $helperCount
-            writeAuthState = $gitState
-            writeProbe = "git_push_dry_run"
-        }
-        ready = $ready
-        remediation = @($remediation | Select-Object -Unique)
-    }
+        -CredentialHelperCount $helperCount `
+        -GitWriteState $gitState
 }

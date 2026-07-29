@@ -18,6 +18,9 @@ function Assert-Throws {
         [scriptblock]$Action,
 
         [Parameter(Mandatory = $true)]
+        [string]$ExpectedMessage,
+
+        [Parameter(Mandatory = $true)]
         [string]$Message
     )
 
@@ -25,6 +28,12 @@ function Assert-Throws {
         & $Action
     }
     catch {
+        if ($_.Exception.Message -cne $ExpectedMessage) {
+            throw (
+                "$Message Expected error '$ExpectedMessage', got " +
+                "'$($_.Exception.Message)'."
+            )
+        }
         return
     }
     throw $Message
@@ -36,17 +45,20 @@ function Invoke-ExpectedScriptFailure {
         [string[]]$Arguments,
 
         [Parameter(Mandatory = $true)]
+        [string]$ExpectedErrorPattern,
+
+        [Parameter(Mandatory = $true)]
         [string]$Message
     )
 
     $previousPreference = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
-        $null = & powershell `
+        $output = @(& powershell `
             -NoProfile `
             -ExecutionPolicy Bypass `
             -File (Join-Path $repoRoot "scripts\capture-evidence.ps1") `
-            @Arguments 2>&1
+            @Arguments 2>&1)
         $exitCode = $LASTEXITCODE
     }
     finally {
@@ -54,6 +66,10 @@ function Invoke-ExpectedScriptFailure {
     }
     if ($exitCode -ne 1) {
         throw "$Message Expected exit code 1, got $exitCode."
+    }
+    $outputText = ($output | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+    if ($outputText -cnotmatch $ExpectedErrorPattern) {
+        throw "$Message Expected error matching '$ExpectedErrorPattern', got '$outputText'."
     }
 }
 
@@ -85,9 +101,11 @@ try {
         throw "Valid evidence spec was not normalized."
     }
     $capture = $spec.Captures[0]
+    $machineGodotPath = "C:\machine-specific\Godot_v4.7.1-stable_mono_win64.exe"
     $arguments = @(New-EvidenceCaptureArguments `
         -Capture $capture `
-        -ScreenshotPath "evidence/test/baseline-t1.png")
+        -ScreenshotPath "evidence/test/baseline-t1.png" `
+        -GodotPath $machineGodotPath)
     foreach ($required in @(
         "-ScreenshotTicks",
         "-SelectCell",
@@ -103,8 +121,18 @@ try {
             throw "Capture arguments omit '$required'."
         }
     }
+    if ($arguments[0] -cne "-GodotPath" -or $arguments[1] -cne $machineGodotPath) {
+        throw "Runtime capture arguments omit the explicit machine Godot path."
+    }
+    $reproductionArguments = @(New-EvidenceReproductionArguments `
+        -Capture $capture `
+        -ScreenshotPath "evidence/test/baseline-t1.png")
+    if ("-GodotPath" -in $reproductionArguments -or
+        $machineGodotPath -in $reproductionArguments) {
+        throw "Published reproduction arguments leaked a machine-specific Godot path."
+    }
     $command = ConvertTo-PowerShellCommand `
-        -Arguments (@("powershell", "-File", ".\scripts\run-game.ps1") + $arguments)
+        -Arguments $reproductionArguments
     if ($command -notmatch "-ScreenshotTicks 1" -or
         $command -notmatch "-CameraPosition '560,320'") {
         throw "Reproduction command does not preserve explicit capture parameters."
@@ -124,6 +152,7 @@ try {
         -Action {
             Assert-EvidenceFilesEqual -ExpectedPath $primaryPath -ActualPath $repeatPath
         } `
+        -ExpectedMessage "Repeated evidence differs at byte 3." `
         -Message "Byte-for-byte guard accepted a changed repeat image."
 
     $eventLine = [ordered]@{
@@ -147,6 +176,7 @@ try {
         -Action {
             Assert-EvidenceEventsEqual -Expected $event -Actual $changedEvent
         } `
+        -ExpectedMessage "Repeated evidence differs in structured property 'checksum'." `
         -Message "Structured repeat guard accepted a changed checksum."
 
     [IO.File]::WriteAllBytes($repeatPath, [byte[]]@(1, 2, 3, 4))
@@ -185,6 +215,9 @@ try {
         -Action {
             Assert-EvidenceSourcePublishable -SourceDirty $true
         } `
+        -ExpectedMessage (
+            "Source worktree is dirty. Commit the evidence-producing state first, " +
+            "or use -AllowDirtySource only for a non-publishable diagnostic bundle.") `
         -Message "Dirty source was accepted as publishable by default."
     Assert-EvidenceSourcePublishable -SourceDirty $true -AllowDirtySource
     $dirtyRoot = Join-Path $testRoot "dirty"
@@ -201,6 +234,20 @@ try {
         [Text.Encoding]::UTF8) | ConvertFrom-Json
     if ($dirtyManifest.reproducible -or $dirtyManifest.publishable) {
         throw "Dirty-source manifest claims to be reproducible or publishable."
+    }
+    $dirtyMarkdown = [IO.File]::ReadAllLines(
+        $dirtyWritten.MarkdownPath,
+        [Text.Encoding]::UTF8)
+    $warningIndex = [Array]::IndexOf(
+        $dirtyMarkdown,
+        "> Warning: the source worktree was dirty. This diagnostic bundle is not publishable.")
+    $tableHeaderIndex = [Array]::IndexOf(
+        $dirtyMarkdown,
+        "| Capture | Fixture / tick | Canonical checksum | PNG SHA-256 |")
+    if ($warningIndex -lt 0 -or $tableHeaderIndex -le $warningIndex -or
+        $dirtyMarkdown[$tableHeaderIndex + 1] -cne "|---|---:|---|---|" -or
+        $dirtyMarkdown[$tableHeaderIndex + 2] -cnotmatch '^\| `baseline-t1` \|') {
+        throw "Dirty-source Markdown warning interrupts or precedes no intact capture table."
     }
 
     $duplicateSpecPath = Join-Path $testRoot "duplicate.json"
@@ -238,6 +285,7 @@ try {
             "-OutputRoot", "evidence\invalid",
             "-ValidateOnly"
         ) `
+        -ExpectedErrorPattern "Evidence capture name 'same' is duplicated\." `
         -Message "capture-evidence accepted duplicate names."
 
     $fractionalSpecPath = Join-Path $testRoot "fractional.json"
@@ -251,6 +299,7 @@ try {
             "-OutputRoot", "evidence\invalid",
             "-ValidateOnly"
         ) `
+        -ExpectedErrorPattern "schemaVersion must be an integer\." `
         -Message "capture-evidence rounded a fractional schemaVersion."
 
     $objectCapturesPath = Join-Path $testRoot "object-captures.json"
@@ -276,13 +325,15 @@ try {
             "-OutputRoot", "evidence\invalid",
             "-ValidateOnly"
         ) `
+        -ExpectedErrorPattern "Evidence spec property 'captures' must be a JSON array\." `
         -Message "capture-evidence accepted object-form captures."
     Invoke-ExpectedScriptFailure `
         -Arguments @(
             "-SpecPath", $validSpecPath,
-            "-OutputRoot", "..\outside",
+            "-OutputRoot", "good\..\..\outside",
             "-ValidateOnly"
         ) `
+        -ExpectedErrorPattern "OutputRoot resolves outside repository \.artifacts\." `
         -Message "capture-evidence accepted output traversal."
 
     [ordered]@{
@@ -296,6 +347,8 @@ try {
         byteDifferenceRejected = $true
         checksumDifferenceRejected = $true
         dirtySourceRejectedByDefault = $true
+        dirtyMarkdownTableIntact = $true
+        portableCommandOmitsGodotPath = $true
         manifestWritten = $true
     } | ConvertTo-Json -Compress | Write-Host
 }

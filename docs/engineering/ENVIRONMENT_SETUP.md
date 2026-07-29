@@ -68,7 +68,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -GodotP
 
 | Стадия | Что проверяет | Время\* |
 |---|---|---|
-| `scripts` | семь dependency-free гвардов: контракт стадий, вывод Godot, пути screenshot/evidence, manifest, GitHub auth diagnostic, конфиги Ivan-MCP и domain MCP | 4 с |
+| `scripts` | семь dependency-free гвардов: контракт стадий, вывод Godot, пути screenshot/evidence, manifest, GitHub auth diagnostic, конфиги Ivan-MCP и domain MCP | 7 с |
 | `build` | `restore` решения, `--locked-mode` restore тестов domain MCP, `Release` build всего решения | 3 с |
 | `tests` | `dotnet test` для Simulation, Presentation и DomainMcp | 31 с |
 | `mcp` | реальный запуск launcher domain MCP и stdio-контракт `verify-domain-mcp.ps1` | 4 с |

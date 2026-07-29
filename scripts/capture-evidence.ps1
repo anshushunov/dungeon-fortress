@@ -136,6 +136,12 @@ try {
             -Capture $capture `
             -ScreenshotPath $relativeRepeatPath `
             -GodotPath $GodotPath)
+        $reproductionArguments = @(New-EvidenceReproductionArguments `
+            -Capture $capture `
+            -ScreenshotPath $relativePrimaryPath)
+        $repeatReproductionArguments = @(New-EvidenceReproductionArguments `
+            -Capture $capture `
+            -ScreenshotPath $relativeRepeatPath)
 
         Write-Host "Capturing evidence '$($capture.Name)' (primary)..."
         $primaryResult = Invoke-EvidenceRunGame `
@@ -165,22 +171,6 @@ try {
         Assert-EvidenceEventsEqual -Expected $primaryEvent -Actual $repeatEvent
         Assert-EvidenceFilesEqual -ExpectedPath $primaryPath -ActualPath $repeatPath
 
-        $reproductionArguments = @(
-            "powershell",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            ".\scripts\run-game.ps1"
-        ) + @($primaryArguments)
-        $repeatReproductionArguments = @(
-            "powershell",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            ".\scripts\run-game.ps1"
-        ) + @($repeatArguments)
         $primaryHash = Get-EvidenceSha256 -Path $primaryPath
         $repeatHash = Get-EvidenceSha256 -Path $repeatPath
         if ($primaryHash -cne $repeatHash) {

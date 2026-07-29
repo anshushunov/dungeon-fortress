@@ -25,6 +25,10 @@ try {
             throw "GitHub CLI is not installed."
         }
 
+        Write-Warning (
+            "gh auth login --web may print a short-lived pairing code for the owner. " +
+            "Do not capture, forward, or paste that code into agent logs, issues, or PRs."
+        )
         & gh auth login --hostname github.com --git-protocol https --web
         if ($LASTEXITCODE -ne 0) {
             throw "gh auth login failed with exit code $LASTEXITCODE."
