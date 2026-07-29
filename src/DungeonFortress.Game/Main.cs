@@ -13,12 +13,7 @@ namespace DungeonFortress.Game;
 /// </summary>
 public partial class Main : Node2D
 {
-    private const int TileSize = 22;
     private const double TicksPerSecond = 6.0;
-    // The map hangs below the two control strips, so its origin is derived from
-    // the band they occupy rather than from a number nobody can re-derive. The
-    // strips grew when they stopped being 9pt text and became icon buttons.
-    private static readonly Vector2 MapOrigin = new(18, ToolbarStripTop + ControlStripsBandHeight);
     private static readonly Color[] CreatureColors =
     [
         new("#fb7185"), new("#f59e0b"), new("#eab308"),
@@ -40,7 +35,11 @@ public partial class Main : Node2D
     // marking accepted for this tick and not applied yet. Rebuilt with _state and
     // never written back — see DungeonFortress.Presentation.MapProjection.
     private MapProjection? _projection;
+    private Camera2D? _camera;
+    private CanvasLayer? _hudLayer;
     private Control? _hudRoot;
+    private Control? _worldViewport;
+    private readonly List<ColorRect> _worldViewportMasks = [];
     private Label? _title;
     private Label? _summary;
     private Label? _inspector;
@@ -62,6 +61,13 @@ public partial class Main : Node2D
         "one command. Esc cancels a drag, then puts the brush away.";
     private string _fixture = "baseline";
     private string? _screenshotPath;
+    private int _tileSize = CameraView.DefaultTileSize;
+    private double _cameraZoom = CameraView.DefaultZoom;
+    private ViewPoint _cameraCenter = CameraView.MapCenter(CameraView.DefaultTileSize);
+    private double _uiScale = CameraView.DefaultUiScale;
+    private ViewSize? _requestedFrameSize;
+    private bool _cameraPanning;
+    private Vector2 _lastPanPointer;
     private int? _selectedCreatureId;
     private GridPoint? _selectedCell;
     private int? _hoverCreatureId;
@@ -85,6 +91,9 @@ public partial class Main : Node2D
     private string _checksum = string.Empty;
     private int _screenshotFramesRemaining;
     private int _fallbackSpriteDraws;
+    private bool _spritesHaveMipmaps;
+    private int _cameraInputChecks;
+    private bool _hudInputRejected;
 
     public override void _Ready()
     {
@@ -95,11 +104,21 @@ public partial class Main : Node2D
             var screenshotTicks = CommandLineArguments.ReadInt(arguments, "--screenshot-ticks") ?? 1;
             _screenshotPath = CommandLineArguments.Read(arguments, "--screenshot");
             _screenshotFramesRemaining = _screenshotPath is null ? 0 : 3;
+            var view = ViewLaunchOptions.Parse(
+                arguments,
+                requireExplicitCaptureParameters: _screenshotPath is not null);
+            _tileSize = view.TileSize;
+            _cameraZoom = view.CameraZoom;
+            _cameraCenter = view.CameraPosition;
+            _uiScale = view.UiScale;
+            _requestedFrameSize = view.FrameSize;
+            ConfigureRequestedFrame();
             var selectCreature = CommandLineArguments.ReadInt(arguments, "--select-creature");
             var selectCell = CommandLineArguments.Read(arguments, "--select-cell");
             var headlessSmoke = arguments.Contains("--smoke", StringComparer.Ordinal);
             var visibleSmoke = arguments.Contains("--visible-smoke", StringComparer.Ordinal);
             var controlsSmoke = arguments.Contains("--smoke-controls", StringComparer.Ordinal);
+            var cameraSmoke = arguments.Contains("--smoke-camera", StringComparer.Ordinal);
             var demoControls = arguments.Contains("--demo-controls", StringComparer.Ordinal);
             var demoDig = arguments.Contains("--demo-dig", StringComparer.Ordinal);
             var demoStone = arguments.Contains("--demo-stone", StringComparer.Ordinal);
@@ -108,7 +127,13 @@ public partial class Main : Node2D
             // still owns. verify.ps1 runs it and requires it to fail: that is what
             // proves the guard reacts at all instead of passing on everything.
             var strictHudFit = arguments.Contains("--strict-hud-fit", StringComparer.Ordinal);
-            var requiresSprites = !headlessSmoke && !controlsSmoke;
+            var requiresSprites = !headlessSmoke && !controlsSmoke && !cameraSmoke;
+
+            // World sprites are sampled below 1x at the two overview zoom levels.
+            // The imported image is rebuilt with mipmaps in LoadGoblinSprites;
+            // this inherited filter makes the immediate DrawTextureRect calls use
+            // those levels with linear sampling.
+            TextureFilter = TextureFilterEnum.LinearWithMipmaps;
 
             // Before the HUD, because every toolbar button is created with the
             // texture it draws. A file the icon pack has not delivered yet becomes
@@ -116,6 +141,7 @@ public partial class Main : Node2D
             // changes no code at all.
             LoadIcons();
             CreateHud();
+            CreateCamera();
             LoadGoblinSprites();
             if (requiresSprites)
             {
@@ -189,6 +215,15 @@ public partial class Main : Node2D
             // content and the check would silently pass on anything.
             AssertLabelsFit(strictHudFit);
             AssertControlStripsFit();
+            AssertRequestedFrameSize();
+
+            if (cameraSmoke)
+            {
+                VerifyCameraInputSmoke();
+                VerifyDeterministicFixture(fixture);
+                PrintResult("godot_camera_smoke", "ok", null);
+                GetTree().Quit();
+            }
 
             if (headlessSmoke || visibleSmoke)
             {
@@ -420,7 +455,7 @@ public partial class Main : Node2D
         foreach (var creature in _state!.Creatures)
         {
             var render = CreatureRenderCenter(creature);
-            var drawnCell = ToCell(render);
+            var drawnCell = WorldToCell(render);
             var origin = _creatureMotionOrigin.TryGetValue(creature.Id, out var from)
                 ? from
                 : creature.Position;
@@ -462,7 +497,7 @@ public partial class Main : Node2D
             interpolatedFrames = _framePacingInterpolatedFrames,
             interpolationLeadViolations = _framePacingLeadViolations,
             maxRenderStepPixels = Math.Round((double)_framePacingMaxRenderStep, 3),
-            tileSize = TileSize,
+            tileSize = _tileSize,
             ticksPerSecond = TicksPerSecond,
             runtimeDiagnostics = _diagnostics,
         }));
@@ -485,14 +520,66 @@ public partial class Main : Node2D
     {
         switch (@event)
         {
+            case InputEventMouseMotion motion when _cameraPanning:
+                var panDelta = motion.Position - _lastPanPointer;
+                _lastPanPointer = motion.Position;
+                PanCamera(new ViewPoint(panDelta.X, panDelta.Y));
+                break;
+
             case InputEventMouseMotion motion:
                 UpdatePointer(motion.Position);
-                if (_dragAnchor is not null && ToCell(motion.Position) is { } dragged &&
-                    IsMapCell(dragged) && _dragCurrent != dragged)
+                if (_dragAnchor is not null &&
+                    ScreenToCell(motion.Position) is { } dragged &&
+                    _dragCurrent != dragged)
                 {
                     _dragCurrent = dragged;
                     UpdateHud();
                     QueueRedraw();
+                }
+
+                break;
+
+            case InputEventMouseButton
+            {
+                ButtonIndex: MouseButton.Middle,
+                Pressed: true,
+            } middle:
+                if (WorldViewportScreenRect().HasPoint(middle.Position))
+                {
+                    _cameraPanning = true;
+                    _lastPanPointer = middle.Position;
+                }
+
+                break;
+
+            case InputEventMouseButton
+            {
+                ButtonIndex: MouseButton.Middle,
+                Pressed: false,
+            }:
+                _cameraPanning = false;
+                break;
+
+            case InputEventMouseButton
+            {
+                ButtonIndex: MouseButton.WheelUp,
+                Pressed: true,
+            } wheelUp:
+                if (WorldViewportScreenRect().HasPoint(wheelUp.Position))
+                {
+                    StepCameraZoom(1);
+                }
+
+                break;
+
+            case InputEventMouseButton
+            {
+                ButtonIndex: MouseButton.WheelDown,
+                Pressed: true,
+            } wheelDown:
+                if (WorldViewportScreenRect().HasPoint(wheelDown.Position))
+                {
+                    StepCameraZoom(-1);
                 }
 
                 break;
@@ -530,7 +617,7 @@ public partial class Main : Node2D
                     break;
                 }
 
-                if (ToCell(click.Position) is { } start && IsMapCell(start))
+                if (ScreenToCell(click.Position) is { } start)
                 {
                     _dragAnchor = start;
                     _dragCurrent = start;
@@ -551,6 +638,18 @@ public partial class Main : Node2D
 
         switch (key.Keycode)
         {
+            case Key.Left:
+                NudgeCamera(-3, 0);
+                break;
+            case Key.Right:
+                NudgeCamera(3, 0);
+                break;
+            case Key.Up:
+                NudgeCamera(0, -3);
+                break;
+            case Key.Down:
+                NudgeCamera(0, 3);
+                break;
             case Key.Space:
             case Key.P:
                 TogglePause();
@@ -664,11 +763,9 @@ public partial class Main : Node2D
     // goes away, and it is what makes the overflow guard measure the layout the
     // player actually gets rather than a rectangle nobody has laid out.
     //
-    // One thing is deliberately still pinned to constants: the map keeps
-    // MapOrigin and TileSize. Replacing that belongs to ADR 0008's camera, not
-    // here. The control strips no longer are: they are Buttons in a container, so
-    // the band below reserves the height they lay themselves out into instead of
-    // repeating the offsets a hit test used to check.
+    // ADR 0008 now gives the map an explicit WorldViewport row. The camera
+    // centers its world in that row, while the HUD continues to be ordinary
+    // Control layout measured independently of map dimensions.
     // ---------------------------------------------------------------------
     private const int ToolbarStripTop = 74;
 
@@ -690,35 +787,57 @@ public partial class Main : Node2D
     private const int HudTopMargin = 8;
     private const int HudRightMargin = 16;
     private const int HudBottomMargin = 8;
+    private const int HudLeftMargin = 16;
     private const int HudColumnSeparation = 10;
     private const int HudPanelSeparation = 6;
-    private const int HudSidePanelMinimumWidth = 240;
+    private const int HudSidePanelMinimumWidth = 300;
+    private const int HudMapColumnMinimumWidth = 480;
 
-    private static Vector2 MapPixelSize =>
-        new(PrototypeTuning.MapWidth * TileSize, PrototypeTuning.MapHeight * TileSize);
+    private Vector2 MapPixelSize
+    {
+        get
+        {
+            var size = CameraView.MapSize(_tileSize);
+            return new Vector2((float)size.Width, (float)size.Height);
+        }
+    }
+
+    private float WorldVisualScale => (float)CameraView.WorldVisualScale(_tileSize);
+
+    private float ScaleWorld(float referencePixels) => referencePixels * WorldVisualScale;
+
+    private Vector2 ScaleWorld(float referenceX, float referenceY) =>
+        new(ScaleWorld(referenceX), ScaleWorld(referenceY));
 
     private void CreateHud()
     {
-        // The root keeps top-left anchors and is resized explicitly, and that is
-        // load-bearing rather than a style choice. A Control anchored to the full
-        // rect measures itself against its parent's anchorable rect, and the
-        // parent here is a Node2D, whose anchorable rect is empty — the HUD would
-        // silently collapse to its own minimum size on the first layout pass
-        // after _Ready. Top-left anchors have no such dependency, so the size the
-        // viewport hands the HUD is the size it keeps.
+        // The CanvasLayer is the structural boundary between world and HUD. A
+        // Camera2D added to the world can move or scale Main without moving this
+        // subtree; GUI input also reaches it before _UnhandledInput reaches the
+        // map.
+        _hudLayer = new CanvasLayer { Name = "HudLayer" };
+        AddChild(_hudLayer);
+        CreateWorldViewportMasks();
+
+        // The root keeps top-left anchors and is resized explicitly. CanvasLayer
+        // is not a Control and has no anchorable rectangle, so a full-rect anchor
+        // would silently collapse to the HUD's minimum size on the first layout
+        // pass after _Ready. Top-left anchors have no such dependency: the size
+        // the viewport hands the HUD is the size it keeps.
         _hudRoot = new Control
         {
             Name = "Hud",
             MouseFilter = Control.MouseFilterEnum.Ignore,
+            TextureFilter = CanvasItem.TextureFilterEnum.Linear,
         };
-        AddChild(_hudRoot);
+        _hudLayer.AddChild(_hudRoot);
         _hudRoot.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.TopLeft);
         GetViewport().SizeChanged += OnViewportResized;
 
         var margins = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
         _hudRoot.AddChild(margins);
         margins.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        margins.AddThemeConstantOverride("margin_left", (int)MapOrigin.X);
+        margins.AddThemeConstantOverride("margin_left", HudLeftMargin);
         margins.AddThemeConstantOverride("margin_top", HudTopMargin);
         margins.AddThemeConstantOverride("margin_right", HudRightMargin);
         margins.AddThemeConstantOverride("margin_bottom", HudBottomMargin);
@@ -728,24 +847,274 @@ public partial class Main : Node2D
         margins.AddChild(columns);
         columns.AddChild(CreateMapColumn());
         columns.AddChild(CreateSideColumn());
-        LayoutHud(GetViewportRect().Size);
+        LayoutHud(GetViewportRect().Size, _uiScale);
     }
 
-    private void OnViewportResized() => LayoutHud(GetViewportRect().Size);
+    /// <summary>
+    /// Camera2D transforms the complete world canvas, while the HUD reserves only
+    /// one rectangle for that canvas. Four opaque HUD-layer rectangles cover the
+    /// complement of the reserved rectangle. This is the presentation equivalent
+    /// of a rectangular clip and keeps a zoomed map from showing through the
+    /// transparent title, toolbars or roster.
+    /// </summary>
+    private void CreateWorldViewportMasks()
+    {
+        string[] names = ["WorldMaskTop", "WorldMaskBottom", "WorldMaskLeft", "WorldMaskRight"];
+        foreach (var name in names)
+        {
+            var mask = new ColorRect
+            {
+                Name = name,
+                Color = new Color("#07111d"),
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+            };
+            _hudLayer!.AddChild(mask);
+            _worldViewportMasks.Add(mask);
+        }
+    }
+
+    private void LayoutWorldViewportMasks(Vector2 frameSize)
+    {
+        if (_worldViewportMasks.Count != 4 || _worldViewport is null)
+        {
+            return;
+        }
+
+        var world = WorldViewportScreenRect();
+        SetMask(_worldViewportMasks[0], 0, 0, frameSize.X, world.Position.Y);
+        SetMask(_worldViewportMasks[1], 0, world.End.Y, frameSize.X, frameSize.Y - world.End.Y);
+        SetMask(_worldViewportMasks[2], 0, world.Position.Y, world.Position.X, world.Size.Y);
+        SetMask(_worldViewportMasks[3], world.End.X, world.Position.Y, frameSize.X - world.End.X, world.Size.Y);
+    }
+
+    private static void SetMask(ColorRect mask, float x, float y, float width, float height)
+    {
+        mask.Position = new Vector2(x, y);
+        mask.Size = new Vector2(Math.Max(0, width), Math.Max(0, height));
+    }
 
     /// <summary>
-    /// The left column: the header, the band the two control strips are drawn
-    /// in, the band the map is drawn in, and the roster underneath. Only the
-    /// roster expands, because everything above it is drawn at a fixed pixel
-    /// geometry that the camera work of ADR 0008 owns.
+    /// <c>canvas_items</c> treats the project window size as a design size. If
+    /// only the native window is enlarged, a same-aspect 1600x900 window still
+    /// exposes the 1280x720 design rectangle and merely scales it. A capture's
+    /// explicit frame size is instead the logical rendering rectangle: this is
+    /// what makes a larger deterministic frame reveal more world while the HUD
+    /// keeps its authored pixel sizes.
+    ///
+    /// The project still owns the canvas-items/expand policy. An explicit frame
+    /// fixes the logical rendering rectangle used by reproducible captures and
+    /// <c>run-game.ps1</c>; an ordinary interactive resize synchronizes that
+    /// rectangle to the new native window size in <see cref="OnViewportResized"/>.
+    /// </summary>
+    private void ConfigureRequestedFrame()
+    {
+        if (_requestedFrameSize is not { } requested)
+        {
+            return;
+        }
+
+        GetWindow().ContentScaleSize = new Vector2I(
+            checked((int)requested.Width),
+            checked((int)requested.Height));
+    }
+
+    private void OnViewportResized()
+    {
+        // A player resizing an interactive window expects extra pixels to expose
+        // extra world. Captures keep their declared logical frame frozen; this
+        // synchronization is therefore deliberately disabled for screenshot
+        // runs.
+        if (_screenshotPath is null)
+        {
+            var window = GetWindow();
+            if (window.ContentScaleSize != window.Size)
+            {
+                window.ContentScaleSize = window.Size;
+            }
+        }
+
+        LayoutHud(GetViewportRect().Size, _uiScale);
+        ApplyCameraView();
+        QueueRedraw();
+    }
+
+    private void CreateCamera()
+    {
+        _camera = new Camera2D
+        {
+            Name = "WorldCamera",
+            Enabled = true,
+        };
+        AddChild(_camera);
+        ApplyCameraView();
+    }
+
+    private CameraFrame CurrentCameraFrame()
+    {
+        var viewport = GetViewportRect().Size;
+        var world = WorldViewportScreenRect();
+        return new CameraFrame(
+            _cameraCenter,
+            _cameraZoom,
+            new ViewRect(world.Position.X, world.Position.Y, world.Size.X, world.Size.Y),
+            new ViewSize(viewport.X, viewport.Y));
+    }
+
+    private void ApplyCameraView()
+    {
+        if (_camera is null || _worldViewport is null)
+        {
+            return;
+        }
+
+        var frame = CurrentCameraFrame();
+        var node = frame.CameraNodePosition;
+        _camera.Position = new Vector2((float)node.X, (float)node.Y);
+        _camera.Zoom = Vector2.One * (float)_cameraZoom;
+        _camera.ForceUpdateScroll();
+    }
+
+    private Rect2 WorldViewportScreenRect()
+    {
+        var transform = _worldViewport!.GetGlobalTransformWithCanvas();
+        var topLeft = transform * Vector2.Zero;
+        var bottomRight = transform * _worldViewport.Size;
+        return new Rect2(topLeft, bottomRight - topLeft);
+    }
+
+    private GridPoint WorldToCell(Vector2 world)
+    {
+        var cell = CameraView.WorldToCell(new ViewPoint(world.X, world.Y), _tileSize);
+        return cell;
+    }
+
+    private GridPoint? ScreenToCell(Vector2 screen)
+    {
+        var worldViewport = WorldViewportScreenRect();
+        if (!worldViewport.HasPoint(screen))
+        {
+            return null;
+        }
+
+        // InputEventMouse positions are viewport pixels. The inverse of the live
+        // canvas transform is the authoritative screen-to-world conversion; only
+        // the engine-free world-to-grid step remains in Presentation.
+        var world = GetViewport().GetCanvasTransform().AffineInverse() * screen;
+        var cell = WorldToCell(world);
+        return IsMapCell(cell) ? cell : null;
+    }
+
+    private void PanCamera(ViewPoint screenDelta)
+    {
+        _cameraCenter = CameraView.PanByScreenDelta(_cameraCenter, screenDelta, _cameraZoom);
+        ApplyCameraView();
+        UpdatePointer(_lastPanPointer);
+        QueueRedraw();
+    }
+
+    private void StepCameraZoom(int direction)
+    {
+        _cameraZoom = CameraView.StepZoom(_cameraZoom, direction);
+        ApplyCameraView();
+        QueueRedraw();
+    }
+
+    private void NudgeCamera(int horizontalTiles, int verticalTiles)
+    {
+        _cameraCenter = CameraView.MoveByTiles(
+            _cameraCenter,
+            horizontalTiles,
+            verticalTiles,
+            _tileSize);
+        ApplyCameraView();
+        QueueRedraw();
+    }
+
+    private void AssertRequestedFrameSize()
+    {
+        if (_requestedFrameSize is not { } requested)
+        {
+            return;
+        }
+
+        var actual = GetViewportRect().Size;
+        if (!Mathf.IsEqualApprox(actual.X, (float)requested.Width) ||
+            !Mathf.IsEqualApprox(actual.Y, (float)requested.Height))
+        {
+            throw new InvalidOperationException(
+                $"Requested frame {requested.Width}x{requested.Height}, " +
+                $"but Godot created {actual.X}x{actual.Y}.");
+        }
+    }
+
+    /// <summary>
+    /// Engine-level evidence for the input seam: the real Camera2D canvas
+    /// transform is inverted at every discrete zoom and three camera positions.
+    /// A point in the side HUD is rejected before the inverse can become a map
+    /// click.
+    /// </summary>
+    private void VerifyCameraInputSmoke()
+    {
+        var originalCenter = _cameraCenter;
+        var originalZoom = _cameraZoom;
+        var target = new GridPoint(14, 8);
+        var targetWorld = CellCenter(target);
+        ViewPoint[] centers =
+        [
+            CameraView.MapCenter(_tileSize),
+            new ViewPoint(600, 340),
+            new ViewPoint(520, 300),
+        ];
+
+        _cameraInputChecks = 0;
+        foreach (var zoom in CameraView.ZoomLevels)
+        {
+            foreach (var center in centers)
+            {
+                _cameraZoom = zoom;
+                _cameraCenter = center;
+                ApplyCameraView();
+                var screen = GetViewport().GetCanvasTransform() * targetWorld;
+                if (ScreenToCell(screen) != target)
+                {
+                    throw new InvalidOperationException(
+                        $"Camera input mapped cell {target} incorrectly at zoom {zoom} " +
+                        $"and center {center}.");
+                }
+
+                _cameraInputChecks++;
+            }
+        }
+
+        var worldViewport = WorldViewportScreenRect();
+        var hudPoint = new Vector2(
+            Math.Min(GetViewportRect().Size.X - 1, worldViewport.End.X + 8),
+            worldViewport.GetCenter().Y);
+        _hudInputRejected = !worldViewport.HasPoint(hudPoint) && ScreenToCell(hudPoint) is null;
+        if (!_hudInputRejected)
+        {
+            throw new InvalidOperationException("A point in the HUD reached map input.");
+        }
+
+        _cameraCenter = originalCenter;
+        _cameraZoom = originalZoom;
+        ApplyCameraView();
+    }
+
+    /// <summary>
+    /// The left column: header, controls, an explicit world viewport and roster.
+    /// Its width is negotiated with the side panel and never derived from the
+    /// map's pixel width. A larger frame therefore grows this viewport and shows
+    /// more world at the same camera zoom.
     /// </summary>
     private Control CreateMapColumn()
     {
         var column = new VBoxContainer
         {
             MouseFilter = Control.MouseFilterEnum.Ignore,
-            SizeFlagsHorizontal = Control.SizeFlags.Fill,
-            CustomMinimumSize = new Vector2(MapPixelSize.X + 10, 0),
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsStretchRatio = 2.2f,
+            CustomMinimumSize = new Vector2(HudMapColumnMinimumWidth, 0),
         };
         column.AddThemeConstantOverride("separation", 0);
 
@@ -773,15 +1142,18 @@ public partial class Main : Node2D
         _summary.CustomMinimumSize = new Vector2(0, HudTextHeight(_summary, 2));
 
         column.AddChild(CreateControlStrips());
-        column.AddChild(new Control
+        _worldViewport = new Control
         {
-            Name = "Map",
+            Name = "WorldViewport",
             MouseFilter = Control.MouseFilterEnum.Ignore,
-            CustomMinimumSize = MapPixelSize,
-        });
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+            SizeFlagsStretchRatio = 3f,
+        };
+        column.AddChild(_worldViewport);
 
         _roster = MakeHudLabel(10, new Color("#cbd5e1"));
         _roster.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        _roster.SizeFlagsStretchRatio = 1f;
         column.AddChild(_roster);
         return column;
     }
@@ -1131,9 +1503,9 @@ public partial class Main : Node2D
     }
 
     /// <summary>
-    /// The measurable claim of this step: the brush strip is narrower than the map
-    /// it marks. It used to end at 676px against a 616px map, which is what a row
-    /// of eleven text buttons costs.
+    /// The measurable claim of this step: the brush strip is narrower than the
+    /// explicit world viewport it controls. The viewport is layout, not map pixel
+    /// width, so changing tile size cannot silently push the buttons off-screen.
     ///
     /// Measured at every frame size the HUD guard uses, and for the same reason: a
     /// check that only ever saw one size cannot tell a layout that fits from one
@@ -1143,28 +1515,29 @@ public partial class Main : Node2D
     {
         var live = GetViewportRect().Size;
         var failures = new List<string>();
-        foreach (var viewport in HudFitViewports())
+        foreach (var frame in HudFitFrames())
         {
-            LayoutHud(viewport);
+            LayoutHud(frame.Viewport, frame.UiScale);
+            var worldWidth = _worldViewport!.Size.X;
             foreach (var (name, strip) in ControlStrips())
             {
-                if (strip is null || strip.Size.X <= MapPixelSize.X)
+                if (strip is null || strip.Size.X <= worldWidth)
                 {
                     continue;
                 }
 
                 failures.Add(
-                    $"'{name}' is {strip.Size.X}px wide at viewport {viewport}, " +
-                    $"wider than the {MapPixelSize.X}px map it marks");
+                    $"'{name}' is {strip.Size.X}px wide at viewport {frame.Viewport} " +
+                    $"and UI scale {frame.UiScale}, wider than the {worldWidth}px world viewport");
             }
         }
 
-        LayoutHud(live);
+        LayoutHud(live, _uiScale);
 
         if (failures.Count > 0)
         {
             throw new InvalidOperationException(
-                $"A control strip is wider than the map in {failures.Count} place(s): " +
+                $"A control strip is wider than the world viewport in {failures.Count} place(s): " +
                 string.Join("; ", failures) +
                 ". A strip that overhangs the map puts controls where the player is " +
                 "not looking and breaks the column the HUD is laid out in.");
@@ -1185,6 +1558,7 @@ public partial class Main : Node2D
     private object ControlStripFit() => new
     {
         mapWidth = MapPixelSize.X,
+        worldViewportWidth = _worldViewport!.Size.X,
         widths = ControlStrips()
             .Where(entry => entry.Strip is not null)
             .Select(entry => (object)new { name = entry.Name, width = entry.Strip!.Size.X })
@@ -1206,6 +1580,7 @@ public partial class Main : Node2D
         {
             MouseFilter = Control.MouseFilterEnum.Ignore,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsStretchRatio = 1f,
             CustomMinimumSize = new Vector2(HudSidePanelMinimumWidth, 0),
         };
         var background = new StyleBoxFlat { BgColor = new Color("#0f1d2d"), BorderColor = new Color("#334155") };
@@ -1311,16 +1686,32 @@ public partial class Main : Node2D
 
     private void LoadGoblinSprites()
     {
+        _spritesHaveMipmaps = true;
         foreach (var state in new[] { "idle", "work", "combat", "downed" })
         {
             var path = $"res://assets/generated/goblins/goblin_{state}_v1.png";
-            if (ResourceLoader.Exists(path) && GD.Load<Texture2D>(path) is { } texture)
+            if (ResourceLoader.Exists(path) && GD.Load<Texture2D>(path) is { } imported)
             {
+                // Overview zooms sample a sprite below its authored draw size.
+                // The repository intentionally ignores generated *.import files,
+                // so mipmaps are created from the imported image here instead of
+                // depending on one editor profile's local import options.
+                var image = imported.GetImage();
+                var mipmapResult = image.GenerateMipmaps();
+                if (mipmapResult != Error.Ok || !image.HasMipmaps())
+                {
+                    throw new InvalidOperationException(
+                        $"Could not generate mipmaps for '{path}': {mipmapResult}.");
+                }
+
+                var texture = ImageTexture.CreateFromImage(image);
+                _spritesHaveMipmaps &= texture.GetImage().HasMipmaps();
                 _goblinSprites.Add(state, texture);
                 _loadedSpriteStates.Add(state);
             }
             else
             {
+                _spritesHaveMipmaps = false;
                 _missingSpriteStates.Add(state);
             }
         }
@@ -1330,7 +1721,13 @@ public partial class Main : Node2D
     {
         if (_missingSpriteStates.Count == 0)
         {
-            return;
+            if (_spritesHaveMipmaps)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException(
+                "Required goblin sprites loaded without mipmaps, but the camera has zoom levels below 1x.");
         }
 
         throw new InvalidOperationException(
@@ -1412,7 +1809,10 @@ public partial class Main : Node2D
         {
             if (!_nameLabels.TryGetValue(creature.Id, out var label))
             {
-                label = MakeMapLabel(new Vector2(98, 17), 10, CreatureColors[creature.Id]);
+                label = MakeMapLabel(
+                    ScaleWorld(98, 17),
+                    Math.Max(1, (int)Math.Round(ScaleWorld(10))),
+                    CreatureColors[creature.Id]);
                 _nameLabels.Add(creature.Id, label);
             }
 
@@ -1429,7 +1829,9 @@ public partial class Main : Node2D
             // Follows the interpolated body, not the canonical tile, so the tag
             // does not snap a whole tile ahead of the creature it names.
             label.Position = CreatureRenderCenter(creature) +
-                new Vector2(2 - (TileSize / 2f), -14 - (TileSize / 2f));
+                new Vector2(
+                    ScaleWorld(2) - (_tileSize / 2f),
+                    -ScaleWorld(14) - (_tileSize / 2f));
         }
     }
 
@@ -1509,10 +1911,10 @@ public partial class Main : Node2D
     /// frame size. The text is left in place for the caller to keep measuring
     /// and is put back by <see cref="RestoreSummary"/>.
     /// </summary>
-    private (int Needed, int Shown) MeasureSummary(string text, Vector2 viewport)
+    private (int Needed, int Shown) MeasureSummary(string text, HudFitFrame frame)
     {
         _summary!.Text = text;
-        LayoutHud(viewport);
+        LayoutHud(frame.Viewport, frame.UiScale);
         return (_summary.GetLineCount(), _summary.GetVisibleLineCount());
     }
 
@@ -1616,25 +2018,27 @@ public partial class Main : Node2D
         [.. tiles.Select(tile => new[] { tile.X, tile.Y })];
 
     /// <summary>
-    /// Viewport sizes the HUD is required to hold all of its text at. The live
-    /// frame is always one of them; the rest exist so that "the layout follows
-    /// the viewport" is a checked claim rather than an intention. ADR 0008 turns
-    /// the frame into an input, and a guard that only ever saw one size could not
-    /// tell a responsive layout from a lucky one.
+    /// Frame and UI-scale pairs the HUD is required to hold all of its text at.
+    /// The live pair is always included. Larger UI scales are paired with larger
+    /// frames because a scale that cannot fit is rejected rather than clipped.
     ///
     /// A size that is missing here is not "unsupported": it is unmeasured. The
     /// current text does not fit the old 960x540 frame at readable sizes — the
     /// side column needs about 33 lines and that frame offers about 29 — which is
     /// exactly the deficit Issue #28 measured and this Issue had to clear.
     /// </summary>
-    private Vector2[] HudFitViewports() =>
+    private readonly record struct HudFitFrame(Vector2 Viewport, double UiScale);
+
+    private HudFitFrame[] HudFitFrames() =>
         new[]
         {
-            GetViewportRect().Size,
-            new Vector2(1280, 720),
-            new Vector2(1366, 768),
-            new Vector2(1600, 900),
-            new Vector2(1024, 768),
+            new HudFitFrame(GetViewportRect().Size, _uiScale),
+            new HudFitFrame(new Vector2(1280, 720), 1.0),
+            new HudFitFrame(new Vector2(1366, 768), 1.0),
+            new HudFitFrame(new Vector2(1600, 900), 1.0),
+            new HudFitFrame(new Vector2(1024, 768), 0.8),
+            new HudFitFrame(new Vector2(1920, 1080), 1.25),
+            new HudFitFrame(new Vector2(2560, 1440), 2.0),
         }.Distinct().ToArray();
 
     /// <summary>
@@ -1649,9 +2053,10 @@ public partial class Main : Node2D
     /// frame take space away from the panels that can spare it instead of
     /// quietly clipping the legend.
     /// </summary>
-    private void LayoutHud(Vector2 size)
+    private void LayoutHud(Vector2 size, double uiScale)
     {
-        _hudRoot!.Size = size;
+        _hudRoot!.Scale = Vector2.One * (float)uiScale;
+        _hudRoot.Size = size / (float)uiScale;
         _hudRoot.PropagateNotification((int)Container.NotificationSortChildren);
         foreach (var line in _legendLines)
         {
@@ -1659,6 +2064,7 @@ public partial class Main : Node2D
         }
 
         _hudRoot.PropagateNotification((int)Container.NotificationSortChildren);
+        LayoutWorldViewportMasks(size);
     }
 
     /// <summary>
@@ -1689,9 +2095,9 @@ public partial class Main : Node2D
         var live = GetViewportRect().Size;
         var failures = new List<string>();
         var terminal = TerminalSummaries();
-        foreach (var viewport in HudFitViewports())
+        foreach (var frame in HudFitFrames())
         {
-            LayoutHud(viewport);
+            LayoutHud(frame.Viewport, frame.UiScale);
             foreach (var (name, label) in HudLabels())
             {
                 if (label is null)
@@ -1705,24 +2111,25 @@ public partial class Main : Node2D
                 {
                     failures.Add(
                         $"'{name}' needs {needed} lines but only {shown} fit in " +
-                        $"{label.Size} at viewport {viewport}");
+                        $"{label.Size} at viewport {frame.Viewport}, UI scale {frame.UiScale}");
                 }
             }
 
             foreach (var (outcome, text) in terminal)
             {
-                var (needed, shown) = MeasureSummary(text, viewport);
+                var (needed, shown) = MeasureSummary(text, frame);
                 if (needed > shown)
                 {
                     failures.Add(
                         $"summary at the end of a party ('{outcome}') needs {needed} " +
-                        $"lines but only {shown} fit at viewport {viewport}");
+                        $"lines but only {shown} fit at viewport {frame.Viewport}, " +
+                        $"UI scale {frame.UiScale}");
                 }
             }
         }
 
         RestoreSummary();
-        LayoutHud(live);
+        LayoutHud(live, _uiScale);
 
         if (failures.Count > 0)
         {
@@ -1746,8 +2153,17 @@ public partial class Main : Node2D
         return new
         {
             viewport = new[] { viewport.X, viewport.Y },
-            checkedViewports = HudFitViewports()
-                .Select(size => new[] { size.X, size.Y })
+            uiScale = _uiScale,
+            checkedViewports = HudFitFrames()
+                .Select(frame => new[] { frame.Viewport.X, frame.Viewport.Y })
+                .Distinct()
+                .ToArray(),
+            checkedFrames = HudFitFrames()
+                .Select(frame => (object)new
+                {
+                    viewport = new[] { frame.Viewport.X, frame.Viewport.Y },
+                    uiScale = frame.UiScale,
+                })
                 .ToArray(),
             labels = HudLabels()
                 .Where(entry => entry.Label is not null)
@@ -1771,7 +2187,9 @@ public partial class Main : Node2D
     private object[] TerminalSummaryFit()
     {
         var live = GetViewportRect().Size;
-        var narrowest = HudFitViewports().OrderBy(size => size.X).First();
+        var narrowest = HudFitFrames()
+            .OrderBy(frame => frame.Viewport.X / frame.UiScale)
+            .First();
         var measured = TerminalSummaries()
             .Select(end =>
             {
@@ -1779,7 +2197,8 @@ public partial class Main : Node2D
                 return (object)new
                 {
                     outcome = end.Outcome,
-                    viewport = new[] { narrowest.X, narrowest.Y },
+                    viewport = new[] { narrowest.Viewport.X, narrowest.Viewport.Y },
+                    uiScale = narrowest.UiScale,
                     neededLines = needed,
                     visibleLines = shown,
                     text = end.Text,
@@ -1787,25 +2206,67 @@ public partial class Main : Node2D
             })
             .ToArray();
         RestoreSummary();
-        LayoutHud(live);
+        LayoutHud(live, _uiScale);
         return measured;
+    }
+
+    private object ViewState()
+    {
+        var viewport = GetViewportRect().Size;
+        var world = WorldViewportScreenRect();
+        var camera = CurrentCameraFrame();
+        return new
+        {
+            frameSize = new[] { viewport.X, viewport.Y },
+            requestedFrameSize = _requestedFrameSize is { } requested
+                ? new[] { requested.Width, requested.Height }
+                : null,
+            worldViewport = new[]
+            {
+                world.Position.X,
+                world.Position.Y,
+                world.Size.X,
+                world.Size.Y,
+            },
+            tileSize = _tileSize,
+            goblinWorldSize = CameraView.GoblinDrawSize(_tileSize),
+            goblinScreenSize = CameraView.GoblinDrawSize(_tileSize) * _cameraZoom,
+            cameraPosition = new[] { _cameraCenter.X, _cameraCenter.Y },
+            cameraNodePosition = new[]
+            {
+                camera.CameraNodePosition.X,
+                camera.CameraNodePosition.Y,
+            },
+            cameraZoom = _cameraZoom,
+            zoomLevel = Array.IndexOf(CameraView.ZoomLevels.ToArray(), _cameraZoom),
+            visibleWorldSize = new[]
+            {
+                camera.VisibleWorldSize.Width,
+                camera.VisibleWorldSize.Height,
+            },
+            uiScale = _uiScale,
+            textureFilter = TextureFilter.ToString(),
+            spriteMipmaps = _spritesHaveMipmaps,
+            cameraInputChecks = _cameraInputChecks,
+            hudInputRejected = _hudInputRejected,
+        };
     }
 
     private void DrawMap()
     {
-        DrawRect(new Rect2(MapOrigin, MapPixelSize), new Color("#111827"));
+        DrawRect(new Rect2(Vector2.Zero, MapPixelSize), new Color("#111827"));
         for (var y = 0; y < PrototypeTuning.MapHeight; y++)
         {
             for (var x = 0; x < PrototypeTuning.MapWidth; x++)
             {
                 var cell = new GridPoint(x, y);
-                var rect = new Rect2(CellTopLeft(cell), new Vector2(TileSize - 1, TileSize - 1));
+                var rect = new Rect2(CellTopLeft(cell), new Vector2(_tileSize - 1, _tileSize - 1));
                 if (_state!.Map.RockTiles.Contains(cell))
                 {
                     // Rock fills the grid gap as well, so a wall reads as one
                     // solid mass. Colour alone did not separate it from floor.
                     DrawRect(
-                        new Rect2(CellTopLeft(cell), new Vector2(TileSize, TileSize)),
+                        new Rect2(CellTopLeft(cell), new Vector2(_tileSize, _tileSize)),
                         BaseTileColor(cell));
                 }
                 else
@@ -1842,7 +2303,10 @@ public partial class Main : Node2D
 
         foreach (var bed in _state!.Beds)
         {
-            DrawCircle(CellCenter(bed.Position), 5, bed.IsRipe ? new Color("#bef264") : new Color("#4d7c0f"));
+            DrawCircle(
+                CellCenter(bed.Position),
+                ScaleWorld(5),
+                bed.IsRipe ? new Color("#bef264") : new Color("#4d7c0f"));
         }
 
         foreach (var loose in _state.LooseItems)
@@ -1854,19 +2318,30 @@ public partial class Main : Node2D
                 _ => new Color("#a3e635"),
             };
             var center = CellCenter(loose.Position);
-            DrawCircle(center, 3 + Math.Min(3, loose.Quantity), color);
+            DrawCircle(center, ScaleWorld(3 + Math.Min(3, loose.Quantity)), color);
             if (loose.Resource == ResourceKind.Stone)
             {
                 // A dark rim separates loose stone from a pale meal at a glance.
-                DrawArc(center, 4.5f, 0, Mathf.Tau, 12, new Color("#475569"), 1.5f);
+                DrawArc(
+                    center,
+                    ScaleWorld(4.5f),
+                    0,
+                    Mathf.Tau,
+                    12,
+                    new Color("#475569"),
+                    ScaleWorld(1.5f));
             }
         }
 
         foreach (var job in _state.Jobs)
         {
             var color = HaulRouteColor(job);
-            DrawLine(CellCenter(job.Origin), CellCenter(job.Target), color with { A = 0.35f }, 1.0f);
-            DrawCircle(CellCenter(job.Target), 3.2f, color);
+            DrawLine(
+                CellCenter(job.Origin),
+                CellCenter(job.Target),
+                color with { A = 0.35f },
+                ScaleWorld(1.0f));
+            DrawCircle(CellCenter(job.Target), ScaleWorld(3.2f), color);
 
             // A booked stockpile cell is part of the route even before pickup, so
             // the player can see where this pile is going.
@@ -1876,7 +2351,7 @@ public partial class Main : Node2D
                     CellCenter(job.Target),
                     CellCenter(storeCell),
                     color with { A = 0.25f },
-                    1.0f);
+                    ScaleWorld(1.0f));
             }
         }
 
@@ -1889,20 +2364,38 @@ public partial class Main : Node2D
             var color = DefenderColor(creature);
             // The generated character states serve both factions; the outline is
             // the stable team cue (teal crew, red-raider ring).
-            DrawCircle(center, 9, color);
+            DrawCircle(center, ScaleWorld(9), color);
             DrawGoblin(center, CrewSpriteKey(creature));
             if (creature.Mode == CreatureMode.Downed)
             {
-                DrawLine(center + new Vector2(-5, -5), center + new Vector2(5, 5), new Color("#f8fafc"), 2);
-                DrawLine(center + new Vector2(5, -5), center + new Vector2(-5, 5), new Color("#f8fafc"), 2);
+                DrawLine(
+                    center + ScaleWorld(-5, -5),
+                    center + ScaleWorld(5, 5),
+                    new Color("#f8fafc"),
+                    ScaleWorld(2));
+                DrawLine(
+                    center + ScaleWorld(5, -5),
+                    center + ScaleWorld(-5, 5),
+                    new Color("#f8fafc"),
+                    ScaleWorld(2));
             }
 
-            DrawHpBar(center + new Vector2(-7, 8), creature.Hp, creature.MaxHp, color);
-            DrawCircle(center + new Vector2(7, -7), 2.25f, CreatureStateColor(creature));
+            DrawHpBar(center + ScaleWorld(-7, 8), creature.Hp, creature.MaxHp, color);
+            DrawCircle(
+                center + ScaleWorld(7, -7),
+                ScaleWorld(2.25f),
+                CreatureStateColor(creature));
 
             if (_selectedCreatureId == creature.Id)
             {
-                DrawArc(center, 10, 0, Mathf.Tau, 16, new Color("#ffffff"), 2);
+                DrawArc(
+                    center,
+                    ScaleWorld(10),
+                    0,
+                    Mathf.Tau,
+                    16,
+                    new Color("#ffffff"),
+                    ScaleWorld(2));
             }
 
             if (creature.Carrying is ResourceKind.Stone)
@@ -1910,17 +2403,22 @@ public partial class Main : Node2D
                 // Stone rides as a rimmed grey square, the same shape a stockpile
                 // pip uses, so "carrying" and "stored" read as the same material.
                 DrawRect(
-                    new Rect2(center + new Vector2(3, -9), new Vector2(6, 6)),
+                    new Rect2(center + ScaleWorld(3, -9), ScaleWorld(6, 6)),
                     new Color("#e2e8f0"));
                 DrawRect(
-                    new Rect2(center + new Vector2(3, -9), new Vector2(6, 6)),
+                    new Rect2(center + ScaleWorld(3, -9), ScaleWorld(6, 6)),
                     new Color("#0f172a"),
                     false,
-                    1.0f);
+                    ScaleWorld(1.0f));
             }
             else if (creature.Carrying is not null)
             {
-                DrawCircle(center + new Vector2(6, -6), 2.5f, creature.Carrying == ResourceKind.Meal ? new Color("#fde68a") : new Color("#a3e635"));
+                DrawCircle(
+                    center + ScaleWorld(6, -6),
+                    ScaleWorld(2.5f),
+                    creature.Carrying == ResourceKind.Meal
+                        ? new Color("#fde68a")
+                        : new Color("#a3e635"));
             }
         }
 
@@ -1928,17 +2426,29 @@ public partial class Main : Node2D
         {
             if (raider.Mode == RaiderMode.Escaped) continue;
             var center = RaiderRenderCenter(raider);
-            DrawCircle(center, 9, new Color("#7f1d1d"));
+            DrawCircle(center, ScaleWorld(9), new Color("#7f1d1d"));
             DrawGoblin(center, RaiderSpriteKey(raider));
-            DrawHpBar(center + new Vector2(-7, 9), raider.Hp, PrototypeTuning.RaiderHp, new Color("#fb7185"));
+            DrawHpBar(
+                center + ScaleWorld(-7, 9),
+                raider.Hp,
+                PrototypeTuning.RaiderHp,
+                new Color("#fb7185"));
             if (raider.Mode == RaiderMode.Downed)
             {
-                DrawLine(center + new Vector2(-5, -5), center + new Vector2(5, 5), new Color("#f8fafc"), 2);
-                DrawLine(center + new Vector2(5, -5), center + new Vector2(-5, 5), new Color("#f8fafc"), 2);
+                DrawLine(
+                    center + ScaleWorld(-5, -5),
+                    center + ScaleWorld(5, 5),
+                    new Color("#f8fafc"),
+                    ScaleWorld(2));
+                DrawLine(
+                    center + ScaleWorld(5, -5),
+                    center + ScaleWorld(-5, 5),
+                    new Color("#f8fafc"),
+                    ScaleWorld(2));
             }
             else
             {
-                DrawCircle(center + new Vector2(6, -6), 2, new Color("#fecaca"));
+                DrawCircle(center + ScaleWorld(6, -6), ScaleWorld(2), new Color("#fecaca"));
             }
         }
 
@@ -1995,17 +2505,21 @@ public partial class Main : Node2D
             foreach (var cell in BrushSelection.Rectangle(anchor, corner))
             {
                 var color = accepted.Contains(cell) ? BrushAccent() : new Color("#ef4444");
-                var tile = new Rect2(CellTopLeft(cell), new Vector2(TileSize - 1, TileSize - 1));
-                DrawRect(tile.Grow(-1), color with { A = 0.32f });
+                var tile = new Rect2(CellTopLeft(cell), new Vector2(_tileSize - 1, _tileSize - 1));
+                DrawRect(tile.Grow(-ScaleWorld(1)), color with { A = 0.32f });
             }
 
             var topLeft = CellTopLeft(new GridPoint(
                 Math.Min(anchor.X, corner.X),
                 Math.Min(anchor.Y, corner.Y)));
             var size = new Vector2(
-                (Math.Abs(anchor.X - corner.X) + 1) * TileSize,
-                (Math.Abs(anchor.Y - corner.Y) + 1) * TileSize);
-            DrawRect(new Rect2(topLeft, size - new Vector2(1, 1)), new Color("#f8fafc"), false, 1.5f);
+                (Math.Abs(anchor.X - corner.X) + 1) * _tileSize,
+                (Math.Abs(anchor.Y - corner.Y) + 1) * _tileSize);
+            DrawRect(
+                new Rect2(topLeft, size - ScaleWorld(1, 1)),
+                new Color("#f8fafc"),
+                false,
+                ScaleWorld(1.5f));
             DrawSelectionCount(topLeft, stroke);
             return;
         }
@@ -2015,12 +2529,16 @@ public partial class Main : Node2D
             return;
         }
 
-        var preview = new Rect2(CellTopLeft(hovered), new Vector2(TileSize - 1, TileSize - 1));
+        var preview = new Rect2(CellTopLeft(hovered), new Vector2(_tileSize - 1, _tileSize - 1));
         var previewColor = BrushSelection.Accepts(_projection!, _editMode, _brushZone, hovered)
             ? BrushAccent()
             : new Color("#ef4444");
-        DrawRect(preview.Grow(-1), previewColor with { A = 0.32f });
-        DrawRect(preview.Grow(-1), new Color("#f8fafc"), false, 1.5f);
+        DrawRect(preview.Grow(-ScaleWorld(1)), previewColor with { A = 0.32f });
+        DrawRect(
+            preview.Grow(-ScaleWorld(1)),
+            new Color("#f8fafc"),
+            false,
+            ScaleWorld(1.5f));
     }
 
     /// <summary>
@@ -2030,8 +2548,8 @@ public partial class Main : Node2D
     /// </summary>
     private void DrawSelectionCount(Vector2 topLeft, BrushStroke stroke)
     {
-        const float width = 58;
-        const float height = 14;
+        var width = ScaleWorld(58);
+        var height = ScaleWorld(14);
         var text = stroke.Tiles.Count == 1 ? "1 cell" : $"{stroke.Tiles.Count} cells";
 
         // Kept inside the map on both axes. Above the selection when there is room
@@ -2039,17 +2557,19 @@ public partial class Main : Node2D
         // Control nodes and draw over the canvas, so a caption that overhangs the
         // top of the map would be covered by the strip rather than clipped.
         var box = new Vector2(
-            Math.Clamp(topLeft.X, MapOrigin.X, MapOrigin.X + MapPixelSize.X - width),
-            topLeft.Y - height - 3 >= MapOrigin.Y ? topLeft.Y - height - 3 : topLeft.Y + 3);
+            Math.Clamp(topLeft.X, 0, MapPixelSize.X - width),
+            topLeft.Y - height - ScaleWorld(3) >= 0
+                ? topLeft.Y - height - ScaleWorld(3)
+                : topLeft.Y + ScaleWorld(3));
 
         DrawRect(new Rect2(box, new Vector2(width, height)), new Color("#0b1622"));
         DrawString(
             ThemeDB.FallbackFont,
-            box + new Vector2(3, height - 3),
+            box + new Vector2(ScaleWorld(3), height - ScaleWorld(3)),
             text,
             HorizontalAlignment.Left,
-            width - 6,
-            11,
+            width - ScaleWorld(6),
+            Math.Max(1, (int)Math.Round(ScaleWorld(11))),
             stroke.Tiles.Count == 0 ? new Color("#fca5a5") : new Color("#f8fafc"));
     }
 
@@ -2082,7 +2602,11 @@ public partial class Main : Node2D
 
             if (designation.WorkTile is { } workTile)
             {
-                DrawLine(CellCenter(workTile), center, accent with { A = 0.55f }, 1.0f);
+                DrawLine(
+                    CellCenter(workTile),
+                    center,
+                    accent with { A = 0.55f },
+                    ScaleWorld(1.0f));
             }
 
             if (designation.ProgressTicks <= 0 || designation.RequiredTicks <= 0)
@@ -2097,17 +2621,23 @@ public partial class Main : Node2D
 
             // The rock is eaten away from the bottom up, so progress is readable
             // at tile size without hunting for a thin bar.
-            var eaten = (TileSize - 3) * fraction;
+            var eaten = (_tileSize - ScaleWorld(3)) * fraction;
             DrawRect(
                 new Rect2(
-                    CellTopLeft(designation.Tile) + new Vector2(1, TileSize - 2 - eaten),
-                    new Vector2(TileSize - 3, eaten)),
+                    CellTopLeft(designation.Tile) +
+                    new Vector2(ScaleWorld(1), _tileSize - ScaleWorld(2) - eaten),
+                    new Vector2(_tileSize - ScaleWorld(3), eaten)),
                 new Color("#fbbf24") with { A = 0.6f });
 
-            var barTopLeft = CellTopLeft(designation.Tile) + new Vector2(2, TileSize - 7);
-            DrawRect(new Rect2(barTopLeft, new Vector2(TileSize - 5, 4)), new Color("#0f172a"));
+            var barWidth = _tileSize - ScaleWorld(5);
+            var barHeight = ScaleWorld(4);
+            var barTopLeft = CellTopLeft(designation.Tile) +
+                new Vector2(ScaleWorld(2), _tileSize - ScaleWorld(7));
             DrawRect(
-                new Rect2(barTopLeft, new Vector2((TileSize - 5) * fraction, 4)),
+                new Rect2(barTopLeft, new Vector2(barWidth, barHeight)),
+                new Color("#0f172a"));
+            DrawRect(
+                new Rect2(barTopLeft, new Vector2(barWidth * fraction, barHeight)),
                 new Color("#fde047"));
         }
     }
@@ -2120,13 +2650,21 @@ public partial class Main : Node2D
     /// </summary>
     private void DrawDigMark(GridPoint tile, Color accent)
     {
-        var rect = new Rect2(CellTopLeft(tile), new Vector2(TileSize - 1, TileSize - 1));
-        DrawRect(rect.Grow(-1), accent with { A = 0.26f });
-        DrawRect(rect.Grow(-1), accent, false, 1.5f);
+        var rect = new Rect2(CellTopLeft(tile), new Vector2(_tileSize - 1, _tileSize - 1));
+        DrawRect(rect.Grow(-ScaleWorld(1)), accent with { A = 0.26f });
+        DrawRect(rect.Grow(-ScaleWorld(1)), accent, false, ScaleWorld(1.5f));
 
         var center = CellCenter(tile);
-        DrawLine(center + new Vector2(-5, -5), center + new Vector2(5, 5), accent, 1.5f);
-        DrawLine(center + new Vector2(5, -5), center + new Vector2(-5, 5), accent, 1.5f);
+        DrawLine(
+            center + ScaleWorld(-5, -5),
+            center + ScaleWorld(5, 5),
+            accent,
+            ScaleWorld(1.5f));
+        DrawLine(
+            center + ScaleWorld(5, -5),
+            center + ScaleWorld(-5, 5),
+            accent,
+            ScaleWorld(1.5f));
     }
 
     /// <summary>
@@ -2181,10 +2719,14 @@ public partial class Main : Node2D
                 site.ProgressTicks / (float)site.RequiredTicks,
                 0f,
                 1f);
-            var barTopLeft = CellTopLeft(site.Tile) + new Vector2(2, 2);
-            DrawRect(new Rect2(barTopLeft, new Vector2(TileSize - 5, 3)), new Color("#0f172a"));
+            var barWidth = _tileSize - ScaleWorld(5);
+            var barHeight = ScaleWorld(3);
+            var barTopLeft = CellTopLeft(site.Tile) + ScaleWorld(2, 2);
             DrawRect(
-                new Rect2(barTopLeft, new Vector2((TileSize - 5) * fraction, 3)),
+                new Rect2(barTopLeft, new Vector2(barWidth, barHeight)),
+                new Color("#0f172a"));
+            DrawRect(
+                new Rect2(barTopLeft, new Vector2(barWidth * fraction, barHeight)),
                 new Color("#5eead4"));
         }
     }
@@ -2201,37 +2743,37 @@ public partial class Main : Node2D
         int incomingReserved,
         int required)
     {
-        var rect = new Rect2(CellTopLeft(tile), new Vector2(TileSize - 1, TileSize - 1));
-        DrawRect(rect.Grow(-1), accent with { A = 0.22f });
-        DrawRect(rect.Grow(-1), accent, false, 1.5f);
+        var rect = new Rect2(CellTopLeft(tile), new Vector2(_tileSize - 1, _tileSize - 1));
+        DrawRect(rect.Grow(-ScaleWorld(1)), accent with { A = 0.22f });
+        DrawRect(rect.Grow(-ScaleWorld(1)), accent, false, ScaleWorld(1.5f));
 
         var topLeft = CellTopLeft(tile);
         DrawString(
             ThemeDB.FallbackFont,
-            topLeft + new Vector2(2, 8),
+            topLeft + ScaleWorld(2, 8),
             "POST?",
             HorizontalAlignment.Left,
-            TileSize - 3,
-            6,
+            _tileSize - ScaleWorld(3),
+            Math.Max(1, (int)Math.Round(ScaleWorld(6))),
             accent);
 
         for (var index = 0; index < required; index++)
         {
             var pip = new Rect2(
-                topLeft + new Vector2(3 + index * 7, TileSize - 9),
-                new Vector2(5, 5));
+                topLeft + new Vector2(ScaleWorld(3 + (index * 7)), _tileSize - ScaleWorld(9)),
+                ScaleWorld(5, 5));
             if (index < delivered)
             {
                 DrawRect(pip, new Color("#e2e8f0"));
-                DrawRect(pip, new Color("#475569"), false, 1.0f);
+                DrawRect(pip, new Color("#475569"), false, ScaleWorld(1.0f));
             }
             else if (index < delivered + incomingReserved)
             {
-                DrawRect(pip, new Color("#7dd3fc"), false, 1.0f);
+                DrawRect(pip, new Color("#7dd3fc"), false, ScaleWorld(1.0f));
             }
             else
             {
-                DrawRect(pip, accent with { A = 0.45f }, false, 1.0f);
+                DrawRect(pip, accent with { A = 0.45f }, false, ScaleWorld(1.0f));
             }
         }
     }
@@ -2249,7 +2791,7 @@ public partial class Main : Node2D
     /// <summary>
     /// The end of the chain, drawn as a graybox primitive with a caption: a solid
     /// teal block so a built post reads as a built thing rather than as floor, and
-    /// the word itself because a 22 px square cannot say "training post" on its
+    /// the word itself because the old small square cannot say "training post" on its
     /// own. The authored posts are drawn the same way, so the player cannot tell
     /// them apart — which is the claim the step is making.
     /// </summary>
@@ -2258,16 +2800,20 @@ public partial class Main : Node2D
         foreach (var station in _state!.Stations.Where(item => item.Kind == TileKind.Post))
         {
             var topLeft = CellTopLeft(station.Position);
-            var rect = new Rect2(topLeft, new Vector2(TileSize - 1, TileSize - 1));
-            DrawRect(rect.Grow(-3), new Color("#0f766e"));
-            DrawRect(rect.Grow(-3), new Color("#5eead4"), false, 1.0f);
+            var rect = new Rect2(topLeft, new Vector2(_tileSize - 1, _tileSize - 1));
+            DrawRect(rect.Grow(-ScaleWorld(3)), new Color("#0f766e"));
+            DrawRect(
+                rect.Grow(-ScaleWorld(3)),
+                new Color("#5eead4"),
+                false,
+                ScaleWorld(1.0f));
             DrawString(
                 ThemeDB.FallbackFont,
-                topLeft + new Vector2(2, 9),
+                topLeft + ScaleWorld(2, 9),
                 "POST",
                 HorizontalAlignment.Left,
-                TileSize - 3,
-                6,
+                _tileSize - ScaleWorld(3),
+                Math.Max(1, (int)Math.Round(ScaleWorld(6))),
                 new Color("#ccfbf1"));
         }
     }
@@ -2304,37 +2850,48 @@ public partial class Main : Node2D
     /// </summary>
     private void DrawStockpileCell(GridPoint position, Color accent, int stored, int incomingReserved)
     {
-        var rect = new Rect2(CellTopLeft(position), new Vector2(TileSize - 1, TileSize - 1));
-        DrawRect(rect.Grow(-1), new Color("#1f2937"));
-        DrawRect(rect.Grow(-1), accent, false, 1.5f);
+        var rect = new Rect2(CellTopLeft(position), new Vector2(_tileSize - 1, _tileSize - 1));
+        DrawRect(rect.Grow(-ScaleWorld(1)), new Color("#1f2937"));
+        DrawRect(rect.Grow(-ScaleWorld(1)), accent, false, ScaleWorld(1.5f));
 
         // Corner ticks read as "a marked-out storage square" instead of just
         // another zone outline.
         var topLeft = CellTopLeft(position);
         foreach (var corner in new[]
                  {
-                     (new Vector2(2, 2), new Vector2(6, 2), new Vector2(2, 6)),
-                     (new Vector2(TileSize - 3, 2), new Vector2(TileSize - 7, 2), new Vector2(TileSize - 3, 6)),
+                     (ScaleWorld(2, 2), ScaleWorld(6, 2), ScaleWorld(2, 6)),
+                     (
+                         new Vector2(_tileSize - ScaleWorld(3), ScaleWorld(2)),
+                         new Vector2(_tileSize - ScaleWorld(7), ScaleWorld(2)),
+                         new Vector2(_tileSize - ScaleWorld(3), ScaleWorld(6))),
                  })
         {
-            DrawLine(topLeft + corner.Item1, topLeft + corner.Item2, accent, 1.0f);
-            DrawLine(topLeft + corner.Item1, topLeft + corner.Item3, accent, 1.0f);
+            DrawLine(
+                topLeft + corner.Item1,
+                topLeft + corner.Item2,
+                accent,
+                ScaleWorld(1.0f));
+            DrawLine(
+                topLeft + corner.Item1,
+                topLeft + corner.Item3,
+                accent,
+                ScaleWorld(1.0f));
         }
 
         for (var index = 0; index < stored; index++)
         {
             DrawRect(
                 new Rect2(
-                    topLeft + new Vector2(4 + index * 7, TileSize - 10),
-                    new Vector2(6, 6)),
+                    topLeft + new Vector2(ScaleWorld(4 + (index * 7)), _tileSize - ScaleWorld(10)),
+                    ScaleWorld(6, 6)),
                 new Color("#e2e8f0"));
             DrawRect(
                 new Rect2(
-                    topLeft + new Vector2(4 + index * 7, TileSize - 10),
-                    new Vector2(6, 6)),
+                    topLeft + new Vector2(ScaleWorld(4 + (index * 7)), _tileSize - ScaleWorld(10)),
+                    ScaleWorld(6, 6)),
                 new Color("#475569"),
                 false,
-                1.0f);
+                ScaleWorld(1.0f));
         }
 
         // A hollow pip per booked slot: the player sees the room is taken even
@@ -2343,11 +2900,11 @@ public partial class Main : Node2D
         {
             DrawRect(
                 new Rect2(
-                    topLeft + new Vector2(4 + index * 7, TileSize - 10),
-                    new Vector2(6, 6)),
+                    topLeft + new Vector2(ScaleWorld(4 + (index * 7)), _tileSize - ScaleWorld(10)),
+                    ScaleWorld(6, 6)),
                 new Color("#7dd3fc"),
                 false,
-                1.0f);
+                ScaleWorld(1.0f));
         }
     }
 
@@ -2382,7 +2939,8 @@ public partial class Main : Node2D
 
     private void UpdatePointer(Vector2 position)
     {
-        _hoverCell = ToCell(position) is { } cell && IsMapCell(cell) ? cell : null;
+        _lastPanPointer = position;
+        _hoverCell = ScreenToCell(position);
         _hoverCreatureId = _hoverCell is { } hovered
             ? _state!.Creatures.FirstOrDefault(creature => creature.Position == hovered)?.Id
             : null;
@@ -2392,8 +2950,8 @@ public partial class Main : Node2D
 
     private void SelectAt(Vector2 position)
     {
-        var cell = ToCell(position);
-        if (cell is not { } selected || !IsMapCell(selected))
+        var cell = ScreenToCell(position);
+        if (cell is not { } selected)
         {
             return;
         }
@@ -3211,9 +3769,11 @@ public partial class Main : Node2D
                 @event = "godot_graybox_screenshot",
                 status = "ok",
                 fixture = _fixture,
+                seed = _state!.Seed,
                 tick = _state!.Tick,
                 checksum = _checksum,
                 path = resolved,
+                view = ViewState(),
                 // The frame carries its own conservation evidence, so a reviewer
                 // never has to trust the picture alone.
                 stoneProduced = _state.Economy.StoneProduced,
@@ -3262,6 +3822,7 @@ public partial class Main : Node2D
             tick = _state?.Tick,
             checksum = _checksum,
             canonicalStateOwner = "DungeonFortress.Simulation.PrototypeWorld",
+            view = ViewState(),
             // The same conservation evidence a screenshot carries. A headless run
             // is now a complete frame report, so the golden UI state does not need
             // a window to be captured.
@@ -3315,16 +3876,17 @@ public partial class Main : Node2D
     // read the same as before the seam landed.
     private static bool IsMapCell(GridPoint cell) => MapBounds.Contains(cell);
 
-    private static GridPoint? ToCell(Vector2 position)
+    private Vector2 CellTopLeft(GridPoint cell)
     {
-        var x = (int)((position.X - MapOrigin.X) / TileSize);
-        var y = (int)((position.Y - MapOrigin.Y) / TileSize);
-        return new GridPoint(x, y);
+        var point = CameraView.CellTopLeft(cell, _tileSize);
+        return new Vector2((float)point.X, (float)point.Y);
     }
 
-    private static Vector2 CellTopLeft(GridPoint cell) => MapOrigin + new Vector2(cell.X * TileSize, cell.Y * TileSize);
-
-    private static Vector2 CellCenter(GridPoint cell) => CellTopLeft(cell) + new Vector2(TileSize / 2f, TileSize / 2f);
+    private Vector2 CellCenter(GridPoint cell)
+    {
+        var point = CameraView.CellCenter(cell, _tileSize);
+        return new Vector2((float)point.X, (float)point.Y);
+    }
 
     private Color BaseTileColor(GridPoint cell)
     {
@@ -3440,20 +4002,32 @@ public partial class Main : Node2D
     {
         if (_goblinSprites.TryGetValue(key, out var sprite))
         {
-            DrawTextureRect(sprite, new Rect2(center - new Vector2(10, 10), new Vector2(20, 20)), false);
+            var drawSize = (float)CameraView.GoblinDrawSize(_tileSize);
+            var halfSize = drawSize / 2f;
+            DrawTextureRect(
+                sprite,
+                new Rect2(
+                    center - new Vector2(halfSize, halfSize),
+                    new Vector2(drawSize, drawSize)),
+                false);
             return;
         }
 
         // Missing exploratory art must not prevent a deterministic playable build.
         _fallbackSpriteDraws++;
-        DrawCircle(center, 6, new Color("#84cc16"));
+        DrawCircle(center, ScaleWorld(6), new Color("#84cc16"));
     }
 
     private void DrawHpBar(Vector2 topLeft, int hp, int maxHp, Color color)
     {
-        const float width = 14;
-        DrawRect(new Rect2(topLeft, new Vector2(width, 3)), new Color("#0f172a"));
-        DrawRect(new Rect2(topLeft, new Vector2(width * Math.Clamp(hp / (float)maxHp, 0, 1), 3)), color);
+        var width = ScaleWorld(14);
+        var height = ScaleWorld(3);
+        DrawRect(new Rect2(topLeft, new Vector2(width, height)), new Color("#0f172a"));
+        DrawRect(
+            new Rect2(
+                topLeft,
+                new Vector2(width * Math.Clamp(hp / (float)maxHp, 0, 1), height)),
+            color);
     }
 
     private void DrawZoneLabels()
@@ -3475,7 +4049,14 @@ public partial class Main : Node2D
             return;
         }
 
-        DrawString(ThemeDB.FallbackFont, CellTopLeft(anchor) + new Vector2(2, 10), text, HorizontalAlignment.Left, -1, 7, ZoneColor(zone));
+        DrawString(
+            ThemeDB.FallbackFont,
+            CellTopLeft(anchor) + ScaleWorld(2, 10),
+            text,
+            HorizontalAlignment.Left,
+            -1,
+            Math.Max(1, (int)Math.Round(ScaleWorld(7))),
+            ZoneColor(zone));
     }
 
     // EditMode used to be declared here. It is DungeonFortress.Presentation's

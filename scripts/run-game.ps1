@@ -21,8 +21,17 @@ param(
     [switch]$DemoStone,
     [switch]$DemoBuild,
     [switch]$VisibleSmoke,
+    [ValidateRange(32, 48)]
+    [int]$TileSize = 40,
+    [ValidateScript({ $_ -in @(0.5, 0.75, 1.0, 1.5, 2.0) })]
+    [double]$CameraZoom = 0.75,
+    [ValidatePattern("^-?\d+(\.\d+)?,-?\d+(\.\d+)?$")]
+    [string]$CameraPosition = "560,320",
+    [ValidateRange(0.75, 2.0)]
+    [double]$UiScale = 1.0,
+    [Alias("WindowSize")]
     [ValidatePattern("^\d{3,5}x\d{3,5}$")]
-    [string]$WindowSize
+    [string]$FrameSize = "1280x720"
 )
 
 Set-StrictMode -Version Latest
@@ -68,10 +77,17 @@ Initialize-GodotRuntimeEnvironment -RepositoryRoot $repoRoot
 Import-GodotProjectAssets -GodotPath $godot -ProjectPath $projectPath
 
 $arguments = @("--path", $projectPath)
-if (-not [string]::IsNullOrWhiteSpace($WindowSize)) {
-    $arguments += "--resolution", $WindowSize
+if (-not [string]::IsNullOrWhiteSpace($FrameSize)) {
+    $arguments += "--resolution", $FrameSize
 }
-$arguments += "--", "--fixture", $Fixture
+$arguments += @(
+    "--", "--fixture", $Fixture,
+    "--tile-size", $TileSize.ToString([Globalization.CultureInfo]::InvariantCulture),
+    "--camera-zoom", $CameraZoom.ToString([Globalization.CultureInfo]::InvariantCulture),
+    "--camera-position", $CameraPosition,
+    "--ui-scale", $UiScale.ToString([Globalization.CultureInfo]::InvariantCulture),
+    "--frame-size", $FrameSize
+)
 if ($VisibleSmoke) {
     $arguments += "--visible-smoke"
 }

@@ -1,18 +1,22 @@
 # Godot graybox — Prototype 1
 
 Status: active
-Source: Issues #10–#12, #24, #26, #28, #36, #48, #55, #58
+Source: Issues #10–#12, #24, #26, #28, #36, #48, #55, #58, #79
 
 The graybox is the visual, top-down projection of the headless Prototype 1
 economy and raid. It starts with the `baseline` gameplay-v2 fixture.
 
-The frame is 1280x720. It used to be 960x540, and that frame could not hold the
-HUD text: at its worst moment the side column needs about 33 lines of
-explanation and 540 px offers about 29, which is the deficit Issue #28 measured
-and Issue #36 cleared. The map is still drawn at a 22 px tile pinned to a fixed
-origin, so the larger frame leaves empty space around it; growing the tile to
-32–48 px and adding a camera is
-[ADR 0008](../decisions/0008-three-quarter-projection.md), not this.
+The authored baseline and launcher default are 1280x720. It used to be 960x540,
+and that frame could not hold the HUD text: at its worst moment the side column
+needs about 33 lines of explanation and 540 px offers about 29, which is the
+deficit Issue #28 measured and Issue #36 cleared. Captures now name their exact
+frame rather than inheriting the live window.
+
+The world uses a 40 px tile and a `Camera2D`; the HUD is a separate `CanvasLayer`
+and does not move or zoom with the world. The five discrete camera levels are
+`0.5`, `0.75`, `1`, `1.5` and `2`. This is the first camera-and-scale slice of
+[ADR 0008](../decisions/0008-three-quarter-projection.md); it does not change the
+current top-down projection.
 
 ## Run
 
@@ -69,6 +73,18 @@ affordances rather than game actions.
 | Mark a training-post blueprint | blueprint icon | `C` |
 | Withdraw a blueprint | crossed blueprint icon | `V` |
 | Cycle zone / job priority / rule | the three selectors | `Z`, `J`, `K` |
+| Zoom the world | mouse wheel over the map | — |
+| Pan the world | middle-button drag over the map | arrow keys, three tiles per press |
+
+The wheel steps only through the five declared zoom levels. At `0.5` the whole
+28×16 ownership grid fits in the default world viewport; `2` is the detail view.
+The launcher starts at `0.75`, which keeps the whole fortress legible while
+making the 40 px tile materially larger than the former 22 px tile.
+
+Camera input is presentation-only. A map click first has to land in the explicit
+world viewport, then the live Godot canvas transform is inverted and the
+resulting world point is converted to a grid cell. Clicks on the title,
+toolbars, roster and side panel never become map input.
 
 ## Indirect controls (Phase B)
 
@@ -195,11 +211,11 @@ pack, because a half-delivered set leaves some buttons on placeholders with
 nothing saying which.
 
 **Strip width.** `AssertControlStripsFit()` runs next to `AssertLabelsFit()`, on
-every entry point and at the same frame sizes, and requires each strip to be no
-wider than the 616 px map. The brush strip used to end at 676 px, wider than the
-map it marks. It is now **453 px**, and the time strip 306 px; both are published
-as `controlStrips` in every structured output next to `labelFit`, so a run states
-the widths instead of the guard being trusted.
+every entry point and at the same frame/UI-scale pairs, and requires each strip
+to be no wider than the explicit world viewport. The brush strip used to end at
+676 px, wider than the map it marks. It is now at most **455 px**, and the time
+strip is 306 px; both are published as `controlStrips` in every structured output
+next to `labelFit`, so a run states the widths instead of the guard being trusted.
 
 `REPLAY [Y]` moved from the brush strip to the time strip. It rebuilds the world
 from the command log, which is what `BASE` and `NEGLECT` do, and it is not a
@@ -624,16 +640,36 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -ScreenshotTicks 180 `
   -SelectCreature 3 `
   -DemoControls `
+  -TileSize 40 `
+  -CameraZoom 0.75 `
+  -CameraPosition 560,320 `
+  -UiScale 1 `
+  -FrameSize 1280x720 `
   -ScreenshotPath visual\graybox-baseline-t180.png
 ```
 
 The result includes fixture, seed, tick, canonical checksum, PNG path,
-`loadedSpriteStates` and `fallbackSpriteDraws`. Visual smoke requires all four
-goblin states and zero fallback draws. The path must be relative and is always
+`loadedSpriteStates`, `fallbackSpriteDraws` and a `view` object. `view` records
+the actual and requested frame, world viewport, tile size, camera position,
+camera node position, zoom, visible world size, UI scale, texture filtering and
+whether the goblin sprites have mipmaps. It also reports the goblin's world-space
+and resulting screen-space draw size, so readability at a chosen view can be
+checked without estimating pixels from a screenshot. Visual smoke requires all
+four goblin states, mipmaps and zero fallback draws. The path must be relative and is always
 resolved below `.artifacts/`; rooted and traversal paths are rejected. Do not
 commit the image. `--smoke` and
 `--visible-smoke` continue to report structured runtime diagnostics for
 automation.
+
+A screenshot made by calling Godot directly is rejected unless all five
+pixel-affecting inputs are explicit: `--tile-size`, `--camera-zoom`,
+`--camera-position`, `--ui-scale` and `--frame-size`. `run-game.ps1` always
+supplies them. The project remains `canvas_items` + `expand`; for an explicit
+frame the launcher also makes that frame the logical rendering size, so
+1600x900 at zoom 1 exposes more world than 1280x720 instead of scaling the same
+1280x720 rectangle. An ordinary interactive window resize synchronizes the
+logical rendering size to the native window too; a reproducible capture keeps its
+explicit frame fixed.
 
 ## Checking the HUD without reading pixels
 
@@ -704,16 +740,18 @@ every piece of HUD text — the four panels the golden state records, the header
 and each legend row. It is measured against the rectangle the layout produced,
 never against a window constant, because ADR 0008 removes the fixed frame.
 
-**It runs in `_Ready`, on every entry point, at five frame sizes.** Since the HUD
-became a Control tree the measurement is only meaningful *after* a layout pass,
+**It runs in `_Ready`, on every entry point, at the live frame/UI-scale pair plus
+six fixed pairs.** Since the HUD became a Control tree the measurement is only
+meaningful *after* a layout pass,
 which is the opposite of what the old absolute layout needed: a container hands a
 label its size, so that size is the designed one and an unclipped label can no
 longer re-expand to its own content. Godot sorts containers on a deferred pass, so
 `LayoutHud()` notifies the subtree and gets the same placement a frame would
-produce, synchronously. It then repeats the whole check at 1280x720, 1366x768,
-1600x900 and 1024x768, so "the layout follows the viewport" is a checked claim
-rather than an intention — a guard that only ever saw one size cannot tell a
-responsive layout from a lucky one.
+produce, synchronously. It then repeats the whole check at 1280x720@1,
+1366x768@1, 1600x900@1, 1024x768@0.8, 1920x1080@1.25 and 2560x1440@2, so "the
+layout follows the viewport and UI scale" is a checked claim rather than an
+intention — a guard that only ever saw one pair cannot tell a responsive layout
+from a lucky one.
 
 A size that is absent from that list is not unsupported, it is unmeasured. The old
 960x540 frame is absent because the current text does not fit it: the side column
@@ -760,31 +798,47 @@ replayed in one shot with no frames at all — plus `frames`, `interpolatedFrame
 | movement no longer teleports | `maxRenderStepPixels` is below `tileSize` |
 
 Measured on the `baseline` fixture at tick 200: 665 frames at 20 fps and 1992 at
-60 fps, both landing on the same checksum, `maxRenderStepPixels` 6.6 and 2.2
-against a 22 px tile. Before interpolation that number was the tile size itself.
+60 fps, both landing on the same checksum, `maxRenderStepPixels` 12 and 4
+against a 40 px tile. Before interpolation that number was the tile size itself.
 
 The last row only means something while a frame is shorter than a tick. At a frame
 rate low enough to cover several ticks the picture legitimately moves more than a
 tile, which is why the check pins the frame rate instead of sampling whatever the
 machine produces.
 
-### What ADR 0008 will change here
+### Camera, scale and deterministic evidence (Issue #79)
 
 [ADR 0008](../decisions/0008-three-quarter-projection.md) makes the camera part of
 the capture inputs: the same tick at a different camera position or zoom produces a
-different picture. When the camera lands, its position and zoom must be recorded
-next to the seed and the tick for every reproducible frame in this document. The
-camera is not implemented yet and is out of Issue #28 and Issue #36.
+different picture. The camera position, zoom, tile size, UI scale and frame size
+are therefore recorded next to the seed and tick for every reproducible frame.
 
 The golden UI state is unaffected on purpose — it holds no camera-dependent value.
 It is what proved the Issue #36 reflow changed where the HUD text sits and not
 what it says: all three frames passed without regeneration.
 
-The stretch aspect stays `keep`, so the viewport is a stable 1280x720 whatever the
-window does. `expand` would let the viewport grow with the window, but then a
-capture stops having one frame size, which is the same ambiguity ADR 0008 warns
-about for the camera. The HUD does not depend on that choice: it is laid out from
-`GetViewportRect()` and relaid out whenever the viewport changes.
+`scripts/verify.ps1 -Stage godot` proves the canonical checksum is identical
+across four combinations of camera position, zoom, frame size and UI scale. The
+same stage drives a real `Camera2D` transform through all five zoom levels at
+three positions (15 click checks) and rejects a point in the HUD. It also compares
+1280x720 and 1600x900 at zoom 1 and requires the latter to expose a larger world
+rectangle.
+
+`scripts/verify.ps1 -Stage screenshots` captures the same explicit baseline
+frame twice and requires the PNG files to be byte-for-byte identical before it
+captures the prepared raid. These are same-machine repeatability checks, not
+committed golden screenshots: the portability reasons in
+[Golden UI state](#golden-ui-state) still apply.
+
+The selected 40 px tile scales world-space primitives from the previous 22 px
+grid instead of leaving their silhouettes behind at the old size. The 96×96
+goblin source is drawn at 36.36 world pixels: 18.18 screen pixels in the `0.5`
+overview and 72.73 at `2×`, still below its source resolution. The pure camera
+test pins both bounds and the Godot stage publishes and checks overview, base and
+detail sizes. This keeps the 1120×640 ownership map available in the overview
+without making creatures less readable than before. Runtime mipmaps plus
+`LinearWithMipmaps` keep the same source usable below 1×; no new art-direction
+decision is hidden in the camera slice.
 
 ## Readability pass
 
