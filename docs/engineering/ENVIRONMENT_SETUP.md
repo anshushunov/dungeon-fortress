@@ -57,17 +57,96 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -GodotPath "<path-to-godot-console>"
 ```
 
-Команда выполняет:
+Без параметров выполняются все стадии. Это полный прогон, и его состав с
+введением стадий не изменился.
 
-1. restore и `Release` build всего `DungeonFortress.sln`;
-2. `dotnet test` для детерминизма и инвариантов симуляции;
-3. два независимых процесса с одинаковыми seed/commands и побайтовое сравнение
-   canonical JSON;
-4. запуск с другим seed и проверку изменения checksum;
-5. два измерения 1 000 лёгких агентов × 10 000 fixed ticks;
-6. `Debug` build Godot-host и headless smoke;
-7. проверку structured success event, process exit code и отсутствие любых
-   строк `ERROR:` в выводе Godot.
+### Стадии
+
+Проверка разделена на девять стадий. Стадия — группа проверок, которая падает по
+одной причине и нужна одному виду изменений. Полный прогон выполняет их в
+порядке таблицы; `-Stage` оставляет подмножество, `-Skip` исключает названные.
+
+| Стадия | Что проверяет | Время\* |
+|---|---|---|
+| `scripts` | пять dependency-free гвардов: контракт стадий, вывод Godot, путь скриншота, конфиг Ivan-MCP, конфиг domain MCP | 2 с |
+| `build` | `restore` решения, `--locked-mode` restore тестов domain MCP, `Release` build всего решения | 3 с |
+| `tests` | `dotnet test` для Simulation, Presentation и DomainMcp | 31 с |
+| `mcp` | реальный запуск launcher domain MCP и stdio-контракт `verify-domain-mcp.ps1` | 4 с |
+| `sim` | детерминизм: 32 агента × 256 тиков дважды на одном seed и один раз на другом | 0,4 с |
+| `load` | 1 000 агентов × 10 000 fixed ticks дважды с побайтовым сравнением | 0,6 с |
+| `godot` | `Debug` build Godot-host, изолированный импорт спрайтов, headless smoke, controls smoke, независимость канонического состояния от частоты кадров | 18 с |
+| `ui` | эталонные кадры `tests/golden/ui/*.json`, снятые headless и сравнённые с коммитом | 4 с |
+| `screenshots` | два оконных прогона со съёмкой кадра и диагностикой спрайтов | 5 с |
+
+\* Замер на машине владельца при прогретых сборках; полный прогон в тех же
+условиях — 68 с. Первый прогон в свежем worktree дольше за счёт restore.
+
+Что покрывает каждая стадия, печатает сам скрипт:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -ListStages
+```
+
+Примеры частичного прогона:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -Stage ui
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -Stage tests,sim
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -Skip load,screenshots
+```
+
+### Какую стадию выбирать
+
+| Что изменено | Минимальный набор |
+|---|---|
+| `scripts/**`, конфигурация MCP-клиентов | `scripts`; плюс `mcp` при правке launcher или `verify-domain-mcp.ps1` |
+| `src/DungeonFortress.Simulation/**` | `tests,sim`; плюс `load` при изменении стоимости тика или структур данных; плюс `mcp` при изменении ответа `prototype_run` |
+| `src/DungeonFortress.Presentation/**` | `tests,ui` |
+| `src/DungeonFortress.Game/**`, сцены, ввод | `godot,ui` |
+| спрайты и другие ассеты | `godot,screenshots` |
+| `.csproj`, `global.json`, версии зависимостей | полный прогон |
+| только документация | ничего |
+
+Стадия сама доводит рабочую копию до нужного состояния: `-Stage ui` выполнит
+restore, `Debug` build Godot-host и импорт ассетов, `-Stage sim` соберёт scenario
+runner. Поэтому частичный прогон не проверяет вчерашний бинарник, а выполненные
+подготовительные шаги перечислены в поле `prerequisites`.
+
+Сам механизм стадий тоже проверяется, и без сборки:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-verify-stages.ps1
+```
+
+Тест разбирает `verify.ps1` как AST и требует, чтобы ни одна проверка не
+запускалась вне стадии или подготовительного шага, чтобы таблица выше совпадала с
+`-ListStages` и чтобы неизвестное имя стадии и пустой выбор отвергались. Без
+этого частичный прогон мог бы молча перестать выполнять то, что перечисляет.
+Тест входит в стадию `scripts`.
+
+### Когда полный прогон обязателен
+
+Частичный прогон — инструмент итерации, а не замена проверки. Полный прогон
+обязателен:
+
+- перед handoff, PR и merge: `green-auto-merge` из
+  [ADR 0014](../decisions/0014-parallel-agents-and-autonomy.md) требует зелёный
+  `scripts/verify.ps1` целиком;
+- после изменения зависимостей, версии SDK или движка;
+- когда изменение затрагивает больше одной области из партиции ADR 0014;
+- когда неясно, что именно затронуто.
+
+Отличать прогоны нужно по выводу, а не по памяти. Итоговая строка
+`verification_result` содержит `scope` (`full` или `partial`), `stagesExecuted` и
+`stagesNotRun`:
+
+```json
+{"event":"verification_result","status":"ok","scope":"partial","stagesExecuted":["ui"],"stagesNotRun":["scripts","build","tests","mcp","sim","load","godot","screenshots"]}
+```
+
+Прогон, упавший на середине, печатает ту же строку со `"status":"error"`, именем
+упавшей стадии и списком всего, что не выполнялось. Молча усечённой проверки не
+бывает: частичный прогон всегда называет то, что он не проверял.
 
 Проверку можно запускать с подключённым domain MCP: клиентская сессия исполняет
 собственную копию сервера и не держит открытым build output. Останавливать
