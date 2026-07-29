@@ -2437,21 +2437,14 @@ public partial class Main : Node2D
     private void DrawMap()
     {
         DrawRect(new Rect2(Vector2.Zero, MapPixelSize), new Color("#111827"));
+        var rockTiles = _state!.Map.RockTiles.ToHashSet();
         for (var y = 0; y < PrototypeTuning.MapHeight; y++)
         {
             for (var x = 0; x < PrototypeTuning.MapWidth; x++)
             {
                 var cell = new GridPoint(x, y);
                 var rect = new Rect2(CellTopLeft(cell), new Vector2(_tileSize - 1, _tileSize - 1));
-                if (_state!.Map.RockTiles.Contains(cell))
-                {
-                    // Rock fills the grid gap as well, so a wall reads as one
-                    // solid mass. Colour alone did not separate it from floor.
-                    DrawRect(
-                        new Rect2(CellTopLeft(cell), new Vector2(_tileSize, _tileSize)),
-                        BaseTileColor(cell));
-                }
-                else
+                if (!rockTiles.Contains(cell))
                 {
                     DrawRect(rect, BaseTileColor(cell));
                 }
@@ -2460,27 +2453,10 @@ public partial class Main : Node2D
                 {
                     DrawRect(rect.Grow(-3), ZoneColor(zone), false, 1.5f);
                 }
-
-                // While a marking brush is held every legal target is outlined, so
-                // the player never has to guess where a stroke would land. The
-                // rule is read from the same function the stroke itself uses, so
-                // an outlined cell and an accepted cell cannot be different sets.
-                if (LegalTargetOutline() is { } outline &&
-                    BrushSelection.Accepts(_projection, _editMode, _brushZone, cell))
-                {
-                    DrawRect(rect.Grow(-2), outline, false, 1.0f);
-                }
-
-                if (_selectedCell == cell)
-                {
-                    DrawRect(rect.Grow(-1), new Color("#f8fafc"), false, 2.0f);
-                }
             }
         }
 
-        DrawDigDesignations();
         DrawBuildSites();
-        DrawBuiltPosts();
         DrawStockpileCells();
 
         foreach (var bed in _state!.Beds)
@@ -2537,105 +2513,333 @@ public partial class Main : Node2D
             }
         }
 
-        foreach (var creature in _state.Creatures)
-        {
-            // Interpolated, not canonical: the body, its carried item, its health
-            // bar and its selection ring all hang off this one point, so lerping
-            // it is what turns six canonical steps a second into motion.
-            var center = CreatureRenderCenter(creature);
-            var color = DefenderColor(creature);
-            // The generated character states serve both factions; the outline is
-            // the stable team cue (teal crew, red-raider ring).
-            DrawCircle(center, ScaleWorld(9), color);
-            DrawGoblin(center, CrewSpriteKey(creature));
-            if (creature.Mode == CreatureMode.Downed)
-            {
-                DrawLine(
-                    center + ScaleWorld(-5, -5),
-                    center + ScaleWorld(5, 5),
-                    new Color("#f8fafc"),
-                    ScaleWorld(2));
-                DrawLine(
-                    center + ScaleWorld(5, -5),
-                    center + ScaleWorld(-5, 5),
-                    new Color("#f8fafc"),
-                    ScaleWorld(2));
-            }
-
-            DrawHpBar(center + ScaleWorld(-7, 8), creature.Hp, creature.MaxHp, color);
-            DrawCircle(
-                center + ScaleWorld(7, -7),
-                ScaleWorld(2.25f),
-                CreatureStateColor(creature));
-
-            if (_selectedCreatureId == creature.Id)
-            {
-                DrawArc(
-                    center,
-                    ScaleWorld(10),
-                    0,
-                    Mathf.Tau,
-                    16,
-                    new Color("#ffffff"),
-                    ScaleWorld(2));
-            }
-
-            if (creature.Carrying is ResourceKind.Stone)
-            {
-                // Stone rides as a rimmed grey square, the same shape a stockpile
-                // pip uses, so "carrying" and "stored" read as the same material.
-                DrawRect(
-                    new Rect2(center + ScaleWorld(3, -9), ScaleWorld(6, 6)),
-                    new Color("#e2e8f0"));
-                DrawRect(
-                    new Rect2(center + ScaleWorld(3, -9), ScaleWorld(6, 6)),
-                    new Color("#0f172a"),
-                    false,
-                    ScaleWorld(1.0f));
-            }
-            else if (creature.Carrying is not null)
-            {
-                DrawCircle(
-                    center + ScaleWorld(6, -6),
-                    ScaleWorld(2.5f),
-                    creature.Carrying == ResourceKind.Meal
-                        ? new Color("#fde68a")
-                        : new Color("#a3e635"));
-            }
-        }
-
-        foreach (var raider in _state.Raiders)
-        {
-            if (raider.Mode == RaiderMode.Escaped) continue;
-            var center = RaiderRenderCenter(raider);
-            DrawCircle(center, ScaleWorld(9), new Color("#7f1d1d"));
-            DrawGoblin(center, RaiderSpriteKey(raider));
-            DrawHpBar(
-                center + ScaleWorld(-7, 9),
-                raider.Hp,
-                PrototypeTuning.RaiderHp,
-                new Color("#fb7185"));
-            if (raider.Mode == RaiderMode.Downed)
-            {
-                DrawLine(
-                    center + ScaleWorld(-5, -5),
-                    center + ScaleWorld(5, 5),
-                    new Color("#f8fafc"),
-                    ScaleWorld(2));
-                DrawLine(
-                    center + ScaleWorld(5, -5),
-                    center + ScaleWorld(-5, 5),
-                    new Color("#f8fafc"),
-                    ScaleWorld(2));
-            }
-            else
-            {
-                DrawCircle(center + ScaleWorld(6, -6), ScaleWorld(2), new Color("#fecaca"));
-            }
-        }
-
+        DrawElevatedWorld(rockTiles);
+        // A dig mark is a player-intent overlay on the wall, not wall material.
+        // Drawing it after the depth pass keeps it readable on both top and face.
+        DrawDigDesignations();
+        DrawCellInteractionOverlays();
         DrawZoneLabels();
         DrawBrushPreview();
+    }
+
+    /// <summary>
+    /// Walls, bodies and tall structures share one painter's-order pass. The
+    /// <see cref="WorldRenderItem"/> for a body is built from its interpolated
+    /// center, so changing alpha can change depth without changing a tick or the
+    /// canonical snapshot.
+    /// </summary>
+    private void DrawElevatedWorld(IReadOnlySet<GridPoint> rockTiles)
+    {
+        var items = new List<WorldRenderItem>();
+        foreach (var cell in rockTiles)
+        {
+            var center = CellCenter(cell);
+            items.Add(new WorldRenderItem(
+                WorldRenderKind.Wall,
+                CellStableId(cell),
+                center.X,
+                CellTopLeft(cell).Y + _tileSize));
+        }
+
+        var structures = _state!.Stations
+            .Where(station => station.Kind == TileKind.Post)
+            .ToDictionary(station => CellStableId(station.Position));
+        foreach (var (stableId, station) in structures)
+        {
+            var center = CellCenter(station.Position);
+            items.Add(new WorldRenderItem(
+                WorldRenderKind.Structure,
+                stableId,
+                center.X,
+                CellTopLeft(station.Position).Y + _tileSize));
+        }
+
+        var creatureCenters = _state.Creatures.ToDictionary(
+            creature => creature.Id,
+            CreatureRenderCenter);
+        foreach (var creature in _state.Creatures)
+        {
+            var center = creatureCenters[creature.Id];
+            items.Add(new WorldRenderItem(
+                WorldRenderKind.Creature,
+                creature.Id,
+                center.X,
+                center.Y));
+        }
+
+        var raiderCenters = _state.Raiders
+            .Where(raider => raider.Mode != RaiderMode.Escaped)
+            .ToDictionary(raider => raider.Id, RaiderRenderCenter);
+        foreach (var raider in _state.Raiders.Where(item => item.Mode != RaiderMode.Escaped))
+        {
+            var center = raiderCenters[raider.Id];
+            items.Add(new WorldRenderItem(
+                WorldRenderKind.Raider,
+                raider.Id,
+                center.X,
+                center.Y));
+        }
+
+        var creatures = _state.Creatures.ToDictionary(creature => creature.Id);
+        var raiders = _state.Raiders.ToDictionary(raider => raider.Id);
+        foreach (var item in WorldRenderOrder.BackToFront(items))
+        {
+            switch (item.Kind)
+            {
+                case WorldRenderKind.Wall:
+                    var cell = CellFromStableId(item.StableId);
+                    DrawWall(cell, WallTopology.SelectVariant(cell, rockTiles));
+                    break;
+                case WorldRenderKind.Structure:
+                    DrawBuiltPost(structures[item.StableId]);
+                    break;
+                case WorldRenderKind.Creature:
+                    DrawCreature(creatures[item.StableId], creatureCenters[item.StableId]);
+                    break;
+                case WorldRenderKind.Raider:
+                    DrawRaider(raiders[item.StableId], raiderCenters[item.StableId]);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(item.Kind), item.Kind, null);
+            }
+        }
+    }
+
+    private static int CellStableId(GridPoint cell) =>
+        (cell.Y * PrototypeTuning.MapWidth) + cell.X;
+
+    private static GridPoint CellFromStableId(int stableId) =>
+        new(stableId % PrototypeTuning.MapWidth, stableId / PrototypeTuning.MapWidth);
+
+    /// <summary>
+    /// Graybox three-quarter wall geometry. The full tile is the connected top
+    /// mass; an exposed observer-facing side replaces its lower strip with a dark
+    /// facade. Missing cardinal neighbours add only outer seams, so connected
+    /// rock has no internal checkerboard grid.
+    /// </summary>
+    private void DrawWall(GridPoint cell, WallTileVariant variant)
+    {
+        var topLeft = CellTopLeft(cell);
+        var facadeHeight = ScaleWorld(8);
+        var facadeOverhang = ScaleWorld(3);
+        // The cell is the wall's footprint. Its top rises into the cell behind,
+        // while the facade ends at the footprint's lower edge. This overlap is
+        // what gives Y-order something visible to occlude.
+        var visualTopLeft = topLeft - new Vector2(0, facadeHeight);
+        var tile = new Vector2(_tileSize, _tileSize);
+        DrawRect(new Rect2(visualTopLeft, tile), WallTopColor(cell));
+
+        var edgeWidth = ScaleWorld(1.25f);
+        var brightEdge = WallEdgeColor(cell);
+        var darkEdge = WallFacadeColor(cell);
+        if (!WallTopology.Connects(variant, WallNeighbors.North))
+        {
+            DrawLine(
+                visualTopLeft,
+                visualTopLeft + new Vector2(_tileSize, 0),
+                brightEdge,
+                edgeWidth);
+        }
+
+        if (!WallTopology.Connects(variant, WallNeighbors.West))
+        {
+            DrawLine(
+                visualTopLeft,
+                topLeft + new Vector2(0, _tileSize),
+                darkEdge,
+                edgeWidth);
+        }
+
+        if (!WallTopology.Connects(variant, WallNeighbors.East))
+        {
+            DrawLine(
+                visualTopLeft + new Vector2(_tileSize, 0),
+                topLeft + tile,
+                darkEdge,
+                edgeWidth);
+        }
+
+        if (!WallTopology.HasFrontFacade(variant))
+        {
+            return;
+        }
+
+        var facadeTop = topLeft.Y + _tileSize - facadeHeight;
+        DrawRect(
+            new Rect2(
+                new Vector2(topLeft.X, facadeTop),
+                new Vector2(_tileSize, facadeHeight + facadeOverhang)),
+            WallFacadeColor(cell));
+        DrawLine(
+            new Vector2(topLeft.X, facadeTop),
+            new Vector2(topLeft.X + _tileSize, facadeTop),
+            WallLipColor(cell),
+            ScaleWorld(2));
+        if (!WallTopology.Connects(variant, WallNeighbors.West))
+        {
+            DrawLine(
+                topLeft + new Vector2(0, _tileSize),
+                topLeft + new Vector2(0, _tileSize + facadeOverhang),
+                darkEdge,
+                edgeWidth);
+        }
+
+        if (!WallTopology.Connects(variant, WallNeighbors.East))
+        {
+            DrawLine(
+                topLeft + tile,
+                topLeft + new Vector2(_tileSize, _tileSize + facadeOverhang),
+                darkEdge,
+                edgeWidth);
+        }
+
+        DrawLine(
+            topLeft + new Vector2(0, _tileSize + facadeOverhang),
+            topLeft + new Vector2(_tileSize, _tileSize + facadeOverhang),
+            new Color("#100d0c"),
+            edgeWidth);
+    }
+
+    private Color WallTopColor(GridPoint cell) => BaseTileColor(cell);
+
+    private Color WallFacadeColor(GridPoint cell) =>
+        _state!.Map.DiggableTiles.Contains(cell)
+            ? new Color("#403832")
+            : new Color("#171310");
+
+    private Color WallEdgeColor(GridPoint cell) =>
+        _state!.Map.DiggableTiles.Contains(cell)
+            ? new Color("#a99682")
+            : new Color("#55483f");
+
+    private Color WallLipColor(GridPoint cell) =>
+        _state!.Map.DiggableTiles.Contains(cell)
+            ? new Color("#8b7968")
+            : new Color("#3c332e");
+
+    private void DrawCreature(PrototypeCreatureSnapshot creature, Vector2 center)
+    {
+        // The body, its carried item, health bar and selection ring all hang off
+        // this interpolated point. It is also the point supplied to Y-order.
+        var color = DefenderColor(creature);
+        // The generated character states serve both factions; the outline is the
+        // stable team cue (teal crew, red-raider ring).
+        DrawCircle(center, ScaleWorld(9), color);
+        DrawGoblin(center, CrewSpriteKey(creature));
+        if (creature.Mode == CreatureMode.Downed)
+        {
+            DrawLine(
+                center + ScaleWorld(-5, -5),
+                center + ScaleWorld(5, 5),
+                new Color("#f8fafc"),
+                ScaleWorld(2));
+            DrawLine(
+                center + ScaleWorld(5, -5),
+                center + ScaleWorld(-5, 5),
+                new Color("#f8fafc"),
+                ScaleWorld(2));
+        }
+
+        DrawHpBar(center + ScaleWorld(-7, 8), creature.Hp, creature.MaxHp, color);
+        DrawCircle(
+            center + ScaleWorld(7, -7),
+            ScaleWorld(2.25f),
+            CreatureStateColor(creature));
+
+        if (_selectedCreatureId == creature.Id)
+        {
+            DrawArc(
+                center,
+                ScaleWorld(10),
+                0,
+                Mathf.Tau,
+                16,
+                new Color("#ffffff"),
+                ScaleWorld(2));
+        }
+
+        if (creature.Carrying is ResourceKind.Stone)
+        {
+            // Stone rides as a rimmed grey square, the same shape a stockpile pip
+            // uses, so "carrying" and "stored" read as the same material.
+            DrawRect(
+                new Rect2(center + ScaleWorld(3, -9), ScaleWorld(6, 6)),
+                new Color("#e2e8f0"));
+            DrawRect(
+                new Rect2(center + ScaleWorld(3, -9), ScaleWorld(6, 6)),
+                new Color("#0f172a"),
+                false,
+                ScaleWorld(1.0f));
+        }
+        else if (creature.Carrying is not null)
+        {
+            DrawCircle(
+                center + ScaleWorld(6, -6),
+                ScaleWorld(2.5f),
+                creature.Carrying == ResourceKind.Meal
+                    ? new Color("#fde68a")
+                    : new Color("#a3e635"));
+        }
+    }
+
+    private void DrawRaider(PrototypeRaiderSnapshot raider, Vector2 center)
+    {
+        DrawCircle(center, ScaleWorld(9), new Color("#7f1d1d"));
+        DrawGoblin(center, RaiderSpriteKey(raider));
+        DrawHpBar(
+            center + ScaleWorld(-7, 9),
+            raider.Hp,
+            PrototypeTuning.RaiderHp,
+            new Color("#fb7185"));
+        if (raider.Mode == RaiderMode.Downed)
+        {
+            DrawLine(
+                center + ScaleWorld(-5, -5),
+                center + ScaleWorld(5, 5),
+                new Color("#f8fafc"),
+                ScaleWorld(2));
+            DrawLine(
+                center + ScaleWorld(5, -5),
+                center + ScaleWorld(-5, 5),
+                new Color("#f8fafc"),
+                ScaleWorld(2));
+        }
+        else
+        {
+            DrawCircle(center + ScaleWorld(6, -6), ScaleWorld(2), new Color("#fecaca"));
+        }
+    }
+
+    /// <summary>
+    /// Input affordances belong above world depth: a selected wall and the legal
+    /// targets of a held brush must remain visible even when the wall itself was
+    /// deliberately drawn after a body behind it.
+    /// </summary>
+    private void DrawCellInteractionOverlays()
+    {
+        for (var y = 0; y < PrototypeTuning.MapHeight; y++)
+        {
+            for (var x = 0; x < PrototypeTuning.MapWidth; x++)
+            {
+                var cell = new GridPoint(x, y);
+                var rect = new Rect2(
+                    CellTopLeft(cell),
+                    new Vector2(_tileSize - 1, _tileSize - 1));
+
+                // The rule is read from the same function the stroke uses, so an
+                // outlined cell and an accepted cell cannot be different sets.
+                if (LegalTargetOutline() is { } outline &&
+                    BrushSelection.Accepts(_projection!, _editMode, _brushZone, cell))
+                {
+                    DrawRect(rect.Grow(-2), outline, false, 1.0f);
+                }
+
+                if (_selectedCell == cell)
+                {
+                    DrawRect(rect.Grow(-1), new Color("#f8fafc"), false, 2.0f);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -2975,29 +3179,28 @@ public partial class Main : Node2D
     /// teal block so a built post reads as a built thing rather than as floor, and
     /// the word itself because the old small square cannot say "training post" on its
     /// own. The authored posts are drawn the same way, so the player cannot tell
-    /// them apart — which is the claim the step is making.
+    /// them apart — which is the claim the step is making. One post is drawn at a
+    /// time because tall structures participate in the same Y-order as walls and
+    /// bodies.
     /// </summary>
-    private void DrawBuiltPosts()
+    private void DrawBuiltPost(PrototypeStationSnapshot station)
     {
-        foreach (var station in _state!.Stations.Where(item => item.Kind == TileKind.Post))
-        {
-            var topLeft = CellTopLeft(station.Position);
-            var rect = new Rect2(topLeft, new Vector2(_tileSize - 1, _tileSize - 1));
-            DrawRect(rect.Grow(-ScaleWorld(3)), new Color("#0f766e"));
-            DrawRect(
-                rect.Grow(-ScaleWorld(3)),
-                new Color("#5eead4"),
-                false,
-                ScaleWorld(1.0f));
-            DrawString(
-                ThemeDB.FallbackFont,
-                topLeft + ScaleWorld(2, 9),
-                "POST",
-                HorizontalAlignment.Left,
-                _tileSize - ScaleWorld(3),
-                Math.Max(1, (int)Math.Round(ScaleWorld(6))),
-                new Color("#ccfbf1"));
-        }
+        var topLeft = CellTopLeft(station.Position);
+        var rect = new Rect2(topLeft, new Vector2(_tileSize - 1, _tileSize - 1));
+        DrawRect(rect.Grow(-ScaleWorld(3)), new Color("#0f766e"));
+        DrawRect(
+            rect.Grow(-ScaleWorld(3)),
+            new Color("#5eead4"),
+            false,
+            ScaleWorld(1.0f));
+        DrawString(
+            ThemeDB.FallbackFont,
+            topLeft + ScaleWorld(2, 9),
+            "POST",
+            HorizontalAlignment.Left,
+            _tileSize - ScaleWorld(3),
+            Math.Max(1, (int)Math.Round(ScaleWorld(6))),
+            new Color("#ccfbf1"));
     }
 
     /// <summary>
