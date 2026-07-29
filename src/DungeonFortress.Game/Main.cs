@@ -93,6 +93,7 @@ public partial class Main : Node2D
     private int _fallbackSpriteDraws;
     private bool _spritesHaveMipmaps;
     private int _cameraInputChecks;
+    private int _cameraBoundsChecks;
     private bool _hudInputRejected;
 
     public override void _Ready()
@@ -967,6 +968,11 @@ public partial class Main : Node2D
             return;
         }
 
+        var unboundedFrame = CurrentCameraFrame();
+        _cameraCenter = CameraView.ClampCenterToMap(
+            _cameraCenter,
+            unboundedFrame.VisibleWorldSize,
+            _tileSize);
         var frame = CurrentCameraFrame();
         var node = frame.CameraNodePosition;
         _camera.Position = new Vector2((float)node.X, (float)node.Y);
@@ -1049,9 +1055,10 @@ public partial class Main : Node2D
 
     /// <summary>
     /// Engine-level evidence for the input seam: the real Camera2D canvas
-    /// transform is inverted at every discrete zoom and three camera positions.
-    /// A point in the side HUD is rejected before the inverse can become a map
-    /// click.
+    /// transform is inverted at every discrete zoom and three requested camera
+    /// positions. The same smoke drives both map extremes at every zoom and
+    /// proves ApplyCameraView clamps them. A point in the side HUD is rejected
+    /// before the inverse can become a map click.
     /// </summary>
     private void VerifyCameraInputSmoke()
     {
@@ -1067,6 +1074,7 @@ public partial class Main : Node2D
         ];
 
         _cameraInputChecks = 0;
+        _cameraBoundsChecks = 0;
         foreach (var zoom in CameraView.ZoomLevels)
         {
             foreach (var center in centers)
@@ -1083,6 +1091,35 @@ public partial class Main : Node2D
                 }
 
                 _cameraInputChecks++;
+            }
+        }
+
+        ViewPoint[] outsideCenters =
+        [
+            new ViewPoint(-10_000, -10_000),
+            new ViewPoint(10_000, 10_000),
+        ];
+        foreach (var zoom in CameraView.ZoomLevels)
+        {
+            foreach (var outsideCenter in outsideCenters)
+            {
+                _cameraZoom = zoom;
+                _cameraCenter = outsideCenter;
+                var visibleWorldSize = CurrentCameraFrame().VisibleWorldSize;
+                var expected = CameraView.ClampCenterToMap(
+                    outsideCenter,
+                    visibleWorldSize,
+                    _tileSize);
+                ApplyCameraView();
+                if (Math.Abs(_cameraCenter.X - expected.X) > 0.001 ||
+                    Math.Abs(_cameraCenter.Y - expected.Y) > 0.001)
+                {
+                    throw new InvalidOperationException(
+                        $"Camera escaped map bounds at zoom {zoom}: " +
+                        $"requested {outsideCenter}, applied {_cameraCenter}, expected {expected}.");
+                }
+
+                _cameraBoundsChecks++;
             }
         }
 
@@ -2248,6 +2285,7 @@ public partial class Main : Node2D
             textureFilter = TextureFilter.ToString(),
             spriteMipmaps = _spritesHaveMipmaps,
             cameraInputChecks = _cameraInputChecks,
+            cameraBoundsChecks = _cameraBoundsChecks,
             hudInputRejected = _hudInputRejected,
         };
     }

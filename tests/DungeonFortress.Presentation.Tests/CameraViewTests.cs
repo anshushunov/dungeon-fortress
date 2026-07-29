@@ -129,6 +129,36 @@ public sealed class CameraViewTests
     }
 
     [Fact]
+    public void Camera_stops_when_the_visible_world_reaches_a_map_edge()
+    {
+        var visible = new ViewSize(800, 400);
+
+        Assert.Equal(
+            new ViewPoint(400, 200),
+            CameraView.ClampCenterToMap(
+                new ViewPoint(-10_000, -10_000),
+                visible,
+                CameraView.DefaultTileSize));
+        Assert.Equal(
+            new ViewPoint(720, 440),
+            CameraView.ClampCenterToMap(
+                new ViewPoint(10_000, 10_000),
+                visible,
+                CameraView.DefaultTileSize));
+    }
+
+    [Fact]
+    public void An_axis_that_fits_the_whole_map_stays_centered()
+    {
+        Assert.Equal(
+            new ViewPoint(560, 320),
+            CameraView.ClampCenterToMap(
+                new ViewPoint(10_000, -10_000),
+                new ViewSize(1_200, 700),
+                CameraView.DefaultTileSize));
+    }
+
+    [Fact]
     public void Arrow_pan_moves_by_whole_tiles()
     {
         Assert.Equal(

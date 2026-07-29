@@ -202,6 +202,48 @@ public static class CameraView
             center.Y - (screenDelta.Y / zoom));
     }
 
+    /// <summary>
+    /// Keeps the camera on the ownership map. An axis that shows less than the
+    /// whole map may travel only until the viewport touches an edge; an axis that
+    /// shows the whole map stays centered instead of allowing empty space to
+    /// swallow the map.
+    /// </summary>
+    public static ViewPoint ClampCenterToMap(
+        ViewPoint center,
+        ViewSize visibleWorldSize,
+        int tileSize)
+    {
+        ValidateTileSize(tileSize);
+        if (!double.IsFinite(center.X) ||
+            !double.IsFinite(center.Y) ||
+            !double.IsFinite(visibleWorldSize.Width) ||
+            !double.IsFinite(visibleWorldSize.Height) ||
+            visibleWorldSize.Width <= 0 ||
+            visibleWorldSize.Height <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(visibleWorldSize),
+                visibleWorldSize,
+                "Camera center must be finite and visible world size must be finite and positive.");
+        }
+
+        var map = MapSize(tileSize);
+        return new ViewPoint(
+            ClampAxis(center.X, visibleWorldSize.Width, map.Width),
+            ClampAxis(center.Y, visibleWorldSize.Height, map.Height));
+    }
+
+    private static double ClampAxis(double center, double visible, double map)
+    {
+        if (visible >= map)
+        {
+            return map / 2.0;
+        }
+
+        var halfVisible = visible / 2.0;
+        return Math.Clamp(center, halfVisible, map - halfVisible);
+    }
+
     public static ViewPoint MoveByTiles(
         ViewPoint center,
         int horizontalTiles,
