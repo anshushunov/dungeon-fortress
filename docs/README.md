@@ -47,6 +47,10 @@ Prototype 1; `design/GDD.md` описывает игру шире и на уро
 Запуск, управление и воспроизводимый screenshot визуального Phase A graybox
 описаны в `engineering/PROTOTYPE_GRAYBOX.md`.
 
+Сборка повторяемых PNG, manifest для PR, безопасная диагностика GitHub
+authentication и точный token usage handoff описаны в
+`engineering/EVIDENCE_WORKFLOW.md`.
+
 Правила работы Codex, Claude Code и других агентов находятся в
 `engineering/MULTI_AGENT_WORKFLOW.md`.
 

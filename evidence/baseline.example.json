@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "captures": [
+    {
+      "name": "baseline-t1",
+      "fixture": "baseline",
+      "screenshotTicks": 1,
+      "tileSize": 40,
+      "cameraZoom": 0.5,
+      "cameraPosition": "560,320",
+      "uiScale": 1.0,
+      "frameSize": "1280x720"
+    }
+  ]
+}
