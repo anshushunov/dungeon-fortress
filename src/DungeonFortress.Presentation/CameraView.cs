@@ -203,45 +203,28 @@ public static class CameraView
     }
 
     /// <summary>
-    /// Keeps the camera on the ownership map. An axis that shows less than the
-    /// whole map may travel only until the viewport touches an edge; an axis that
-    /// shows the whole map stays centered instead of allowing empty space to
-    /// swallow the map.
+    /// Keeps the camera focus on the ownership map without cancelling overview
+    /// panning. The focus may travel between the centers of the two edge tiles,
+    /// so even when the whole map fits in the viewport a drag still moves it, but
+    /// the camera can never wander into empty space beyond the map.
     /// </summary>
-    public static ViewPoint ClampCenterToMap(
-        ViewPoint center,
-        ViewSize visibleWorldSize,
-        int tileSize)
+    public static ViewPoint ClampCenterToMap(ViewPoint center, int tileSize)
     {
         ValidateTileSize(tileSize);
         if (!double.IsFinite(center.X) ||
-            !double.IsFinite(center.Y) ||
-            !double.IsFinite(visibleWorldSize.Width) ||
-            !double.IsFinite(visibleWorldSize.Height) ||
-            visibleWorldSize.Width <= 0 ||
-            visibleWorldSize.Height <= 0)
+            !double.IsFinite(center.Y))
         {
             throw new ArgumentOutOfRangeException(
-                nameof(visibleWorldSize),
-                visibleWorldSize,
-                "Camera center must be finite and visible world size must be finite and positive.");
+                nameof(center),
+                center,
+                "Camera center must be finite.");
         }
 
         var map = MapSize(tileSize);
+        var halfTile = tileSize / 2.0;
         return new ViewPoint(
-            ClampAxis(center.X, visibleWorldSize.Width, map.Width),
-            ClampAxis(center.Y, visibleWorldSize.Height, map.Height));
-    }
-
-    private static double ClampAxis(double center, double visible, double map)
-    {
-        if (visible >= map)
-        {
-            return map / 2.0;
-        }
-
-        var halfVisible = visible / 2.0;
-        return Math.Clamp(center, halfVisible, map - halfVisible);
+            Math.Clamp(center.X, halfTile, map.Width - halfTile),
+            Math.Clamp(center.Y, halfTile, map.Height - halfTile));
     }
 
     public static ViewPoint MoveByTiles(

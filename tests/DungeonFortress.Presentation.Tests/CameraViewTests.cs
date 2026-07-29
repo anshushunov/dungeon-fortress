@@ -129,32 +129,32 @@ public sealed class CameraViewTests
     }
 
     [Fact]
-    public void Camera_stops_when_the_visible_world_reaches_a_map_edge()
+    public void Camera_focus_stops_on_the_centers_of_the_edge_tiles()
     {
-        var visible = new ViewSize(800, 400);
-
         Assert.Equal(
-            new ViewPoint(400, 200),
+            new ViewPoint(20, 20),
             CameraView.ClampCenterToMap(
                 new ViewPoint(-10_000, -10_000),
-                visible,
                 CameraView.DefaultTileSize));
         Assert.Equal(
-            new ViewPoint(720, 440),
+            new ViewPoint(1_100, 620),
             CameraView.ClampCenterToMap(
                 new ViewPoint(10_000, 10_000),
-                visible,
                 CameraView.DefaultTileSize));
     }
 
     [Fact]
-    public void An_axis_that_fits_the_whole_map_stays_centered()
+    public void Overview_pan_is_not_cancelled_when_the_whole_map_fits()
     {
+        var panned = CameraView.PanByScreenDelta(
+            CameraView.MapCenter(CameraView.DefaultTileSize),
+            new ViewPoint(40, -20),
+            CameraView.ZoomLevels[0]);
+
         Assert.Equal(
-            new ViewPoint(560, 320),
+            new ViewPoint(480, 360),
             CameraView.ClampCenterToMap(
-                new ViewPoint(10_000, -10_000),
-                new ViewSize(1_200, 700),
+                panned,
                 CameraView.DefaultTileSize));
     }
 

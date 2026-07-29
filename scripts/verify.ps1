@@ -416,8 +416,9 @@ $stageCatalog = [ordered]@{
                 -EventName "godot_camera_smoke"
             if ([int]$cameraEvent.view.cameraInputChecks -ne 15 -or
                 [int]$cameraEvent.view.cameraBoundsChecks -ne 10 -or
+                [int]$cameraEvent.view.cameraPanChecks -ne 5 -or
                 -not [bool]$cameraEvent.view.hudInputRejected) {
-                throw "Camera smoke did not prove input mapping, map bounds and HUD rejection."
+                throw "Camera smoke did not prove input mapping, map bounds, panning and HUD rejection."
             }
 
             Write-Host "Comparing canonical checksum across camera, frame and UI parameters..."
@@ -507,6 +508,7 @@ $stageCatalog = [ordered]@{
                 CameraExitCode = $cameraResult.ExitCode
                 CameraInputChecks = [int]$cameraEvent.view.cameraInputChecks
                 CameraBoundsChecks = [int]$cameraEvent.view.cameraBoundsChecks
+                CameraPanChecks = [int]$cameraEvent.view.cameraPanChecks
                 ViewChecksum = [string]$viewChecksums[0]
                 ViewCases = @($viewCases.Name)
                 GoblinScreenPixels = [pscustomobject]@{
@@ -776,6 +778,7 @@ try {
         $summary["godotCameraExitCode"] = $godotStageResult.CameraExitCode
         $summary["cameraInputChecks"] = $godotStageResult.CameraInputChecks
         $summary["cameraBoundsChecks"] = $godotStageResult.CameraBoundsChecks
+        $summary["cameraPanChecks"] = $godotStageResult.CameraPanChecks
         $summary["viewInvariantChecksum"] = $godotStageResult.ViewChecksum
         $summary["viewCases"] = @($godotStageResult.ViewCases)
         $summary["goblinScreenPixels"] = $godotStageResult.GoblinScreenPixels

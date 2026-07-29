@@ -94,6 +94,7 @@ public partial class Main : Node2D
     private bool _spritesHaveMipmaps;
     private int _cameraInputChecks;
     private int _cameraBoundsChecks;
+    private int _cameraPanChecks;
     private bool _hudInputRejected;
 
     public override void _Ready()
@@ -968,11 +969,7 @@ public partial class Main : Node2D
             return;
         }
 
-        var unboundedFrame = CurrentCameraFrame();
-        _cameraCenter = CameraView.ClampCenterToMap(
-            _cameraCenter,
-            unboundedFrame.VisibleWorldSize,
-            _tileSize);
+        _cameraCenter = CameraView.ClampCenterToMap(_cameraCenter, _tileSize);
         var frame = CurrentCameraFrame();
         var node = frame.CameraNodePosition;
         _camera.Position = new Vector2((float)node.X, (float)node.Y);
@@ -1056,9 +1053,10 @@ public partial class Main : Node2D
     /// <summary>
     /// Engine-level evidence for the input seam: the real Camera2D canvas
     /// transform is inverted at every discrete zoom and three requested camera
-    /// positions. The same smoke drives both map extremes at every zoom and
-    /// proves ApplyCameraView clamps them. A point in the side HUD is rejected
-    /// before the inverse can become a map click.
+    /// positions. The same smoke drives both map extremes and one real pan at
+    /// every zoom, proving ApplyCameraView clamps the focus without cancelling
+    /// overview movement. A point in the side HUD is rejected before the inverse
+    /// can become a map click.
     /// </summary>
     private void VerifyCameraInputSmoke()
     {
@@ -1075,6 +1073,7 @@ public partial class Main : Node2D
 
         _cameraInputChecks = 0;
         _cameraBoundsChecks = 0;
+        _cameraPanChecks = 0;
         foreach (var zoom in CameraView.ZoomLevels)
         {
             foreach (var center in centers)
@@ -1105,11 +1104,7 @@ public partial class Main : Node2D
             {
                 _cameraZoom = zoom;
                 _cameraCenter = outsideCenter;
-                var visibleWorldSize = CurrentCameraFrame().VisibleWorldSize;
-                var expected = CameraView.ClampCenterToMap(
-                    outsideCenter,
-                    visibleWorldSize,
-                    _tileSize);
+                var expected = CameraView.ClampCenterToMap(outsideCenter, _tileSize);
                 ApplyCameraView();
                 if (Math.Abs(_cameraCenter.X - expected.X) > 0.001 ||
                     Math.Abs(_cameraCenter.Y - expected.Y) > 0.001)
@@ -1121,6 +1116,26 @@ public partial class Main : Node2D
 
                 _cameraBoundsChecks++;
             }
+        }
+
+        foreach (var zoom in CameraView.ZoomLevels)
+        {
+            _cameraZoom = zoom;
+            _cameraCenter = CameraView.MapCenter(_tileSize);
+            ApplyCameraView();
+            var beforePan = _cameraCenter;
+            PanCamera(new ViewPoint(40, -20));
+            var expected = CameraView.ClampCenterToMap(
+                CameraView.PanByScreenDelta(beforePan, new ViewPoint(40, -20), zoom),
+                _tileSize);
+            if (_cameraCenter == beforePan || _cameraCenter != expected)
+            {
+                throw new InvalidOperationException(
+                    $"Camera pan was cancelled at zoom {zoom}: " +
+                    $"before {beforePan}, applied {_cameraCenter}, expected {expected}.");
+            }
+
+            _cameraPanChecks++;
         }
 
         var worldViewport = WorldViewportScreenRect();
@@ -2286,6 +2301,7 @@ public partial class Main : Node2D
             spriteMipmaps = _spritesHaveMipmaps,
             cameraInputChecks = _cameraInputChecks,
             cameraBoundsChecks = _cameraBoundsChecks,
+            cameraPanChecks = _cameraPanChecks,
             hudInputRejected = _hudInputRejected,
         };
     }

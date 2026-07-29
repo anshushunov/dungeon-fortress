@@ -80,9 +80,9 @@ The wheel steps only through the five declared zoom levels. At `0.5` the whole
 28×16 ownership grid fits in the default world viewport; `2` is the detail view.
 The launcher starts at `0.75`, which keeps the whole fortress legible while
 making the 40 px tile materially larger than the former 22 px tile.
-Pan stops when the visible world touches a map edge. If the whole map fits along
-one axis, that axis stays centered, so resizing or zooming out cannot leave the
-fortress stranded in a corner of empty canvas.
+Pan stops when the camera focus reaches the center of an edge tile. This keeps
+the focus on the ownership map without cancelling movement at overview zooms
+where the whole map fits in the world viewport.
 
 Camera input is presentation-only. A map click first has to land in the explicit
 world viewport, then the live Godot canvas transform is inverted and the
@@ -824,7 +824,8 @@ what it says: all three frames passed without regeneration.
 across four combinations of camera position, zoom, frame size and UI scale. The
 same stage drives a real `Camera2D` transform through all five zoom levels at
 three requested positions (15 click checks), drives both map extremes at every
-zoom (10 bounds checks), and rejects a point in the HUD. It also compares
+zoom (10 bounds checks), proves a pan moves at every zoom (5 pan checks), and
+rejects a point in the HUD. It also compares
 1280x720 and 1600x900 at zoom 1 and requires the latter to expose a larger world
 rectangle.
 
