@@ -14,6 +14,8 @@ CLAUDE.local.md
 **/obj/
 **/.godot/
 *.import
+# Godot regenerates *.uid on import; see docs/engineering/ENVIRONMENT_SETUP.md
+*.uid
 .artifacts/
 src/DungeonFortress.Game/addons/godot_mcp/
 src/DungeonFortress.Game/DungeonFortress.Game.IvanMcp.props
