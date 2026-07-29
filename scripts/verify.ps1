@@ -443,11 +443,28 @@ $stageCatalog = [ordered]@{
             if (-not (Test-Path -LiteralPath $baselineScreenshot -PathType Leaf)) {
                 throw "Baseline visual smoke did not write its screenshot."
             }
+            # Tick 1670 is twenty ticks into the *second* wave of the prepared
+            # party (waves arrive at 1300, 1650, 2000 and 2350). Three reasons
+            # for that tick rather than the old 1540, which now falls in the
+            # quiet window between waves 1 and 2 and drew no raid at all:
+            #
+            # - the second wave proves the cycle repeats, which is the thing
+            #   worth photographing; a frame inside wave 1 would look exactly
+            #   like the single raid this replaced;
+            # - twenty ticks in is structurally mid-combat and not merely
+            #   empirically so: all six raiders have entered by then (entry
+            #   takes ten ticks) and none can yet have walked to the larder,
+            #   stolen a load and walked back out, which needs about fifty;
+            # - it is the richest frame for what this stage actually guards,
+            #   the goblin sprite diagnostics. Measured there: three raiders
+            #   alive on the map, ten drawn including the downed of wave 1,
+            #   six defenders fighting and one downed — all four sprite states
+            #   on screen at once.
             $raidResult = Invoke-GodotChecked `
                 -GodotPath $godot `
                 -Arguments @(
                     "--path", $gameProjectPath,
-                    "--", "--fixture", "prepared", "--screenshot", $raidScreenshot, "--screenshot-ticks", "1540"
+                    "--", "--fixture", "prepared", "--screenshot", $raidScreenshot, "--screenshot-ticks", "1670"
                 ) `
                 -ExpectedSuccessEvent "godot_graybox_screenshot"
             Assert-GoblinSpriteDiagnostics -OutputLines $raidResult.Output -EventName "godot_graybox_screenshot"
