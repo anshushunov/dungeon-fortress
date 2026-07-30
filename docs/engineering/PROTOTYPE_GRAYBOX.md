@@ -435,10 +435,13 @@ involved.
 
 The world draws in four passes:
 
-1. floor and other material that belongs below elevated world geometry;
+1. floor and base material that belongs below elevated world geometry, including
+   blueprint and stockpile silhouettes but not their countable pips;
 2. walls, training posts, creatures and raiders in stable back-to-front Y-order;
-3. zones, routes, work goals, dig intent and body information above world depth;
-4. selection and brush previews above every informational mark.
+3. zone outlines, translucent routes and work goals, dig intent, material pips,
+   body information and zone labels above world depth;
+4. legal-target and selection outlines, followed by the active brush preview,
+   above the informational marks.
 
 Walls use the lower edge of their footprint as depth anchor. Training posts use
 the cell centre because a creature performing `Drill` legitimately occupies the
@@ -453,9 +456,14 @@ HP bars, state dots, downed marks and the selected-creature ring are information
 not opaque world material. They use the same interpolated centre as the body but
 are drawn after the depth pass, so a wall can hide the lower body without also
 hiding its readable state. Zone borders, haul routes and work goals likewise
-remain complete instead of losing their south edge under a wall. Rock selection,
-DIG previews and excavation progress use the wall's raised top-plus-facade
-bounds rather than the flat cell footprint.
+remain complete instead of losing their south edge under a wall. Work-goal dots
+use the same low alpha as their route, so a goal sharing a creature's cell does
+not become an opaque disk over its sprite. Blueprint delivery pips and stockpile
+occupancy pips are also informational and remain readable when a southern wall
+overlaps their cell. Rock selection, DIG previews and excavation progress use
+the wall's raised top-plus-facade bounds rather than the flat cell footprint;
+the outer frame of a multi-cell brush remains the exact grid rectangle that the
+command will receive.
 
 Two ignored, reproducible frames show the same internal wall column with a
 selected creature on opposite sides:

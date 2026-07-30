@@ -2447,7 +2447,7 @@ public partial class Main : Node2D
                 var rect = new Rect2(CellTopLeft(cell), new Vector2(_tileSize - 1, _tileSize - 1));
                 if (!rockTiles.Contains(cell))
                 {
-                    DrawRect(rect, BaseTileColor(cell));
+                    DrawRect(rect, FloorTileColor(cell));
                 }
             }
         }
@@ -2495,9 +2495,11 @@ public partial class Main : Node2D
         // A dig mark is a player-intent overlay on the wall, not wall material.
         // Drawing it after the depth pass keeps it readable on both top and face.
         DrawDigDesignations(rockTiles);
+        DrawBuildSiteInformationOverlays();
+        DrawStockpileInformationOverlays();
         DrawBodyInformationOverlays();
-        DrawCellInteractionOverlays(rockTiles);
         DrawZoneLabels();
+        DrawCellInteractionOverlays(rockTiles);
         DrawBrushPreview(rockTiles);
     }
 
@@ -2529,7 +2531,10 @@ public partial class Main : Node2D
                 CellCenter(job.Target),
                 color with { A = 0.35f },
                 ScaleWorld(1.0f));
-            DrawCircle(CellCenter(job.Target), ScaleWorld(3.2f), color);
+            DrawCircle(
+                CellCenter(job.Target),
+                ScaleWorld(3.2f),
+                color with { A = 0.35f });
 
             // A booked stockpile cell is part of the route even before pickup, so
             // the player can see where this pile is going.
@@ -2637,86 +2642,34 @@ public partial class Main : Node2D
     /// </summary>
     private void DrawWall(GridPoint cell, WallTileVariant variant, bool isDiggable)
     {
-        var topLeft = CellTopLeft(cell);
-        var facadeHeight = ScaleWorld(8);
-        var facadeOverhang = ScaleWorld(3);
-        // The cell is the wall's footprint. Its top rises into the cell behind,
-        // while the facade ends at the footprint's lower edge. This overlap is
-        // what gives Y-order something visible to occlude.
-        var visualTopLeft = topLeft - new Vector2(0, facadeHeight);
-        var tile = new Vector2(_tileSize, _tileSize);
-        DrawRect(new Rect2(visualTopLeft, tile), WallTopColor(isDiggable));
+        var geometry = WallRenderGeometry.ForCell(cell, variant, _tileSize);
+        DrawRect(ToRect2(geometry.Top), WallTopColor(isDiggable));
 
         var edgeWidth = ScaleWorld(1.25f);
-        var brightEdge = WallEdgeColor(isDiggable);
-        var darkEdge = WallFacadeColor(isDiggable);
-        var exposed = WallTopology.ExposedSides(variant);
-        if (exposed.HasFlag(WallNeighbors.North))
+        if (geometry.Facade is { } facade)
         {
+            DrawRect(ToRect2(facade), WallFacadeColor(isDiggable));
+        }
+
+        foreach (var stroke in geometry.Strokes)
+        {
+            var (color, width) = stroke.Kind switch
+            {
+                WallStrokeKind.BrightEdge => (WallEdgeColor(isDiggable), edgeWidth),
+                WallStrokeKind.DarkEdge => (WallFacadeColor(isDiggable), edgeWidth),
+                WallStrokeKind.FacadeLip => (WallLipColor(isDiggable), ScaleWorld(2)),
+                WallStrokeKind.FacadeBottom => (new Color("#100d0c"), edgeWidth),
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(stroke.Kind),
+                    stroke.Kind,
+                    null),
+            };
             DrawLine(
-                visualTopLeft,
-                visualTopLeft + new Vector2(_tileSize, 0),
-                brightEdge,
-                edgeWidth);
+                ToVector2(stroke.From),
+                ToVector2(stroke.To),
+                color,
+                width);
         }
-
-        if (exposed.HasFlag(WallNeighbors.West))
-        {
-            DrawLine(
-                visualTopLeft,
-                topLeft + new Vector2(0, _tileSize),
-                darkEdge,
-                edgeWidth);
-        }
-
-        if (exposed.HasFlag(WallNeighbors.East))
-        {
-            DrawLine(
-                visualTopLeft + new Vector2(_tileSize, 0),
-                topLeft + tile,
-                darkEdge,
-                edgeWidth);
-        }
-
-        if (!WallTopology.HasFrontFacade(variant))
-        {
-            return;
-        }
-
-        var facadeTop = topLeft.Y + _tileSize - facadeHeight;
-        DrawRect(
-            new Rect2(
-                new Vector2(topLeft.X, facadeTop),
-                new Vector2(_tileSize, facadeHeight + facadeOverhang)),
-            WallFacadeColor(isDiggable));
-        DrawLine(
-            new Vector2(topLeft.X, facadeTop),
-            new Vector2(topLeft.X + _tileSize, facadeTop),
-            WallLipColor(isDiggable),
-            ScaleWorld(2));
-        if (exposed.HasFlag(WallNeighbors.West))
-        {
-            DrawLine(
-                topLeft + new Vector2(0, _tileSize),
-                topLeft + new Vector2(0, _tileSize + facadeOverhang),
-                darkEdge,
-                edgeWidth);
-        }
-
-        if (exposed.HasFlag(WallNeighbors.East))
-        {
-            DrawLine(
-                topLeft + tile,
-                topLeft + new Vector2(_tileSize, _tileSize + facadeOverhang),
-                darkEdge,
-                edgeWidth);
-        }
-
-        DrawLine(
-            topLeft + new Vector2(0, _tileSize + facadeOverhang),
-            topLeft + new Vector2(_tileSize, _tileSize + facadeOverhang),
-            new Color("#100d0c"),
-            edgeWidth);
     }
 
     private static Color WallTopColor(bool isDiggable) =>
@@ -2755,16 +2708,19 @@ public partial class Main : Node2D
 
     private Rect2 WallVisualRect(GridPoint cell, WallTileVariant variant)
     {
-        var facadeHeight = ScaleWorld(8);
-        var facadeOverhang = ScaleWorld(3);
-        var height = _tileSize +
-            (WallTopology.HasFrontFacade(variant)
-                ? facadeHeight + facadeOverhang
-                : 0);
+        var bounds = WallRenderGeometry.ForCell(cell, variant, _tileSize).Bounds;
         return new Rect2(
-            CellTopLeft(cell) - new Vector2(0, facadeHeight),
-            new Vector2(_tileSize - 1, height - 1));
+            ToVector2(new ViewPoint(bounds.X, bounds.Y)),
+            new Vector2((float)bounds.Width - 1, (float)bounds.Height - 1));
     }
+
+    private static Vector2 ToVector2(ViewPoint point) =>
+        new((float)point.X, (float)point.Y);
+
+    private static Rect2 ToRect2(ViewRect rect) =>
+        new(
+            new Vector2((float)rect.X, (float)rect.Y),
+            new Vector2((float)rect.Width, (float)rect.Height));
 
     private void DrawCreature(PrototypeCreatureSnapshot creature, Vector2 center)
     {
@@ -2808,14 +2764,41 @@ public partial class Main : Node2D
 
     private void DrawBodyInformationOverlays()
     {
-        foreach (var creature in _state!.Creatures)
-        {
-            DrawCreatureInformation(creature, CreatureRenderCenter(creature));
-        }
+        var creatureCenters = _state!.Creatures.ToDictionary(
+            creature => creature.Id,
+            CreatureRenderCenter);
+        var raiderCenters = _state.Raiders
+            .Where(raider => raider.Mode != RaiderMode.Escaped)
+            .ToDictionary(raider => raider.Id, RaiderRenderCenter);
+        var creatures = _state.Creatures.ToDictionary(creature => creature.Id);
+        var raiders = _state.Raiders.ToDictionary(raider => raider.Id);
+        var items = creatureCenters
+            .Select(pair => WorldRenderGeometry.ForBody(
+                WorldRenderKind.Creature,
+                pair.Key,
+                new ViewPoint(pair.Value.X, pair.Value.Y)))
+            .Concat(raiderCenters.Select(pair => WorldRenderGeometry.ForBody(
+                WorldRenderKind.Raider,
+                pair.Key,
+                new ViewPoint(pair.Value.X, pair.Value.Y))));
 
-        foreach (var raider in _state.Raiders.Where(item => item.Mode != RaiderMode.Escaped))
+        foreach (var item in WorldRenderOrder.BackToFront(items))
         {
-            DrawRaiderInformation(raider, RaiderRenderCenter(raider));
+            switch (item.Kind)
+            {
+                case WorldRenderKind.Creature:
+                    DrawCreatureInformation(
+                        creatures[item.StableId],
+                        creatureCenters[item.StableId]);
+                    break;
+                case WorldRenderKind.Raider:
+                    DrawRaiderInformation(
+                        raiders[item.StableId],
+                        raiderCenters[item.StableId]);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(item.Kind), item.Kind, null);
+            }
         }
     }
 
@@ -2955,17 +2938,17 @@ public partial class Main : Node2D
         {
             var corner = _dragCurrent ?? anchor;
             var accepted = stroke.Tiles.ToHashSet();
-            var hasBounds = false;
-            var selectionBounds = default(Rect2);
             foreach (var cell in BrushSelection.Rectangle(anchor, corner))
             {
                 var color = accepted.Contains(cell) ? BrushAccent() : new Color("#ef4444");
                 var tile = CellInteractionRect(cell, rockTiles);
                 DrawRect(tile.Grow(-ScaleWorld(1)), color with { A = 0.32f });
-                selectionBounds = hasBounds ? selectionBounds.Merge(tile) : tile;
-                hasBounds = true;
             }
 
+            // The outer frame names the exact grid rectangle sent to the command.
+            // Individual wall fills still follow raised visual mass, but a mixed
+            // floor/rock drag must not move the command boundary off the grid.
+            var selectionBounds = BrushGridRect(anchor, corner);
             DrawRect(
                 selectionBounds.Grow(-ScaleWorld(1)),
                 new Color("#f8fafc"),
@@ -2990,6 +2973,17 @@ public partial class Main : Node2D
             new Color("#f8fafc"),
             false,
             ScaleWorld(1.5f));
+    }
+
+    private Rect2 BrushGridRect(GridPoint first, GridPoint second)
+    {
+        var left = Math.Min(first.X, second.X);
+        var top = Math.Min(first.Y, second.Y);
+        var width = (Math.Abs(first.X - second.X) + 1) * _tileSize;
+        var height = (Math.Abs(first.Y - second.Y) + 1) * _tileSize;
+        return new Rect2(
+            CellTopLeft(new GridPoint(left, top)),
+            new Vector2(width - 1, height - 1));
     }
 
     /// <summary>
@@ -3045,7 +3039,7 @@ public partial class Main : Node2D
         {
             var accent = DigColor(MapAccents.Dig(_projection, designation));
             DrawDigMark(designation.Tile, accent, rockTiles);
-            var center = CellCenter(designation.Tile);
+            var center = CellInteractionRect(designation.Tile, rockTiles).GetCenter();
 
             if (designation.StatusCode == "dig_unreachable")
             {
@@ -3158,6 +3152,22 @@ public partial class Main : Node2D
         {
             DrawBlueprint(
                 tile,
+                BuildColor(MapAccents.PendingBlueprint(_projection, tile)));
+        }
+
+        foreach (var site in _projection.BuildSites)
+        {
+            var accent = BuildColor(MapAccents.Blueprint(_projection, site));
+            DrawBlueprint(site.Tile, accent);
+        }
+    }
+
+    private void DrawBuildSiteInformationOverlays()
+    {
+        foreach (var tile in _projection!.PendingBuildMarks)
+        {
+            DrawBlueprintPips(
+                tile,
                 BuildColor(MapAccents.PendingBlueprint(_projection, tile)),
                 0,
                 0,
@@ -3167,8 +3177,12 @@ public partial class Main : Node2D
         foreach (var site in _projection.BuildSites)
         {
             var accent = BuildColor(MapAccents.Blueprint(_projection, site));
-            DrawBlueprint(site.Tile, accent, site.Delivered, site.IncomingReserved, site.Required);
-
+            DrawBlueprintPips(
+                site.Tile,
+                accent,
+                site.Delivered,
+                site.IncomingReserved,
+                site.Required);
             if (site.ProgressTicks <= 0 || site.RequiredTicks <= 0)
             {
                 continue;
@@ -3197,10 +3211,7 @@ public partial class Main : Node2D
     /// </summary>
     private void DrawBlueprint(
         GridPoint tile,
-        Color accent,
-        int delivered,
-        int incomingReserved,
-        int required)
+        Color accent)
     {
         var rect = new Rect2(CellTopLeft(tile), new Vector2(_tileSize - 1, _tileSize - 1));
         DrawRect(rect.Grow(-ScaleWorld(1)), accent with { A = 0.22f });
@@ -3215,7 +3226,16 @@ public partial class Main : Node2D
             _tileSize - ScaleWorld(3),
             Math.Max(1, (int)Math.Round(ScaleWorld(6))),
             accent);
+    }
 
+    private void DrawBlueprintPips(
+        GridPoint tile,
+        Color accent,
+        int delivered,
+        int incomingReserved,
+        int required)
+    {
+        var topLeft = CellTopLeft(tile);
         for (var index = 0; index < required; index++)
         {
             var pip = new Rect2(
@@ -3288,16 +3308,24 @@ public partial class Main : Node2D
         // the world creates when it applies the paint.
         foreach (var tile in _projection!.PendingStockpileCells)
         {
-            DrawStockpileCell(tile, StockpileColor(MapAccents.PendingStockpile(_projection, tile)), 0, 0);
+            DrawStockpileCell(
+                tile,
+                StockpileColor(MapAccents.PendingStockpile(_projection, tile)));
         }
 
         foreach (var cell in _projection.StockpileCells)
         {
             DrawStockpileCell(
                 cell.Position,
-                StockpileColor(MapAccents.Stockpile(_projection, cell)),
-                cell.Stored,
-                cell.IncomingReserved);
+                StockpileColor(MapAccents.Stockpile(_projection, cell)));
+        }
+    }
+
+    private void DrawStockpileInformationOverlays()
+    {
+        foreach (var cell in _projection!.StockpileCells)
+        {
+            DrawStockpilePips(cell.Position, cell.Stored, cell.IncomingReserved);
         }
     }
 
@@ -3306,7 +3334,7 @@ public partial class Main : Node2D
     /// this tick, so painting a stockpile while paused draws the same square the
     /// tick would draw.
     /// </summary>
-    private void DrawStockpileCell(GridPoint position, Color accent, int stored, int incomingReserved)
+    private void DrawStockpileCell(GridPoint position, Color accent)
     {
         var rect = new Rect2(CellTopLeft(position), new Vector2(_tileSize - 1, _tileSize - 1));
         DrawRect(rect.Grow(-ScaleWorld(1)), new Color("#1f2937"));
@@ -3336,6 +3364,14 @@ public partial class Main : Node2D
                 ScaleWorld(1.0f));
         }
 
+    }
+
+    private void DrawStockpilePips(
+        GridPoint position,
+        int stored,
+        int incomingReserved)
+    {
+        var topLeft = CellTopLeft(position);
         for (var index = 0; index < stored; index++)
         {
             DrawRect(
@@ -4373,23 +4409,10 @@ public partial class Main : Node2D
         return new Vector2((float)point.X, (float)point.Y);
     }
 
-    private Color BaseTileColor(GridPoint cell)
+    private Color FloorTileColor(GridPoint cell)
     {
-        // Rock is read from the snapshot, never from a hardcoded list: the map is
-        // mutable canonical state and Godot only projects it.
-        //
-        // Rock is deliberately a warm stone grey, well above the cool blue floor
-        // in both hue and brightness: the earlier near-black rock was reported as
-        // indistinguishable from floor on the owner's display.
-        if (_state!.Map.RockTiles.Contains(cell))
-        {
-            return _state.Map.DiggableTiles.Contains(cell)
-                ? new Color("#6b6157")
-                : new Color("#2a2522");
-        }
-
         // Freshly excavated ground reads as new: brighter than the original floor.
-        if (_state.Map.ExcavatedTiles.Contains(cell)) return new Color("#3b5a7a");
+        if (_state!.Map.ExcavatedTiles.Contains(cell)) return new Color("#3b5a7a");
 
         if (_state!.Beds.Any(bed => bed.Position == cell)) return new Color("#31572c");
         if (_state.Stations.Any(station => station.Position == cell && station.Kind == TileKind.Kitchen)) return new Color("#7c4a22");

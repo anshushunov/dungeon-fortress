@@ -50,6 +50,131 @@ public static class WorldRenderGeometry
 }
 
 /// <summary>
+/// Semantic wall strokes. The adapter chooses colours and widths, while this
+/// engine-free value fixes which exposed side maps to which visible segment.
+/// </summary>
+public enum WallStrokeKind
+{
+    BrightEdge,
+    DarkEdge,
+    FacadeLip,
+    FacadeBottom,
+}
+
+public readonly record struct WallStroke(
+    ViewPoint From,
+    ViewPoint To,
+    WallStrokeKind Kind);
+
+/// <summary>
+/// All geometry shared by wall drawing and interaction overlays.
+/// </summary>
+public sealed record WallVisualMass(
+    ViewRect Bounds,
+    ViewRect Top,
+    ViewRect? Facade,
+    IReadOnlyList<WallStroke> Strokes);
+
+/// <summary>
+/// Pure graybox wall geometry. Reference dimensions are scaled with the same
+/// tile-size policy as every other world primitive.
+/// </summary>
+public static class WallRenderGeometry
+{
+    public const double FacadeReferenceHeight = 8.0;
+    public const double FacadeReferenceOverhang = 3.0;
+
+    public static WallVisualMass ForCell(
+        GridPoint cell,
+        WallTileVariant variant,
+        int tileSize)
+    {
+        var topLeft = CameraView.CellTopLeft(cell, tileSize);
+        var scale = CameraView.WorldVisualScale(tileSize);
+        var facadeHeight = FacadeReferenceHeight * scale;
+        var facadeOverhang = FacadeReferenceOverhang * scale;
+        var visualTopLeft = new ViewPoint(topLeft.X, topLeft.Y - facadeHeight);
+        var top = new ViewRect(visualTopLeft.X, visualTopLeft.Y, tileSize, tileSize);
+        var exposed = WallTopology.ExposedSides(variant);
+        var strokes = new List<WallStroke>();
+
+        if (exposed.HasFlag(WallNeighbors.North))
+        {
+            strokes.Add(new WallStroke(
+                visualTopLeft,
+                new ViewPoint(visualTopLeft.X + tileSize, visualTopLeft.Y),
+                WallStrokeKind.BrightEdge));
+        }
+
+        if (exposed.HasFlag(WallNeighbors.West))
+        {
+            strokes.Add(new WallStroke(
+                visualTopLeft,
+                new ViewPoint(topLeft.X, visualTopLeft.Y + tileSize),
+                WallStrokeKind.DarkEdge));
+        }
+
+        if (exposed.HasFlag(WallNeighbors.East))
+        {
+            strokes.Add(new WallStroke(
+                new ViewPoint(visualTopLeft.X + tileSize, visualTopLeft.Y),
+                new ViewPoint(
+                    topLeft.X + tileSize,
+                    visualTopLeft.Y + tileSize),
+                WallStrokeKind.DarkEdge));
+        }
+
+        if (!WallTopology.HasFrontFacade(variant))
+        {
+            return new WallVisualMass(top, top, null, strokes);
+        }
+
+        var facadeTop = topLeft.Y + tileSize - facadeHeight;
+        var facade = new ViewRect(
+            topLeft.X,
+            facadeTop,
+            tileSize,
+            facadeHeight + facadeOverhang);
+        strokes.Add(new WallStroke(
+            new ViewPoint(topLeft.X, facadeTop),
+            new ViewPoint(topLeft.X + tileSize, facadeTop),
+            WallStrokeKind.FacadeLip));
+
+        if (exposed.HasFlag(WallNeighbors.West))
+        {
+            strokes.Add(new WallStroke(
+                new ViewPoint(topLeft.X, facade.Y),
+                new ViewPoint(topLeft.X, facade.Y + facade.Height),
+                WallStrokeKind.DarkEdge));
+        }
+
+        if (exposed.HasFlag(WallNeighbors.East))
+        {
+            strokes.Add(new WallStroke(
+                new ViewPoint(topLeft.X + tileSize, facade.Y),
+                new ViewPoint(
+                    topLeft.X + tileSize,
+                    facade.Y + facade.Height),
+                WallStrokeKind.DarkEdge));
+        }
+
+        strokes.Add(new WallStroke(
+            new ViewPoint(topLeft.X, topLeft.Y + tileSize + facadeOverhang),
+            new ViewPoint(
+                topLeft.X + tileSize,
+                topLeft.Y + tileSize + facadeOverhang),
+            WallStrokeKind.FacadeBottom));
+
+        var bounds = new ViewRect(
+            visualTopLeft.X,
+            visualTopLeft.Y,
+            tileSize,
+            tileSize + facadeHeight + facadeOverhang);
+        return new WallVisualMass(bounds, top, facade, strokes);
+    }
+}
+
+/// <summary>
 /// Reversible row-major IDs used only to reconnect sorted presentation items
 /// with adapter-owned drawing data.
 /// </summary>
