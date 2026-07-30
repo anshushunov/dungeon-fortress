@@ -2689,26 +2689,28 @@ public partial class Main : Node2D
     }
 
     /// <summary>
-    /// One rule for every informational mark drawn above the depth pass: a mark
-    /// that can share a cell with a body must not hide it. The fill is
-    /// translucent; an outline may stay opaque, which is what keeps a countable
-    /// mark countable.
+    /// The alpha an informational mark's fill is drawn with, read from
+    /// <c>DungeonFortress.Presentation.InformationalOverlays</c> rather than
+    /// decided here.
     ///
-    /// This is not a style preference. Three separate marks — the post fill, the
-    /// work-goal dot and the delivery pips — each landed opaque on top of the
-    /// creature whose state they explain, because the simulation puts a body on
-    /// exactly the cell the mark describes: Drill requires the post cell, Build
-    /// requires the site cell, and storing stone requires the stockpile cell.
+    /// One rule governs every mark drawn above the depth pass: a mark that can
+    /// share a cell with a body must not hide it. That is not a style preference
+    /// — three separate marks broke it in three consecutive review rounds of
+    /// Issue #83, each landing opaque on the very creature it explains — and it
+    /// is not something this file can be trusted with, because no CI job builds
+    /// it. The declaration, the reason and the number all live on the pure side
+    /// of the seam; this method and <see cref="MarkAccent"/> are the whole of the
+    /// adapter's part in it.
     /// </summary>
-    private const float OccupiableMarkFillAlpha = 0.35f;
+    private static float MarkFill(OverlayMark mark) =>
+        (float)InformationalOverlays.FillAlpha(mark);
 
     /// <summary>
-    /// The same rule for a mark whose whole reading is its fill, such as a
-    /// progress bar. Higher than <see cref="OccupiableMarkFillAlpha"/> because
-    /// there is no outline to carry the shape, still low enough to read the
-    /// sprite underneath.
+    /// The same, for a fill that carries the whole reading — a progress bar has
+    /// no outline to hold its shape, so it gets its own declared value.
     /// </summary>
-    private const float OccupiableMarkAccentAlpha = 0.6f;
+    private static float MarkAccent(OverlayMark mark) =>
+        (float)InformationalOverlays.AccentAlpha(mark);
 
     private void DrawJobRoutes()
     {
@@ -2718,12 +2720,12 @@ public partial class Main : Node2D
             DrawLine(
                 CellCenter(job.Origin),
                 CellCenter(job.Target),
-                color with { A = OccupiableMarkFillAlpha },
+                color with { A = MarkFill(OverlayMark.JobRoute) },
                 ScaleWorld(1.0f));
             DrawCircle(
                 CellCenter(job.Target),
                 ScaleWorld(3.2f),
-                color with { A = OccupiableMarkFillAlpha });
+                color with { A = MarkFill(OverlayMark.JobRoute) });
 
             // A booked stockpile cell is part of the route even before pickup, so
             // the player can see where this pile is going.
@@ -3131,7 +3133,9 @@ public partial class Main : Node2D
             {
                 var color = accepted.Contains(cell) ? BrushAccent() : new Color("#ef4444");
                 var tile = CellInteractionRect(cell, rockTiles);
-                DrawRect(tile.Grow(-ScaleWorld(1)), color with { A = 0.32f });
+                DrawRect(
+                    tile.Grow(-ScaleWorld(1)),
+                    color with { A = MarkFill(OverlayMark.BrushPreview) });
             }
 
             // The outer frame names the exact grid rectangle sent to the command.
@@ -3156,7 +3160,9 @@ public partial class Main : Node2D
         var previewColor = BrushSelection.Accepts(_projection!, _editMode, _brushZone, hovered)
             ? BrushAccent()
             : new Color("#ef4444");
-        DrawRect(preview.Grow(-ScaleWorld(1)), previewColor with { A = 0.32f });
+        DrawRect(
+            preview.Grow(-ScaleWorld(1)),
+            previewColor with { A = MarkFill(OverlayMark.BrushPreview) });
         DrawRect(
             preview.Grow(-ScaleWorld(1)),
             new Color("#f8fafc"),
@@ -3388,10 +3394,10 @@ public partial class Main : Node2D
             // its BuildTicks: an opaque bar would sit on the sprite it explains.
             DrawRect(
                 new Rect2(barTopLeft, new Vector2(barWidth, barHeight)),
-                new Color("#0f172a") with { A = OccupiableMarkFillAlpha });
+                new Color("#0f172a") with { A = MarkFill(OverlayMark.BuildSiteProgress) });
             DrawRect(
                 new Rect2(barTopLeft, new Vector2(barWidth * fraction, barHeight)),
-                new Color("#5eead4") with { A = OccupiableMarkAccentAlpha });
+                new Color("#5eead4") with { A = MarkAccent(OverlayMark.BuildSiteProgress) });
         }
     }
 
@@ -3436,7 +3442,9 @@ public partial class Main : Node2D
             {
                 // The outline stays opaque so the pip is still countable; the fill
                 // does not, because a builder stands on this very cell.
-                DrawRect(pip, new Color("#e2e8f0") with { A = OccupiableMarkFillAlpha });
+                DrawRect(
+                    pip,
+                    new Color("#e2e8f0") with { A = MarkFill(OverlayMark.BuildSiteProgress) });
                 DrawRect(pip, new Color("#475569"), false, ScaleWorld(1.0f));
             }
             else if (index < delivered + incomingReserved)
@@ -3573,7 +3581,7 @@ public partial class Main : Node2D
                 new Rect2(
                     topLeft + new Vector2(ScaleWorld(4 + (index * 7)), _tileSize - ScaleWorld(10)),
                     ScaleWorld(6, 6)),
-                new Color("#e2e8f0") with { A = OccupiableMarkFillAlpha });
+                new Color("#e2e8f0") with { A = MarkFill(OverlayMark.StockpileOccupancy) });
             DrawRect(
                 new Rect2(
                     topLeft + new Vector2(ScaleWorld(4 + (index * 7)), _tileSize - ScaleWorld(10)),

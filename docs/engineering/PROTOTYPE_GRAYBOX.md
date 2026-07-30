@@ -469,6 +469,63 @@ requires the stockpile cell. So work-goal dots, blueprint delivery pips,
 stockpile occupancy pips and the build progress bar are all translucent, and a
 new mark added to this pass inherits the rule instead of rediscovering it.
 
+### What now protects that rule (Issue #90)
+
+The rule above was written down after the third review round and broken again in
+the fourth. Writing it down is not what stops that happening: the rule lived in
+`Main.cs`, and `Main.cs` is not built by the "Pure .NET" CI job, so every
+violation of it was found by an eye on a captured frame. A pixel golden is
+deliberately not the answer — the reasons are in
+[Golden UI state](#golden-ui-state) and they have not changed.
+
+The rule is now **data in `DungeonFortress.Presentation`**, and the adapter reads
+it rather than repeating it:
+
+- `WorldDrawOrder` declares every drawing routine of `DrawMap`, the order the
+  twelve top-level ones run in, and the pass each of them belongs to;
+- `InformationalOverlays` declares, for each mark, what it explains, whether the
+  simulation can put a body on that cell, and the answer it gives — drawn as it
+  is, translucent fill, strokes only, or skipped while a body stands there. The
+  fill alphas live there too, and `Main.MarkFill` / `Main.MarkAccent` are the
+  whole of the adapter's part in it;
+- `BodyOccupancy` is "which cells hold a body", as a pure function of the
+  snapshot.
+
+Three subjects, because the rule reaches them differently. A **cell** mark
+explains a tile and is the case the rule is about. A **body** mark is the body's
+own readout — HP, state dot, downed cross, selection ring — anchored to the body
+and drawn above the depth pass precisely so a raised wall top cannot erase it. A
+**gesture** mark is the drag's own readout: the cell count is an opaque plate on
+purpose, because a number over a sprite is unreadable, and it exists only while
+the button is held. Only cell marks are asked to be translucent, and the one that
+is not — the dig mark — is not asked because rock is impassable.
+
+Four checks in `DungeonFortress.Presentation.Tests` hold it up, and each one was
+chosen against a mutation that nothing used to catch:
+
+| Mutation | What fails |
+|---|---|
+| the alpha taken off a mark above the depth pass | `Every_translucent_mark_reads_its_fill_alpha_from_the_policy` |
+| a policy relaxed to "draw it as it is" | `A_mark_that_can_share_a_cell_with_a_body_is_never_drawn_as_it_is` |
+| `DrawHpBar` called from the depth pass again | `A_routine_only_calls_routines_of_its_own_pass` |
+| a mark moved between passes | `DrawMap_runs_the_declared_steps_in_the_declared_order` |
+| a new mark added to the pass with no declared policy | `Every_drawing_routine_of_the_adapter_is_declared` |
+
+The last four read `src/DungeonFortress.Game/Main.cs` **as text**. That is the
+consequence of the root cause Issue #90 names: no test project references
+`DungeonFortress.Game`, and none should, because the assembly needs the engine
+runtime that ADR 0011 keeps out of the CI job. The reader checks structure only —
+which methods exist, which calls each makes, how many arguments a call has — and
+`UiIconManifestTests` already reads the adapter's asset folder for the same
+reason. A manifest is a contract only while something compares it with the thing
+it describes.
+
+Two declarations are checked against the world rather than believed. "No body
+ever stands on rock", which is what lets a dig mark stay opaque, is a sweep of a
+real 1800-tick session including raid waves. "Bodies really do stand on the cells
+the translucent marks explain" is the same sweep from the other side, so the rule
+is measured to be the normal case rather than asserted to be.
+
 Rock selection, DIG previews and excavation progress use
 the wall's raised top-plus-facade bounds rather than the flat cell footprint;
 the outer frame of a multi-cell brush remains the exact grid rectangle that the
@@ -497,6 +554,13 @@ numeric values, exposed-edge mapping, isolated rock, corners and map edges.
 Render-geometry tests cover a body north and south of a wall, a body sharing a
 training-post cell, stable cell-ID round trips, exact/stable ties and the order
 change on interpolated Y.
+
+All sixteen variants are also checked as **drawn strokes**, not only as masks:
+each one states how many segments of each kind it must have and which edge each
+one lies on, derived from `ExposedSides` rather than from a list of expected
+coordinates. Two variants used to be covered and both had north and west exposed
+at the same time, so swapping those two conditions inside the geometry changed
+nothing any test could see.
 
 The inspector exposes the selected creature's needs, martial form, mode,
 current job, carried item, last reason and its structured numeric details. Cell
