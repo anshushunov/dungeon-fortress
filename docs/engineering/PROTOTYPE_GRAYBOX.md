@@ -7,11 +7,23 @@ The graybox is the visual, three-quarter projection of the headless Prototype 1
 economy and raid on its unchanged orthogonal grid. It starts with the `baseline`
 gameplay-v2 fixture.
 
-The authored baseline and launcher default are 1280x720. It used to be 960x540,
-and that frame could not hold the HUD text: at its worst moment the side column
-needs about 33 lines of explanation and 540 px offers about 29, which is the
-deficit Issue #28 measured and Issue #36 cleared. Captures now name their exact
-frame rather than inheriting the live window.
+1280x720 is the rectangle the HUD is authored against. It is not a launch default
+and not a description of anybody's monitor, and conflating those two meanings is
+the whole of Issues #86 and #100: the launcher used to open that rectangle on
+every screen, which on a large one meant a small window with text 8–15 physical
+pixels tall. The rectangle itself used to be 960x540, and that frame could not
+hold the HUD text at all — at its worst moment the side column needs about 33
+lines of explanation and 540 px offers about 29, which is the deficit Issue #28
+measured and Issue #36 cleared.
+
+`run-game.ps1` therefore has no `-FrameSize` or `-UiScale` default. A launch
+without them asks the screen: the window takes 90 % of the usable area of the
+screen it opens on, and the UI scale is the largest of `1`, `1.25`, `1.5`,
+`1.75`, `2` at which the authored rectangle still fits that frame. The rule, its
+measurements and what happens without a screen are in
+[`ENVIRONMENT_SETUP.md`](ENVIRONMENT_SETUP.md#стартовый-кадр-и-масштаб-интерфейса).
+A reproducible capture never reaches that rule: it names its exact frame rather
+than inheriting the live window or the screen.
 
 The world uses a 40 px tile and a `Camera2D`; the HUD is a separate `CanvasLayer`
 and does not move or zoom with the world. The five discrete camera levels are
@@ -86,11 +98,14 @@ Pan stops when the camera focus reaches the center of an edge tile. This keeps
 the focus on the ownership map without cancelling movement at overview zooms
 where the whole map fits in the world viewport.
 
-`UiScale` is independent of the native frame, but the declared combination must
-leave at least 1024x720 logical pixels after scaling. The default 1280x720 frame
-therefore supports scale 1 (and smaller), while scale 2 requires at least a
-2048x1440 frame. `run-game.ps1` rejects an impossible combination before restore
-or engine startup; the game performs the same validation for direct launches.
+`UiScale` is independent of the native frame, but a declared combination must
+leave at least 1024x720 logical pixels after scaling. The authored 1280x720
+rectangle therefore supports scale 1 (and smaller), while scale 2 requires at
+least a 2048x1440 frame. `run-game.ps1` rejects an impossible **declared**
+combination before restore or engine startup, and the game performs the same
+validation for direct launches. A frame derived from the screen has nothing left
+to reject: the automatic rule picks the largest scale at which the authored
+rectangle still fits, so an impossible pair cannot arise by construction.
 
 Camera input is presentation-only. A map click first has to land in the explicit
 world viewport, then the live Godot canvas transform is inverted and the
@@ -878,8 +893,9 @@ supplies them. The project remains `canvas_items` + `expand`; for an explicit
 frame the launcher also makes that frame the logical rendering size, so
 1600x900 at zoom 1 exposes more world than 1280x720 instead of scaling the same
 1280x720 rectangle. An ordinary interactive window resize synchronizes the
-logical rendering size to the native window too; a reproducible capture keeps its
-explicit frame fixed.
+logical rendering size to the native window too, and since Issue #100 it also
+recomputes the UI scale from the new frame rather than leaving the HUD at the
+scale it launched with; a reproducible capture keeps its explicit frame fixed.
 
 ## Checking the HUD without reading pixels
 
