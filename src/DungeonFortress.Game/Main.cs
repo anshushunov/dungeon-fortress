@@ -148,7 +148,8 @@ public partial class Main : Node2D
             // number, which is what a reproducible frame needs and what
             // ViewLaunchOptions already demands from every capture.
             _uiScaleIsAutomatic = CommandLineArguments.Read(arguments, "--ui-scale") is null;
-            AssertStartupFramePolicy();
+            _startupFramePolicyChecks = CameraView.AssertStartupFramePolicy(
+                ViewLaunchOptions.MinimumLogicalFrameSize);
             ConfigureStartupFrame();
             var selectCreature = CommandLineArguments.ReadInt(arguments, "--select-creature");
             var selectCell = CommandLineArguments.Read(arguments, "--select-cell");
@@ -979,87 +980,22 @@ public partial class Main : Node2D
     // Startup frame and UI scale (Issue #100, Issue #86)
     //
     // The launcher used to hand every run a 1280x720 frame at UI scale 1. That
-    // pair is the *authored design rectangle*, not a description of any real
-    // display, and on the owner's screen it opened a small window with 8-15 px
-    // HUD text. Twice.
+    // pair is the rectangle the HUD is authored against, not a description of
+    // any real display, and on the owner's screen it opened a small window with
+    // 8-15 px HUD text. Twice.
     //
-    // The rule now has two halves and they must not be confused:
-    //
-    // - a run that declares its frame keeps every previous guarantee. A capture
-    //   is required by ViewLaunchOptions to declare --tile-size, --camera-zoom,
-    //   --camera-position, --ui-scale and --frame-size, so no screenshot can
-    //   ever reach the code below and no screenshot can inherit this machine;
-    // - a run that declares nothing is an interactive launch, and an
-    //   interactive launch asks the screen instead of a constant.
-    //
-    // The policy itself is deliberately pure geometry, with no DPI query. On
-    // Windows a Godot window is per-monitor DPI aware, so a display the system
-    // scales at 150 % already reports proportionally more physical pixels, and
-    // the ratio below picks the larger scale from that alone. Reading the DPI
-    // separately would double-count it.
+    // The arithmetic of the replacement is engine-free and lives in
+    // CameraView.AutomaticFrameSize / AutomaticUiScale, which is where ADR 0011
+    // puts a rule of presentation. What is left here is the part that genuinely
+    // needs the engine: asking the display server for a screen, moving the
+    // window, and re-deriving the scale when the player resizes it.
     // ---------------------------------------------------------------------
-
-    /// <summary>
-    /// The rectangle the HUD is authored against. It is the frame the guard
-    /// matrix has always contained and the unit the auto UI scale counts in:
-    /// "how many times does the design rectangle fit into this window".
-    /// </summary>
-    private const int DesignFrameWidth = 1280;
-
-    private const int DesignFrameHeight = 720;
-
-    /// <summary>
-    /// How much of the screen's usable rectangle a fresh window takes. Not the
-    /// whole rectangle: the window stays an ordinary movable, resizable window
-    /// with room for its own decorations, and the owner asked for a wider start,
-    /// not for the desktop.
-    /// </summary>
-    private const double StartupFrameScreenShare = 0.9;
-
-    /// <summary>
-    /// The scales an automatic run may choose. Bounded above by
-    /// <see cref="CameraView.MaximumUiScale"/>, which is also the largest value
-    /// an explicit <c>--ui-scale</c> is allowed, and below by 1: a window that
-    /// is already small must not be made smaller still.
-    /// </summary>
-    private static readonly double[] AutoUiScaleSteps = [1.0, 1.25, 1.5, 1.75, 2.0];
-
-    /// <summary>
-    /// The largest step at which the frame still shows at least the design
-    /// rectangle. A frame narrower than the design rectangle gets scale 1,
-    /// which is exactly what it got before this policy existed.
-    /// </summary>
-    private static double AutoUiScale(double frameWidth, double frameHeight)
-    {
-        var fit = Math.Min(frameWidth / DesignFrameWidth, frameHeight / DesignFrameHeight);
-        var chosen = AutoUiScaleSteps[0];
-        foreach (var step in AutoUiScaleSteps)
-        {
-            // 1e-9 so that an exactly-fitting frame such as 1920x1080 gets 1.5
-            // rather than losing it to binary representation.
-            if (step <= fit + 1e-9)
-            {
-                chosen = step;
-            }
-        }
-
-        return chosen;
-    }
-
-    /// <summary>
-    /// The window a fresh interactive run opens on a screen whose usable
-    /// rectangle is <paramref name="usable"/>.
-    /// </summary>
-    private static ViewSize AutoFrameSize(ViewSize usable) =>
-        new(
-            Math.Max(DesignFrameWidth, Math.Floor(usable.Width * StartupFrameScreenShare)),
-            Math.Max(DesignFrameHeight, Math.Floor(usable.Height * StartupFrameScreenShare)));
 
     /// <summary>
     /// The usable rectangle of the screen this window is on, or <c>null</c> when
     /// there is no display to ask (headless) or the display is smaller than the
-    /// design rectangle. Both cases fall back to the authored 1280x720 frame,
-    /// which is what every run did before.
+    /// authored rectangle. Both cases fall back to the frame in
+    /// <c>project.godot</c>, which is what every run did before.
     /// </summary>
     private ViewRect? ScreenUsableRect()
     {
@@ -1070,7 +1006,8 @@ public partial class Main : Node2D
 
         var screen = DisplayServer.WindowGetCurrentScreen();
         var rect = DisplayServer.ScreenGetUsableRect(screen);
-        if (rect.Size.X < DesignFrameWidth || rect.Size.Y < DesignFrameHeight)
+        if (rect.Size.X < CameraView.DesignFrameSize.Width ||
+            rect.Size.Y < CameraView.DesignFrameSize.Height)
         {
             return null;
         }
@@ -1089,7 +1026,7 @@ public partial class Main : Node2D
         else if (ScreenUsableRect() is { } usable)
         {
             _screenUsableRect = usable;
-            frame = AutoFrameSize(new ViewSize(usable.Width, usable.Height));
+            frame = CameraView.AutomaticFrameSize(new ViewSize(usable.Width, usable.Height));
             var size = new Vector2I(checked((int)frame.Width), checked((int)frame.Height));
             var window = GetWindow();
             window.Size = size;
@@ -1106,15 +1043,15 @@ public partial class Main : Node2D
         else
         {
             // No screen to measure — headless, or a display smaller than the
-            // design rectangle. The project's own 1280x720 window stands and an
-            // omitted --ui-scale keeps meaning 1, which is what every run did
+            // authored rectangle. The project's own 1280x720 window stands and
+            // an omitted --ui-scale keeps meaning 1, which is what every run did
             // before this policy existed.
             return;
         }
 
         if (_uiScaleIsAutomatic)
         {
-            _uiScale = AutoUiScale(frame.Width, frame.Height);
+            _uiScale = CameraView.AutomaticUiScale(frame);
         }
 
         AssertLogicalFrameFits(frame, _uiScale);
@@ -1130,158 +1067,16 @@ public partial class Main : Node2D
     private static void AssertLogicalFrameFits(ViewSize frame, double uiScale)
     {
         var minimum = ViewLaunchOptions.MinimumLogicalFrameSize;
-        if (frame.Width / uiScale >= minimum.Width &&
-            frame.Height / uiScale >= minimum.Height)
+        if (CameraView.FitsLogicalFrame(frame, uiScale, minimum))
         {
             return;
         }
 
         throw new ArgumentException(
             $"Frame {FormatSize(frame)} at UI scale {FormatNumber(uiScale)} provides only " +
-            $"{FormatSize(new ViewSize(frame.Width / uiScale, frame.Height / uiScale))} " +
-            $"logical pixels; at least {FormatSize(minimum)} are required.",
+            $"{FormatSize(CameraView.LogicalFrameSize(frame, uiScale))} logical pixels; " +
+            $"at least {FormatSize(minimum)} are required.",
             "--ui-scale");
-    }
-
-    /// <summary>
-    /// The startup frame policy is arithmetic, and arithmetic that only ever
-    /// runs against the one display in front of it is arithmetic nobody checks:
-    /// this machine has a 3072x1920 screen and would never execute the laptop
-    /// branches. The properties are therefore asserted over a fixed matrix of
-    /// real display sizes on every entry point, so every headless smoke, golden
-    /// UI capture and screenshot in <c>verify.ps1</c> runs them:
-    ///
-    /// 1. a chosen scale is one of the declared steps and inside the range an
-    ///    explicit <c>--ui-scale</c> may use;
-    /// 2. the automatic window fits its screen and is never smaller than the
-    ///    design rectangle;
-    /// 3. the logical frame never drops under the HUD guard's minimum;
-    /// 4. the chosen step is the largest one that still shows the design
-    ///    rectangle — the next step up would not;
-    /// 5. a bigger screen never produces a smaller window or a smaller scale;
-    /// 6. and the minimum-logical guard itself rejects a pair that violates it,
-    ///    because a guard that has never been seen to fail is not evidence.
-    /// </summary>
-    private void AssertStartupFramePolicy()
-    {
-        ViewSize[] screens =
-        [
-            new(1280, 720),
-            new(1366, 768),
-            new(1440, 900),
-            new(1600, 900),
-            new(1920, 1080),
-            new(1920, 1200),
-            new(2048, 1440),
-            new(2560, 1440),
-            new(3044, 1722),
-            new(3440, 1440),
-            new(3840, 2160),
-        ];
-
-        // Monotonicity needs a sequence that actually grows in both dimensions.
-        // The matrix above deliberately does not: a 3440x1440 ultrawide is wider
-        // and shorter than a 3044x1722 window, and comparing those two would
-        // measure the order of the list rather than the policy.
-        ViewSize[] ladder =
-        [
-            new(1280, 720),
-            new(1600, 900),
-            new(1920, 1080),
-            new(2560, 1440),
-            new(3840, 2160),
-        ];
-
-        var checks = 0;
-        var minimum = ViewLaunchOptions.MinimumLogicalFrameSize;
-        foreach (var screen in screens)
-        {
-            var frame = AutoFrameSize(screen);
-            var scale = AutoUiScale(frame.Width, frame.Height);
-            checks++;
-
-            if (!AutoUiScaleSteps.Contains(scale) ||
-                scale < CameraView.MinimumUiScale ||
-                scale > CameraView.MaximumUiScale)
-            {
-                throw new InvalidOperationException(
-                    $"Automatic UI scale {FormatNumber(scale)} for screen " +
-                    $"{FormatSize(screen)} is not a supported step.");
-            }
-
-            if (frame.Width > screen.Width || frame.Height > screen.Height ||
-                frame.Width < DesignFrameWidth || frame.Height < DesignFrameHeight)
-            {
-                throw new InvalidOperationException(
-                    $"Automatic frame {FormatSize(frame)} does not fit screen " +
-                    $"{FormatSize(screen)} while holding the design rectangle.");
-            }
-
-            if (frame.Width / scale < minimum.Width || frame.Height / scale < minimum.Height)
-            {
-                throw new InvalidOperationException(
-                    $"Automatic frame {FormatSize(frame)} at UI scale {FormatNumber(scale)} " +
-                    $"leaves only {FormatNumber(frame.Width / scale)}x" +
-                    $"{FormatNumber(frame.Height / scale)} logical pixels.");
-            }
-
-            var next = AutoUiScaleSteps.FirstOrDefault(step => step > scale, double.NaN);
-            if (!double.IsNaN(next) &&
-                frame.Width / next >= DesignFrameWidth &&
-                frame.Height / next >= DesignFrameHeight)
-            {
-                throw new InvalidOperationException(
-                    $"Automatic UI scale {FormatNumber(scale)} for frame {FormatSize(frame)} " +
-                    $"is not the largest step that still shows the design rectangle.");
-            }
-
-        }
-
-        ViewSize? previousFrame = null;
-        double? previousScale = null;
-        foreach (var screen in ladder)
-        {
-            var frame = AutoFrameSize(screen);
-            var scale = AutoUiScale(frame.Width, frame.Height);
-            checks++;
-            if (previousFrame is { } earlierFrame && previousScale is { } earlierScale &&
-                (frame.Width < earlierFrame.Width || frame.Height < earlierFrame.Height ||
-                 scale < earlierScale))
-            {
-                throw new InvalidOperationException(
-                    $"Screen {FormatSize(screen)} produced frame {FormatSize(frame)} at UI scale " +
-                    $"{FormatNumber(scale)}, which is smaller than the frame or scale of the " +
-                    $"smaller screen before it.");
-            }
-
-            previousFrame = frame;
-            previousScale = scale;
-        }
-
-        // The smallest window this policy can open, asked for at the largest
-        // scale an explicit --ui-scale may name: 640x360 logical, far under the
-        // minimum. If this stops throwing, the guard has stopped guarding.
-        var guardReacted = false;
-        try
-        {
-            AssertLogicalFrameFits(new ViewSize(DesignFrameWidth, DesignFrameHeight), CameraView.MaximumUiScale);
-        }
-        catch (ArgumentException)
-        {
-            guardReacted = true;
-        }
-
-        checks++;
-        if (!guardReacted)
-        {
-            throw new InvalidOperationException(
-                "The minimum-logical-frame guard accepted " +
-                $"{DesignFrameWidth}x{DesignFrameHeight} at UI scale " +
-                $"{FormatNumber(CameraView.MaximumUiScale)}, which leaves less than " +
-                $"{FormatSize(ViewLaunchOptions.MinimumLogicalFrameSize)} logical pixels.");
-        }
-
-        _startupFramePolicyChecks = checks;
     }
 
     private void OnViewportResized()
@@ -1306,9 +1101,12 @@ public partial class Main : Node2D
         // was derived from; an explicit one never moves.
         if (_uiScaleIsAutomatic && _requestedFrameSize is null && _screenshotPath is null)
         {
-            var minimum = ViewLaunchOptions.MinimumLogicalFrameSize;
-            var scale = AutoUiScale(size.X, size.Y);
-            if (size.X / scale >= minimum.Width && size.Y / scale >= minimum.Height)
+            var live = new ViewSize(size.X, size.Y);
+            var scale = CameraView.AutomaticUiScale(live);
+            if (CameraView.FitsLogicalFrame(
+                    live,
+                    scale,
+                    ViewLaunchOptions.MinimumLogicalFrameSize))
             {
                 _uiScale = scale;
             }
