@@ -2038,13 +2038,19 @@ public partial class Main : Node2D
     /// No entry point ever draws this frame: a smoke run stops at tick 1 and a
     /// screenshot run stops wherever it was told to, so the one frame the owner
     /// actually reads their result in was the one frame nothing measured. It is
-    /// also the widest the line ever gets — `DOMAIN RAIDED · N/4 repelled` runs
-    /// eight characters past the longest countdown — so it is precisely the case
-    /// that would wrap onto a third line over the time toolbar.
+    /// also the widest the line ever gets — `DOMAIN RAIDED · N/4 repelled ·
+    /// score N` runs well past the longest countdown — so it is precisely the
+    /// case that would wrap onto a third line over the time toolbar.
     ///
     /// The strings come from the real <see cref="HudText"/> on the real snapshot
     /// with only the session result substituted, so this measures the shipping
-    /// wording rather than a hand-written imitation of it.
+    /// wording rather than a hand-written imitation of it. That substitution has
+    /// to cover **every** field the terminal wording reads. The party score was
+    /// the second one, and inheriting it from a live snapshot — where it is
+    /// null, because a party in progress has no score — silently returned this
+    /// guard to measuring the wording it replaced, some fourteen characters
+    /// short of what ships. A guard that stays green by no longer measuring the
+    /// thing it was written for is the defect Issue #49 is about.
     /// </summary>
     private (string Outcome, string Text)[] TerminalSummaries()
     {
@@ -2054,6 +2060,18 @@ public partial class Main : Node2D
         }
 
         var view = CurrentHudView();
+
+        // Chosen for width rather than for realism: the guard has to measure the
+        // widest score the wording can ever carry, not a comfortable one. That is
+        // the whole `held` band plus everything a party can still be holding at
+        // the end, with a minus sign in front because a ruined party's score goes
+        // negative. Deriving it from the weights keeps the worst case honest when
+        // the weights move, which they may — they are tuning by ADR 0010.
+        var widestScore = -(PrototypeTuning.ScoreOutcomeHeld +
+            _state.Waves.Count * PrototypeTuning.ScorePerWaveRepelled +
+            _state.Creatures.Count * PrototypeTuning.ScorePerSurvivor +
+            PrototypeTuning.MealTarget * PrototypeTuning.ScorePerMealKept);
+
         return new[] { ("held", _state.Waves.Count), ("raided", 1), ("fallen", 0) }
             .Select(end => (end.Item1, HudText.Summary(view with
             {
@@ -2063,6 +2081,7 @@ public partial class Main : Node2D
                     {
                         Outcome = end.Item1,
                         WavesRepelled = end.Item2,
+                        Score = widestScore,
                     },
                 },
             })))
