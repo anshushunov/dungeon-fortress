@@ -194,6 +194,57 @@ public sealed class HudTextTests
     }
 
     /// <summary>
+    /// ADR 0016 split two questions by the moment they are asked. "How am I
+    /// doing" is answered all party long by the gap between renown and domain
+    /// strength; "how did I play" is answered once, at the end, by the party
+    /// score. So the summary of a party in progress must not carry a score —
+    /// not even a provisional one — and the end of the party must.
+    /// </summary>
+    [Fact]
+    public void The_party_score_appears_with_the_end_of_the_party_and_never_before_it()
+    {
+        var running = PresentationFixtures.Baseline(400);
+        Assert.Null(running.SessionResult.Outcome);
+        Assert.Null(running.SessionResult.Score);
+
+        var duringTheParty = HudText.Summary(View(running));
+        Assert.DoesNotContain("score", duringTheParty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("renown", duringTheParty, StringComparison.Ordinal);
+        Assert.Contains("strength", duringTheParty, StringComparison.Ordinal);
+
+        var ended = running with
+        {
+            SessionResult = running.SessionResult with
+            {
+                Outcome = "raided",
+                WavesRepelled = 2,
+                Score = 678,
+            },
+        };
+
+        Assert.Equal("DOMAIN RAIDED · 2/4 repelled · score 678", HudText.WavePhase(ended));
+        Assert.Equal(
+            "DOMAIN HELD 4/4 · score 678",
+            HudText.WavePhase(ended with
+            {
+                SessionResult = ended.SessionResult with { Outcome = "held" },
+            }));
+        Assert.Equal(
+            "DOMAIN FELL · wave 1/4 · score -12",
+            HudText.WavePhase(ended with
+            {
+                SessionResult = ended.SessionResult with { Outcome = "fallen", Score = -12 },
+            }));
+
+        // The first line is the one the player reads all party long; the score
+        // never joins it, so the summary does not grow a third number.
+        Assert.Equal(
+            HudText.Summary(View(running)).Split('\n')[0],
+            HudText.Summary(View(ended)).Split('\n')[0]);
+        Assert.Contains("score 678", HudText.Summary(View(ended)).Split('\n')[1], StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The empty panel repeats its own header. That is what the shipped HUD does,
     /// so it is what this asserts; changing it is a product decision, not a tidy-up.
     /// </summary>

@@ -388,22 +388,49 @@ public sealed class PrototypeWorld
                 _waves.Count),
             _raiders.OrderBy(raider => raider.Id).Select(raider => new PrototypeRaiderSnapshot(
                 raider.Id, raider.Wave, raider.Hp, raider.Might, raider.Position, raider.CarryingMeals, raider.StealTicks, raider.ReturningToGate, raider.Mode)).ToArray(),
-            new PrototypeSessionResultSnapshot(
-                _sessionOutcome,
-                _sessionEndTick,
-                _sessionOutcome is null && CurrentTick >= PrototypeTuning.SessionTicks,
-                _waves.LastOrDefault(wave => wave.Outcome is not null)?.Outcome,
-                _waves.Count(wave => wave.Outcome is not null),
-                _waves.Count(WasRepelled),
-                _waves.Count,
-                Renown(),
-                DomainStrength(),
-                _waves.Sum(wave => wave.DefendersDowned),
-                _waves.Sum(wave => wave.DefendersFled),
-                _raiders.Count(raider => raider.Mode == RaiderMode.Downed),
-                _raiders.Where(raider => raider.Mode == RaiderMode.Escaped)
-                    .Sum(raider => raider.CarryingMeals),
-                _stockMeals));
+            BuildSessionResult());
+    }
+
+    /// <summary>
+    /// The end of the party as a set of facts, and — once there is an end —
+    /// the single number those facts add up to.
+    /// </summary>
+    private PrototypeSessionResultSnapshot BuildSessionResult()
+    {
+        var wavesRepelled = _waves.Count(WasRepelled);
+        var defendersDowned = _waves.Sum(wave => wave.DefendersDowned);
+        var defendersFled = _waves.Sum(wave => wave.DefendersFled);
+        var mealsStolen = _raiders
+            .Where(raider => raider.Mode == RaiderMode.Escaped)
+            .Sum(raider => raider.CarryingMeals);
+
+        return new PrototypeSessionResultSnapshot(
+            _sessionOutcome,
+            _sessionEndTick,
+            _sessionOutcome is null && CurrentTick >= PrototypeTuning.SessionTicks,
+            _waves.LastOrDefault(wave => wave.Outcome is not null)?.Outcome,
+            _waves.Count(wave => wave.Outcome is not null),
+            wavesRepelled,
+            _waves.Count,
+            Renown(),
+            DomainStrength(),
+            defendersDowned,
+            defendersFled,
+            _raiders.Count(raider => raider.Mode == RaiderMode.Downed),
+            mealsStolen,
+            _stockMeals,
+            // A party that has not ended has no score, and one cut short by the
+            // fuse never will: it did not end, it was stopped. The number is
+            // read once, at the end, and never during the party (ADR 0016).
+            _sessionOutcome is null
+                ? null
+                : PrototypePartyScore.Compute(
+                    _sessionOutcome,
+                    wavesRepelled,
+                    _creatures.Count(CanWorkAndDefend),
+                    _stockMeals,
+                    mealsStolen,
+                    defendersDowned + defendersFled));
     }
 
     /// <summary>
@@ -2382,9 +2409,7 @@ public sealed class PrototypeWorld
             return true;
         }
 
-        if (_creatures.Any(creature =>
-                creature.Mode != CreatureMode.Downed &&
-                creature.Satiety >= PrototypeTuning.CollapseThreshold))
+        if (_creatures.Any(CanWorkAndDefend))
         {
             return false;
         }
@@ -2393,6 +2418,17 @@ public sealed class PrototypeWorld
             LooseCount(ResourceKind.Meal) == 0 &&
             _creatures.All(creature => creature.Carrying != ResourceKind.Meal);
     }
+
+    /// <summary>
+    /// One of the people the domain still has: on their feet and fed enough to
+    /// do something about it. The party score counts exactly these as survivors,
+    /// which is why a fallen domain scores none of them without anyone writing
+    /// a special case — "nobody left who can work and defend" is the same
+    /// sentence read over the whole population.
+    /// </summary>
+    private static bool CanWorkAndDefend(CreatureState creature) =>
+        creature.Mode != CreatureMode.Downed &&
+        creature.Satiety >= PrototypeTuning.CollapseThreshold;
 
     private void ApplyMorale()
     {

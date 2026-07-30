@@ -397,6 +397,11 @@ public sealed record PrototypeRaiderSnapshot(
 /// is left who can work and defend, and <c>null</c> while the party is still
 /// being played. <see cref="LastWaveOutcome"/> keeps the four wave outcomes
 /// reachable from the same place they always were.
+///
+/// <see cref="Score"/> is the one field here that appears only once the party
+/// has ended: an unfinished party has no score, and saying so with an absent
+/// field rather than a zero is what keeps "how am I doing" and "how did I play"
+/// two different questions (ADR 0016).
 /// </summary>
 public sealed record PrototypeSessionResultSnapshot(
     string? Outcome,
@@ -415,7 +420,11 @@ public sealed record PrototypeSessionResultSnapshot(
     int DefendersFled,
     int RaidersDowned,
     int MealsStolen,
-    int MealsLeft);
+    int MealsLeft,
+    // The party score, and <c>null</c> for as long as there is no party to
+    // score: while it is still being played, or when the session fuse cut it
+    // short without an outcome. See <see cref="PrototypePartyScore"/>.
+    int? Score);
 
 public sealed record PrototypeSnapshot(
     int SchemaVersion,

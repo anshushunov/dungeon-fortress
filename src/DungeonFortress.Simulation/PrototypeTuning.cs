@@ -43,6 +43,34 @@ public static class PrototypeTuning
     // fat pantry is noticed without drowning out everything else the domain did.
     public const int RenownMealsPerPoint = 2;
 
+    // The party score (ADR 0016). The outcome sets the band and everything else
+    // moves the score inside it: surviving the party is worth more than any
+    // single thing that can be preserved or lost inside one, which is what keeps
+    // a domain that lived above a domain that died. The measured worst raid of
+    // the sweep — 66 portions carried off and 35 defenders lost — costs 610 and
+    // still leaves the survivor ahead of the fallen.
+    //
+    // Holding is worth twice surviving, and that band is deliberately unreachable
+    // today: no fixture has ever repelled all four waves, and the score is what
+    // will show it when one does.
+    public const int ScoreOutcomeHeld = 2_000;
+    public const int ScoreOutcomeRaided = 1_000;
+    public const int ScoreOutcomeFallen = 0;
+
+    // What the party preserved. A wave turned back weighs six times a creature
+    // still standing because a wave is the unit the party is made of; a portion
+    // left in the larder is the smallest thing worth noticing.
+    public const int ScorePerWaveRepelled = 60;
+    public const int ScorePerSurvivor = 10;
+    public const int ScorePerMealKept = 2;
+
+    // What it lost. A stolen portion costs more than a kept one earns: it is not
+    // only gone, its going is what made the raid worth making. A defender put
+    // down or broken by morale costs more still — people are harder to replace
+    // than supper, and in this slice they cannot be replaced at all.
+    public const int ScorePerMealStolen = 5;
+    public const int ScorePerDefenderLost = 8;
+
     // Domain strength: the mirror number. Inborn might weighs more per point
     // than trained form, because might is 1..5 and martialForm is 0..100. What
     // each creature brings is then scaled by its readiness, so the mirror shows

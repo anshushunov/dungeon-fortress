@@ -134,6 +134,14 @@ public static class HudText
     ///
     /// The end of the party outranks the wave in hand, and an arriving wave
     /// outranks its own countdown.
+    ///
+    /// The party score is printed here and nowhere else, because here is the
+    /// only place that exists once the party is over. During the party the
+    /// summary keeps the same two numbers it always had — renown and domain
+    /// strength — and the gap between them is still the only thing to read.
+    /// "How am I doing" and "how did I play" are different questions asked at
+    /// different moments (ADR 0016), so the second one never appears while the
+    /// first is still open.
     /// </summary>
     public static string WavePhase(PrototypeSnapshot state)
     {
@@ -142,6 +150,7 @@ public static class HudText
         var waves = $"{threat.WaveNumber}/{threat.WaveCount}";
         if (state.SessionResult.Outcome is { } outcome)
         {
+            var score = state.SessionResult.Score is { } value ? $" · score {value}" : string.Empty;
             // Three outcomes, three different words in the same place, so which
             // one happened is read at a glance and never needs the inspector.
             // "Raided" carries how many waves were actually turned back, because
@@ -153,10 +162,10 @@ public static class HudText
             // domain fell", which is the worst thing to say by accident.
             return outcome switch
             {
-                "held" => $"DOMAIN HELD {threat.WaveCount}/{threat.WaveCount}",
+                "held" => $"DOMAIN HELD {threat.WaveCount}/{threat.WaveCount}{score}",
                 "raided" =>
-                    $"DOMAIN RAIDED · {state.SessionResult.WavesRepelled}/{threat.WaveCount} repelled",
-                "fallen" => $"DOMAIN FELL · wave {waves}",
+                    $"DOMAIN RAIDED · {state.SessionResult.WavesRepelled}/{threat.WaveCount} repelled{score}",
+                "fallen" => $"DOMAIN FELL · wave {waves}{score}",
                 _ => throw new ArgumentOutOfRangeException(
                     nameof(state),
                     outcome,
