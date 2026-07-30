@@ -107,10 +107,21 @@ public static class PrototypeTuning
     public const int ArmourReadinessDivisor = 50;
     public const int DamageJitter = 1;
     public const int LightInjuryShare = 40;
+    // Nerve is measured per creature and dread is measured from where that
+    // creature is standing. The two health terms are what keep the moment of
+    // breaking personal: `MoraleGritWeight` and `MoraleReadinessDivisor` barely
+    // move during a fight, while a defender's own wounds and the crowd on top of
+    // it change from tick to tick and differently for each of them. A single
+    // domain-wide counter against a single threshold broke everyone who happened
+    // to sit in the same band on the same tick, which is what Issue #101 saw.
     public const int MoraleGritWeight = 12;
     public const int MoraleReadinessDivisor = 2;
     public const int MoraleBase = 50;
     public const int MoralePerDowned = 10;
+    public const int MoraleHealthWeight = 24;
+    public const int MoralePerRaiderNear = 7;
+    public const int MoraleWitnessRadius = 6;
+    public const int MoralePressRadius = 2;
     public const ulong DefaultSeed = 20_260_726UL;
 
     public const int MapWidth = 28;
