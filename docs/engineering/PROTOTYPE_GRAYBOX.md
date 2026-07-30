@@ -456,11 +456,20 @@ HP bars, state dots, downed marks and the selected-creature ring are information
 not opaque world material. They use the same interpolated centre as the body but
 are drawn after the depth pass, so a wall can hide the lower body without also
 hiding its readable state. Zone borders, haul routes and work goals likewise
-remain complete instead of losing their south edge under a wall. Work-goal dots
-use the same low alpha as their route, so a goal sharing a creature's cell does
-not become an opaque disk over its sprite. Blueprint delivery pips and stockpile
-occupancy pips are also informational and remain readable when a southern wall
-overlaps their cell. Rock selection, DIG previews and excavation progress use
+remain complete instead of losing their south edge under a wall.
+
+**One rule governs every mark in this pass: a mark that can share a cell with a
+body must not hide it.** Its fill is translucent; an outline may stay opaque,
+which is what keeps a countable mark countable. The rule is stated once because
+it is not a style preference — three separate marks broke it in turn, each
+landing opaque on the very creature it explains. The simulation is what makes
+this the normal case rather than an edge one: `Drill` requires the post cell,
+`Build` requires the site cell for every one of its ticks, and storing stone
+requires the stockpile cell. So work-goal dots, blueprint delivery pips,
+stockpile occupancy pips and the build progress bar are all translucent, and a
+new mark added to this pass inherits the rule instead of rediscovering it.
+
+Rock selection, DIG previews and excavation progress use
 the wall's raised top-plus-facade bounds rather than the flat cell footprint;
 the outer frame of a multi-cell brush remains the exact grid rectangle that the
 command will receive.

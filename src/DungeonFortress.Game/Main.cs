@@ -2521,6 +2521,28 @@ public partial class Main : Node2D
         }
     }
 
+    /// <summary>
+    /// One rule for every informational mark drawn above the depth pass: a mark
+    /// that can share a cell with a body must not hide it. The fill is
+    /// translucent; an outline may stay opaque, which is what keeps a countable
+    /// mark countable.
+    ///
+    /// This is not a style preference. Three separate marks — the post fill, the
+    /// work-goal dot and the delivery pips — each landed opaque on top of the
+    /// creature whose state they explain, because the simulation puts a body on
+    /// exactly the cell the mark describes: Drill requires the post cell, Build
+    /// requires the site cell, and storing stone requires the stockpile cell.
+    /// </summary>
+    private const float OccupiableMarkFillAlpha = 0.35f;
+
+    /// <summary>
+    /// The same rule for a mark whose whole reading is its fill, such as a
+    /// progress bar. Higher than <see cref="OccupiableMarkFillAlpha"/> because
+    /// there is no outline to carry the shape, still low enough to read the
+    /// sprite underneath.
+    /// </summary>
+    private const float OccupiableMarkAccentAlpha = 0.6f;
+
     private void DrawJobRoutes()
     {
         foreach (var job in _state!.Jobs)
@@ -2529,12 +2551,12 @@ public partial class Main : Node2D
             DrawLine(
                 CellCenter(job.Origin),
                 CellCenter(job.Target),
-                color with { A = 0.35f },
+                color with { A = OccupiableMarkFillAlpha },
                 ScaleWorld(1.0f));
             DrawCircle(
                 CellCenter(job.Target),
                 ScaleWorld(3.2f),
-                color with { A = 0.35f });
+                color with { A = OccupiableMarkFillAlpha });
 
             // A booked stockpile cell is part of the route even before pickup, so
             // the player can see where this pile is going.
@@ -3195,12 +3217,14 @@ public partial class Main : Node2D
             var barWidth = _tileSize - ScaleWorld(5);
             var barHeight = ScaleWorld(3);
             var barTopLeft = CellTopLeft(site.Tile) + ScaleWorld(2, 2);
+            // Translucent, because a builder occupies the site for every one of
+            // its BuildTicks: an opaque bar would sit on the sprite it explains.
             DrawRect(
                 new Rect2(barTopLeft, new Vector2(barWidth, barHeight)),
-                new Color("#0f172a"));
+                new Color("#0f172a") with { A = OccupiableMarkFillAlpha });
             DrawRect(
                 new Rect2(barTopLeft, new Vector2(barWidth * fraction, barHeight)),
-                new Color("#5eead4"));
+                new Color("#5eead4") with { A = OccupiableMarkAccentAlpha });
         }
     }
 
@@ -3243,7 +3267,9 @@ public partial class Main : Node2D
                 ScaleWorld(5, 5));
             if (index < delivered)
             {
-                DrawRect(pip, new Color("#e2e8f0"));
+                // The outline stays opaque so the pip is still countable; the fill
+                // does not, because a builder stands on this very cell.
+                DrawRect(pip, new Color("#e2e8f0") with { A = OccupiableMarkFillAlpha });
                 DrawRect(pip, new Color("#475569"), false, ScaleWorld(1.0f));
             }
             else if (index < delivered + incomingReserved)
@@ -3374,11 +3400,13 @@ public partial class Main : Node2D
         var topLeft = CellTopLeft(position);
         for (var index = 0; index < stored; index++)
         {
+            // Same rule as the blueprint pips: a carrier stands on the cell in the
+            // tick the pip appears, so only the outline may be opaque.
             DrawRect(
                 new Rect2(
                     topLeft + new Vector2(ScaleWorld(4 + (index * 7)), _tileSize - ScaleWorld(10)),
                     ScaleWorld(6, 6)),
-                new Color("#e2e8f0"));
+                new Color("#e2e8f0") with { A = OccupiableMarkFillAlpha });
             DrawRect(
                 new Rect2(
                     topLeft + new Vector2(ScaleWorld(4 + (index * 7)), _tileSize - ScaleWorld(10)),
