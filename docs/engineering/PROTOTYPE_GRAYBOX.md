@@ -527,9 +527,41 @@ the translucent marks explain" is the same sweep from the other side, so the rul
 is measured to be the normal case rather than asserted to be.
 
 Rock selection, DIG previews and excavation progress use
-the wall's raised top-plus-facade bounds rather than the flat cell footprint;
-the outer frame of a multi-cell brush remains the exact grid rectangle that the
-command will receive.
+the wall's raised top-plus-facade bounds rather than the flat cell footprint.
+
+### The selection frame follows the same shape (Issue #99)
+
+Issue #83 gave rock volume and taught the hover highlight, the selected cell and
+the dig marks about it — all of them ask `CellInteractionRect`. The rectangle a
+drag stretches did not: it was built in grid coordinates and knew nothing about
+volume. The owner reported it from playtest as "hovering rock outlines its whole
+shape, clicking it snaps back to a square", which happens exactly at the moment
+the player moves from looking to acting.
+
+`DungeonFortress.Presentation.SelectionGeometry` is now the one function both
+shapes come from. The frame is the union of the interaction rectangles of the
+cells the drag covers, walked column by column, so:
+
+- a drag over rock rises with the wall's raised top and hangs with its facade,
+  the same way the hover highlight does;
+- a drag over floor is exactly the grid rectangle it always was, to the pixel;
+- a **mixed** drag rises only over the columns whose first cell is rock. It is
+  therefore neither the flat grid rectangle nor the bounding box of the raised
+  ones — the bounding box was tried during Issue #83 and rejected, because it
+  lifts the frame over floor columns that were never raised.
+
+Which cells the command carries is untouched: `BrushSelection` still decides
+that, the accepted and skipped cells are still tinted one by one, and the count
+above the selection is still the accepted count.
+
+`SelectionGeometryTests` pins the shape from both ends, which is what makes
+"the two geometries agree" a check rather than a convention. Containment says
+every selected cell's rectangle lies inside the frame, so building the frame
+from grid coordinates fails; tightness says each column ends exactly where its
+own cells do, so a bounding box fails. The caption is placed by
+`SelectionGeometry.CaptionBox` and checked to stay inside the map at every tile
+size — the top of a rock selection on row 0 is genuinely above the map, so the
+clamp stopped being a formality.
 
 Two ignored, reproducible frames show the same internal wall column with a
 selected creature on opposite sides:

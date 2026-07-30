@@ -2883,27 +2883,16 @@ public partial class Main : Node2D
             ? new Color("#8b7968")
             : new Color("#3c332e");
 
+    /// <summary>
+    /// The shape a cell is highlighted and hit with. It is one call into
+    /// <c>DungeonFortress.Presentation.SelectionGeometry</c> so that the hover
+    /// highlight, the selected cell, the dig marks and the frame a drag stretches
+    /// cannot end up describing different shapes for the same rock.
+    /// </summary>
     private Rect2 CellInteractionRect(
         GridPoint cell,
-        IReadOnlySet<GridPoint> rockTiles)
-    {
-        if (!rockTiles.Contains(cell))
-        {
-            return new Rect2(
-                CellTopLeft(cell),
-                new Vector2(_tileSize - 1, _tileSize - 1));
-        }
-
-        return WallVisualRect(cell, WallTopology.SelectVariant(cell, rockTiles));
-    }
-
-    private Rect2 WallVisualRect(GridPoint cell, WallTileVariant variant)
-    {
-        var bounds = WallRenderGeometry.ForCell(cell, variant, _tileSize).Bounds;
-        return new Rect2(
-            ToVector2(new ViewPoint(bounds.X, bounds.Y)),
-            new Vector2((float)bounds.Width - 1, (float)bounds.Height - 1));
-    }
+        IReadOnlySet<GridPoint> rockTiles) =>
+        ToRect2(SelectionGeometry.CellInteractionRect(cell, rockTiles, _tileSize));
 
     private static Vector2 ToVector2(ViewPoint point) =>
         new((float)point.X, (float)point.Y);
@@ -3138,16 +3127,25 @@ public partial class Main : Node2D
                     color with { A = MarkFill(OverlayMark.BrushPreview) });
             }
 
-            // The outer frame names the exact grid rectangle sent to the command.
-            // Individual wall fills still follow raised visual mass, but a mixed
-            // floor/rock drag must not move the command boundary off the grid.
-            var selectionBounds = BrushGridRect(anchor, corner);
-            DrawRect(
-                selectionBounds.Grow(-ScaleWorld(1)),
+            // The frame follows the same shape the highlight does: the union of
+            // the interaction rectangles of the cells it covers, column by
+            // column. On a mixed floor/rock drag it rises only over the columns
+            // whose first cell is rock, so it is neither a flat grid rectangle
+            // nor the bounding box of the raised ones. Which cells the command
+            // carries is unchanged and is still shown cell by cell above.
+            var frame = SelectionGeometry.Outline(
+                anchor,
+                corner,
+                rockTiles,
+                _tileSize,
+                ScaleWorld(1));
+            DrawPolyline(
+                frame.Select(ToVector2).ToArray(),
                 new Color("#f8fafc"),
-                false,
                 ScaleWorld(1.5f));
-            DrawSelectionCount(selectionBounds.Position, stroke);
+            DrawSelectionCount(
+                SelectionGeometry.Bounds(anchor, corner, rockTiles, _tileSize),
+                stroke);
             return;
         }
 
@@ -3170,43 +3168,31 @@ public partial class Main : Node2D
             ScaleWorld(1.5f));
     }
 
-    private Rect2 BrushGridRect(GridPoint first, GridPoint second)
-    {
-        var left = Math.Min(first.X, second.X);
-        var top = Math.Min(first.Y, second.Y);
-        var width = (Math.Abs(first.X - second.X) + 1) * _tileSize;
-        var height = (Math.Abs(first.Y - second.Y) + 1) * _tileSize;
-        return new Rect2(
-            CellTopLeft(new GridPoint(left, top)),
-            new Vector2(width - 1, height - 1));
-    }
-
     /// <summary>
     /// The number of cells the command will carry, drawn on the selection itself.
     /// It is the accepted count and not the area of the rectangle: a drag across
     /// floor and rock states how much of it the brush will actually take.
+    ///
+    /// Where the plate lands is decided by <c>SelectionGeometry.CaptionBox</c>:
+    /// raised rock puts the top of a selection on row 0 above the map, so "keep
+    /// it inside the map" stopped being a formality the moment the frame started
+    /// following wall volume.
     /// </summary>
-    private void DrawSelectionCount(Vector2 topLeft, BrushStroke stroke)
+    private void DrawSelectionCount(ViewRect selection, BrushStroke stroke)
     {
         var width = ScaleWorld(58);
         var height = ScaleWorld(14);
         var text = stroke.Tiles.Count == 1 ? "1 cell" : $"{stroke.Tiles.Count} cells";
+        var box = ToRect2(SelectionGeometry.CaptionBox(
+            new ViewPoint(selection.X, selection.Y),
+            new ViewSize(width, height),
+            ScaleWorld(3),
+            _tileSize));
 
-        // Kept inside the map on both axes. Above the selection when there is room
-        // and inside its first cell when there is not: HUD masks cover every
-        // canvas pixel outside the explicit world viewport, so an overhanging
-        // caption would be hidden rather than appear inside the HUD.
-        var preferredY = topLeft.Y - height - ScaleWorld(3) >= 0
-            ? topLeft.Y - height - ScaleWorld(3)
-            : topLeft.Y + ScaleWorld(3);
-        var box = new Vector2(
-            Math.Clamp(topLeft.X, 0, MapPixelSize.X - width),
-            Math.Clamp(preferredY, 0, MapPixelSize.Y - height));
-
-        DrawRect(new Rect2(box, new Vector2(width, height)), new Color("#0b1622"));
+        DrawRect(box, new Color("#0b1622"));
         DrawString(
             ThemeDB.FallbackFont,
-            box + new Vector2(ScaleWorld(3), height - ScaleWorld(3)),
+            box.Position + new Vector2(ScaleWorld(3), height - ScaleWorld(3)),
             text,
             HorizontalAlignment.Left,
             width - ScaleWorld(6),

@@ -220,6 +220,37 @@ public sealed class WorldDrawPassGuardTests
         }
     }
 
+    /// <summary>
+    /// Issue #99: the frame a drag stretches is built from the same function the
+    /// hover highlight uses. The pure proof is
+    /// <see cref="SelectionGeometryTests"/>; this is the half that says the
+    /// adapter asks it rather than measuring the grid itself, which is what the
+    /// frame used to do.
+    /// </summary>
+    [Fact]
+    public void The_selection_frame_is_drawn_from_the_shared_geometry()
+    {
+        var preview = AdapterSource.Body("DrawBrushPreview");
+
+        Assert.Contains("SelectionGeometry.Outline", preview, StringComparison.Ordinal);
+        Assert.Contains("CellInteractionRect(", preview, StringComparison.Ordinal);
+
+        // Grid arithmetic in this routine is how the two geometries came apart in
+        // the first place: the frame measured the grid while every cell in it
+        // measured visible mass.
+        Assert.DoesNotContain("CellTopLeft(", preview, StringComparison.Ordinal);
+        Assert.DoesNotContain("_tileSize *", preview, StringComparison.Ordinal);
+
+        Assert.Contains(
+            "SelectionGeometry.CellInteractionRect",
+            AdapterSource.Body("CellInteractionRect"),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "SelectionGeometry.CaptionBox",
+            AdapterSource.Body("DrawSelectionCount"),
+            StringComparison.Ordinal);
+    }
+
     private static IEnumerable<OverlayMark> MarksWithPolicy(OverlayMarkPolicy policy) =>
         InformationalOverlays.All
             .Where(rule => rule.Policy == policy)
