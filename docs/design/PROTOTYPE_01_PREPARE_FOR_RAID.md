@@ -1823,7 +1823,12 @@ score = исход
 | `Wave` | `number`, `announceTick`, `arriveTick`, `announced`, `arrived`, `raiderCount`, `raiderMight`, `outcome`, `endTick`, `raidersDowned`, `defendersDowned`, `defendersFled`, `mealsStolen`, `renownAtAnnounce` |
 | `Threat` | волна в руках: `waveNumber`, `waveCount`, `announceTick`, `arriveTick`, `raiderCount`, `raiderMight`, `ticksRemaining`, `announced`, `active` |
 | `Domain` | `renown`, `strength`, `renownAtPreviousWave`, `strengthAtPreviousWave`, `livingCreatures`, `downedCreatures`, `injuredCreatures`, `peakMeals`, `wavesArrived`, `wavesResolved`, `waveCount` |
-| `SessionResult` | `outcome` (`held`/`raided`/`fallen`), `endTick`, `unresolved`, `lastWaveOutcome`, `wavesResolved`, `wavesRepelled`, `waveCount`, `renown`, `strength`, `defendersDowned`, `defendersFled`, `raidersDowned`, `mealsStolen`, `mealsLeft` |
+| `SessionResult` | `outcome` (`held`/`raided`/`fallen`), `endTick`, `unresolved`, `lastWaveOutcome`, `wavesResolved`, `wavesRepelled`, `waveCount`, `renown`, `strength`, `defendersDowned`, `defendersFled`, `raidersDowned`, `mealsStolen`, `mealsLeft`, `score` |
+
+**Правило (`score` — единственное поле с условным присутствием).** Все остальные
+поля таблицы есть в снапшоте в любой тик. `score` появляется только у
+закончившейся партии и до исхода отсутствует как поле (10.8); партия,
+прерванная предохранителем, его не получает.
 
 ### 12.2. Ресурсы
 
