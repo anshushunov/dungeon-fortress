@@ -31,11 +31,31 @@ $ErrorActionPreference = "Stop"
 #     reach - may only call the names in $allowedOutsideStages below;
 #   - run setup lives in functions this script dot-sources, so those bodies are
 #     parsed too and may only call $allowedOutsideStages plus the plumbing named
-#     in $allowedInsideRunSetup (Issue #102).
+#     in $allowedInsideRunSetup (Issue #102);
+#   - with one exit that is easy to read past, so it is spelled out. Inside run
+#     setup, a call to a function that is *itself* part of the run-setup closure
+#     is allowed under any name, because the guard then goes on to police that
+#     function's body instead. Membership is by reachability, not by permission:
+#     define Assert-ProbeInvariant in TemporaryRoot.ps1, call it from
+#     Initialize-VerificationTemporaryRoot, and it joins the closure and passes.
+#     Measured: exit 0, no findings, the new name visible only as an entry in
+#     runSetupFunctions in this test's JSON.
 #
-# So a check added under a name this guard has never heard of fails by default,
-# which is the only way a name-based rule can be honest about the future. Adding a
-# name to either allowlist is a deliberate line in a diff, with a reason next to it.
+# So a check added under a name this guard has never heard of fails by default at
+# the top level of verify.ps1 and inside any function no stage can reach - which
+# is the only way a name-based rule can be honest about the future. It does not
+# fail by default inside run setup. There the name is admitted by reachability
+# and only the body is policed, so a check assembled from allowed plumbing gets
+# through under a name of its own.
+#
+# That is not a separate hole. It is deferred item 2 below wearing a function
+# name, it needs the same decision, and one rule would close both. The negative
+# case `check-inside-dot-sourced-run-setup` proves the part that does hold - a
+# name that is called but defined nowhere - and should not be read as proving
+# more than that.
+#
+# Adding a name to either allowlist is a deliberate line in a diff, with a reason
+# next to it.
 
 # --- which way each rule falls over ------------------------------------------
 #
@@ -86,6 +106,11 @@ $ErrorActionPreference = "Stop"
 #      selection this way, and those refusals are correct. Condition to revisit:
 #      a rule that tells those two apart without renaming the existing ones -
 #      for example a marker a check has to carry - not a rule that bans `throw`.
+#      It has a second spelling, found by review of this change and described at
+#      the top of this file: a new function reachable from run setup joins the
+#      closure, so its *name* is admitted and only its body is policed - and a
+#      body of plumbing plus `throw` is this item again. Both spellings wait on
+#      the same decision.
 #
 #   3. A check with no command in it at all:
 #      `if ([IO.File]::ReadAllText(...) -notmatch ...) { throw ... }`. DEFERRED
@@ -856,6 +881,11 @@ function Get-StrayCheckFindings {
         }
 
         if ($zone -eq "run-setup") {
+            # The exit named at the top of this file. A function inside the
+            # closure is allowed under any name because its own body is policed
+            # next - so admission here is by reachability, not by permission,
+            # and a check whose body is only allowed plumbing survives it. That
+            # is deferred item 2, not a defect in this branch.
             if ($RunSetup.Contains($command.Name)) {
                 continue
             }
@@ -1523,6 +1553,10 @@ try {
             Expect = @('& $strayCheck')
         },
         [pscustomobject]@{
+            # Proves exactly one thing: a name that is called from run setup and
+            # defined nowhere is a finding. A name that is *also defined* in one
+            # of these files joins the run-setup closure and is admitted - see
+            # the exit described at the top of this file, and deferred item 2.
             Name = "check-inside-dot-sourced-run-setup"
             Why = "a check hidden in the body of a run-setup function in another file"
             File = "TemporaryRoot.ps1"
