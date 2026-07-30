@@ -7,11 +7,23 @@ The graybox is the visual, three-quarter projection of the headless Prototype 1
 economy and raid on its unchanged orthogonal grid. It starts with the `baseline`
 gameplay-v2 fixture.
 
-The authored baseline and launcher default are 1280x720. It used to be 960x540,
-and that frame could not hold the HUD text: at its worst moment the side column
-needs about 33 lines of explanation and 540 px offers about 29, which is the
-deficit Issue #28 measured and Issue #36 cleared. Captures now name their exact
-frame rather than inheriting the live window.
+1280x720 is the rectangle the HUD is authored against. It is not a launch default
+and not a description of anybody's monitor, and conflating those two meanings is
+the whole of Issues #86 and #100: the launcher used to open that rectangle on
+every screen, which on a large one meant a small window with text 8–15 physical
+pixels tall. The rectangle itself used to be 960x540, and that frame could not
+hold the HUD text at all — at its worst moment the side column needs about 33
+lines of explanation and 540 px offers about 29, which is the deficit Issue #28
+measured and Issue #36 cleared.
+
+`run-game.ps1` therefore has no `-FrameSize` or `-UiScale` default. A launch
+without them asks the screen: the window takes 90 % of the usable area of the
+screen it opens on, and the UI scale is the largest of `1`, `1.25`, `1.5`,
+`1.75`, `2` at which the authored rectangle still fits that frame. The rule, its
+measurements and what happens without a screen are in
+[`ENVIRONMENT_SETUP.md`](ENVIRONMENT_SETUP.md#стартовый-кадр-и-масштаб-интерфейса).
+A reproducible capture never reaches that rule: it names its exact frame rather
+than inheriting the live window or the screen.
 
 The world uses a 40 px tile and a `Camera2D`; the HUD is a separate `CanvasLayer`
 and does not move or zoom with the world. The five discrete camera levels are
@@ -86,11 +98,14 @@ Pan stops when the camera focus reaches the center of an edge tile. This keeps
 the focus on the ownership map without cancelling movement at overview zooms
 where the whole map fits in the world viewport.
 
-`UiScale` is independent of the native frame, but the declared combination must
-leave at least 1024x720 logical pixels after scaling. The default 1280x720 frame
-therefore supports scale 1 (and smaller), while scale 2 requires at least a
-2048x1440 frame. `run-game.ps1` rejects an impossible combination before restore
-or engine startup; the game performs the same validation for direct launches.
+`UiScale` is independent of the native frame, but a declared combination must
+leave at least 1024x720 logical pixels after scaling. The authored 1280x720
+rectangle therefore supports scale 1 (and smaller), while scale 2 requires at
+least a 2048x1440 frame. `run-game.ps1` rejects an impossible **declared**
+combination before restore or engine startup, and the game performs the same
+validation for direct launches. A frame derived from the screen has nothing left
+to reject: the automatic rule picks the largest scale at which the authored
+rectangle still fits, so an impossible pair cannot arise by construction.
 
 Camera input is presentation-only. A map click first has to land in the explicit
 world viewport, then the live Godot canvas transform is inverted and the
@@ -469,10 +484,119 @@ requires the stockpile cell. So work-goal dots, blueprint delivery pips,
 stockpile occupancy pips and the build progress bar are all translucent, and a
 new mark added to this pass inherits the rule instead of rediscovering it.
 
+### What now protects that rule (Issue #90)
+
+The rule above was written down after the third review round and broken again in
+the fourth. Writing it down is not what stops that happening: the rule lived in
+`Main.cs`, and `Main.cs` is not built by the "Pure .NET" CI job, so every
+violation of it was found by an eye on a captured frame. A pixel golden is
+deliberately not the answer — the reasons are in
+[Golden UI state](#golden-ui-state) and they have not changed.
+
+The rule is now **data in `DungeonFortress.Presentation`**, and the adapter reads
+it rather than repeating it:
+
+- `WorldDrawOrder` declares every drawing routine of `DrawMap`, the order the
+  twelve top-level ones run in, and the pass each of them belongs to;
+- `InformationalOverlays` declares, for each mark, what it explains, whether the
+  simulation can put a body on that cell, and the answer it gives — drawn as it
+  is, translucent fill, strokes only, or skipped while a body stands there. The
+  fill alphas live there too, and `Main.MarkFill` / `Main.MarkAccent` are the
+  whole of the adapter's part in it;
+- `BodyOccupancy` is "which cells hold a body", as a pure function of the
+  snapshot.
+
+Two subjects, because the rule reaches them differently. A **cell** mark explains
+a tile and is the case the rule is about. A **body** mark is the body's own
+readout — HP, state dot, downed cross, selection ring — anchored to the body and
+drawn above the depth pass precisely so a raised wall top cannot erase it. The
+one cell mark that is not asked to be translucent is the dig mark, and only
+because rock is impassable, which is measured rather than assumed.
+
+One mark is opaque over cells that hold bodies **as a stated exception**: the
+count above a drag. Its plate lands on the row above the selection, and on a rock
+selection in row 0 it is pushed inside the selection itself, so the rule reaches
+it. It stays opaque for one reason — a number drawn over a sprite is unreadable,
+and translucency would be an appearance change this step forbids. That is
+declared as `OpaqueByExemption` with a required reason and reported by the rule
+test as an accepted exception, rather than as a third subject claiming the rule
+does not apply. The distinction matters: a subject that means "out of scope" is
+an escape hatch, and the first version of this manifest had one.
+
+Four checks in `DungeonFortress.Presentation.Tests` hold it up, and each one was
+chosen against a mutation that nothing used to catch:
+
+| Mutation | What fails |
+|---|---|
+| the alpha taken off a mark above the depth pass | `Every_translucent_mark_reads_its_fill_alpha_from_the_policy` |
+| a policy relaxed to "draw it as it is" | `A_mark_that_can_share_a_cell_with_a_body_is_never_drawn_as_it_is` |
+| `DrawHpBar` called from the depth pass again | `A_routine_only_calls_routines_of_its_own_pass` |
+| a mark moved between passes | `DrawMap_runs_the_declared_steps_in_the_declared_order` |
+| a new mark added to the pass with no declared policy | `Every_drawing_routine_of_the_adapter_is_declared` |
+| an opaque fill written as `this.DrawRect(…)` instead of `DrawRect(…)` | `No_covering_primitive_hides_behind_a_receiver` |
+| an opaque mark drawn inline in `DrawMap` itself | `DrawMap_draws_nothing_of_its_own` |
+
+The last four read `src/DungeonFortress.Game/Main.cs` **as text**. That is the
+consequence of the root cause Issue #90 names: no test project references
+`DungeonFortress.Game`, and none should, because the assembly needs the engine
+runtime that ADR 0011 keeps out of the CI job. The reader checks structure only —
+which methods exist, which calls each makes, how many arguments a call has — and
+`UiIconManifestTests` already reads the adapter's asset folder for the same
+reason. A manifest is a contract only while something compares it with the thing
+it describes.
+
+Two declarations are checked against the world rather than believed. "No body
+ever stands on rock", which is what lets a dig mark stay opaque, is a sweep of a
+real 1800-tick session including raid waves. "Bodies really do stand on the cells
+the translucent marks explain" is the same sweep from the other side, so the rule
+is measured to be the normal case rather than asserted to be.
+
+**Where the checks stop.** They hold code that follows one naming convention: a
+drawing method is a method whose name starts with `Draw`. A drawing method called
+something else is outside the manifest and outside every check built on it —
+that is a property of a convention, not an oversight, and saying so is what makes
+"a new mark cannot reach this pass without a policy" a true statement rather than
+an overclaim. The two ways out that were *not* conventions are closed instead:
+`DrawMap` now draws no primitive of its own, so there is no unnamed body inside
+the passes, and a call written on `this` counts as a call, so a receiver cannot
+hide a fill from the alpha check.
+
 Rock selection, DIG previews and excavation progress use
-the wall's raised top-plus-facade bounds rather than the flat cell footprint;
-the outer frame of a multi-cell brush remains the exact grid rectangle that the
-command will receive.
+the wall's raised top-plus-facade bounds rather than the flat cell footprint.
+
+### The selection frame follows the same shape (Issue #99)
+
+Issue #83 gave rock volume and taught the hover highlight, the selected cell and
+the dig marks about it — all of them ask `CellInteractionRect`. The rectangle a
+drag stretches did not: it was built in grid coordinates and knew nothing about
+volume. The owner reported it from playtest as "hovering rock outlines its whole
+shape, clicking it snaps back to a square", which happens exactly at the moment
+the player moves from looking to acting.
+
+`DungeonFortress.Presentation.SelectionGeometry` is now the one function both
+shapes come from. The frame is the union of the interaction rectangles of the
+cells the drag covers, walked column by column, so:
+
+- a drag over rock rises with the wall's raised top and hangs with its facade,
+  the same way the hover highlight does;
+- a drag over floor is exactly the grid rectangle it always was, to the pixel;
+- a **mixed** drag rises only over the columns whose first cell is rock. It is
+  therefore neither the flat grid rectangle nor the bounding box of the raised
+  ones — the bounding box was tried during Issue #83 and rejected, because it
+  lifts the frame over floor columns that were never raised.
+
+Which cells the command carries is untouched: `BrushSelection` still decides
+that, the accepted and skipped cells are still tinted one by one, and the count
+above the selection is still the accepted count.
+
+`SelectionGeometryTests` pins the shape from both ends, which is what makes
+"the two geometries agree" a check rather than a convention. Containment says
+every selected cell's rectangle lies inside the frame, so building the frame
+from grid coordinates fails; tightness says each column ends exactly where its
+own cells do, so a bounding box fails. The caption is placed by
+`SelectionGeometry.CaptionBox` and checked to stay inside the map at every tile
+size — the top of a rock selection on row 0 is genuinely above the map, so the
+clamp stopped being a formality.
 
 Two ignored, reproducible frames show the same internal wall column with a
 selected creature on opposite sides:
@@ -497,6 +621,13 @@ numeric values, exposed-edge mapping, isolated rock, corners and map edges.
 Render-geometry tests cover a body north and south of a wall, a body sharing a
 training-post cell, stable cell-ID round trips, exact/stable ties and the order
 change on interpolated Y.
+
+All sixteen variants are also checked as **drawn strokes**, not only as masks:
+each one states how many segments of each kind it must have and which edge each
+one lies on, derived from `ExposedSides` rather than from a list of expected
+coordinates. Two variants used to be covered and both had north and west exposed
+at the same time, so swapping those two conditions inside the geometry changed
+nothing any test could see.
 
 The inspector exposes the selected creature's needs, martial form, mode,
 current job, carried item, last reason and its structured numeric details. Cell
@@ -782,8 +913,9 @@ supplies them. The project remains `canvas_items` + `expand`; for an explicit
 frame the launcher also makes that frame the logical rendering size, so
 1600x900 at zoom 1 exposes more world than 1280x720 instead of scaling the same
 1280x720 rectangle. An ordinary interactive window resize synchronizes the
-logical rendering size to the native window too; a reproducible capture keeps its
-explicit frame fixed.
+logical rendering size to the native window too, and since Issue #100 it also
+recomputes the UI scale from the new frame rather than leaving the HUD at the
+scale it launched with; a reproducible capture keeps its explicit frame fixed.
 
 ## Checking the HUD without reading pixels
 

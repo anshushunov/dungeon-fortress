@@ -141,6 +141,104 @@ public sealed class WorldRenderGeometryTests
         });
     }
 
+    /// <summary>
+    /// All sixteen variants, checked against <see cref="WallTopology.ExposedSides"/>
+    /// rather than against a list of expected strokes.
+    ///
+    /// The third review round of Issue #83 left exactly this hole: two variants
+    /// were covered and both had North and West exposed at the same time, so
+    /// swapping the two conditions inside the geometry changed nothing either test
+    /// could see. Here every variant states how many strokes of each kind it must
+    /// have and which edge each one lies on, so North and West are no longer
+    /// interchangeable — and neither are East and West, or the top edges and the
+    /// facade ones.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(WallTopologyTests.EveryNeighborhood), MemberType = typeof(WallTopologyTests))]
+    public void Every_wall_variant_draws_the_segments_its_exposed_sides_require(
+        WallNeighbors neighbors,
+        WallTileVariant variant,
+        byte stableValue)
+    {
+        Assert.Equal(stableValue, (byte)variant);
+        const int TileSize = 44;
+        var cell = new GridPoint(2, 3);
+        var exposed = WallTopology.ExposedSides(variant);
+        var hasFacade = exposed.HasFlag(WallNeighbors.South);
+        Assert.Equal(hasFacade, WallTopology.HasFrontFacade(variant));
+        Assert.Equal(((WallNeighbors)15 & ~neighbors), exposed);
+
+        var geometry = WallRenderGeometry.ForCell(cell, variant, TileSize);
+
+        var left = geometry.Top.X;
+        var right = geometry.Top.X + TileSize;
+        var top = geometry.Top.Y;
+        var bottom = geometry.Bounds.Y + geometry.Bounds.Height;
+        var lip = hasFacade ? geometry.Facade!.Value.Y : double.NaN;
+
+        // How many of each kind the exposed sides ask for. A facade adds its own
+        // lip and bottom, plus one more vertical stroke on each exposed side,
+        // because the facade hangs below the top mass.
+        Assert.Equal(
+            exposed.HasFlag(WallNeighbors.North) ? 1 : 0,
+            Count(geometry, WallStrokeKind.BrightEdge));
+        Assert.Equal(hasFacade ? 1 : 0, Count(geometry, WallStrokeKind.FacadeLip));
+        Assert.Equal(hasFacade ? 1 : 0, Count(geometry, WallStrokeKind.FacadeBottom));
+        Assert.Equal(
+            (exposed.HasFlag(WallNeighbors.West) ? (hasFacade ? 2 : 1) : 0) +
+            (exposed.HasFlag(WallNeighbors.East) ? (hasFacade ? 2 : 1) : 0),
+            Count(geometry, WallStrokeKind.DarkEdge));
+
+        foreach (var stroke in geometry.Strokes)
+        {
+            AssertInsideOrOnEdge(geometry.Bounds, stroke.From);
+            AssertInsideOrOnEdge(geometry.Bounds, stroke.To);
+            switch (stroke.Kind)
+            {
+                case WallStrokeKind.BrightEdge:
+                    AssertHorizontal(stroke, top, left, right);
+                    break;
+                case WallStrokeKind.FacadeLip:
+                    AssertHorizontal(stroke, lip, left, right);
+                    break;
+                case WallStrokeKind.FacadeBottom:
+                    AssertHorizontal(stroke, bottom, left, right);
+                    break;
+                case WallStrokeKind.DarkEdge:
+                    Assert.Equal(stroke.From.X, stroke.To.X);
+                    Assert.True(
+                        stroke.From.X == left || stroke.From.X == right,
+                        $"{variant}: a dark edge at x={stroke.From.X} lies on neither side.");
+                    Assert.True(
+                        stroke.From.X != left || exposed.HasFlag(WallNeighbors.West),
+                        $"{variant}: a west edge is drawn although west is connected.");
+                    Assert.True(
+                        stroke.From.X != right || exposed.HasFlag(WallNeighbors.East),
+                        $"{variant}: an east edge is drawn although east is connected.");
+                    break;
+                default:
+                    throw new InvalidOperationException($"unhandled stroke {stroke.Kind}");
+            }
+        }
+
+        if (!hasFacade)
+        {
+            Assert.Null(geometry.Facade);
+            Assert.Equal(geometry.Top, geometry.Bounds);
+        }
+    }
+
+    private static int Count(WallVisualMass geometry, WallStrokeKind kind) =>
+        geometry.Strokes.Count(stroke => stroke.Kind == kind);
+
+    private static void AssertHorizontal(WallStroke stroke, double y, double left, double right)
+    {
+        Assert.Equal(y, stroke.From.Y);
+        Assert.Equal(y, stroke.To.Y);
+        Assert.Equal(left, Math.Min(stroke.From.X, stroke.To.X));
+        Assert.Equal(right, Math.Max(stroke.From.X, stroke.To.X));
+    }
+
     [Theory]
     [InlineData(0, 0)]
     [InlineData(27, 0)]
