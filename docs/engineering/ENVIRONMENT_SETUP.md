@@ -43,6 +43,87 @@ NuGet source берётся из `GodotSharp/Tools/nupkgs` выбранной .N
 Скрипты проверяют строку версии `4.7.1` и наличие bundled NuGet packages. Путь
 конкретной машины не записывается в проект.
 
+## Временный каталог
+
+Проверке нужен временный каталог, в котором она может создавать, писать **и
+удалять**. Там живут две вещи: короткий runtime profile Godot и изолированный
+проект теста импорта спрайтов. Обе создаются во время прогона и убираются после.
+
+Каталог выбирается в порядке:
+
+1. `-TemporaryRoot <path>` — явный одноразовый override;
+2. `$env:DUNGEON_FORTRESS_TEMP` — override для всей сессии;
+3. системные `TMP`/`TEMP`.
+
+Выбранный каталог печатается до первой стадии и попадает в итоговую строку:
+
+```json
+{"event":"verification_temporary_root","status":"ok","path":"C:\\Users\\<user>\\AppData\\Local\\Temp","source":"TMP/TEMP"}
+```
+
+Пригодность проверяется **до** запуска стадий: скрипт создаёт пробный подкаталог
+с файлом и удаляет его — тем же вызовом `Remove-Item -Recurse -Force`, которым
+пользуется настоящая уборка. Непригодный каталог отвергается с указанием
+каталога, причины и способа исправления, а `verification_result` получает
+`"failedPhase":"preflight"` и пустой `stagesExecuted`.
+
+Пример из сессии, в которой `TEMP` указывал в `C:\WINDOWS\TEMP`:
+
+```text
+The temporary directory this run would use is not usable.
+  directory: C:\WINDOWS\TEMP
+  chosen by: TMP/TEMP
+  failure:   'C:\WINDOWS\TEMP\verify-temp-probe-...' was created and then could
+             not be deleted: Отказано в доступе.
+Use one of:
+  -TemporaryRoot <directory this account can create and delete in>
+  $env:DUNGEON_FORTRESS_TEMP=<the same directory>
+  point TMP and TEMP at such a directory
+```
+
+Так выглядит Issue #89. До проверки пригодности та же сессия доходила до стадии
+`godot`, тест импорта печатал `status: ok`, и только его уборка падала на
+`Remove-Item`. Прогон сообщал `{"failedStage":"godot","reason":"'powershell'
+failed with exit code 1."}` — сообщение не называло ни каталог, ни право, и три
+разные сессии искали дефект в проверяемом изменении.
+
+Тонкость, из-за которой проверка делает удаление именно через `Remove-Item`: в
+`C:\WINDOWS\TEMP` вызов `[IO.Directory]::Delete` на собственном подкаталоге
+проходит, а `Remove-Item -Recurse -Force` на нём же падает с
+`Access is denied`. Проба более дешёвым вызовом признала бы каталог пригодным, а
+уборка всё равно упала бы.
+
+Каталог **не** подбирается автоматически. Он обязан быть коротким и вне
+worktree: в нём создаётся runtime profile Godot, а длинный путь возвращает
+ограничение `CreateDirectory` и ошибку shader cache из раздела «Проверка вывода
+Godot». Подставить `.artifacts/` вместо системного temp — значит вернуть ту
+ошибку молча, поэтому прогон отказывается угадывать и просит выбрать каталог
+явно.
+
+Неудача уборки — предупреждение, а не провал. Если каталог перестал удаляться
+уже после проверки пригодности (антивирус, открытый файл, редактор), в выводе
+появляется строка
+
+```json
+{"event":"temporary_cleanup","status":"warning","description":"...","path":"...","reason":"..."}
+```
+
+а прогон сохраняет тот статус, который заслужили сами проверки. Выполненная
+проверка не становится красной из-за того, что каталог не удалось стереть.
+
+Обе половины правила проверяются отдельным dependency-free тестом из стадии
+`scripts`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-temporary-root.ps1
+```
+
+Он подтверждает порядок выбора каталога, отвергает файл вместо каталога и
+каталог, из которого не удаляется содержимое, требует, чтобы пригодный каталог
+принимался и не оставлял мусора, и запускает настоящий `verify.ps1` с заведомо
+непригодным `-TemporaryRoot`, ожидая отказ с пустым `stagesExecuted`. Удаление
+блокируется настоящим открытым файлом, а не заглушкой.
+
 ## Единая проверка
 
 Из корня репозитория:
@@ -68,7 +149,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -GodotP
 
 | Стадия | Что проверяет | Время\* |
 |---|---|---|
-| `scripts` | семь dependency-free гвардов: контракт стадий, вывод Godot, пути screenshot/evidence, manifest, GitHub auth diagnostic, конфиги Ivan-MCP и domain MCP | 7 с |
+| `scripts` | восемь dependency-free гвардов: контракт стадий, пригодность временного каталога, вывод Godot, пути screenshot/evidence, manifest, GitHub auth diagnostic, конфиги Ivan-MCP и domain MCP | 25 с |
 | `build` | `restore` решения, `--locked-mode` restore тестов domain MCP, `Release` build всего решения | 3 с |
 | `tests` | `dotnet test` для Simulation, Presentation и DomainMcp | 31 с |
 | `mcp` | реальный запуск launcher domain MCP и stdio-контракт `verify-domain-mcp.ps1` | 4 с |

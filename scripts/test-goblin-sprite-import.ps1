@@ -8,6 +8,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "GodotTools.ps1")
+. (Join-Path $PSScriptRoot "TemporaryRoot.ps1")
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
@@ -70,6 +71,14 @@ config/name="Dungeon Fortress sprite import test"
 finally {
     if (Test-Path -LiteralPath $testRoot) {
         Assert-UnderRoot -Path $testRoot -Root $temporaryRoot
-        Remove-Item -LiteralPath $testRoot -Recurse -Force
+        # The import result is already decided and printed above. Failing here
+        # would report a permission problem in the temporary directory as a
+        # failed sprite import, which is what Issue #89 was opened about. The
+        # run refuses to start on a temporary directory it cannot delete from,
+        # so reaching this warning means something took the directory after the
+        # preflight - an antivirus, an editor, another process.
+        Remove-TemporaryItemBestEffort `
+            -Path $testRoot `
+            -Description "isolated sprite-import project" | Out-Null
     }
 }
