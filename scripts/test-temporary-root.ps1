@@ -70,6 +70,13 @@ $decidedByRemoveItem = @("Get-TemporaryRootDiagnosis", "Remove-TemporaryItemBest
 # order, not that the answer comes from it. Closing that needs data flow, and
 # writing it needs intent - drift does not produce a decoy. This guard is here
 # to catch drift (Issue #102, item 4).
+#
+# One measured caveat, so nobody mistakes the tripwire for the contract. Writing
+# the decoy means replacing the real delete, and the anchor of the negative case
+# below then matches zero times, so the run does fail - with "anchors on text
+# appearing 0 time(s) ... update the anchor". That message tells the reader to
+# fix the anchor, not that the deciding delete moved. It is an accident of the
+# anchor check, not a rule, and it should not be counted as coverage.
 
 function Get-CommandParameterValues {
     [CmdletBinding()]
