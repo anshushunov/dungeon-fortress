@@ -27,11 +27,19 @@ param(
     [double]$CameraZoom = 0.75,
     [ValidatePattern("^-?\d+(\.\d+)?,-?\d+(\.\d+)?$")]
     [string]$CameraPosition = "560,320",
+    # FrameSize and UiScale have no default on purpose. 1280x720 at scale 1 is
+    # the rectangle the HUD is authored against, not a description of anyone's
+    # monitor, and using it as a launch default opened a small window with 8-15 px
+    # text on the owner's screen twice (Issues #86 and #100). Omitted, both are
+    # derived from the screen by the game; see "Startup frame and UI scale" in
+    # Main.cs. Supplied, they behave exactly as before — which is what keeps
+    # capture-evidence.ps1 and verify.ps1 machine-independent, since both always
+    # pass every frame parameter explicitly.
     [ValidateRange(0.75, 2.0)]
-    [double]$UiScale = 1.0,
+    [Nullable[double]]$UiScale,
     [Alias("WindowSize")]
     [ValidatePattern("^\d{3,5}x\d{3,5}$")]
-    [string]$FrameSize = "1280x720"
+    [string]$FrameSize
 )
 
 Set-StrictMode -Version Latest
@@ -43,19 +51,31 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $artifactsRoot = Join-Path $repoRoot ".artifacts"
 $projectPath = Join-Path $repoRoot "src\DungeonFortress.Game"
 $projectFile = Join-Path $projectPath "DungeonFortress.Game.csproj"
-$frameParts = $FrameSize -split "x", 2
-$frameWidth = [int]::Parse($frameParts[0], [Globalization.CultureInfo]::InvariantCulture)
-$frameHeight = [int]::Parse($frameParts[1], [Globalization.CultureInfo]::InvariantCulture)
+$hasFrameSize = -not [string]::IsNullOrWhiteSpace($FrameSize)
+$hasUiScale = $null -ne $UiScale
 $minimumLogicalWidth = 1024
 $minimumLogicalHeight = 720
-if (($frameWidth / $UiScale) -lt $minimumLogicalWidth -or
-    ($frameHeight / $UiScale) -lt $minimumLogicalHeight) {
-    throw (
-        "FrameSize $FrameSize at UiScale " +
-        $UiScale.ToString([Globalization.CultureInfo]::InvariantCulture) +
-        " is too small: the HUD requires at least ${minimumLogicalWidth}x" +
-        "${minimumLogicalHeight} logical pixels. Increase FrameSize or reduce UiScale."
-    )
+# Only a declared frame can be judged here. A frame derived from the screen is
+# not known until the engine has asked the display, so the same rule is enforced
+# there — see AssertLogicalFrameFits in Main.cs. This check survives because it
+# rejects an impossible pair before restore and build, which is a minute of
+# waiting, not because it is the only place the rule lives.
+if ($hasFrameSize) {
+    $frameParts = $FrameSize -split "x", 2
+    $frameWidth = [int]::Parse($frameParts[0], [Globalization.CultureInfo]::InvariantCulture)
+    $frameHeight = [int]::Parse($frameParts[1], [Globalization.CultureInfo]::InvariantCulture)
+    # An omitted UiScale never scales a declared frame below scale 1, so scale 1
+    # is the pair to judge that case by.
+    $effectiveUiScale = if ($hasUiScale) { [double]$UiScale } else { 1.0 }
+    if (($frameWidth / $effectiveUiScale) -lt $minimumLogicalWidth -or
+        ($frameHeight / $effectiveUiScale) -lt $minimumLogicalHeight) {
+        throw (
+            "FrameSize $FrameSize at UiScale " +
+            $effectiveUiScale.ToString([Globalization.CultureInfo]::InvariantCulture) +
+            " is too small: the HUD requires at least ${minimumLogicalWidth}x" +
+            "${minimumLogicalHeight} logical pixels. Increase FrameSize or reduce UiScale."
+        )
+    }
 }
 
 $resolvedScreenshotPath = if ([string]::IsNullOrWhiteSpace($ScreenshotPath)) {
@@ -92,17 +112,24 @@ Initialize-GodotRuntimeEnvironment -RepositoryRoot $repoRoot
 Import-GodotProjectAssets -GodotPath $godot -ProjectPath $projectPath
 
 $arguments = @("--path", $projectPath)
-if (-not [string]::IsNullOrWhiteSpace($FrameSize)) {
+if ($hasFrameSize) {
     $arguments += "--resolution", $FrameSize
 }
 $arguments += @(
     "--", "--fixture", $Fixture,
     "--tile-size", $TileSize.ToString([Globalization.CultureInfo]::InvariantCulture),
     "--camera-zoom", $CameraZoom.ToString([Globalization.CultureInfo]::InvariantCulture),
-    "--camera-position", $CameraPosition,
-    "--ui-scale", $UiScale.ToString([Globalization.CultureInfo]::InvariantCulture),
-    "--frame-size", $FrameSize
+    "--camera-position", $CameraPosition
 )
+# Absent, not empty: the game distinguishes "no frame declared" from a declared
+# one, and an empty --ui-scale would parse as a value.
+if ($hasUiScale) {
+    $arguments += "--ui-scale", ([double]$UiScale).ToString(
+        [Globalization.CultureInfo]::InvariantCulture)
+}
+if ($hasFrameSize) {
+    $arguments += "--frame-size", $FrameSize
+}
 if ($VisibleSmoke) {
     $arguments += "--visible-smoke"
 }

@@ -15,6 +15,12 @@ config/features=PackedStringArray("4.7", "C#", "GL Compatibility")
 ; its worst frame. ADR 0008 makes the actual capture size an explicit launch
 ; parameter and keeps the HUD in its own CanvasLayer.
 ;
+; This size is the design rectangle and the fallback, not what a player gets.
+; A launch that declares no --frame-size sizes its own window from the screen
+; and picks a UI scale to match; see "Startup frame and UI scale" in Main.cs and
+; docs/engineering/ENVIRONMENT_SETUP.md. Headless runs and displays smaller than
+; this rectangle keep it unchanged.
+;
 ; "expand" supports aspect-ratio changes. For an explicit --frame-size, Main also
 ; sets that value as the logical content size, so a same-aspect larger frame
 ; exposes more world instead of scaling the old frame up. Reproducibility comes
