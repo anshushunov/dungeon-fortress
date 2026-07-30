@@ -121,7 +121,13 @@ internal static class PrototypeEvaluation
         return new EvaluationReport(
             1,
             "tests/DungeonFortress.Scenarios --evaluate-prototype",
-            "f7f94e9",
+            // The implementation the numbers below came from, not the commit
+            // that happens to carry the file: `d3c8399` is the only commit of
+            // this branch that touches the simulation, so it is the last state
+            // in which these measurements could have changed. Everything after
+            // it — documentation, the HUD guard, the speed format — cannot move
+            // them, and `--verify` passing on top of those commits is the proof.
+            "d3c8399",
             Ticks,
             Seeds,
             MatrixScenarios,
