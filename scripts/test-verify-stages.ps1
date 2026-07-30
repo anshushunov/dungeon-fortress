@@ -254,6 +254,10 @@ function Get-VerifyStructure {
         Functions = $functions
         Commands = $commands
         StageLoopStartOffset = $stageLoop.Extent.StartOffset
+        # Simulating 45 selections revisits the same two dozen scopes over and
+        # over. Without this the guard spends ten seconds re-filtering the same
+        # command list, and the cheapest stage in the run stops being cheap.
+        RangeCache = @{}
     }
 }
 
@@ -271,9 +275,14 @@ function Get-CommandsInRange {
         [int]$EndOffset
     )
 
-    return @($Structure.Commands | Where-Object {
-        $_.StartOffset -ge $StartOffset -and $_.EndOffset -le $EndOffset
-    })
+    $key = "$StartOffset-$EndOffset"
+    if (-not $Structure.RangeCache.Contains($key)) {
+        $Structure.RangeCache[$key] = @($Structure.Commands | Where-Object {
+            $_.StartOffset -ge $StartOffset -and $_.EndOffset -le $EndOffset
+        })
+    }
+
+    return @($Structure.RangeCache[$key])
 }
 
 function Get-ReachableFunctions {

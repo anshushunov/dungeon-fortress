@@ -155,7 +155,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -GodotP
 
 | Стадия | Что проверяет | Время\* |
 |---|---|---|
-| `scripts` | восемь dependency-free гвардов: контракт стадий, пригодность временного каталога, вывод Godot, пути screenshot/evidence, manifest, GitHub auth diagnostic, конфиги Ivan-MCP и domain MCP | 25 с |
+| `scripts` | восемь dependency-free гвардов: контракт стадий, пригодность временного каталога, вывод Godot, пути screenshot/evidence, manifest, GitHub auth diagnostic, конфиги Ivan-MCP и domain MCP | 22 с\*\* |
 | `build` | `restore` решения, `--locked-mode` restore тестов domain MCP, `Release` build всего решения | 3 с |
 | `tests` | `dotnet test` для Simulation, Presentation и DomainMcp | 31 с |
 | `mcp` | реальный запуск launcher domain MCP и stdio-контракт `verify-domain-mcp.ps1` | 4 с |
@@ -169,6 +169,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -GodotP
 
 \* Замер на машине владельца при прогретых сборках; полный прогон в тех же
 условиях — около 90 с. Первый прогон в свежем worktree дольше за счёт restore.
+
+\*\* Строка `scripts` перемерена после добавления восьмого гварда, но на машине
+агента, которая примерно вдвое медленнее: те же прежние гварды дают на ней около
+12 с из этих 22 с. С остальными строками таблицы это число напрямую не
+сравнивается.
 
 Что покрывает каждая стадия, печатает сам скрипт:
 
