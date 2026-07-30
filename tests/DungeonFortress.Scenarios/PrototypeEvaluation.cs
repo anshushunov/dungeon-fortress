@@ -121,7 +121,13 @@ internal static class PrototypeEvaluation
         return new EvaluationReport(
             1,
             "tests/DungeonFortress.Scenarios --evaluate-prototype",
-            "f7f94e9",
+            // The implementation the numbers below came from, not the commit
+            // that happens to carry the file: `d3c8399` is the only commit of
+            // this branch that touches the simulation, so it is the last state
+            // in which these measurements could have changed. Everything after
+            // it — documentation, the HUD guard, the speed format — cannot move
+            // them, and `--verify` passing on top of those commits is the proof.
+            "d3c8399",
             Ticks,
             Seeds,
             MatrixScenarios,
@@ -197,9 +203,14 @@ internal static class PrototypeEvaluation
                 state.SessionResult.RaidersDowned,
                 state.SessionResult.MealsStolen,
                 state.SessionResult.MealsLeft,
-                // The two numbers the party is scored by, and the shape of the
-                // pressure that produced them. Without these the evidence would
-                // still be measuring a single raid.
+                // The party score: the one number that ranks the run, present
+                // only because the run ended. Renown stays in the evidence
+                // beside it, unchanged and no longer pretending to be a score
+                // (ADR 0016).
+                state.SessionResult.Score,
+                // The two numbers the party is read by during play, and the
+                // shape of the pressure that produced them. Without these the
+                // evidence would still be measuring a single raid.
                 state.Domain.Renown,
                 state.Domain.Strength,
                 state.Domain.LivingCreatures,
@@ -280,7 +291,7 @@ internal static class PrototypeEvaluation
     private sealed record EconomyMetrics(int HarvestsCompleted, int RawHaulsCompleted, int CookBatchesCompleted, int MealHaulsCompleted, int MealsProduced, int MealsEaten, int MealsCurrent);
     private sealed record LaborMetrics(int FoodWorkTicks, int RestTicks, int EatTicks, int DrillTicks, int WatchTicks, int MusterTicks, int IdleTicks, int PostOccupancyPercent);
     private sealed record CreatureMetrics(int Count, int AverageSatiety, int AverageFatigue, int AverageMartialForm, int? AverageReadinessAtRaid, IReadOnlyDictionary<string, int> Modes, int Injured, int Downed, int Fled, IReadOnlyList<string> Names);
-    private sealed record SessionMetrics(string? Outcome, int? EndTick, bool Unresolved, int DefendersDowned, int DefendersFled, int RaidersDowned, int MealsStolen, int MealsLeft, int Renown, int Strength, int LivingCreatures, int WavesResolved, int WavesRepelled, int WaveCount, IReadOnlyList<WaveMetrics> Waves);
+    private sealed record SessionMetrics(string? Outcome, int? EndTick, bool Unresolved, int DefendersDowned, int DefendersFled, int RaidersDowned, int MealsStolen, int MealsLeft, int? Score, int Renown, int Strength, int LivingCreatures, int WavesResolved, int WavesRepelled, int WaveCount, IReadOnlyList<WaveMetrics> Waves);
     private sealed record WaveMetrics(int Number, int ArriveTick, int RaiderCount, int RaiderMight, int RenownAtAnnounce, string? Outcome, int? EndTick, int RaidersDowned, int DefendersDowned, int DefendersFled, int MealsStolen);
     private sealed record ExplainabilityMetrics(int EventCount, int DistinctReasonCodes, IReadOnlyDictionary<string, int> ReasonCodeOccurrences);
 }

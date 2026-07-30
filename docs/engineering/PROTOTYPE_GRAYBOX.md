@@ -834,6 +834,16 @@ compares it field by field.
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\update-golden-ui.ps1
 ```
 
+**Every number in HUD text is formatted with the invariant culture** (Issue #46).
+The same text is compared in two environments with two different cultures —
+locally through `verify.ps1` and in CI through `DungeonFortress.Presentation.Tests`
+— so a decimal separator taken from the machine would pass in one and fail in the
+other. The playback speed was the only such number and used to print `0,5x` on a
+ru-RU desktop; nothing caught it because all three reference frames are paused and
+never reached the branch. HUD text is a checked artefact, not a localised
+interface: localisation, if it ever happens, is a decision of its own and not a
+property of the build machine.
+
 Golden **screenshots** were considered and rejected. The three Issue #26 frames did
 reproduce byte-for-byte, but on one machine and one driver; elsewhere the pixels
 move and the test becomes a source of false failures. `.artifacts/` is ignored, so

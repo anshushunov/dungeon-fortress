@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using DungeonFortress.Simulation;
 
 namespace DungeonFortress.Presentation;
@@ -50,6 +52,13 @@ public static class HudText
     /// Stone is reported as three separate facts on purpose — loose on the
     /// floor, on someone's back, put away — because one combined number would
     /// hide exactly the part of the chain that is moving.
+    ///
+    /// Every number here is formatted with the invariant culture. This text is
+    /// a checked artefact — the golden UI state compares it across two machines
+    /// with two different cultures — so a decimal separator that follows the
+    /// machine would make "0.5x" pass locally and fail in CI for a reason no
+    /// diff would explain. Localisation, if it ever arrives, will be a decision
+    /// of its own and not a side effect of where the build ran (Issue #46).
     /// </summary>
     public static string Summary(HudViewState view) => Summary(view, view.Projection);
 
@@ -59,7 +68,7 @@ public static class HudText
         var stock = state.Stocks;
         var domain = state.Domain;
         return
-            $"{view.Fixture.ToUpperInvariant()}  •  t{state.Tick}  •  {(view.Paused ? "PAUSED" : $"{view.Speed:0.#}x")}" +
+            $"{view.Fixture.ToUpperInvariant()}  •  t{state.Tick}  •  {(view.Paused ? "PAUSED" : Speed(view.Speed))}" +
             $"  •  jobs {state.Jobs.Count}  •  {view.Checksum[..8]}" +
             $"  •  renown {domain.Renown}{Trend(domain.Renown, domain.RenownAtPreviousWave)}" +
             $"  •  strength {domain.Strength}{Trend(domain.Strength, domain.StrengthAtPreviousWave)}" +
@@ -73,6 +82,15 @@ public static class HudText
             // as absent is the same defect as not drawing it (Issue #58).
             $"  •  dug {state.Economy.DigsCompleted}  •  marks {projection.DigDesignationCount}";
     }
+
+    /// <summary>
+    /// The playback speed, in the only culture the HUD is allowed to speak.
+    /// It is the single fractional number in the whole of the HUD and the
+    /// inspector, which is why the rule is cheap to fix now and expensive to
+    /// fix after the second one appears.
+    /// </summary>
+    public static string Speed(double speed) =>
+        speed.ToString("0.#", CultureInfo.InvariantCulture) + "x";
 
     /// <summary>
     /// Better, worse or unchanged since the previous wave landed. Empty before
@@ -134,6 +152,14 @@ public static class HudText
     ///
     /// The end of the party outranks the wave in hand, and an arriving wave
     /// outranks its own countdown.
+    ///
+    /// The party score is printed here and nowhere else, because here is the
+    /// only place that exists once the party is over. During the party the
+    /// summary keeps the same two numbers it always had — renown and domain
+    /// strength — and the gap between them is still the only thing to read.
+    /// "How am I doing" and "how did I play" are different questions asked at
+    /// different moments (ADR 0016), so the second one never appears while the
+    /// first is still open.
     /// </summary>
     public static string WavePhase(PrototypeSnapshot state)
     {
@@ -142,6 +168,7 @@ public static class HudText
         var waves = $"{threat.WaveNumber}/{threat.WaveCount}";
         if (state.SessionResult.Outcome is { } outcome)
         {
+            var score = state.SessionResult.Score is { } value ? $" · score {value}" : string.Empty;
             // Three outcomes, three different words in the same place, so which
             // one happened is read at a glance and never needs the inspector.
             // "Raided" carries how many waves were actually turned back, because
@@ -153,10 +180,10 @@ public static class HudText
             // domain fell", which is the worst thing to say by accident.
             return outcome switch
             {
-                "held" => $"DOMAIN HELD {threat.WaveCount}/{threat.WaveCount}",
+                "held" => $"DOMAIN HELD {threat.WaveCount}/{threat.WaveCount}{score}",
                 "raided" =>
-                    $"DOMAIN RAIDED · {state.SessionResult.WavesRepelled}/{threat.WaveCount} repelled",
-                "fallen" => $"DOMAIN FELL · wave {waves}",
+                    $"DOMAIN RAIDED · {state.SessionResult.WavesRepelled}/{threat.WaveCount} repelled{score}",
+                "fallen" => $"DOMAIN FELL · wave {waves}{score}",
                 _ => throw new ArgumentOutOfRangeException(
                     nameof(state),
                     outcome,

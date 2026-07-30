@@ -342,7 +342,9 @@ public sealed class PrototypeScenarioTests
     /// absent is as load-bearing as what is here: renown ranks a domain that
     /// lives against one that died, and does not reliably rank two living plans
     /// on a single party, because it leans on raiders put down and that number
-    /// swings with combat jitter.
+    /// swings with combat jitter. Ranking the plans is the party score's job
+    /// now, and it is asserted here rather than described in prose — that is
+    /// the whole point of ADR 0016.
     /// </summary>
     private static void AssertEndOfPartyInvariants(
         PrototypeSnapshot baseline,
@@ -354,6 +356,27 @@ public sealed class PrototypeScenarioTests
             prepared.Domain.Renown > neglected.Domain.Renown,
             $"renown baseline={baseline.Domain.Renown}, prepared={prepared.Domain.Renown}, " +
             $"neglected={neglected.Domain.Renown}");
+
+        // The invariant renown could not carry, returned in its own number: a
+        // party that survived outscores one that died, and preparation outscores
+        // living as one always did. Both are read on the same seed, because a
+        // plan is only comparable with the same combat rolls behind it.
+        var score = (
+            Baseline: Score(baseline),
+            Prepared: Score(prepared),
+            Neglected: Score(neglected));
+        Assert.True(
+            score.Baseline > score.Neglected && score.Prepared > score.Neglected,
+            $"score baseline={score.Baseline}, prepared={score.Prepared}, " +
+            $"neglected={score.Neglected}");
+        Assert.True(
+            score.Prepared > score.Baseline,
+            $"score prepared={score.Prepared} must beat baseline={score.Baseline}; " +
+            $"repelled {prepared.SessionResult.WavesRepelled}/{baseline.SessionResult.WavesRepelled}, " +
+            $"stolen {prepared.SessionResult.MealsStolen}/{baseline.SessionResult.MealsStolen}, " +
+            $"defenders lost " +
+            $"{prepared.SessionResult.DefendersDowned + prepared.SessionResult.DefendersFled}/" +
+            $"{baseline.SessionResult.DefendersDowned + baseline.SessionResult.DefendersFled}");
 
         // Preparation buys the price of the raid, not attendance at it. The
         // comparison excludes `neglected` on purpose: it never meets a wave, so
@@ -367,6 +390,16 @@ public sealed class PrototypeScenarioTests
             $"broken by morale prepared={CountEvents(prepared, "combat_fled_morale")}, " +
             $"baseline={CountEvents(baseline, "combat_fled_morale")}");
     }
+
+    /// <summary>
+    /// The score of a party that ended. A party without one has not ended, and
+    /// reading it as a zero would rank an interrupted run against finished ones.
+    /// </summary>
+    private static int Score(PrototypeSnapshot state) =>
+        state.SessionResult.Score ??
+        throw new InvalidOperationException(
+            $"The party did not end (outcome {state.SessionResult.Outcome ?? "null"}, " +
+            $"unresolved {state.SessionResult.Unresolved}), so it has no score to compare.");
 
     private static int CountEvents(PrototypeSnapshot state, string reasonCode) =>
         state.Events.Where(@event => @event.ReasonCode == reasonCode).Sum(@event => @event.Repeats);

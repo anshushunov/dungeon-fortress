@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using DungeonFortress.Simulation;
 
 using Xunit;
@@ -61,12 +63,6 @@ public sealed class HudTextTests
         Assert.Contains("strength 50↓", first, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// The fractional speeds are deliberately absent: <c>{speed:0.#}</c> renders
-    /// the decimal separator of the current culture, so "0.5x" here would be a
-    /// machine-dependent expectation rather than a property of the HUD. The
-    /// behaviour predates this seam and is left exactly as it was.
-    /// </summary>
     [Fact]
     public void A_running_session_shows_its_speed_where_a_paused_one_shows_PAUSED()
     {
@@ -84,6 +80,48 @@ public sealed class HudTextTests
             "BASELINE  •  t10  •  PAUSED  •",
             HudText.Summary(View(state, paused: true, speed: 16.0)),
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Issue #46. The speed is the only fractional number the HUD prints, and it
+    /// used to take the decimal separator of the machine: "0,5x" on a ru-RU
+    /// desktop against "0.5x" in CI. Nothing caught it because all three golden
+    /// frames are paused, so the branch never ran — the check passed for the
+    /// wrong reason, and the first unpaused reference frame would have split the
+    /// two environments with a diff nobody could explain.
+    ///
+    /// This text is a checked artefact, not a localised interface, so it is
+    /// invariant everywhere.
+    /// </summary>
+    [Theory]
+    [InlineData("ru-RU")]
+    [InlineData("de-DE")]
+    [InlineData("tr-TR")]
+    [InlineData("")]
+    public void The_speed_prints_the_same_under_any_culture_of_the_thread(string culture)
+    {
+        var state = PresentationFixtures.Baseline(10);
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = culture.Length == 0
+                ? CultureInfo.InvariantCulture
+                : CultureInfo.GetCultureInfo(culture);
+
+            Assert.Equal("0.5x", HudText.Speed(0.5));
+            Assert.Equal("2x", HudText.Speed(2.0));
+            Assert.StartsWith(
+                "BASELINE  •  t10  •  0.5x  •",
+                HudText.Summary(View(state, paused: false, speed: 0.5)),
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                ',',
+                HudText.Summary(View(state, paused: false, speed: 0.5)));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
     }
 
     /// <summary>
@@ -191,6 +229,57 @@ public sealed class HudTextTests
         {
             SessionResult = raided.SessionResult with { Outcome = "fallen" },
         }));
+    }
+
+    /// <summary>
+    /// ADR 0016 split two questions by the moment they are asked. "How am I
+    /// doing" is answered all party long by the gap between renown and domain
+    /// strength; "how did I play" is answered once, at the end, by the party
+    /// score. So the summary of a party in progress must not carry a score —
+    /// not even a provisional one — and the end of the party must.
+    /// </summary>
+    [Fact]
+    public void The_party_score_appears_with_the_end_of_the_party_and_never_before_it()
+    {
+        var running = PresentationFixtures.Baseline(400);
+        Assert.Null(running.SessionResult.Outcome);
+        Assert.Null(running.SessionResult.Score);
+
+        var duringTheParty = HudText.Summary(View(running));
+        Assert.DoesNotContain("score", duringTheParty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("renown", duringTheParty, StringComparison.Ordinal);
+        Assert.Contains("strength", duringTheParty, StringComparison.Ordinal);
+
+        var ended = running with
+        {
+            SessionResult = running.SessionResult with
+            {
+                Outcome = "raided",
+                WavesRepelled = 2,
+                Score = 678,
+            },
+        };
+
+        Assert.Equal("DOMAIN RAIDED · 2/4 repelled · score 678", HudText.WavePhase(ended));
+        Assert.Equal(
+            "DOMAIN HELD 4/4 · score 678",
+            HudText.WavePhase(ended with
+            {
+                SessionResult = ended.SessionResult with { Outcome = "held" },
+            }));
+        Assert.Equal(
+            "DOMAIN FELL · wave 1/4 · score -12",
+            HudText.WavePhase(ended with
+            {
+                SessionResult = ended.SessionResult with { Outcome = "fallen", Score = -12 },
+            }));
+
+        // The first line is the one the player reads all party long; the score
+        // never joins it, so the summary does not grow a third number.
+        Assert.Equal(
+            HudText.Summary(View(running)).Split('\n')[0],
+            HudText.Summary(View(ended)).Split('\n')[0]);
+        Assert.Contains("score 678", HudText.Summary(View(ended)).Split('\n')[1], StringComparison.Ordinal);
     }
 
     /// <summary>

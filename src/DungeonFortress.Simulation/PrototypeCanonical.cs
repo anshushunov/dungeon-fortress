@@ -617,6 +617,19 @@ public static class PrototypeCanonical
         writer.WriteNumber("raidersDowned", state.SessionResult.RaidersDowned);
         writer.WriteNumber("mealsStolen", state.SessionResult.MealsStolen);
         writer.WriteNumber("mealsLeft", state.SessionResult.MealsLeft);
+
+        // The score is written only for a party that ended, and is absent —
+        // not null — for one that has not. That is the canonical form of "the
+        // score is read at the end and never during the party" (ADR 0016), and
+        // it is why the state of a party in progress is unchanged to the bit by
+        // the arrival of a score: the same tick of the same log still hashes to
+        // what it hashed to before, so a mid-party golden that moves is a leak
+        // and not a chore.
+        if (state.SessionResult.Score is { } score)
+        {
+            writer.WriteNumber("score", score);
+        }
+
         writer.WriteEndObject();
         writer.WriteEndObject();
     }
