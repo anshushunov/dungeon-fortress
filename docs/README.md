@@ -54,6 +54,10 @@ authentication и точный token usage handoff описаны в
 Правила работы Codex, Claude Code и других агентов находятся в
 `engineering/MULTI_AGENT_WORKFLOW.md`.
 
+Находки review без наблюдаемого последствия лежат в
+`engineering/DEBT_LEDGER.md` и слота в очереди не получают —
+[ADR 0018](decisions/0018-feature-first-blocks.md).
+
 ## Что где фиксировать
 
 | Содержание | Место |
@@ -64,6 +68,7 @@ authentication и точный token usage handoff описаны в
 | Текущее устройство механики | `design/` |
 | Варианты, выбор и последствия важного решения | `decisions/` |
 | Незакрытый вопрос | `OPEN_QUESTIONS.md` |
+| Находка review без наблюдаемого последствия | `engineering/DEBT_LEDGER.md` |
 | Конкретная работа с критериями готовности | GitHub Issue |
 | Группа задач и порядок выполнения | GitHub Project |
 | Обсуждение и проверка изменения | Pull Request |
