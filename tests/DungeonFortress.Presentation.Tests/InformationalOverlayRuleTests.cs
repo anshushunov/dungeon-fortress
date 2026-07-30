@@ -34,7 +34,10 @@ public sealed class InformationalOverlayRuleTests
                 $"{rule.Mark} explains a cell a body can stand on and is declared " +
                 $"{rule.Policy}. The simulation puts a body on exactly the cell " +
                 "such a mark describes, so an opaque one lands on the sprite it " +
-                $"is explaining. Declared reason: {rule.Reason}");
+                "is explaining. If that is deliberate, say so with " +
+                $"{OverlayMarkPolicy.OpaqueByExemption} and a reason, rather than " +
+                $"with a policy that claims nothing is underneath. Declared " +
+                $"reason: {rule.Reason}");
 
             Assert.True(
                 rule.Policy != OverlayMarkPolicy.TranslucentFill ||
@@ -47,27 +50,58 @@ public sealed class InformationalOverlayRuleTests
     }
 
     /// <summary>
-    /// The two marks that are opaque on purpose, and why the rule does not reach
-    /// them. Stated as an assertion rather than as prose, so relabelling a cell
-    /// mark as a body or gesture readout to escape the rule is a visible edit to
-    /// this list rather than a silent one.
+    /// The one mark the rule reaches and that is opaque anyway, listed by name.
+    ///
+    /// The first version of this manifest gave the drag's cell count a subject of
+    /// its own and claimed the rule did not reach it. That was the comfortable
+    /// answer and the wrong one: the plate is anchored to the selection, which is
+    /// an area of the map, so it does land on cells that hold bodies — and on a
+    /// rock selection in row 0 the caption is pushed inside the selection itself.
+    /// An exemption with a required reason says the same thing honestly, and it
+    /// stays inside <see cref="InformationalOverlays.GovernedByTheRule"/> so the
+    /// rule test reports it as an accepted exception rather than as out of scope.
     /// </summary>
     [Fact]
-    public void Only_a_body_readout_and_the_gesture_readout_stay_opaque_over_a_body()
+    public void The_only_accepted_exemption_is_the_drag_readout()
     {
-        var exempt = InformationalOverlays.All
-            .Where(rule => rule.Subject != OverlayMarkSubject.Cell)
-            .Select(rule => rule.Mark)
-            .OrderBy(mark => mark)
-            .ToArray();
+        var exemptions = InformationalOverlays.Exemptions().ToArray();
 
-        Assert.Equal(new[] { OverlayMark.BodyState, OverlayMark.SelectionCount }, exempt);
         Assert.Equal(
-            OverlayMarkSubject.Body,
-            InformationalOverlays.For(OverlayMark.BodyState).Subject);
+            new[] { OverlayMark.SelectionCount },
+            exemptions.Select(rule => rule.Mark).OrderBy(mark => mark));
+        Assert.All(exemptions, rule =>
+        {
+            Assert.Equal(OverlayMarkSubject.Cell, rule.Subject);
+            Assert.True(rule.CellCanHoldBody);
+            Assert.Contains(rule, InformationalOverlays.GovernedByTheRule());
+            Assert.True(
+                rule.Reason.Length > 80,
+                $"{rule.Mark} is an accepted exception to the one rule of this " +
+                "pass and has to say why in more than a phrase.");
+        });
+    }
+
+    /// <summary>
+    /// Only a body's own readout is outside the rule by subject, and the cell
+    /// question is asked exactly of the marks it means something for: a value
+    /// nobody reads looks load-bearing and is not.
+    /// </summary>
+    [Fact]
+    public void Only_a_body_readout_is_outside_the_rule_and_the_cell_flag_is_never_dead()
+    {
         Assert.Equal(
-            OverlayMarkSubject.Gesture,
-            InformationalOverlays.For(OverlayMark.SelectionCount).Subject);
+            new[] { OverlayMark.BodyState },
+            InformationalOverlays.All
+                .Where(rule => rule.Subject != OverlayMarkSubject.Cell)
+                .Select(rule => rule.Mark)
+                .OrderBy(mark => mark));
+
+        foreach (var rule in InformationalOverlays.All)
+        {
+            Assert.Equal(
+                rule.Subject == OverlayMarkSubject.Cell,
+                rule.CellCanHoldBody.HasValue);
+        }
     }
 
     /// <summary>

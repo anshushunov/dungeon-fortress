@@ -67,12 +67,24 @@ public static class WorldDrawOrder
     /// <summary>
     /// The prefix that makes a method a drawing routine. Anything with this
     /// prefix that <see cref="Entry"/> can reach must be declared below.
+    ///
+    /// This is a naming <em>convention</em>, and the boundary is worth stating
+    /// plainly rather than leaving to be discovered: a drawing method named
+    /// something else — <c>PaintThreatHalo</c> — is outside the manifest and
+    /// therefore outside every check built on it. The convention is the load
+    /// bearing part; the checks only hold code that follows it. The other way out
+    /// was closed instead of documented: <see cref="Entry"/> itself draws no
+    /// primitive, so there is no unnamed body left inside the passes.
     /// </summary>
     public const string RoutinePrefix = "Draw";
 
     private static readonly WorldDrawRoutine[] Routines =
     [
         // Pass 1 — below depth.
+        new("DrawMapBackground", WorldDrawPass.BelowDepth, null),
+        new("DrawFloorTiles", WorldDrawPass.BelowDepth, null),
+        new("DrawBeds", WorldDrawPass.BelowDepth, null),
+        new("DrawLooseItems", WorldDrawPass.BelowDepth, null),
         new("DrawBuildSites", WorldDrawPass.BelowDepth, null),
         new("DrawBlueprint", WorldDrawPass.BelowDepth, null),
         new("DrawStockpileCells", WorldDrawPass.BelowDepth, null),
@@ -127,8 +139,12 @@ public static class WorldDrawOrder
     /// </summary>
     public static IReadOnlyList<string> Steps { get; } =
     [
+        "DrawMapBackground",
+        "DrawFloorTiles",
         "DrawBuildSites",
         "DrawStockpileCells",
+        "DrawBeds",
+        "DrawLooseItems",
         "DrawElevatedWorld",
         "DrawZoneOutlines",
         "DrawJobRoutes",

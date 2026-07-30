@@ -68,6 +68,18 @@ public static class SelectionGeometry
     /// The selection column by column. Each column spans from the top of its
     /// first cell's interaction rectangle to the bottom of its last one, which
     /// is what the union of those rectangles occupies.
+    ///
+    /// Only the two ends of a column are measured, and that is exact rather than
+    /// approximate because of one invariant: a wall reaches less than a whole
+    /// tile past its own footprint. Its raised top rises
+    /// <see cref="WallRenderGeometry.FacadeReferenceHeight"/> scaled pixels and
+    /// its facade hangs <see cref="WallRenderGeometry.FacadeReferenceOverhang"/>
+    /// below, and their sum stays under the tile size across the whole 32–48 px
+    /// range ADR 0008 allows — 16 px at 32 and 24 px at 48. So rock in the middle
+    /// of a column can never poke out of a span whose ends are one tile further
+    /// away, whatever those ends are made of.
+    /// <c>SelectionGeometryTests.A_wall_reaches_less_than_a_tile_past_its_footprint</c>
+    /// pins the invariant and the floor–rock–floor column that depends on it.
     /// </summary>
     public static IReadOnlyList<SelectionColumn> Columns(
         GridPoint from,

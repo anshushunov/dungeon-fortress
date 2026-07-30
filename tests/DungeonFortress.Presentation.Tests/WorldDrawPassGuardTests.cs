@@ -29,6 +29,16 @@ namespace DungeonFortress.Presentation.Tests;
 /// The fifth — overlay geometry drifting out of step with the drawn wall mass —
 /// is not here: it was closed by construction when <c>WallVisualMass</c> became
 /// the one source both sides read.
+///
+/// <b>Where the checks stop.</b> They hold code that follows the convention
+/// <see cref="WorldDrawOrder.RoutinePrefix"/> names: a method whose name starts
+/// with <c>Draw</c>. A drawing method called something else is outside the
+/// manifest and outside every check here, and that is a property of a naming
+/// convention rather than an oversight — saying so is what makes "a new mark
+/// cannot be added without a policy" a true statement instead of an
+/// overclaim. The other way out is closed rather than documented:
+/// <see cref="DrawMap_draws_nothing_of_its_own"/> leaves no unnamed body inside
+/// the passes.
 /// </summary>
 public sealed class WorldDrawPassGuardTests
 {
@@ -72,6 +82,67 @@ public sealed class WorldDrawPassGuardTests
         // The engine's own primitives are reachable through the same reader, which
         // is what the fill checks below depend on.
         Assert.NotEmpty(AdapterSource.CallsTo(AdapterSource.Body("DrawZoneOutlines"), "DrawRect"));
+
+        // And a call written on `this` is the same call. The review of this guard
+        // got a fully opaque build progress bar past it by writing exactly that,
+        // so the reader is asked about both spellings here rather than trusted.
+        Assert.Single(AdapterSource.CallsTo("this.DrawRect(a, b);", "DrawRect"));
+        Assert.Single(AdapterSource.CallsTo("DrawRect(a, b);", "DrawRect"));
+        Assert.Empty(AdapterSource.CallsTo("other.DrawRect(a, b);", "DrawRect"));
+        Assert.Empty(AdapterSource.CallsTo("MyDrawRect(a, b);", "DrawRect"));
+    }
+
+    /// <summary>
+    /// The remaining assumption of <see cref="AdapterSource.CallsTo"/>, turned
+    /// into a check.
+    ///
+    /// The reader understands two spellings of a call the adapter makes on
+    /// itself: bare and on <c>this</c>. Any other receiver in front of a
+    /// primitive that can cover a sprite is a call it would skip, and a skipped
+    /// call is a silently green guard — which is exactly how a fully opaque build
+    /// progress bar got past an earlier version of this file. There is no
+    /// <c>.editorconfig</c> or StyleCop in the repository today, but SA1101 would
+    /// put <c>this.</c> in front of every one of these mechanically, so the
+    /// spelling is not hypothetical.
+    /// </summary>
+    [Fact]
+    public void No_covering_primitive_hides_behind_a_receiver()
+    {
+        foreach (var (name, _, _) in CoveringPrimitives)
+        {
+            foreach (var receiver in AdapterSource.ReceiversOf(name))
+            {
+                Assert.True(
+                    string.Equals(receiver, "this", StringComparison.Ordinal),
+                    $"'{name}' is called on receiver '{receiver}'. The reader only " +
+                    "understands a bare call and one written on 'this', so this " +
+                    "call is invisible to every fill check below — teach the " +
+                    "reader the receiver or drop it.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>DrawMap</c> draws nothing itself, so there is no unnamed body inside
+    /// the passes.
+    ///
+    /// It used to draw the background, the floor, the beds and the loose items
+    /// inline, which left a place where a new opaque mark could be added without
+    /// touching any routine the manifest names. The four are ordinary declared
+    /// routines now and this check keeps the entry point a list of passes.
+    /// </summary>
+    [Fact]
+    public void DrawMap_draws_nothing_of_its_own()
+    {
+        var body = AdapterSource.Body(WorldDrawOrder.Entry);
+        foreach (var primitive in new[] { "DrawRect", "DrawCircle", "DrawLine", "DrawString", "DrawArc" })
+        {
+            Assert.True(
+                AdapterSource.CallsTo(body, primitive).Count == 0,
+                $"{WorldDrawOrder.Entry} calls {primitive} itself. Every mark has " +
+                "to live in a routine the manifest declares, or its policy is " +
+                "declared nowhere.");
+        }
     }
 
     /// <summary>

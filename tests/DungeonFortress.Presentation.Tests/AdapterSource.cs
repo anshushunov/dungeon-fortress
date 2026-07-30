@@ -101,10 +101,15 @@ internal static class AdapterSource
     }
 
     /// <summary>
-    /// Every call to <paramref name="method"/> inside <paramref name="body"/>,
-    /// ignoring qualified calls such as <c>SelectionGeometry.Outline(...)</c>: the
-    /// adapter's own routines and the engine's canvas primitives are both called
-    /// unqualified, and nothing else is being asked about here.
+    /// Every call to <paramref name="method"/> inside <paramref name="body"/>.
+    ///
+    /// A call written on <c>this</c> counts, because <c>this.DrawRect(...)</c> is
+    /// the same call and the review of this guard got a fully opaque build
+    /// progress bar past it by writing exactly that. A call on any other receiver
+    /// does not — <c>SelectionGeometry.Outline(...)</c> is a different method on a
+    /// different type — and
+    /// <c>WorldDrawPassGuardTests.No_covering_primitive_hides_behind_a_receiver</c>
+    /// is what turns that remaining assumption into a checked one.
     /// </summary>
     internal static IReadOnlyList<SourceCall> CallsTo(string body, string method)
     {
@@ -334,8 +339,75 @@ internal static class AdapterSource
     private static char NextCharacter(string text, int index) =>
         index < text.Length ? text[index] : '\0';
 
-    private static bool IsUnqualifiedIdentifierStart(string text, int index) =>
-        index == 0 || (!IsIdentifierPart(text[index - 1]) && text[index - 1] != '.');
+    /// <summary>
+    /// Whether the identifier at <paramref name="index"/> starts a call the
+    /// adapter makes on itself: either unqualified, or written on <c>this</c>.
+    /// </summary>
+    private static bool IsUnqualifiedIdentifierStart(string text, int index)
+    {
+        if (index == 0)
+        {
+            return true;
+        }
+
+        if (text[index - 1] != '.')
+        {
+            return !IsIdentifierPart(text[index - 1]);
+        }
+
+        var receiverEnd = index - 1;
+        var receiverStart = receiverEnd;
+        while (receiverStart > 0 && IsIdentifierPart(text[receiverStart - 1]))
+        {
+            receiverStart--;
+        }
+
+        return string.CompareOrdinal(text, receiverStart, "this", 0, 4) == 0 &&
+            receiverEnd - receiverStart == 4 &&
+            (receiverStart == 0 || !IsIdentifierPart(text[receiverStart - 1]));
+    }
+
+    /// <summary>
+    /// Every receiver a call to <paramref name="method"/> is written on in the
+    /// whole file, so a receiver the reader does not understand is named rather
+    /// than silently skipped.
+    /// </summary>
+    internal static IReadOnlyList<string> ReceiversOf(string method)
+    {
+        var receivers = new List<string>();
+        for (var index = 0; index < Masked.Length;)
+        {
+            var start = Masked.IndexOf(method, index, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                break;
+            }
+
+            index = start + 1;
+            if (IsIdentifierPart(NextCharacter(Masked, start + method.Length)) ||
+                start == 0 ||
+                Masked[start - 1] != '.')
+            {
+                continue;
+            }
+
+            var open = SkipWhitespace(Masked, start + method.Length);
+            if (open >= Masked.Length || Masked[open] != '(')
+            {
+                continue;
+            }
+
+            var receiverStart = start - 1;
+            while (receiverStart > 0 && IsIdentifierPart(Masked[receiverStart - 1]))
+            {
+                receiverStart--;
+            }
+
+            receivers.Add(Masked[receiverStart..(start - 1)]);
+        }
+
+        return receivers;
+    }
 
     private static bool IsIdentifierPart(char character) =>
         char.IsLetterOrDigit(character) || character == '_';

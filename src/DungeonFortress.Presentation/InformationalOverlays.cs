@@ -24,12 +24,6 @@ public enum OverlayMarkSubject
     /// </summary>
     Body,
 
-    /// <summary>
-    /// The mark explains the gesture in progress and lives only while a mouse
-    /// button is held. It is anchored to the selection under the pointer, not to
-    /// a cell, and it is the player's own readout of what they are doing.
-    /// </summary>
-    Gesture,
 }
 
 /// <summary>
@@ -40,10 +34,24 @@ public enum OverlayMarkPolicy
 {
     /// <summary>
     /// Drawn as it is, opaque fill included. Legal only where no body's sprite
-    /// can be underneath — a cell no body can stand on, a body's own readout or
-    /// the gesture readout.
+    /// can be underneath: a cell no body can stand on, or a body's own readout.
     /// </summary>
     Opaque,
+
+    /// <summary>
+    /// Opaque over a cell a body can stand on, as a stated exception rather than
+    /// because the rule does not reach it. Every use has to carry a reason, and
+    /// the rule test reports the exemptions by name so a second one cannot be
+    /// added quietly.
+    ///
+    /// The one mark that uses it is the drag's cell count: it is an opaque plate
+    /// because a number drawn over a sprite is unreadable, and making it
+    /// translucent would be an appearance change Issue #90 forbids. Calling it
+    /// "outside the rule" would have been the comfortable answer and the wrong
+    /// one — the plate is anchored to the selection, which is an area of the map,
+    /// and it lands on cells that hold bodies.
+    /// </summary>
+    OpaqueByExemption,
 
     /// <summary>
     /// The fill is translucent so the sprite reads through it. An outline, a
@@ -90,10 +98,13 @@ public enum OverlayMark
 /// <param name="Mark">The reading this rule governs.</param>
 /// <param name="Subject">Whose sprite can be underneath.</param>
 /// <param name="CellCanHoldBody">
-/// Whether the simulation can put a body on the cell this mark explains. It is
-/// <c>false</c> only for a mark that lives on rock, and
-/// <c>InformationalOverlayRuleTests</c> proves that against a real session
-/// rather than trusting the declaration.
+/// Whether the simulation can put a body on the cell this mark explains, or
+/// <c>null</c> for a mark that is not about a cell at all. It is <c>false</c>
+/// only for a mark that lives on rock, and <c>InformationalOverlayRuleTests</c>
+/// proves that against a real session rather than trusting the declaration. The
+/// value is required exactly when <paramref name="Subject"/> is
+/// <see cref="OverlayMarkSubject.Cell"/> and forbidden otherwise, so it can
+/// never sit unread next to a mark it does not describe.
 /// </param>
 /// <param name="Policy">What the mark does about it.</param>
 /// <param name="FillAlpha">
@@ -109,7 +120,7 @@ public enum OverlayMark
 public sealed record OverlayMarkRule(
     OverlayMark Mark,
     OverlayMarkSubject Subject,
-    bool CellCanHoldBody,
+    bool? CellCanHoldBody,
     OverlayMarkPolicy Policy,
     double FillAlpha,
     double AccentAlpha,
@@ -211,7 +222,7 @@ public static class InformationalOverlays
         new(
             OverlayMark.BodyState,
             OverlayMarkSubject.Body,
-            CellCanHoldBody: true,
+            CellCanHoldBody: null,
             OverlayMarkPolicy.Opaque,
             1.0,
             1.0,
@@ -247,15 +258,18 @@ public static class InformationalOverlays
             "on, and the player has to see who is in the area being marked."),
         new(
             OverlayMark.SelectionCount,
-            OverlayMarkSubject.Gesture,
+            OverlayMarkSubject.Cell,
             CellCanHoldBody: true,
-            OverlayMarkPolicy.Opaque,
+            OverlayMarkPolicy.OpaqueByExemption,
             1.0,
             1.0,
-            "The cell count is the gesture's own readout on an opaque plate, " +
-            "kept for one reason: a number over a sprite is unreadable. It is " +
-            "anchored to the selection rather than to a cell and it exists only " +
-            "while the button is held."),
+            "The count is a plate on the row above the drag, and a selection is " +
+            "an area of the map: it does land on cells that hold bodies, and on " +
+            "a rock selection in row 0 the caption is pushed inside the " +
+            "selection itself. The rule reaches it and the exception is taken " +
+            "anyway, for one reason — a number drawn over a sprite is " +
+            "unreadable, and translucency would be an appearance change Issue " +
+            "#90 forbids. It is bounded: it exists only while a button is held."),
     ];
 
     public static IReadOnlyList<OverlayMarkRule> All => Rules;
@@ -304,13 +318,19 @@ public static class InformationalOverlays
         IsDrawn(For(mark).Policy, cellHoldsBody);
 
     /// <summary>
-    /// The marks that would hide a body if their policy were relaxed. This is the
-    /// set the rule test walks, and it is derived rather than listed so a new
-    /// mark joins it by being declared.
+    /// The marks the rule reaches: those that explain a cell the simulation can
+    /// put a body on. Derived rather than listed, so a new mark joins it by being
+    /// declared. An exemption stays in this set on purpose — it is a mark the
+    /// rule reaches and that answers with a stated exception, not a mark the rule
+    /// misses.
     /// </summary>
     public static IEnumerable<OverlayMarkRule> GovernedByTheRule() =>
         Rules.Where(rule =>
-            rule.Subject == OverlayMarkSubject.Cell && rule.CellCanHoldBody);
+            rule.Subject == OverlayMarkSubject.Cell && rule.CellCanHoldBody == true);
+
+    /// <summary>The accepted exceptions, each with the reason it was accepted.</summary>
+    public static IEnumerable<OverlayMarkRule> Exemptions() =>
+        Rules.Where(rule => rule.Policy == OverlayMarkPolicy.OpaqueByExemption);
 }
 
 /// <summary>

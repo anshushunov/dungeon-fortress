@@ -2601,11 +2601,45 @@ public partial class Main : Node2D
         };
     }
 
+    /// <summary>
+    /// The four passes, and nothing else. This routine draws no primitive of its
+    /// own on purpose: every mark belongs to a named routine the manifest in
+    /// <c>DungeonFortress.Presentation.WorldDrawOrder</c> declares, and a mark
+    /// drawn inline here would be a mark with no declared policy in the one place
+    /// the manifest cannot see. <c>DrawMap_draws_nothing_of_its_own</c> is the
+    /// check that keeps it that way.
+    /// </summary>
     private void DrawMap()
     {
-        DrawRect(new Rect2(Vector2.Zero, MapPixelSize), new Color("#111827"));
         var rockTiles = _state!.Map.RockTiles.ToHashSet();
         var diggableTiles = _state.Map.DiggableTiles.ToHashSet();
+        DrawMapBackground();
+        DrawFloorTiles(rockTiles);
+        DrawBuildSites();
+        DrawStockpileCells();
+        DrawBeds();
+        DrawLooseItems();
+        DrawElevatedWorld(rockTiles, diggableTiles);
+        // Flat informational marks are projected above elevated geometry. A wall
+        // must not erase one side of a zone or the destination of an active job.
+        DrawZoneOutlines();
+        DrawJobRoutes();
+        // A dig mark is a player-intent overlay on the wall, not wall material.
+        // Drawing it after the depth pass keeps it readable on both top and face.
+        DrawDigDesignations(rockTiles);
+        DrawBuildSiteInformationOverlays();
+        DrawStockpileInformationOverlays();
+        DrawBodyInformationOverlays();
+        DrawZoneLabels();
+        DrawCellInteractionOverlays(rockTiles);
+        DrawBrushPreview(rockTiles);
+    }
+
+    private void DrawMapBackground() =>
+        DrawRect(new Rect2(Vector2.Zero, MapPixelSize), new Color("#111827"));
+
+    private void DrawFloorTiles(IReadOnlySet<GridPoint> rockTiles)
+    {
         for (var y = 0; y < PrototypeTuning.MapHeight; y++)
         {
             for (var x = 0; x < PrototypeTuning.MapWidth; x++)
@@ -2618,10 +2652,10 @@ public partial class Main : Node2D
                 }
             }
         }
+    }
 
-        DrawBuildSites();
-        DrawStockpileCells();
-
+    private void DrawBeds()
+    {
         foreach (var bed in _state!.Beds)
         {
             DrawCircle(
@@ -2629,8 +2663,11 @@ public partial class Main : Node2D
                 ScaleWorld(5),
                 bed.IsRipe ? new Color("#bef264") : new Color("#4d7c0f"));
         }
+    }
 
-        foreach (var loose in _state.LooseItems)
+    private void DrawLooseItems()
+    {
+        foreach (var loose in _state!.LooseItems)
         {
             var color = loose.Resource switch
             {
@@ -2653,21 +2690,6 @@ public partial class Main : Node2D
                     ScaleWorld(1.5f));
             }
         }
-
-        DrawElevatedWorld(rockTiles, diggableTiles);
-        // Flat informational marks are projected above elevated geometry. A wall
-        // must not erase one side of a zone or the destination of an active job.
-        DrawZoneOutlines();
-        DrawJobRoutes();
-        // A dig mark is a player-intent overlay on the wall, not wall material.
-        // Drawing it after the depth pass keeps it readable on both top and face.
-        DrawDigDesignations(rockTiles);
-        DrawBuildSiteInformationOverlays();
-        DrawStockpileInformationOverlays();
-        DrawBodyInformationOverlays();
-        DrawZoneLabels();
-        DrawCellInteractionOverlays(rockTiles);
-        DrawBrushPreview(rockTiles);
     }
 
     private void DrawZoneOutlines()

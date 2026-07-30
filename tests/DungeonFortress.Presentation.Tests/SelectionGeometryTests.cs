@@ -102,6 +102,52 @@ public sealed class SelectionGeometryTests
     }
 
     /// <summary>
+    /// The case only the invariant covers: a column whose two ends are floor and
+    /// whose middle is rock. <see cref="SelectionGeometry.Columns"/> measures the
+    /// ends only, so it is exact exactly while a wall reaches less than one tile
+    /// past its own footprint. Both halves are asserted here — the arithmetic
+    /// across the whole tile range ADR 0008 allows, and the column that depends
+    /// on it.
+    /// </summary>
+    [Theory]
+    [InlineData(CameraView.MinimumTileSize)]
+    [InlineData(CameraView.DefaultTileSize)]
+    [InlineData(CameraView.MaximumTileSize)]
+    public void A_wall_reaches_less_than_a_tile_past_its_footprint(int tileSize)
+    {
+        var scale = CameraView.WorldVisualScale(tileSize);
+        var reach =
+            (WallRenderGeometry.FacadeReferenceHeight +
+             WallRenderGeometry.FacadeReferenceOverhang) * scale;
+
+        Assert.True(
+            reach < tileSize,
+            $"a wall reaches {reach} px past its footprint at tile size " +
+            $"{tileSize}, so measuring only the ends of a column would miss rock " +
+            "in its middle.");
+
+        // Floor, rock, floor: the rock's raised top and hanging facade are inside
+        // the span the two floor ends produce.
+        var rock = new HashSet<GridPoint> { new(5, 3) };
+        var from = new GridPoint(5, 2);
+        var to = new GridPoint(5, 4);
+        var column = Assert.Single(SelectionGeometry.Columns(from, to, rock, tileSize));
+
+        foreach (var cell in BrushSelection.Rectangle(from, to))
+        {
+            var rect = SelectionGeometry.CellInteractionRect(cell, rock, tileSize);
+            Assert.InRange(rect.Y, column.Top, column.Bottom);
+            Assert.InRange(rect.Y + rect.Height, column.Top, column.Bottom);
+        }
+
+        // And the span really is the one the floor ends give, so the assertion
+        // above is not passing because the middle happened to be measured.
+        Assert.Equal(
+            SelectionGeometry.CellInteractionRect(from, rock, tileSize).Y,
+            column.Top);
+    }
+
+    /// <summary>
     /// The other half. A bounding box of the raised rectangles also contains every
     /// cell, and it is what the second review round of Issue #83 objected to: it
     /// lifts the top of the frame over floor columns that were never raised. The

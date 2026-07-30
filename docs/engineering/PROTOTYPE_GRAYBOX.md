@@ -506,14 +506,22 @@ it rather than repeating it:
 - `BodyOccupancy` is "which cells hold a body", as a pure function of the
   snapshot.
 
-Three subjects, because the rule reaches them differently. A **cell** mark
-explains a tile and is the case the rule is about. A **body** mark is the body's
-own readout — HP, state dot, downed cross, selection ring — anchored to the body
-and drawn above the depth pass precisely so a raised wall top cannot erase it. A
-**gesture** mark is the drag's own readout: the cell count is an opaque plate on
-purpose, because a number over a sprite is unreadable, and it exists only while
-the button is held. Only cell marks are asked to be translucent, and the one that
-is not — the dig mark — is not asked because rock is impassable.
+Two subjects, because the rule reaches them differently. A **cell** mark explains
+a tile and is the case the rule is about. A **body** mark is the body's own
+readout — HP, state dot, downed cross, selection ring — anchored to the body and
+drawn above the depth pass precisely so a raised wall top cannot erase it. The
+one cell mark that is not asked to be translucent is the dig mark, and only
+because rock is impassable, which is measured rather than assumed.
+
+One mark is opaque over cells that hold bodies **as a stated exception**: the
+count above a drag. Its plate lands on the row above the selection, and on a rock
+selection in row 0 it is pushed inside the selection itself, so the rule reaches
+it. It stays opaque for one reason — a number drawn over a sprite is unreadable,
+and translucency would be an appearance change this step forbids. That is
+declared as `OpaqueByExemption` with a required reason and reported by the rule
+test as an accepted exception, rather than as a third subject claiming the rule
+does not apply. The distinction matters: a subject that means "out of scope" is
+an escape hatch, and the first version of this manifest had one.
 
 Four checks in `DungeonFortress.Presentation.Tests` hold it up, and each one was
 chosen against a mutation that nothing used to catch:
@@ -525,6 +533,8 @@ chosen against a mutation that nothing used to catch:
 | `DrawHpBar` called from the depth pass again | `A_routine_only_calls_routines_of_its_own_pass` |
 | a mark moved between passes | `DrawMap_runs_the_declared_steps_in_the_declared_order` |
 | a new mark added to the pass with no declared policy | `Every_drawing_routine_of_the_adapter_is_declared` |
+| an opaque fill written as `this.DrawRect(…)` instead of `DrawRect(…)` | `No_covering_primitive_hides_behind_a_receiver` |
+| an opaque mark drawn inline in `DrawMap` itself | `DrawMap_draws_nothing_of_its_own` |
 
 The last four read `src/DungeonFortress.Game/Main.cs` **as text**. That is the
 consequence of the root cause Issue #90 names: no test project references
@@ -540,6 +550,16 @@ ever stands on rock", which is what lets a dig mark stay opaque, is a sweep of a
 real 1800-tick session including raid waves. "Bodies really do stand on the cells
 the translucent marks explain" is the same sweep from the other side, so the rule
 is measured to be the normal case rather than asserted to be.
+
+**Where the checks stop.** They hold code that follows one naming convention: a
+drawing method is a method whose name starts with `Draw`. A drawing method called
+something else is outside the manifest and outside every check built on it —
+that is a property of a convention, not an oversight, and saying so is what makes
+"a new mark cannot reach this pass without a policy" a true statement rather than
+an overclaim. The two ways out that were *not* conventions are closed instead:
+`DrawMap` now draws no primitive of its own, so there is no unnamed body inside
+the passes, and a call written on `this` counts as a call, so a receiver cannot
+hide a fill from the alpha check.
 
 Rock selection, DIG previews and excavation progress use
 the wall's raised top-plus-facade bounds rather than the flat cell footprint.
