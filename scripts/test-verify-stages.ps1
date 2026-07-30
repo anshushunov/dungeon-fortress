@@ -28,11 +28,91 @@ $ErrorActionPreference = "Stop"
 #   - a stage body, and the body of any function a stage can reach, may contain
 #     anything. That is what a stage is for;
 #   - everywhere else - the top level, and the body of any function no stage can
-#     reach - may only call the names in $allowedOutsideStages below.
+#     reach - may only call the names in $allowedOutsideStages below;
+#   - run setup lives in functions this script dot-sources, so those bodies are
+#     parsed too and may only call $allowedOutsideStages plus the plumbing named
+#     in $allowedInsideRunSetup (Issue #102).
 #
 # So a check added under a name this guard has never heard of fails by default,
 # which is the only way a name-based rule can be honest about the future. Adding a
-# name to the allowlist is a deliberate line in a diff, with a reason next to it.
+# name to either allowlist is a deliberate line in a diff, with a reason next to it.
+
+# --- which way each rule falls over ------------------------------------------
+#
+# Two rules in this file fail in opposite directions, and until Issue #102 that
+# was nowhere written down. A reader who assumes both are fail-closed will trust
+# the second one further than it deserves.
+#
+#   fail-closed - "a check outside every stage". An unknown command name is a
+#   finding. Adding a check is therefore visible by default, and the cost is
+#   borne by whoever adds a legitimate new piece of run setup: they have to name
+#   it in an allowlist and say why. That is the trade this rule is meant to make.
+#
+#   fail-open - the APPDATA order model. It follows what it can recognise -
+#   `dotnet` as a command name and `-FilePath "dotnet"` as a string literal - and
+#   says nothing about what it cannot. A program invoked in a way the model does
+#   not read is simply absent from the simulated run, and absence looks exactly
+#   like compliance.
+#
+# Issue #102 narrowed the open side rather than documenting it away: a `-FilePath`
+# whose value is not a string literal is now a finding, because the model cannot
+# tell whether it runs dotnet and refusing is cheaper than guessing. What stays
+# open, deliberately: a program invoked through a variable with the call operator
+# (`& $tool`), and anything a *child* script runs. The model follows dotnet inside
+# verify.ps1 and its run setup, not inside every script they start.
+
+# --- the six known ways past this guard, and what was decided about each ------
+#
+# Independent review of PR #97 built a harness that reproduced the analytic half
+# of this guard and mutated verify.ps1 against it. Six ways through came back.
+# None of them is a regression - the previous guard missed them too - so each got
+# a decision rather than a reflex, and the decisions live here because this is
+# where the rules live.
+#
+#   1. Only verify.ps1 was parsed. The bodies of the functions allowed to run
+#      outside stages live in dot-sourced files and were never analysed; PR #97
+#      added two more such names. CLOSED. Every file verify.ps1 dot-sources is
+#      parsed with it, and the transitive bodies of the run-setup entry points
+#      are policed by $allowedInsideRunSetup. Negative cases
+#      `check-inside-dot-sourced-run-setup`, `check-at-the-top-level-of-a-module`
+#      and `dot-source-target-through-a-variable`.
+#
+#   2. A check assembled only from allowed plumbing:
+#      `if (-not (Test-Path ...)) { throw ... }` outside a stage still passes,
+#      because every piece of it is separately legitimate. DEFERRED. Closing it
+#      means deciding what separates "this script refuses bad input" from "this
+#      run decided the repository is unhealthy", and both spellings are the same
+#      code. verify.ps1 already refuses an unknown -Stage name and an empty
+#      selection this way, and those refusals are correct. Condition to revisit:
+#      a rule that tells those two apart without renaming the existing ones -
+#      for example a marker a check has to carry - not a rule that bans `throw`.
+#
+#   3. A check with no command in it at all:
+#      `if ([IO.File]::ReadAllText(...) -notmatch ...) { throw ... }`. DEFERRED
+#      for the same reason and under the same condition as 2: this model reasons
+#      about commands, and a .NET method call is a check only if the answer to 2
+#      says it is.
+#
+#   4. A canonical decoy in front of the deciding deletion. The deletion contract
+#      in scripts\test-temporary-root.ps1 pins the shape of the *first* deletion
+#      in source order, not that the diagnosis is derived from it, so a canonical
+#      `Remove-Item -Recurse -Force -ErrorAction Stop` on a throwaway path
+#      followed by a real `[IO.Directory]::Delete` would pass. REJECTED. Writing
+#      that requires intent; drift does not produce it. This guard exists to
+#      catch drift, and buying the malicious case costs data flow analysis.
+#
+#   5. -ErrorAction was matched by name, not by value, so
+#      `-ErrorAction SilentlyContinue` satisfied the deletion contract. CLOSED in
+#      scripts\test-temporary-root.ps1, which now requires the value `Stop` and
+#      carries the measurement that says why.
+#
+#   6. `$t = "dotnet"; Invoke-Checked -FilePath $t` walked past the APPDATA
+#      model. CLOSED by refusing, not by resolving: a non-literal -FilePath is a
+#      finding. Every -FilePath in verify.ps1 is a string literal today, so the
+#      rule costs nothing to adopt and turns silence into a question. Resolving
+#      variable *values* in the AST stays out of scope - that is the separate,
+#      expensive work Issue #102 rules out. Negative case
+#      `program-name-through-a-variable`.
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $verifyScript = Join-Path $repoRoot "scripts\verify.ps1"
@@ -70,6 +150,25 @@ $allowedOutsideStages = @(
     "Remove-TemporaryItemBestEffort"
 )
 
+# Plumbing the run-setup bodies above may use on top of $allowedOutsideStages.
+# These names are allowed *inside* those functions and nowhere else, so the top
+# level of verify.ps1 does not inherit them. Each one is here because run setup
+# genuinely cannot be written without it (Issue #102, item 1).
+$allowedInsideRunSetup = @(
+    # Finding the engine on PATH when no path was given.
+    "Get-Command",
+    # Collapsing the engine's --version output into one string.
+    "Out-String",
+    # The deciding delete of the temporary-directory probe, and the best-effort
+    # cleanup of the run directory. Both are Issue #89 and both are why this
+    # name may not appear at the top level.
+    "Remove-Item",
+    # Normalising an engine path that was given explicitly.
+    "Resolve-Path",
+    # Locating the NuGet source bundled next to the engine executable.
+    "Split-Path"
+)
+
 # Invocations through a variable cannot be resolved by name, so they are matched
 # as text. Anything else dynamic outside a stage is a hole big enough to hide a
 # check in, and is reported.
@@ -77,7 +176,10 @@ $allowedDynamicInvocations = @(
     '. (Join-Path $PSScriptRoot "GodotTools.ps1")',
     '. (Join-Path $PSScriptRoot "HudVerification.ps1")',
     '. (Join-Path $PSScriptRoot "TemporaryRoot.ps1")',
-    '. $stageBody'
+    '. $stageBody',
+    # Run setup asks the engine for its own version. The executable is only
+    # known at run time, so this one cannot be spelled as a literal.
+    '& $GodotPath --version 2>&1'
 )
 
 # Run setup, in the order it has to happen: the temporary directory first,
@@ -121,9 +223,10 @@ function ConvertTo-ComparableCommandName {
     # fix. PowerShell's -eq is already case-insensitive; the suffix and the
     # directory are not.
     #
-    # This deliberately does not resolve variables: `-FilePath $someVariable`
-    # stays unrecognised, and making it otherwise is separate work with a
-    # non-obvious cost.
+    # This deliberately does not resolve variables. It no longer needs to: a
+    # -FilePath that is not a string literal is refused outright by
+    # Get-ProgramNameFindings, so an unreadable spelling is a question rather
+    # than a silence (Issue #102, item 6).
     if ([string]::IsNullOrWhiteSpace($Name)) {
         return ""
     }
@@ -147,12 +250,16 @@ function ConvertTo-ComparableCommandName {
 
 function Get-CommandFilePath {
     [CmdletBinding()]
-    [OutputType([string])]
+    [OutputType([pscustomobject])]
     param(
         [Parameter(Mandatory = $true)]
         [object]$Command
     )
 
+    # Three answers, not two: no -FilePath at all, a -FilePath spelled as a
+    # string literal, and a -FilePath the AST cannot read. The third used to be
+    # indistinguishable from the first, which is how a program name behind a
+    # variable became invisible to the APPDATA model.
     $elements = @($Command.CommandElements)
     for ($index = 0; $index -lt $elements.Count; $index++) {
         $element = $elements[$index]
@@ -169,16 +276,84 @@ function Get-CommandFilePath {
             $value = $elements[$index + 1]
         }
         if ($value -is [Management.Automation.Language.StringConstantExpressionAst]) {
-            return $value.Value
+            return [pscustomobject]@{
+                Present = $true
+                Literal = $true
+                Value = $value.Value
+                Text = ($value.Extent.Text -replace '\s+', ' ').Trim()
+            }
         }
 
+        return [pscustomobject]@{
+            Present = $true
+            Literal = $false
+            Value = $null
+            Text = $(if ($null -eq $value) { "" } else { ($value.Extent.Text -replace '\s+', ' ').Trim() })
+        }
+    }
+
+    return [pscustomobject]@{
+        Present = $false
+        Literal = $false
+        Value = $null
+        Text = ""
+    }
+}
+
+function Resolve-DotSourcedFile {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Command,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ContainingFile
+    )
+
+    # Only two spellings are resolved, both of them literal: `. "Name.ps1"` and
+    # `. (Join-Path $PSScriptRoot "Name.ps1")`. Anything else returns nothing and
+    # falls through to the dynamic-invocation rule, which reports it. That is the
+    # fail-closed direction on purpose: a file this guard cannot name is a file
+    # it cannot police, and silence there would rebuild the hole Issue #102 named.
+    if ($Command.InvocationOperator -ne [Management.Automation.Language.TokenKind]::Dot) {
         return $null
     }
 
-    return $null
+    $elements = @($Command.CommandElements)
+    if ($elements.Count -eq 0) {
+        return $null
+    }
+
+    $leaf = $null
+    $first = $elements[0]
+    if ($first -is [Management.Automation.Language.StringConstantExpressionAst]) {
+        $leaf = $first.Value
+    }
+    elseif ($first -is [Management.Automation.Language.ParenExpressionAst]) {
+        $inner = $first.Find({
+            param($node)
+            $node -is [Management.Automation.Language.CommandAst]
+        }, $true)
+        if ($null -ne $inner -and $inner.GetCommandName() -eq "Join-Path") {
+            $innerElements = @($inner.CommandElements)
+            if ($innerElements.Count -eq 3 -and
+                $innerElements[1] -is [Management.Automation.Language.VariableExpressionAst] -and
+                $innerElements[1].VariablePath.UserPath -eq "PSScriptRoot" -and
+                $innerElements[2] -is [Management.Automation.Language.StringConstantExpressionAst]) {
+                $leaf = $innerElements[2].Value
+            }
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($leaf)) {
+        return $null
+    }
+
+    return [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $ContainingFile) $leaf))
 }
 
-function Get-VerifyStructure {
+function Get-ParsedScript {
     [CmdletBinding()]
     [OutputType([pscustomobject])]
     param(
@@ -193,7 +368,116 @@ function Get-VerifyStructure {
         throw "'$Path' does not parse: $(($parseErrors | ForEach-Object { $_.ToString() }) -join '; ')"
     }
 
-    $catalogAssignment = $ast.Find({
+    return [pscustomobject]@{
+        Path = $Path
+        Ast = $ast
+    }
+}
+
+function Get-VerifyStructure {
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $mainPath = [IO.Path]::GetFullPath($Path)
+    $findings = @()
+    $functions = @{}
+    $commands = @()
+    $files = @()
+
+    # Breadth first over the dot-source graph. verify.ps1 is a script, not a
+    # module, so its run setup is spread across the files it dot-sources; parsing
+    # only the entry point is what let PR #97 add two allowlisted names pointing
+    # into a file nothing ever read (Issue #102, item 1).
+    $visited = @{}
+    $parsedAsts = @{}
+    $pending = New-Object Collections.Generic.Queue[string]
+    $pending.Enqueue($mainPath)
+
+    while ($pending.Count -gt 0) {
+        $filePath = $pending.Dequeue()
+        $key = $filePath.ToLowerInvariant()
+        if ($visited.Contains($key)) {
+            continue
+        }
+        $visited[$key] = $true
+
+        if (-not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
+            $findings += "'$filePath' is dot-sourced but does not exist, so its contents are never checked"
+            continue
+        }
+
+        $parsed = Get-ParsedScript -Path $filePath
+        $parsedAsts[$key] = $parsed.Ast
+        $files += $filePath
+        $isMain = ($filePath -eq $mainPath)
+
+        foreach ($function in $parsed.Ast.FindAll({
+            param($node)
+            $node -is [Management.Automation.Language.FunctionDefinitionAst]
+        }, $true)) {
+            if ($functions.Contains($function.Name)) {
+                $findings += (
+                    "function $($function.Name) is defined in both " +
+                    "'$($functions[$function.Name].File)' and '$filePath'; this guard would " +
+                    "model whichever body it saw first, which is not the one that runs")
+                continue
+            }
+            $functions[$function.Name] = [pscustomobject]@{
+                Name = $function.Name
+                File = $filePath
+                StartOffset = $function.Extent.StartOffset
+                EndOffset = $function.Extent.EndOffset
+                IsPrerequisite = ($function.Name -like "Initialize-*")
+                IsMain = $isMain
+            }
+        }
+
+        foreach ($command in $parsed.Ast.FindAll({
+            param($node)
+            $node -is [Management.Automation.Language.CommandAst]
+        }, $true)) {
+            $commandName = $command.GetCommandName()
+            $filePathArgument = Get-CommandFilePath -Command $command
+            $commands += [pscustomobject]@{
+                Name = $commandName
+                File = $filePath
+                Text = ($command.Extent.Text -replace '\s+', ' ').Trim()
+                Line = $command.Extent.StartLineNumber
+                StartOffset = $command.Extent.StartOffset
+                EndOffset = $command.Extent.EndOffset
+                FilePathArgument = $filePathArgument
+                ComparableName = (ConvertTo-ComparableCommandName -Name $commandName)
+                ComparableFilePath = (ConvertTo-ComparableCommandName -Name $filePathArgument.Value)
+            }
+
+            $dotSourced = Resolve-DotSourcedFile -Command $command -ContainingFile $filePath
+            if ($null -ne $dotSourced) {
+                $pending.Enqueue($dotSourced)
+            }
+        }
+    }
+
+    $commands = @($commands | Sort-Object -Property File, StartOffset)
+
+    $functionsByFile = @{}
+    foreach ($name in $functions.Keys) {
+        $function = $functions[$name]
+        if (-not $functionsByFile.Contains($function.File)) {
+            $functionsByFile[$function.File] = @()
+        }
+        $functionsByFile[$function.File] += $function
+    }
+
+    $mainAst = $parsedAsts[$mainPath.ToLowerInvariant()]
+    if ($null -eq $mainAst) {
+        throw "'$mainPath' could not be parsed, so nothing about the stages can be checked."
+    }
+
+    $catalogAssignment = $mainAst.Find({
         param($node)
         $node -is [Management.Automation.Language.AssignmentStatementAst] -and
         $node.Left -is [Management.Automation.Language.VariableExpressionAst] -and
@@ -241,6 +525,7 @@ function Get-VerifyStructure {
 
         $stages += [pscustomobject]@{
             Name = $stageName
+            File = $mainPath
             StartOffset = $bodyBlock.Extent.StartOffset
             EndOffset = $bodyBlock.Extent.EndOffset
         }
@@ -250,40 +535,7 @@ function Get-VerifyStructure {
         throw "verify.ps1 declares $($stages.Count) stage(s); staging exists to split the run, not to rename it."
     }
 
-    $functions = @{}
-    foreach ($function in $ast.FindAll({
-        param($node)
-        $node -is [Management.Automation.Language.FunctionDefinitionAst]
-    }, $true)) {
-        $functions[$function.Name] = [pscustomobject]@{
-            Name = $function.Name
-            StartOffset = $function.Extent.StartOffset
-            EndOffset = $function.Extent.EndOffset
-            IsPrerequisite = ($function.Name -like "Initialize-*")
-        }
-    }
-
-    $commands = @()
-    foreach ($command in $ast.FindAll({
-        param($node)
-        $node -is [Management.Automation.Language.CommandAst]
-    }, $true)) {
-        $commandName = $command.GetCommandName()
-        $commandFilePath = Get-CommandFilePath -Command $command
-        $commands += [pscustomobject]@{
-            Name = $commandName
-            Text = ($command.Extent.Text -replace '\s+', ' ').Trim()
-            Line = $command.Extent.StartLineNumber
-            StartOffset = $command.Extent.StartOffset
-            EndOffset = $command.Extent.EndOffset
-            FilePath = $commandFilePath
-            ComparableName = (ConvertTo-ComparableCommandName -Name $commandName)
-            ComparableFilePath = (ConvertTo-ComparableCommandName -Name $commandFilePath)
-        }
-    }
-    $commands = @($commands | Sort-Object -Property StartOffset)
-
-    $stageLoop = $ast.Find({
+    $stageLoop = $mainAst.Find({
         param($node)
         $node -is [Management.Automation.Language.ForEachStatementAst] -and
         $node.Condition.Extent.Text -match 'selectedStages'
@@ -293,15 +545,21 @@ function Get-VerifyStructure {
     }
 
     return [pscustomobject]@{
-        Path = $Path
+        Path = $mainPath
+        Files = @($files)
         Stages = @($stages)
         Functions = $functions
         Commands = $commands
         StageLoopStartOffset = $stageLoop.Extent.StartOffset
+        StructureFindings = @($findings)
+        FunctionsByFile = $functionsByFile
         # Simulating 45 selections revisits the same two dozen scopes over and
         # over. Without this the guard spends ten seconds re-filtering the same
         # command list, and the cheapest stage in the run stops being cheap.
         RangeCache = @{}
+        # Same reason, for the "which scope is this command in" question: it is
+        # asked once per command per rule, and the answer never changes.
+        ZoneCache = @{}
     }
 }
 
@@ -313,15 +571,19 @@ function Get-CommandsInRange {
         [object]$Structure,
 
         [Parameter(Mandatory = $true)]
+        [string]$File,
+
+        [Parameter(Mandatory = $true)]
         [int]$StartOffset,
 
         [Parameter(Mandatory = $true)]
         [int]$EndOffset
     )
 
-    $key = "$StartOffset-$EndOffset"
+    $key = "$File|$StartOffset-$EndOffset"
     if (-not $Structure.RangeCache.Contains($key)) {
         $Structure.RangeCache[$key] = @($Structure.Commands | Where-Object {
+            $_.File -eq $File -and
             $_.StartOffset -ge $StartOffset -and $_.EndOffset -le $EndOffset
         })
     }
@@ -334,23 +596,18 @@ function Get-ReachableFunctions {
     [OutputType([hashtable])]
     param(
         [Parameter(Mandatory = $true)]
-        [object]$Structure
+        [object]$Structure,
+
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [string[]]$Roots
     )
 
-    # Reachability starts at the stage bodies, because a stage is the only thing a
-    # run can be asked to execute. Anything no stage can reach is, for the purpose
-    # of this guard, ordinary top-level code - which is what closes the "hide the
-    # check in a helper that only the top level calls" way around rule 1.
     $reachable = @{}
     $pending = New-Object Collections.Generic.Queue[string]
-
-    foreach ($stage in $Structure.Stages) {
-        foreach ($command in (Get-CommandsInRange -Structure $Structure `
-                -StartOffset $stage.StartOffset -EndOffset $stage.EndOffset)) {
-            if (-not [string]::IsNullOrEmpty($command.Name) -and
-                $Structure.Functions.Contains($command.Name)) {
-                $pending.Enqueue($command.Name)
-            }
+    foreach ($root in $Roots) {
+        if ($Structure.Functions.Contains($root)) {
+            $pending.Enqueue($root)
         }
     }
 
@@ -363,6 +620,7 @@ function Get-ReachableFunctions {
 
         $function = $Structure.Functions[$name]
         foreach ($command in (Get-CommandsInRange -Structure $Structure `
+                -File $function.File `
                 -StartOffset $function.StartOffset -EndOffset $function.EndOffset)) {
             if (-not [string]::IsNullOrEmpty($command.Name) -and
                 $Structure.Functions.Contains($command.Name) -and
@@ -375,6 +633,176 @@ function Get-ReachableFunctions {
     return $reachable
 }
 
+function Get-StageReachableFunctions {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Structure
+    )
+
+    # Reachability starts at the stage bodies, because a stage is the only thing a
+    # run can be asked to execute. Anything no stage can reach is, for the purpose
+    # of this guard, ordinary top-level code - which is what closes the "hide the
+    # check in a helper that only the top level calls" way around rule 1.
+    $roots = @()
+    foreach ($stage in $Structure.Stages) {
+        foreach ($command in (Get-CommandsInRange -Structure $Structure `
+                -File $stage.File `
+                -StartOffset $stage.StartOffset -EndOffset $stage.EndOffset)) {
+            if (-not [string]::IsNullOrEmpty($command.Name) -and
+                $Structure.Functions.Contains($command.Name)) {
+                $roots += $command.Name
+            }
+        }
+    }
+
+    return (Get-ReachableFunctions -Structure $Structure -Roots $roots)
+}
+
+function Get-RunSetupFunctions {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Structure,
+
+        [Parameter(Mandatory = $true)]
+        [hashtable]$StageReachable,
+
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [string[]]$AllowedCommands
+    )
+
+    # Run setup is whatever the allowlist lets the top level call and no stage can
+    # reach: the temporary-directory preflight, the engine resolution, the NuGet
+    # profile and the cleanup. Those bodies mostly live in dot-sourced files, so
+    # until Issue #102 nothing looked inside them at all.
+    #
+    # A run-setup function that reaches a stage-reachable one drops out of this
+    # set on purpose. Its body would then be exempt from every rule, which is the
+    # hole this closes rather than a shortcut through it.
+    $roots = @($AllowedCommands | Where-Object {
+        $Structure.Functions.Contains($_) -and -not $StageReachable.Contains($_)
+    })
+
+    $closure = Get-ReachableFunctions -Structure $Structure -Roots $roots
+    $runSetup = @{}
+    foreach ($name in $closure.Keys) {
+        if (-not $StageReachable.Contains($name)) {
+            $runSetup[$name] = $true
+        }
+    }
+
+    return $runSetup
+}
+
+function Get-EnclosingFunction {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Structure,
+
+        [Parameter(Mandatory = $true)]
+        [object]$Command
+    )
+
+    if (-not $Structure.FunctionsByFile.Contains($Command.File)) {
+        return $null
+    }
+
+    $innermost = $null
+    foreach ($function in $Structure.FunctionsByFile[$Command.File]) {
+        if ($Command.StartOffset -lt $function.StartOffset -or
+            $Command.EndOffset -gt $function.EndOffset) {
+            continue
+        }
+        if ($null -eq $innermost -or $function.StartOffset -gt $innermost.StartOffset) {
+            $innermost = $function
+        }
+    }
+
+    return $innermost
+}
+
+function Get-CommandZone {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Structure,
+
+        [Parameter(Mandatory = $true)]
+        [object]$Command,
+
+        [Parameter(Mandatory = $true)]
+        [hashtable]$StageReachable,
+
+        [Parameter(Mandatory = $true)]
+        [hashtable]$RunSetup
+    )
+
+    # Four zones, and the fourth is why dot-sourcing the files is safe. A helper
+    # in GodotTools.ps1 or HudVerification.ps1 that verification never reaches
+    # belongs to another consumer - update-golden-ui.ps1, run-game.ps1 - and
+    # policing it here would report their code as verification's problem.
+    $cacheKey = "$($Command.File)|$($Command.StartOffset)-$($Command.EndOffset)"
+    if ($Structure.ZoneCache.Contains($cacheKey)) {
+        return [string]$Structure.ZoneCache[$cacheKey]
+    }
+
+    $zone = Get-CommandZoneCore `
+        -Structure $Structure `
+        -Command $Command `
+        -StageReachable $StageReachable `
+        -RunSetup $RunSetup
+    $Structure.ZoneCache[$cacheKey] = $zone
+    return $zone
+}
+
+function Get-CommandZoneCore {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Structure,
+
+        [Parameter(Mandatory = $true)]
+        [object]$Command,
+
+        [Parameter(Mandatory = $true)]
+        [hashtable]$StageReachable,
+
+        [Parameter(Mandatory = $true)]
+        [hashtable]$RunSetup
+    )
+
+    $enclosing = Get-EnclosingFunction -Structure $Structure -Command $Command
+    if ($null -ne $enclosing) {
+        if ($StageReachable.Contains($enclosing.Name)) {
+            return "stage"
+        }
+        if ($RunSetup.Contains($enclosing.Name)) {
+            return "run-setup"
+        }
+        if ($enclosing.IsMain) {
+            return "outside"
+        }
+        return "foreign"
+    }
+
+    foreach ($stage in $Structure.Stages) {
+        if ($Command.File -eq $stage.File -and
+            $Command.StartOffset -ge $stage.StartOffset -and
+            $Command.EndOffset -le $stage.EndOffset) {
+            return "stage"
+        }
+    }
+
+    return "outside"
+}
+
 function Get-StrayCheckFindings {
     [CmdletBinding()]
     [OutputType([string[]])]
@@ -383,7 +811,10 @@ function Get-StrayCheckFindings {
         [object]$Structure,
 
         [Parameter(Mandatory = $true)]
-        [hashtable]$Reachable,
+        [hashtable]$StageReachable,
+
+        [Parameter(Mandatory = $true)]
+        [hashtable]$RunSetup,
 
         [Parameter(Mandatory = $true)]
         [AllowEmptyCollection()]
@@ -391,45 +822,110 @@ function Get-StrayCheckFindings {
 
         [Parameter(Mandatory = $true)]
         [AllowEmptyCollection()]
+        [string[]]$AllowedInRunSetup,
+
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
         [string[]]$AllowedDynamic
     )
 
-    $allowedRegions = @()
-    foreach ($stage in $Structure.Stages) {
-        $allowedRegions += [pscustomobject]@{
-            Start = $stage.StartOffset
-            End = $stage.EndOffset
-        }
-    }
-    foreach ($name in $Reachable.Keys) {
-        $function = $Structure.Functions[$name]
-        $allowedRegions += [pscustomobject]@{
-            Start = $function.StartOffset
-            End = $function.EndOffset
-        }
-    }
-
     $findings = @()
     foreach ($command in $Structure.Commands) {
-        $inside = @($allowedRegions | Where-Object {
-            $command.StartOffset -ge $_.Start -and $command.EndOffset -le $_.End
-        })
-        if ($inside.Count -gt 0) {
+        $zone = Get-CommandZone `
+            -Structure $Structure `
+            -Command $command `
+            -StageReachable $StageReachable `
+            -RunSetup $RunSetup
+        if ($zone -eq "stage" -or $zone -eq "foreign") {
             continue
         }
+
+        $where = $(if ($command.File -eq $Structure.Path) {
+            "line $($command.Line)"
+        } else {
+            "$([IO.Path]::GetFileName($command.File)) line $($command.Line)"
+        })
 
         if ([string]::IsNullOrEmpty($command.Name)) {
             if ($AllowedDynamic -notcontains $command.Text) {
                 $findings += (
-                    "'$($command.Text)' at line $($command.Line) invokes something " +
+                    "'$($command.Text)' at $where invokes something " +
                     "through a variable outside every stage")
             }
             continue
         }
 
-        if ($AllowedCommands -notcontains $command.Name) {
-            $findings += "'$($command.Name)' at line $($command.Line) runs outside every stage"
+        if ($zone -eq "run-setup") {
+            if ($RunSetup.Contains($command.Name)) {
+                continue
+            }
+            if ($AllowedCommands -notcontains $command.Name -and
+                $AllowedInRunSetup -notcontains $command.Name) {
+                $findings += (
+                    "'$($command.Name)' at $where runs inside run setup, which " +
+                    "happens outside every stage")
+            }
+            continue
         }
+
+        if ($AllowedCommands -notcontains $command.Name) {
+            $findings += "'$($command.Name)' at $where runs outside every stage"
+        }
+    }
+
+    return @($findings)
+}
+
+function Get-ProgramNameFindings {
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Structure,
+
+        [Parameter(Mandatory = $true)]
+        [hashtable]$StageReachable,
+
+        [Parameter(Mandatory = $true)]
+        [hashtable]$RunSetup
+    )
+
+    # The APPDATA model reads -FilePath as a string. A -FilePath it cannot read
+    # is not evidence of compliance, so it is refused rather than ignored: this
+    # is the one place the model was made to fail closed (Issue #102, item 6).
+    # Every -FilePath in verify.ps1 is a literal today, so the rule costs nothing
+    # to adopt and only ever fires on something new.
+    $findings = @()
+    foreach ($command in $Structure.Commands) {
+        if (-not $command.FilePathArgument.Present -or $command.FilePathArgument.Literal) {
+            continue
+        }
+
+        $zone = Get-CommandZone `
+            -Structure $Structure `
+            -Command $command `
+            -StageReachable $StageReachable `
+            -RunSetup $RunSetup
+        if ($zone -eq "foreign") {
+            continue
+        }
+
+        $where = $(if ($command.File -eq $Structure.Path) {
+            "line $($command.Line)"
+        } else {
+            "$([IO.Path]::GetFileName($command.File)) line $($command.Line)"
+        })
+        $spelling = $(if ([string]::IsNullOrWhiteSpace($command.FilePathArgument.Text)) {
+            "nothing at all"
+        } else {
+            "'$($command.FilePathArgument.Text)'"
+        })
+
+        $findings += (
+            "'$($command.Name)' at $where passes $spelling as -FilePath. The " +
+            "APPDATA order model reads that value as text, so a program named " +
+            "anywhere but in a string literal is invisible to it; spell the " +
+            "program out or move the call into a stage that owns it")
     }
 
     return @($findings)
@@ -441,6 +937,9 @@ function Get-ScopeEvents {
     param(
         [Parameter(Mandatory = $true)]
         [object]$Structure,
+
+        [Parameter(Mandatory = $true)]
+        [string]$File,
 
         [Parameter(Mandatory = $true)]
         [int]$StartOffset,
@@ -472,7 +971,7 @@ function Get-ScopeEvents {
 
     $events = @()
     foreach ($command in (Get-CommandsInRange -Structure $Structure `
-            -StartOffset $StartOffset -EndOffset $EndOffset)) {
+            -File $File -StartOffset $StartOffset -EndOffset $EndOffset)) {
         $name = $command.Name
         if ([string]::IsNullOrEmpty($name)) {
             continue
@@ -506,6 +1005,7 @@ function Get-ScopeEvents {
 
         $events += @(Get-ScopeEvents `
             -Structure $Structure `
+            -File $function.File `
             -StartOffset $function.StartOffset `
             -EndOffset $function.EndOffset `
             -Fired $Fired `
@@ -553,6 +1053,7 @@ function Get-AppDataOrderFindings {
         foreach ($stage in $selection) {
             $events += @(Get-ScopeEvents `
                 -Structure $Structure `
+                -File $stage.File `
                 -StartOffset $stage.StartOffset `
                 -EndOffset $stage.EndOffset `
                 -Fired $fired `
@@ -596,12 +1097,16 @@ function Get-PreflightOrderFindings {
         [string[]]$Sequence
     )
 
+    # Offsets only compare inside one file, and the stage loop this measures
+    # against is in verify.ps1, so run setup is looked for there and nowhere else.
     $findings = @()
     $previousName = $null
     $previousOffset = -1
 
     foreach ($name in $Sequence) {
-        $calls = @($Structure.Commands | Where-Object { $_.Name -eq $name })
+        $calls = @($Structure.Commands | Where-Object {
+            $_.File -eq $Structure.Path -and $_.Name -eq $name
+        })
         if ($calls.Count -eq 0) {
             $findings += (
                 "$name is never called, so run setup every stage depends on is missing")
@@ -637,43 +1142,96 @@ function Get-PrerequisiteFindings {
         [object]$Structure,
 
         [Parameter(Mandatory = $true)]
-        [hashtable]$Reachable
+        [hashtable]$StageReachable,
+
+        [Parameter(Mandatory = $true)]
+        [hashtable]$RunSetup
     )
 
+    # Run setup counts as a way to run something. Before Issue #102 this rule
+    # only knew about stages, which is why it could not be applied to the
+    # dot-sourced Initialize-* names at all: Initialize-VerificationTemporaryRoot
+    # is reached from the preflight and from nowhere else, and calling that dead
+    # code would have been wrong.
+    #
+    # A prerequisite defined in a dot-sourced file that verification never
+    # reaches is deliberately not reported: it belongs to another consumer of
+    # that file, and this guard does not own their code.
     $findings = @()
     foreach ($name in @($Structure.Functions.Keys | Sort-Object)) {
-        if (-not $Structure.Functions[$name].IsPrerequisite) {
+        $function = $Structure.Functions[$name]
+        if (-not $function.IsPrerequisite) {
             continue
         }
-        if ($Reachable.Contains($name)) {
+        if ($StageReachable.Contains($name) -or $RunSetup.Contains($name)) {
+            continue
+        }
+        if (-not $function.IsMain) {
             continue
         }
         $findings += (
-            "prerequisite $name is not reachable from any stage, so nothing can " +
-            "ever run it and no stage is honest about needing it")
+            "prerequisite $name is not reachable from any stage or from run " +
+            "setup, so nothing can ever run it and no stage is honest about needing it")
     }
 
     return @($findings)
 }
 
-function Get-VerifyStructureFindings {
+function Get-VerifyAnalysis {
     [CmdletBinding()]
-    [OutputType([string[]])]
+    [OutputType([pscustomobject])]
     param(
         [Parameter(Mandatory = $true)]
         [string]$Path
     )
 
     $structure = Get-VerifyStructure -Path $Path
-    $reachable = Get-ReachableFunctions -Structure $structure
+    $stageReachable = Get-StageReachableFunctions -Structure $structure
+    $runSetup = Get-RunSetupFunctions `
+        -Structure $structure `
+        -StageReachable $stageReachable `
+        -AllowedCommands $allowedOutsideStages
+
+    return [pscustomobject]@{
+        Structure = $structure
+        StageReachable = $stageReachable
+        RunSetup = $runSetup
+    }
+}
+
+function Get-VerifyStructureFindings {
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [string]$Path,
+
+        [object]$Analysis
+    )
+
+    if ($null -eq $Analysis) {
+        $Analysis = Get-VerifyAnalysis -Path $Path
+    }
+    $structure = $Analysis.Structure
+    $stageReachable = $Analysis.StageReachable
+    $runSetup = $Analysis.RunSetup
 
     $findings = @()
+    $findings += @($structure.StructureFindings)
     $findings += @(Get-StrayCheckFindings `
         -Structure $structure `
-        -Reachable $reachable `
+        -StageReachable $stageReachable `
+        -RunSetup $runSetup `
         -AllowedCommands $allowedOutsideStages `
+        -AllowedInRunSetup $allowedInsideRunSetup `
         -AllowedDynamic $allowedDynamicInvocations)
-    $findings += @(Get-PrerequisiteFindings -Structure $structure -Reachable $reachable)
+    $findings += @(Get-ProgramNameFindings `
+        -Structure $structure `
+        -StageReachable $stageReachable `
+        -RunSetup $runSetup)
+    $findings += @(Get-PrerequisiteFindings `
+        -Structure $structure `
+        -StageReachable $stageReachable `
+        -RunSetup $runSetup)
     $findings += @(Get-PreflightOrderFindings -Structure $structure -Sequence $preflightSequence)
     $findings += @(Get-AppDataOrderFindings `
         -Structure $structure `
@@ -681,6 +1239,26 @@ function Get-VerifyStructureFindings {
         -DotnetCommand $dotnetCommand)
 
     return @($findings)
+}
+
+function Get-AnalysedScriptSurface {
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Analysis
+    )
+
+    # What the run actually reports about itself: which files were parsed and
+    # which functions the guard treats as run setup. Both used to be invisible,
+    # and the second one is the answer to "does the allowlist still point at
+    # something this guard reads".
+    return [pscustomobject]@{
+        Files = @($Analysis.Structure.Files | ForEach-Object { [IO.Path]::GetFileName($_) } | Sort-Object)
+        FilePaths = @($Analysis.Structure.Files)
+        RunSetupFunctions = @($Analysis.RunSetup.Keys | Sort-Object)
+        StageReachableFunctions = @($Analysis.StageReachable.Keys | Sort-Object)
+    }
 }
 
 function Get-DocumentationFindings {
@@ -772,7 +1350,7 @@ function Assert-VerifyRejects {
     }
 }
 
-function New-MutatedCopy {
+function New-MutatedTree {
     [CmdletBinding()]
     [OutputType([string])]
     param(
@@ -780,10 +1358,17 @@ function New-MutatedCopy {
         [string]$Name,
 
         [Parameter(Mandatory = $true)]
-        [string]$OriginalText,
+        [AllowEmptyCollection()]
+        [string[]]$SourceFiles,
+
+        [Parameter(Mandatory = $true)]
+        [string]$MainFileName,
 
         [Parameter(Mandatory = $true)]
         [string]$Destination,
+
+        [Parameter(Mandatory = $true)]
+        [string]$TargetFileName,
 
         [string]$Find,
 
@@ -792,33 +1377,57 @@ function New-MutatedCopy {
         [string]$Append
     )
 
-    $mutated = $OriginalText
-    if (-not [string]::IsNullOrEmpty($Find)) {
-        # A mutation that silently stops applying is a negative test that passes
-        # for the wrong reason, so a missing or ambiguous anchor fails loudly.
-        $occurrences = ([regex]::Matches($OriginalText, [regex]::Escape($Find))).Count
-        if ($occurrences -ne 1) {
-            throw (
-                "The negative case '$Name' anchors on text that appears " +
-                "$occurrences time(s) in verify.ps1; it has to appear exactly once. " +
-                "Update the anchor, do not delete the case.")
+    # The whole set is copied, not just verify.ps1, because the guard now follows
+    # dot-source lines: a lone copy would resolve GodotTools.ps1 to a file that is
+    # not there, and every negative case would "pass" on a missing file instead of
+    # on the mutation.
+    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+    $mutatedPath = $null
+    foreach ($source in $SourceFiles) {
+        $leaf = [IO.Path]::GetFileName($source)
+        $copy = Join-Path $Destination $leaf
+        $text = [IO.File]::ReadAllText($source)
+
+        if ($leaf -eq $TargetFileName) {
+            $original = $text
+            if (-not [string]::IsNullOrEmpty($Find)) {
+                # A mutation that silently stops applying is a negative test that
+                # passes for the wrong reason, so a missing or ambiguous anchor
+                # fails loudly.
+                $occurrences = ([regex]::Matches($text, [regex]::Escape($Find))).Count
+                if ($occurrences -ne 1) {
+                    throw (
+                        "The negative case '$Name' anchors on text that appears " +
+                        "$occurrences time(s) in $leaf; it has to appear exactly once. " +
+                        "Update the anchor, do not delete the case.")
+                }
+                $text = $text.Replace($Find, $Replace)
+            }
+            if (-not [string]::IsNullOrEmpty($Append)) {
+                $text = $text + $Append
+            }
+            if ($text -eq $original) {
+                throw "The negative case '$Name' did not change $leaf at all."
+            }
+            $mutatedPath = $copy
         }
-        $mutated = $OriginalText.Replace($Find, $Replace)
-    }
-    if (-not [string]::IsNullOrEmpty($Append)) {
-        $mutated = $mutated + $Append
-    }
-    if ($mutated -eq $OriginalText) {
-        throw "The negative case '$Name' did not change verify.ps1 at all."
+
+        [IO.File]::WriteAllText($copy, $text, [Text.UTF8Encoding]::new($false))
     }
 
-    [IO.File]::WriteAllText($Destination, $mutated, [Text.UTF8Encoding]::new($false))
-    return $Destination
+    if ($null -eq $mutatedPath) {
+        throw (
+            "The negative case '$Name' names '$TargetFileName', which verify.ps1 " +
+            "does not dot-source; the case would have proven nothing.")
+    }
+
+    return (Join-Path $Destination $MainFileName)
 }
 
 # --- the real script and the real document ---------------------------------
 
-$structureFindings = @(Get-VerifyStructureFindings -Path $verifyScript)
+$analysis = Get-VerifyAnalysis -Path $verifyScript
+$structureFindings = @(Get-VerifyStructureFindings -Analysis $analysis)
 if ($structureFindings.Count -gt 0) {
     throw (
         "verify.ps1 breaks the stage contract:" + [Environment]::NewLine + "  " +
@@ -828,6 +1437,8 @@ if ($structureFindings.Count -gt 0) {
         "one goes into `$allowedOutsideStages in scripts\test-verify-stages.ps1 " +
         "with the reason next to it - otherwise -Stage and -Skip misreport what ran.")
 }
+
+$surface = Get-AnalysedScriptSurface -Analysis $analysis
 
 $listOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File $verifyScript -ListStages
 if ($LASTEXITCODE -ne 0) {
@@ -878,16 +1489,19 @@ Assert-VerifyRejects `
 New-Item -ItemType Directory -Force -Path $sandbox | Out-Null
 
 try {
+    $mainFileName = [IO.Path]::GetFileName($verifyScript)
+    $sourceFiles = @($surface.FilePaths)
     $originalText = [IO.File]::ReadAllText($verifyScript)
     $newline = if ($originalText.Contains("`r`n")) { "`r`n" } else { "`n" }
 
     # A guard nobody has watched fail is a guard nobody knows works. Every case
-    # below is a change someone could plausibly make, applied to a copy, and each
-    # one has to come back named in the findings.
+    # below is a change someone could plausibly make, applied to a copy of the
+    # whole script set, and each one has to come back named in the findings.
     $negativeCases = @(
         [pscustomobject]@{
             Name = "check-outside-a-stage-under-a-new-name"
             Why = "a check outside every stage, under a name this guard has never seen"
+            File = "verify.ps1"
             Find = '    foreach ($stageName in $selectedStages) {'
             Replace = @(
                 '    Assert-SomeNewInvariant -Path $repoRoot',
@@ -899,6 +1513,7 @@ try {
         [pscustomobject]@{
             Name = "check-outside-a-stage-through-a-variable"
             Why = "a check outside every stage, invoked through a variable"
+            File = "verify.ps1"
             Find = '$scope = if ($notRunStages.Count -eq 0) { "full" } else { "partial" }'
             Replace = @(
                 '& $strayCheck',
@@ -908,12 +1523,69 @@ try {
             Expect = @('& $strayCheck')
         },
         [pscustomobject]@{
-            Name = "dotnet-in-a-stage-after-the-profile-switch"
-            Why = "a stage that calls dotnet after APPDATA moved to the Godot profile"
+            Name = "check-inside-dot-sourced-run-setup"
+            Why = "a check hidden in the body of a run-setup function in another file"
+            File = "TemporaryRoot.ps1"
+            Find = '    $selection = Resolve-VerificationTemporaryRoot -ExplicitPath $ExplicitPath'
+            Replace = @(
+                '    Assert-SomeNewInvariant -Path $ExplicitPath',
+                '    $selection = Resolve-VerificationTemporaryRoot -ExplicitPath $ExplicitPath'
+            ) -join $newline
+            Append = ""
+            Expect = @("Assert-SomeNewInvariant", "run setup")
+        },
+        [pscustomobject]@{
+            Name = "check-at-the-top-level-of-a-module"
+            Why = "a check that runs when a dot-sourced file is loaded"
+            File = "GodotTools.ps1"
+            Find = ""
+            Replace = ""
+            Append = @(
+                '',
+                'function Assert-ToolsetAvailable {',
+                '    if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot "verify.ps1") -PathType Leaf)) {',
+                '        throw "verify.ps1 is missing."',
+                '    }',
+                '}',
+                '',
+                'Assert-ToolsetAvailable',
+                ''
+            ) -join $newline
+            Expect = @("Assert-ToolsetAvailable", "GodotTools.ps1")
+        },
+        [pscustomobject]@{
+            Name = "dot-source-target-through-a-variable"
+            Why = "a dot-sourced file this guard cannot name and therefore cannot read"
+            File = "verify.ps1"
+            Find = '. (Join-Path $PSScriptRoot "GodotTools.ps1")'
+            Replace = @(
+                '$toolsModule = "GodotTools.ps1"',
+                '. (Join-Path $PSScriptRoot $toolsModule)'
+            ) -join $newline
+            Append = ""
+            Expect = @('through a variable')
+        },
+        [pscustomobject]@{
+            Name = "program-name-through-a-variable"
+            Why = "a program named by a variable, which the APPDATA model cannot read"
+            File = "verify.ps1"
             Find = '            $baselineScreenshot = Join-Path $verifyRoot "baseline-t1.png"'
             Replace = @(
-                '            Invoke-Checked -FilePath "dotnet" -Arguments @("--version")',
+                '            $program = "dotnet"',
+                '            Invoke-Checked -FilePath $program -Arguments @("--version")',
                 '            $baselineScreenshot = Join-Path $verifyRoot "baseline-t1.png"'
+            ) -join $newline
+            Append = ""
+            Expect = @("-FilePath", "string literal")
+        },
+        [pscustomobject]@{
+            Name = "dotnet-in-a-stage-after-the-profile-switch"
+            Why = "a stage that calls dotnet after APPDATA moved to the Godot profile"
+            File = "verify.ps1"
+            Find = '            $raidScreenshot = Join-Path $verifyRoot "prepared-raid.png"'
+            Replace = @(
+                '            Invoke-Checked -FilePath "dotnet" -Arguments @("--version")',
+                '            $raidScreenshot = Join-Path $verifyRoot "prepared-raid.png"'
             ) -join $newline
             Append = ""
             Expect = @("screenshots", "APPDATA")
@@ -921,10 +1593,11 @@ try {
         [pscustomobject]@{
             Name = "dotnet-after-the-switch-spelled-differently"
             Why = "the same late dotnet call written as a path with an .exe suffix"
-            Find = '            $raidScreenshot = Join-Path $verifyRoot "prepared-raid.png"'
+            File = "verify.ps1"
+            Find = '            $baselineRepeatScreenshot = Join-Path $verifyRoot "baseline-t1-repeat.png"'
             Replace = @(
                 '            Invoke-Checked -FilePath "C:\Program Files\dotnet\DotNet.exe" -Arguments @("--version")',
-                '            $raidScreenshot = Join-Path $verifyRoot "prepared-raid.png"'
+                '            $baselineRepeatScreenshot = Join-Path $verifyRoot "baseline-t1-repeat.png"'
             ) -join $newline
             Append = ""
             Expect = @("screenshots", "APPDATA")
@@ -932,6 +1605,7 @@ try {
         [pscustomobject]@{
             Name = "prerequisites-reordered-inside-a-stage"
             Why = "Initialize-EngineRuntime moved in front of Initialize-GameHostBuild"
+            File = "verify.ps1"
             Find = @(
                 '            Initialize-GameHostBuild',
                 '            Initialize-EngineRuntime',
@@ -950,6 +1624,7 @@ try {
         [pscustomobject]@{
             Name = "prerequisite-no-stage-can-reach"
             Why = "shared setup nothing is able to trigger"
+            File = "verify.ps1"
             Find = ""
             Replace = ""
             Append = @(
@@ -964,6 +1639,7 @@ try {
         [pscustomobject]@{
             Name = "temporary-directory-preflight-dropped"
             Why = "the Issue #89 preflight taken out of the run"
+            File = "verify.ps1"
             Find = '    $temporaryRootSelection = Initialize-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot'
             Replace = '    $temporaryRootSelection = [pscustomobject]@{ Path = $null; Source = $null }'
             Append = ""
@@ -972,10 +1648,12 @@ try {
     )
 
     foreach ($case in $negativeCases) {
-        $copy = New-MutatedCopy `
+        $copy = New-MutatedTree `
             -Name $case.Name `
-            -OriginalText $originalText `
-            -Destination (Join-Path $sandbox ($case.Name + ".ps1")) `
+            -SourceFiles $sourceFiles `
+            -MainFileName $mainFileName `
+            -Destination (Join-Path $sandbox $case.Name) `
+            -TargetFileName $case.File `
             -Find $case.Find `
             -Replace $case.Replace `
             -Append $case.Append
@@ -993,9 +1671,18 @@ try {
     }
 
     # The positive control. Without it every case above could be passing because
-    # the copy is broken rather than because the mutation was caught.
-    $untouched = Join-Path $sandbox "untouched.ps1"
-    [IO.File]::WriteAllText($untouched, $originalText, [Text.UTF8Encoding]::new($false))
+    # the copy is broken rather than because the mutation was caught. The whole
+    # set is copied, so it also proves the dot-source lines still resolve when
+    # the tree lives somewhere other than scripts\.
+    $untouchedRoot = Join-Path $sandbox "untouched"
+    New-Item -ItemType Directory -Force -Path $untouchedRoot | Out-Null
+    foreach ($source in $sourceFiles) {
+        [IO.File]::WriteAllText(
+            (Join-Path $untouchedRoot ([IO.Path]::GetFileName($source))),
+            [IO.File]::ReadAllText($source),
+            [Text.UTF8Encoding]::new($false))
+    }
+    $untouched = Join-Path $untouchedRoot $mainFileName
     $untouchedFindings = @(Get-VerifyStructureFindings -Path $untouched)
     if ($untouchedFindings.Count -gt 0) {
         throw (
@@ -1064,7 +1751,10 @@ try {
         status = "ok"
         stages = $stageNames
         documentedStages = $stageCount
+        analysedFiles = @($surface.Files)
+        runSetupFunctions = @($surface.RunSetupFunctions)
         allowedOutsideStages = $allowedOutsideStages.Count
+        allowedInsideRunSetup = $allowedInsideRunSetup.Count
         preflightSequence = $preflightSequence
         stageSelectionsChecked = $stageCount + ($stageCount * ($stageCount - 1) / 2)
         negativeCasesProven = @($negativeCases | ForEach-Object { $_.Name })
