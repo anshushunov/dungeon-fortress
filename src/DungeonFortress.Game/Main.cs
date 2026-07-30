@@ -67,6 +67,12 @@ public partial class Main : Node2D
     private ViewPoint _cameraCenter = CameraView.MapCenter(CameraView.DefaultTileSize);
     private double _uiScale = CameraView.DefaultUiScale;
     private ViewSize? _requestedFrameSize;
+    // Set only when this run sized its own window from the screen. A capture
+    // never does, because a capture has to declare every pixel-affecting value.
+    private ViewSize? _autoFrameSize;
+    private bool _uiScaleIsAutomatic;
+    private ViewRect? _screenUsableRect;
+    private int _startupFramePolicyChecks;
     private bool _cameraPanning;
     private Vector2 _lastPanPointer;
     private int? _selectedCreatureId;
@@ -137,7 +143,14 @@ public partial class Main : Node2D
             _cameraCenter = view.CameraPosition;
             _uiScale = view.UiScale;
             _requestedFrameSize = view.FrameSize;
-            ConfigureRequestedFrame();
+            // An omitted --ui-scale is not the same as "--ui-scale 1". The first
+            // asks this machine's screen what is readable; the second freezes a
+            // number, which is what a reproducible frame needs and what
+            // ViewLaunchOptions already demands from every capture.
+            _uiScaleIsAutomatic = CommandLineArguments.Read(arguments, "--ui-scale") is null;
+            _startupFramePolicyChecks = CameraView.AssertStartupFramePolicy(
+                ViewLaunchOptions.MinimumLogicalFrameSize);
+            ConfigureStartupFrame();
             var selectCreature = CommandLineArguments.ReadInt(arguments, "--select-creature");
             var selectCell = CommandLineArguments.Read(arguments, "--select-cell");
             var demoControls = arguments.Contains("--demo-controls", StringComparer.Ordinal);
@@ -963,6 +976,109 @@ public partial class Main : Node2D
         window.ContentScaleSize = frame;
     }
 
+    // ---------------------------------------------------------------------
+    // Startup frame and UI scale (Issue #100, Issue #86)
+    //
+    // The launcher used to hand every run a 1280x720 frame at UI scale 1. That
+    // pair is the rectangle the HUD is authored against, not a description of
+    // any real display, and on the owner's screen it opened a small window with
+    // 8-15 px HUD text. Twice.
+    //
+    // The arithmetic of the replacement is engine-free and lives in
+    // CameraView.AutomaticFrameSize / AutomaticUiScale, which is where ADR 0011
+    // puts a rule of presentation. What is left here is the part that genuinely
+    // needs the engine: asking the display server for a screen, moving the
+    // window, and re-deriving the scale when the player resizes it.
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// The usable rectangle of the screen this window is on, or <c>null</c> when
+    /// there is no display to ask (headless) or the display is smaller than the
+    /// authored rectangle. Both cases fall back to the frame in
+    /// <c>project.godot</c>, which is what every run did before.
+    /// </summary>
+    private ViewRect? ScreenUsableRect()
+    {
+        if (DisplayServer.GetName() == "headless")
+        {
+            return null;
+        }
+
+        var screen = DisplayServer.WindowGetCurrentScreen();
+        var rect = DisplayServer.ScreenGetUsableRect(screen);
+        if (rect.Size.X < CameraView.DesignFrameSize.Width ||
+            rect.Size.Y < CameraView.DesignFrameSize.Height)
+        {
+            return null;
+        }
+
+        return new ViewRect(rect.Position.X, rect.Position.Y, rect.Size.X, rect.Size.Y);
+    }
+
+    private void ConfigureStartupFrame()
+    {
+        ViewSize frame;
+        if (_requestedFrameSize is { } declared)
+        {
+            ConfigureRequestedFrame();
+            frame = declared;
+        }
+        else if (ScreenUsableRect() is { } usable)
+        {
+            _screenUsableRect = usable;
+            frame = CameraView.AutomaticFrameSize(new ViewSize(usable.Width, usable.Height));
+            var size = new Vector2I(checked((int)frame.Width), checked((int)frame.Height));
+            var window = GetWindow();
+            window.Size = size;
+            window.ContentScaleSize = size;
+            // Centred in the usable rectangle rather than left wherever the
+            // engine would have put a 1280x720 window: the remaining tenth of
+            // the screen is split evenly, so the title bar has room and no edge
+            // falls off.
+            window.Position = new Vector2I(
+                checked((int)usable.X) + ((checked((int)usable.Width) - size.X) / 2),
+                checked((int)usable.Y) + ((checked((int)usable.Height) - size.Y) / 2));
+            _autoFrameSize = frame;
+        }
+        else
+        {
+            // No screen to measure — headless, or a display smaller than the
+            // authored rectangle. The project's own 1280x720 window stands and
+            // an omitted --ui-scale keeps meaning 1, which is what every run did
+            // before this policy existed.
+            return;
+        }
+
+        if (_uiScaleIsAutomatic)
+        {
+            _uiScale = CameraView.AutomaticUiScale(frame);
+        }
+
+        AssertLogicalFrameFits(frame, _uiScale);
+    }
+
+    /// <summary>
+    /// The rule <see cref="ViewLaunchOptions"/> applies to a declared frame,
+    /// applied once more to the pair this run actually ended up with. It is not
+    /// a duplicate: a frame derived from the screen is unknown until the display
+    /// has been asked, and an explicit <c>--ui-scale 2</c> on a 1366x768 laptop
+    /// reaches exactly here and nowhere else.
+    /// </summary>
+    private static void AssertLogicalFrameFits(ViewSize frame, double uiScale)
+    {
+        var minimum = ViewLaunchOptions.MinimumLogicalFrameSize;
+        if (CameraView.FitsLogicalFrame(frame, uiScale, minimum))
+        {
+            return;
+        }
+
+        throw new ArgumentException(
+            $"Frame {FormatSize(frame)} at UI scale {FormatNumber(uiScale)} provides only " +
+            $"{FormatSize(CameraView.LogicalFrameSize(frame, uiScale))} logical pixels; " +
+            $"at least {FormatSize(minimum)} are required.",
+            "--ui-scale");
+    }
+
     private void OnViewportResized()
     {
         // A player resizing an interactive window expects extra pixels to expose
@@ -978,7 +1094,25 @@ public partial class Main : Node2D
             }
         }
 
-        LayoutHud(GetViewportRect().Size, _uiScale);
+        var size = GetViewportRect().Size;
+        // Issue #86: maximizing used to hand the extra pixels to the world and
+        // leave the HUD at its launch-time scale, so a 3044x1722 client area
+        // still drew 8 px legend text. An automatic scale follows the window it
+        // was derived from; an explicit one never moves.
+        if (_uiScaleIsAutomatic && _requestedFrameSize is null && _screenshotPath is null)
+        {
+            var live = new ViewSize(size.X, size.Y);
+            var scale = CameraView.AutomaticUiScale(live);
+            if (CameraView.FitsLogicalFrame(
+                    live,
+                    scale,
+                    ViewLaunchOptions.MinimumLogicalFrameSize))
+            {
+                _uiScale = scale;
+            }
+        }
+
+        LayoutHud(size, _uiScale);
         ApplyCameraView();
         QueueRedraw();
     }
@@ -2415,6 +2549,20 @@ public partial class Main : Node2D
             requestedFrameSize = _requestedFrameSize is { } requested
                 ? new[] { requested.Width, requested.Height }
                 : null,
+            // Which half of the startup rule this run took. "explicit" is the
+            // only value a capture can ever report, because a capture must
+            // declare --frame-size and --ui-scale before anything else runs.
+            frameMode = _requestedFrameSize is null ? "auto" : "explicit",
+            uiScaleMode = _uiScaleIsAutomatic ? "auto" : "explicit",
+            autoFrameSize = _autoFrameSize is { } automatic
+                ? new[] { automatic.Width, automatic.Height }
+                : null,
+            // Machine-specific and therefore reported only by the runs that
+            // actually consulted it, which are never the reproducible ones.
+            screenUsableRect = _screenUsableRect is { } usable
+                ? new[] { usable.X, usable.Y, usable.Width, usable.Height }
+                : null,
+            startupFramePolicyChecks = _startupFramePolicyChecks,
             worldViewport = world is { } worldRect
                 ? new[]
                 {
@@ -4413,6 +4561,9 @@ public partial class Main : Node2D
 
     private static string FormatVector(Vector2 vector) =>
         $"({FormatNumber(vector.X)}, {FormatNumber(vector.Y)})";
+
+    private static string FormatSize(ViewSize size) =>
+        $"{FormatNumber(size.Width)}x{FormatNumber(size.Height)}";
 
     private void RecordDiagnostic(string scope, Exception exception)
     {

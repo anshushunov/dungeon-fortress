@@ -88,11 +88,38 @@ public static class CameraView
     public const double MinimumUiScale = 0.75;
     public const double MaximumUiScale = 2.0;
 
+    /// <summary>
+    /// The frame the HUD is authored against. It is not a description of anyone's
+    /// monitor, and using it as a launch default is what Issues #86 and #100 were:
+    /// the game opened a small window with 8-15 px text. It stays here as the unit
+    /// the automatic UI scale counts in — "how many times does the authored
+    /// rectangle fit into this window" — and as the fallback when there is no
+    /// screen to ask.
+    /// </summary>
+    public static readonly ViewSize DesignFrameSize = new(1280, 720);
+
+    /// <summary>
+    /// How much of a screen's usable rectangle a fresh window takes. Not the whole
+    /// rectangle: the window stays an ordinary movable, resizable window with room
+    /// for its own decorations.
+    /// </summary>
+    public const double StartupFrameScreenShare = 0.9;
+
     private const double ReferenceTileSize = 22.0;
     private const double ReferenceGoblinDrawSize = 20.0;
     private static readonly double[] DiscreteZoomLevels = [0.5, 0.75, 1.0, 1.5, 2.0];
 
+    /// <summary>
+    /// The scales a run may choose for itself. Bounded above by
+    /// <see cref="MaximumUiScale"/>, which is also the largest value an explicit
+    /// <c>--ui-scale</c> may name, and below by 1: a window that is already small
+    /// must not have its interface made smaller still.
+    /// </summary>
+    private static readonly double[] AutomaticUiScaleSteps = [1.0, 1.25, 1.5, 1.75, 2.0];
+
     public static IReadOnlyList<double> ZoomLevels => DiscreteZoomLevels;
+
+    public static IReadOnlyList<double> AutomaticUiScales => AutomaticUiScaleSteps;
 
     public static int ValidateTileSize(int tileSize)
     {
@@ -141,6 +168,203 @@ public static class CameraView
 
         return uiScale;
     }
+
+    // -----------------------------------------------------------------------
+    // Startup frame and UI scale (Issues #100 and #86)
+    //
+    // A run that declares --frame-size and --ui-scale keeps every guarantee it
+    // had: a capture is required to declare both, so nothing reproducible can
+    // reach the arithmetic below. A run that declares nothing is an interactive
+    // launch, and an interactive launch asks the screen rather than a constant.
+    //
+    // Deliberately pure geometry, with no DPI query. A Godot window on Windows is
+    // per-monitor DPI aware, so a display the system scales at 200 % already
+    // reports twice as many physical pixels and the ratio below picks the larger
+    // scale from that alone. Reading the DPI separately would count it twice.
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// The window a fresh interactive run opens on a screen whose usable
+    /// rectangle is <paramref name="usableScreen"/>. Never smaller than
+    /// <see cref="DesignFrameSize"/> and never larger than the screen.
+    /// </summary>
+    public static ViewSize AutomaticFrameSize(ViewSize usableScreen) =>
+        new(
+            Math.Max(DesignFrameSize.Width, Math.Floor(usableScreen.Width * StartupFrameScreenShare)),
+            Math.Max(DesignFrameSize.Height, Math.Floor(usableScreen.Height * StartupFrameScreenShare)));
+
+    /// <summary>
+    /// The largest step at which <paramref name="frame"/> still shows the whole
+    /// authored rectangle. A frame smaller than that rectangle gets scale 1,
+    /// which is exactly what it got before this policy existed.
+    /// </summary>
+    public static double AutomaticUiScale(ViewSize frame)
+    {
+        var fit = Math.Min(
+            frame.Width / DesignFrameSize.Width,
+            frame.Height / DesignFrameSize.Height);
+        var chosen = AutomaticUiScaleSteps[0];
+        foreach (var step in AutomaticUiScaleSteps)
+        {
+            // 1e-9, so that an exactly fitting frame such as 1920x1080 gets 1.5
+            // instead of losing it to binary representation.
+            if (step <= fit + 1e-9)
+            {
+                chosen = step;
+            }
+        }
+
+        return chosen;
+    }
+
+    /// <summary>
+    /// Whether a frame at a UI scale leaves at least <paramref name="minimumLogical"/>
+    /// logical pixels. The minimum belongs to the launch options rather than to
+    /// the camera, so it is passed in rather than reached for.
+    /// </summary>
+    public static bool FitsLogicalFrame(ViewSize frame, double uiScale, ViewSize minimumLogical) =>
+        frame.Width / uiScale >= minimumLogical.Width &&
+        frame.Height / uiScale >= minimumLogical.Height;
+
+    public static ViewSize LogicalFrameSize(ViewSize frame, double uiScale) =>
+        new(frame.Width / uiScale, frame.Height / uiScale);
+
+    /// <summary>
+    /// Proves the properties of the two functions above over a fixed matrix of
+    /// real display sizes and returns how many assertions it made.
+    ///
+    /// It exists because this arithmetic would otherwise only ever run against
+    /// whichever single display is in front of it: the machine that developed it
+    /// has a 3072x1920 screen and would never execute the laptop branches. The
+    /// Godot adapter calls it on every entry point, so every headless smoke,
+    /// golden UI capture and screenshot in <c>verify.ps1</c> runs it — and it is
+    /// engine-free, so a unit test can call it directly.
+    ///
+    /// 1. a chosen scale is one of the declared steps and inside the range an
+    ///    explicit <c>--ui-scale</c> may use;
+    /// 2. the automatic window fits its screen and is never smaller than the
+    ///    authored rectangle;
+    /// 3. the logical frame never drops under <paramref name="minimumLogical"/>;
+    /// 4. the chosen step is the largest one that still shows the authored
+    ///    rectangle — the next step up would not;
+    /// 5. a bigger screen never produces a smaller window or a smaller scale;
+    /// 6. and <see cref="FitsLogicalFrame"/> rejects a pair that violates it,
+    ///    because a guard never seen to fail is not evidence.
+    /// </summary>
+    public static int AssertStartupFramePolicy(ViewSize minimumLogical)
+    {
+        ViewSize[] screens =
+        [
+            new(1280, 720),
+            new(1366, 768),
+            new(1440, 900),
+            new(1600, 900),
+            new(1920, 1080),
+            new(1920, 1200),
+            new(2048, 1440),
+            new(2560, 1440),
+            new(3044, 1722),
+            new(3440, 1440),
+            new(3840, 2160),
+        ];
+
+        // Monotonicity needs a sequence that actually grows in both dimensions.
+        // The matrix above deliberately does not: a 3440x1440 ultrawide is wider
+        // and shorter than a 3044x1722 window, and comparing those two would
+        // measure the order of the list rather than the policy.
+        ViewSize[] ladder =
+        [
+            new(1280, 720),
+            new(1600, 900),
+            new(1920, 1080),
+            new(2560, 1440),
+            new(3840, 2160),
+        ];
+
+        var checks = 0;
+        foreach (var screen in screens)
+        {
+            var frame = AutomaticFrameSize(screen);
+            var scale = AutomaticUiScale(frame);
+            checks++;
+
+            if (!AutomaticUiScaleSteps.Contains(scale) ||
+                scale < MinimumUiScale ||
+                scale > MaximumUiScale)
+            {
+                throw new InvalidOperationException(
+                    $"Automatic UI scale {Format(scale)} for screen {Format(screen)} " +
+                    "is not a supported step.");
+            }
+
+            if (frame.Width > screen.Width || frame.Height > screen.Height ||
+                frame.Width < DesignFrameSize.Width || frame.Height < DesignFrameSize.Height)
+            {
+                throw new InvalidOperationException(
+                    $"Automatic frame {Format(frame)} does not fit screen {Format(screen)} " +
+                    "while holding the authored rectangle.");
+            }
+
+            if (!FitsLogicalFrame(frame, scale, minimumLogical))
+            {
+                throw new InvalidOperationException(
+                    $"Automatic frame {Format(frame)} at UI scale {Format(scale)} leaves only " +
+                    $"{Format(LogicalFrameSize(frame, scale))} logical pixels.");
+            }
+
+            var next = AutomaticUiScaleSteps.FirstOrDefault(step => step > scale, double.NaN);
+            if (!double.IsNaN(next) &&
+                LogicalFrameSize(frame, next) is { } larger &&
+                larger.Width >= DesignFrameSize.Width &&
+                larger.Height >= DesignFrameSize.Height)
+            {
+                throw new InvalidOperationException(
+                    $"Automatic UI scale {Format(scale)} for frame {Format(frame)} is not the " +
+                    "largest step that still shows the authored rectangle.");
+            }
+        }
+
+        ViewSize? previousFrame = null;
+        double? previousScale = null;
+        foreach (var screen in ladder)
+        {
+            var frame = AutomaticFrameSize(screen);
+            var scale = AutomaticUiScale(frame);
+            checks++;
+            if (previousFrame is { } earlierFrame && previousScale is { } earlierScale &&
+                (frame.Width < earlierFrame.Width || frame.Height < earlierFrame.Height ||
+                 scale < earlierScale))
+            {
+                throw new InvalidOperationException(
+                    $"Screen {Format(screen)} produced frame {Format(frame)} at UI scale " +
+                    $"{Format(scale)}, which is smaller than the frame or scale of the smaller " +
+                    "screen before it.");
+            }
+
+            previousFrame = frame;
+            previousScale = scale;
+        }
+
+        // The smallest window this policy can open, asked for at the largest
+        // scale an explicit --ui-scale may name: 640x360 logical, far under any
+        // sane minimum. If this starts fitting, the guard has stopped guarding.
+        checks++;
+        if (FitsLogicalFrame(DesignFrameSize, MaximumUiScale, minimumLogical))
+        {
+            throw new InvalidOperationException(
+                $"The minimum-logical-frame guard accepted {Format(DesignFrameSize)} at UI scale " +
+                $"{Format(MaximumUiScale)}, which leaves less than {Format(minimumLogical)} " +
+                "logical pixels.");
+        }
+
+        return checks;
+    }
+
+    private static string Format(double value) =>
+        value.ToString("G17", CultureInfo.InvariantCulture);
+
+    private static string Format(ViewSize size) =>
+        $"{Format(size.Width)}x{Format(size.Height)}";
 
     /// <summary>
     /// Preserves the proportions of world-space primitives authored for the old
