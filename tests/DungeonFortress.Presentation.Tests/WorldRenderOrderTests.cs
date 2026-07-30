@@ -17,7 +17,7 @@ public sealed class WorldRenderOrderTests
     }
 
     [Fact]
-    public void Exact_depth_tie_keeps_tall_geometry_in_front_of_bodies()
+    public void Body_on_same_cell_as_a_structure_is_drawn_in_front_of_it()
     {
         var creature = new WorldRenderItem(WorldRenderKind.Creature, 3, 80, 200);
         var raider = new WorldRenderItem(WorldRenderKind.Raider, 2, 80, 200);
@@ -25,7 +25,7 @@ public sealed class WorldRenderOrderTests
         var wall = new WorldRenderItem(WorldRenderKind.Wall, 0, 80, 200);
 
         Assert.Equal(
-            [creature, raider, structure, wall],
+            [structure, creature, raider, wall],
             WorldRenderOrder.BackToFront([wall, structure, raider, creature]));
     }
 
@@ -62,5 +62,13 @@ public sealed class WorldRenderOrderTests
         Assert.Throws<ArgumentOutOfRangeException>(
             () => WorldRenderOrder.BackToFront(
                 [new WorldRenderItem(WorldRenderKind.Wall, 1, 0, double.NaN)]));
+    }
+
+    [Fact]
+    public void Non_finite_render_x_is_rejected()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => WorldRenderOrder.BackToFront(
+                [new WorldRenderItem(WorldRenderKind.Wall, 1, double.PositiveInfinity, 0)]));
     }
 }

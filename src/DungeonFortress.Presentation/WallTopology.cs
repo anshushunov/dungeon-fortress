@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using DungeonFortress.Simulation;
 
 namespace DungeonFortress.Presentation;
@@ -64,7 +66,11 @@ public static class WallTopology
         if (!rockTiles.Contains(cell))
         {
             throw new ArgumentException(
-                $"Cell ({cell.X},{cell.Y}) is not a rock tile.",
+                "Cell (" +
+                cell.X.ToString(CultureInfo.InvariantCulture) +
+                "," +
+                cell.Y.ToString(CultureInfo.InvariantCulture) +
+                ") is not a rock tile.",
                 nameof(cell));
         }
 
@@ -82,6 +88,7 @@ public static class WallTopology
 
     public static bool Connects(WallTileVariant variant, WallNeighbors side)
     {
+        ValidateVariant(variant);
         if (side is WallNeighbors.None || !IsSingleSide(side))
         {
             throw new ArgumentOutOfRangeException(
@@ -100,9 +107,35 @@ public static class WallTopology
     public static bool HasFrontFacade(WallTileVariant variant) =>
         !Connects(variant, WallNeighbors.South);
 
+    /// <summary>
+    /// Exposed outer sides the adapter should articulate. This keeps the mapping
+    /// from an autotile variant to visible seams out of engine code.
+    /// </summary>
+    public static WallNeighbors ExposedSides(WallTileVariant variant)
+    {
+        ValidateVariant(variant);
+        var allSides =
+            WallNeighbors.North |
+            WallNeighbors.East |
+            WallNeighbors.South |
+            WallNeighbors.West;
+        return allSides & ~(WallNeighbors)variant;
+    }
+
     private static bool IsSingleSide(WallNeighbors side) =>
         side is WallNeighbors.North or
             WallNeighbors.East or
             WallNeighbors.South or
             WallNeighbors.West;
+
+    private static void ValidateVariant(WallTileVariant variant)
+    {
+        if ((byte)variant > (byte)WallTileVariant.Surrounded)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(variant),
+                variant,
+                "Wall variants contain only four cardinal connection bits.");
+        }
+    }
 }

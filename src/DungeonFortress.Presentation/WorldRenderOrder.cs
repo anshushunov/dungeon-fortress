@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace DungeonFortress.Presentation;
 
 /// <summary>
@@ -40,8 +42,11 @@ public static class WorldRenderOrder
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(items),
-                    item,
-                    "Render coordinates must be finite.");
+                    "Render coordinates must be finite: x=" +
+                    item.X.ToString("G17", CultureInfo.InvariantCulture) +
+                    ", y=" +
+                    item.Y.ToString("G17", CultureInfo.InvariantCulture) +
+                    ".");
             }
         }
 
@@ -57,9 +62,11 @@ public static class WorldRenderOrder
 
     private static int TiePriority(WorldRenderKind kind) => kind switch
     {
-        WorldRenderKind.Creature => 0,
-        WorldRenderKind.Raider => 1,
-        WorldRenderKind.Structure => 2,
+        // A body using a structure occupies its cell, so the structure is the
+        // background at the exact shared anchor rather than an opaque cover.
+        WorldRenderKind.Structure => 0,
+        WorldRenderKind.Creature => 1,
+        WorldRenderKind.Raider => 2,
         // At the exact crossing depth the wall still occludes the body. It moves
         // in front only after its interpolated anchor has actually passed.
         WorldRenderKind.Wall => 3,

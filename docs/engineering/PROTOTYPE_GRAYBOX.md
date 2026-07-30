@@ -433,17 +433,29 @@ three reference pixels. These two small overlaps make both sides of depth visibl
 without changing the cell or collision model. No atlas or generated asset is
 involved.
 
-The world draws in three passes:
+The world draws in four passes:
 
-1. floor, zones, routes and other flat marks;
+1. floor and other material that belongs below elevated world geometry;
 2. walls, training posts, creatures and raiders in stable back-to-front Y-order;
-3. dig intent, selection and brush previews above world depth.
+3. zones, routes, work goals, dig intent and body information above world depth;
+4. selection and brush previews above every informational mark.
 
-Walls and posts use the lower edge of their footprint as depth anchor. Creatures
-and raiders use their current **interpolated** center. At an exact tie, bodies
-are still behind tall geometry; they move in front only after the interpolated
-anchor crosses it. X and stable identifiers break otherwise equal ties, so
-collection order cannot change a frame.
+Walls use the lower edge of their footprint as depth anchor. Training posts use
+the cell centre because a creature performing `Drill` legitimately occupies the
+same cell and must remain visible over the post. Creatures and raiders use their
+current **interpolated** centre. At an exact wall tie, bodies are still behind
+the wall; they move in front only after the interpolated anchor crosses it. At
+an exact post tie, the post is the background and the body is drawn above it. X
+and stable identifiers break otherwise equal ties, so collection order cannot
+change a frame.
+
+HP bars, state dots, downed marks and the selected-creature ring are information,
+not opaque world material. They use the same interpolated centre as the body but
+are drawn after the depth pass, so a wall can hide the lower body without also
+hiding its readable state. Zone borders, haul routes and work goals likewise
+remain complete instead of losing their south edge under a wall. Rock selection,
+DIG previews and excavation progress use the wall's raised top-plus-facade
+bounds rather than the flat cell footprint.
 
 Two ignored, reproducible frames show the same internal wall column with a
 selected creature on opposite sides:
@@ -463,9 +475,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
 ```
 
 The screenshot events state the selected cells, ticks, checksums and all five
-view inputs. The pure `WallTopologyTests` cover all sixteen neighbour masks,
-isolated rock, corners and map edges; `WorldRenderOrderTests` cover behind,
-front, exact ties, stable ties and the order change on interpolated Y.
+view inputs. The pure tests cover all sixteen neighbour masks and their stable
+numeric values, exposed-edge mapping, isolated rock, corners and map edges.
+Render-geometry tests cover a body north and south of a wall, a body sharing a
+training-post cell, stable cell-ID round trips, exact/stable ties and the order
+change on interpolated Y.
 
 The inspector exposes the selected creature's needs, martial form, mode,
 current job, carried item, last reason and its structured numeric details. Cell
