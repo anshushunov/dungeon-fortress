@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using DungeonFortress.Simulation;
 
 namespace DungeonFortress.Presentation;
@@ -50,6 +52,13 @@ public static class HudText
     /// Stone is reported as three separate facts on purpose — loose on the
     /// floor, on someone's back, put away — because one combined number would
     /// hide exactly the part of the chain that is moving.
+    ///
+    /// Every number here is formatted with the invariant culture. This text is
+    /// a checked artefact — the golden UI state compares it across two machines
+    /// with two different cultures — so a decimal separator that follows the
+    /// machine would make "0.5x" pass locally and fail in CI for a reason no
+    /// diff would explain. Localisation, if it ever arrives, will be a decision
+    /// of its own and not a side effect of where the build ran (Issue #46).
     /// </summary>
     public static string Summary(HudViewState view) => Summary(view, view.Projection);
 
@@ -59,7 +68,7 @@ public static class HudText
         var stock = state.Stocks;
         var domain = state.Domain;
         return
-            $"{view.Fixture.ToUpperInvariant()}  •  t{state.Tick}  •  {(view.Paused ? "PAUSED" : $"{view.Speed:0.#}x")}" +
+            $"{view.Fixture.ToUpperInvariant()}  •  t{state.Tick}  •  {(view.Paused ? "PAUSED" : Speed(view.Speed))}" +
             $"  •  jobs {state.Jobs.Count}  •  {view.Checksum[..8]}" +
             $"  •  renown {domain.Renown}{Trend(domain.Renown, domain.RenownAtPreviousWave)}" +
             $"  •  strength {domain.Strength}{Trend(domain.Strength, domain.StrengthAtPreviousWave)}" +
@@ -73,6 +82,15 @@ public static class HudText
             // as absent is the same defect as not drawing it (Issue #58).
             $"  •  dug {state.Economy.DigsCompleted}  •  marks {projection.DigDesignationCount}";
     }
+
+    /// <summary>
+    /// The playback speed, in the only culture the HUD is allowed to speak.
+    /// It is the single fractional number in the whole of the HUD and the
+    /// inspector, which is why the rule is cheap to fix now and expensive to
+    /// fix after the second one appears.
+    /// </summary>
+    public static string Speed(double speed) =>
+        speed.ToString("0.#", CultureInfo.InvariantCulture) + "x";
 
     /// <summary>
     /// Better, worse or unchanged since the previous wave landed. Empty before

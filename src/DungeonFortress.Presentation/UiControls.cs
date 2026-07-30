@@ -319,6 +319,9 @@ public static class UiControls
         _ => "muster",
     };
 
-    private static string SpeedLabel(double speed) =>
-        speed == 0.5 ? "0.5x" : $"{speed:0}x";
+    // The toolbar and the summary print the same speed, so they print it through
+    // the same function: the half-speed literal this replaced was a special case
+    // that existed only because the general branch could not be trusted with a
+    // fraction under a ru-RU culture (Issue #46).
+    private static string SpeedLabel(double speed) => HudText.Speed(speed);
 }

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using DungeonFortress.Simulation;
 
 using Xunit;
@@ -61,12 +63,6 @@ public sealed class HudTextTests
         Assert.Contains("strength 50↓", first, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// The fractional speeds are deliberately absent: <c>{speed:0.#}</c> renders
-    /// the decimal separator of the current culture, so "0.5x" here would be a
-    /// machine-dependent expectation rather than a property of the HUD. The
-    /// behaviour predates this seam and is left exactly as it was.
-    /// </summary>
     [Fact]
     public void A_running_session_shows_its_speed_where_a_paused_one_shows_PAUSED()
     {
@@ -84,6 +80,48 @@ public sealed class HudTextTests
             "BASELINE  •  t10  •  PAUSED  •",
             HudText.Summary(View(state, paused: true, speed: 16.0)),
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Issue #46. The speed is the only fractional number the HUD prints, and it
+    /// used to take the decimal separator of the machine: "0,5x" on a ru-RU
+    /// desktop against "0.5x" in CI. Nothing caught it because all three golden
+    /// frames are paused, so the branch never ran — the check passed for the
+    /// wrong reason, and the first unpaused reference frame would have split the
+    /// two environments with a diff nobody could explain.
+    ///
+    /// This text is a checked artefact, not a localised interface, so it is
+    /// invariant everywhere.
+    /// </summary>
+    [Theory]
+    [InlineData("ru-RU")]
+    [InlineData("de-DE")]
+    [InlineData("tr-TR")]
+    [InlineData("")]
+    public void The_speed_prints_the_same_under_any_culture_of_the_thread(string culture)
+    {
+        var state = PresentationFixtures.Baseline(10);
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = culture.Length == 0
+                ? CultureInfo.InvariantCulture
+                : CultureInfo.GetCultureInfo(culture);
+
+            Assert.Equal("0.5x", HudText.Speed(0.5));
+            Assert.Equal("2x", HudText.Speed(2.0));
+            Assert.StartsWith(
+                "BASELINE  •  t10  •  0.5x  •",
+                HudText.Summary(View(state, paused: false, speed: 0.5)),
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                ',',
+                HudText.Summary(View(state, paused: false, speed: 0.5)));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
     }
 
     /// <summary>
