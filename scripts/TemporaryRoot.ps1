@@ -160,9 +160,20 @@ function Get-TemporaryRootDiagnosis {
         # would certify a directory that every cleanup in this repository then
         # chokes on, which is the original defect with an extra step.
         #
+        # -ErrorAction Stop is load-bearing, and by value rather than by
+        # presence. Measured on Windows PowerShell 5.1: when the delete fails
+        # because a file inside is held open, the error honours the parameter,
+        # so with SilentlyContinue, Continue or Ignore the catch below never
+        # runs, $removalFailure stays $null and this function returns "usable"
+        # for a directory it just failed to empty. The Access-denied failure of
+        # C:\WINDOWS\TEMP behaves differently - it is terminating under every
+        # value - which is why the parameter looked decorative until someone
+        # measured the other mode (Issue #102).
+        #
         # The rule is not left to this comment: scripts\test-temporary-root.ps1
         # asserts over the AST that the first deletion here, and in
-        # Remove-TemporaryItemBestEffort below, is this exact call.
+        # Remove-TemporaryItemBestEffort below, is this exact call with this
+        # exact -ErrorAction.
         Remove-Item -LiteralPath $probeDirectory -Recurse -Force -ErrorAction Stop
     }
     catch {

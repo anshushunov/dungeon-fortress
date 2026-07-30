@@ -14,7 +14,8 @@ $ErrorActionPreference = "Stop"
 #   2. verify.ps1 refuses such a directory before it runs a single stage;
 #   3. a cleanup that cannot delete its directory warns and returns, so a check
 #      that already passed stays passed;
-#   4. the probe decides by the same call the real cleanup makes.
+#   4. the probe decides by the same call the real cleanup makes, spelled the
+#      same way down to the value of -ErrorAction.
 #
 # It needs no build, no engine and no network, and runs inside the `scripts`
 # stage.
@@ -34,8 +35,79 @@ $sandbox = Join-Path $artifactsRoot ("temporary-root-test-" + [Guid]::NewGuid().
 # test in this repository green while silently restoring the Issue #89 defect,
 # because the two calls only disagree on the permissions of C:\WINDOWS\TEMP.
 # Hence an assertion over the AST rather than more prose.
-$requiredRemoveItemParameters = @("Recurse", "Force", "ErrorAction")
+#
+# -ErrorAction is part of that contract by *value*, not by name (Issue #102).
+# The reason recorded here until then - "without it the failure is not even
+# raised" - is not what a measurement says. Measured on Windows PowerShell
+# 5.1.26100.8972, Remove-Item -Recurse -Force on a directory it cannot delete
+# behaves in two different ways depending on why it cannot:
+#
+#   - the reported Issue #89 case, C:\WINDOWS\TEMP, where the account may create
+#     but not delete: a Win32Exception "Access is denied" that reaches the caller
+#     as a terminating error under *every* -ErrorAction value tried, including
+#     Ignore, and under $ErrorActionPreference of both Stop and Continue. In that
+#     environment the parameter changes nothing, which is what the review of
+#     PR #97 measured;
+#   - a file inside held open, which is the only mode a portable test can create
+#     and the one this file uses below: an IOException that honours the
+#     parameter. With Stop it is caught; with SilentlyContinue, Continue or
+#     Ignore it is not, Get-TemporaryRootDiagnosis returns $null, and a directory
+#     it just failed to delete is certified as usable.
+#
+# So the requirement is not stricter than necessary - it is necessary in the
+# failure mode this repository can reproduce, and the value is the whole point.
+# Omitting the parameter happens to work only while every caller keeps
+# $ErrorActionPreference at "Stop"; measured with "Continue", the same held-open
+# failure goes uncaught. The contract therefore pins the value.
+$requiredRemoveItemParameters = @("Recurse", "Force")
+$requiredErrorActionValue = "Stop"
 $decidedByRemoveItem = @("Get-TemporaryRootDiagnosis", "Remove-TemporaryItemBestEffort")
+
+# Not closed, and deliberately. A canonical Remove-Item -Recurse -Force
+# -ErrorAction Stop on a throwaway path, placed in front of a real
+# [IO.Directory]::Delete that the diagnosis is actually derived from, satisfies
+# everything below: the contract pins the shape of the first deletion in source
+# order, not that the answer comes from it. Closing that needs data flow, and
+# writing it needs intent - drift does not produce a decoy. This guard is here
+# to catch drift (Issue #102, item 4).
+
+function Get-CommandParameterValues {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Command
+    )
+
+    # Parameter name to the text of its value, for the parameters that have one.
+    # A switch maps to $null. Both `-ErrorAction Stop` and `-ErrorAction:Stop`
+    # are read; a value that is not a bare word or a string stays as its own
+    # source text, which is enough to say "that is not Stop".
+    $values = @{}
+    $elements = @($Command.CommandElements)
+    for ($index = 1; $index -lt $elements.Count; $index++) {
+        $element = $elements[$index]
+        if (-not ($element -is [Management.Automation.Language.CommandParameterAst])) {
+            continue
+        }
+
+        $value = $element.Argument
+        if ($null -eq $value -and
+            $index + 1 -lt $elements.Count -and
+            -not ($elements[$index + 1] -is [Management.Automation.Language.CommandParameterAst])) {
+            $value = $elements[$index + 1]
+            $index++
+        }
+
+        $values[$element.ParameterName] = $(if ($null -eq $value) {
+            $null
+        } else {
+            $value.Extent.Text.Trim().Trim('"', "'")
+        })
+    }
+
+    return $values
+}
 
 function Get-FirstDeletion {
     [CmdletBinding()]
@@ -61,6 +133,7 @@ function Get-FirstDeletion {
             Parameters = @($command.CommandElements |
                 Where-Object { $_ -is [Management.Automation.Language.CommandParameterAst] } |
                 ForEach-Object { $_.ParameterName })
+            ParameterValues = (Get-CommandParameterValues -Command $command)
             Offset = $command.Extent.StartOffset
             Line = $command.Extent.StartLineNumber
             Text = ($command.Extent.Text -replace '\s+', ' ').Trim()
@@ -76,6 +149,7 @@ function Get-FirstDeletion {
         $deletions += [pscustomobject]@{
             Kind = "dotnet-delete"
             Parameters = @()
+            ParameterValues = @{}
             Offset = $invocation.Extent.StartOffset
             Line = $invocation.Extent.StartLineNumber
             Text = ($invocation.Extent.Text -replace '\s+', ' ').Trim()
@@ -103,7 +177,10 @@ function Get-DeletionContractFindings {
 
         [Parameter(Mandatory = $true)]
         [AllowEmptyCollection()]
-        [string[]]$RequiredParameters
+        [string[]]$RequiredParameters,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ErrorActionValue
     )
 
     $parseErrors = $null
@@ -146,9 +223,32 @@ function Get-DeletionContractFindings {
             $findings += (
                 "$name deletes at line $($first.Line) without [$($missing -join ', ')]. " +
                 "Without -Recurse and -Force the delete is not the one cleanup " +
-                "performs, and without -ErrorAction Stop its failure is not even " +
-                "raised, so the probe would report success on a directory it " +
-                "could not remove")
+                "performs, so the probe would be answering a different question " +
+                "from the one that matters")
+        }
+
+        # By value, not by name. -ErrorAction SilentlyContinue used to satisfy
+        # this contract while turning the deciding failure into a non-terminating
+        # error nobody catches - measured, on a directory holding a file open,
+        # Get-TemporaryRootDiagnosis then returns $null and accepts it
+        # (Issue #102, item 5).
+        if ($first.Parameters -notcontains "ErrorAction") {
+            $findings += (
+                "$name deletes at line $($first.Line) without -ErrorAction " +
+                "$ErrorActionValue, so whether its failure is raised at all is " +
+                "decided by whichever `$ErrorActionPreference the caller happens " +
+                "to have set")
+            continue
+        }
+
+        $actual = $first.ParameterValues["ErrorAction"]
+        if ([string]$actual -ne $ErrorActionValue) {
+            $findings += (
+                "$name deletes at line $($first.Line) with -ErrorAction " +
+                "'$actual' instead of '$ErrorActionValue'. Measured: with a file " +
+                "held open inside, anything weaker than Stop leaves the failure " +
+                "non-terminating, the catch never runs and the probe certifies a " +
+                "directory it just failed to delete")
         }
     }
 
@@ -162,7 +262,8 @@ try {
     $contractFindings = @(Get-DeletionContractFindings `
         -Path $temporaryRootModule `
         -FunctionNames $decidedByRemoveItem `
-        -RequiredParameters $requiredRemoveItemParameters)
+        -RequiredParameters $requiredRemoveItemParameters `
+        -ErrorActionValue $requiredErrorActionValue)
     if ($contractFindings.Count -gt 0) {
         throw (
             "The probe and the real cleanup no longer delete the same way:" +
@@ -188,10 +289,25 @@ try {
             Expect = "ErrorAction"
         },
         [pscustomobject]@{
+            # The case Issue #102 opened: the parameter is there, the value is
+            # not, and until now that satisfied the contract while breaking the
+            # probe on the one failure mode a test can reproduce.
+            Name = "probe-decides-with-a-weaker-erroraction"
+            Find = $probeDeleteCall
+            Replace = 'Remove-Item -LiteralPath $probeDirectory -Recurse -Force -ErrorAction SilentlyContinue'
+            Expect = "SilentlyContinue"
+        },
+        [pscustomobject]@{
             Name = "cleanup-drifts-away-from-the-probe"
             Find = $cleanupDeleteCall
             Replace = '[IO.Directory]::Delete($Path, $true)'
             Expect = "Remove-TemporaryItemBestEffort"
+        },
+        [pscustomobject]@{
+            Name = "cleanup-drifts-to-a-weaker-erroraction"
+            Find = $cleanupDeleteCall
+            Replace = 'Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Continue'
+            Expect = "Continue"
         }
     )
 
@@ -213,7 +329,8 @@ try {
         $caseFindings = @(Get-DeletionContractFindings `
             -Path $copy `
             -FunctionNames $decidedByRemoveItem `
-            -RequiredParameters $requiredRemoveItemParameters)
+            -RequiredParameters $requiredRemoveItemParameters `
+            -ErrorActionValue $requiredErrorActionValue)
         $matched = @($caseFindings | Where-Object { $_ -match [regex]::Escape($case.Expect) })
         if ($matched.Count -eq 0) {
             throw (
@@ -229,7 +346,8 @@ try {
     $untouchedFindings = @(Get-DeletionContractFindings `
         -Path $untouchedModule `
         -FunctionNames $decidedByRemoveItem `
-        -RequiredParameters $requiredRemoveItemParameters)
+        -RequiredParameters $requiredRemoveItemParameters `
+        -ErrorActionValue $requiredErrorActionValue)
     if ($untouchedFindings.Count -gt 0) {
         throw (
             "An unmodified copy of TemporaryRoot.ps1 was reported as broken, so " +
@@ -445,6 +563,8 @@ try {
         status = "ok"
         resolutionOrder = @("-TemporaryRoot", "`$env:DUNGEON_FORTRESS_TEMP", "TMP/TEMP")
         decidedByRemoveItem = $decidedByRemoveItem
+        requiredDeleteParameters = $requiredRemoveItemParameters
+        requiredErrorAction = $requiredErrorActionValue
         deletionContractCasesProven = @($contractCases | ForEach-Object { $_.Name })
         usableRootAccepted = $true
         fileRejected = $true
