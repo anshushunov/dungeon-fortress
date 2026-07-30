@@ -77,6 +77,52 @@ public sealed class PrototypeContractRegressionTests
         Assert.Contains("\"event\":\"scenario_result\"", result.Output);
     }
 
+    /// <summary>
+    /// The headline `prototype_result` line is a derived report and may hold
+    /// facts the canonical snapshot does not — but where it repeats a canonical
+    /// fact it repeats its form. The score is a fact whose form is its presence:
+    /// a party that has not ended has no score at all rather than an empty one
+    /// (ADR 0016). Reflection over the summary record used to print
+    /// `"Score": null` mid-party, which is the single form the decision rules
+    /// out. The composition of the snapshot itself is pinned by
+    /// <see cref="PrototypeSnapshotShapeTests"/>; this is the same rule in the
+    /// other output form, and the versioning rule that ties them together is in
+    /// `docs/engineering/PROTOTYPE_HEADLESS.md`.
+    /// </summary>
+    [Theory]
+    [InlineData("baseline", 1, false)]
+    [InlineData("neglected", PrototypeTuning.SessionTicks, true)]
+    public void The_headline_result_line_carries_a_score_only_for_a_party_that_ended(
+        string fixtureName,
+        int ticks,
+        bool partyEnded)
+    {
+        var result = CaptureConsole(() => Program.Main(
+        [
+            "--prototype",
+            "--commands",
+            FixturePath(fixtureName),
+            "--ticks",
+            ticks.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        ]));
+
+        Assert.Equal(0, result.ExitCode);
+        using var document = JsonDocument.Parse(
+            result.Output
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Last(line => line.Contains("prototype_result", StringComparison.Ordinal)));
+        var sessionResult = document.RootElement.GetProperty("sessionResult");
+
+        Assert.Equal(
+            partyEnded,
+            sessionResult.GetProperty("Outcome").ValueKind != JsonValueKind.Null);
+        Assert.Equal(partyEnded, sessionResult.TryGetProperty("Score", out _));
+        // The rest of the summary is carried all along and is unaffected: only
+        // the score waits for the party to end.
+        Assert.True(sessionResult.TryGetProperty("WavesRepelled", out _));
+        Assert.True(sessionResult.TryGetProperty("MealsStolen", out _));
+    }
+
     [Fact]
     public void Canonical_state_contains_pending_commands_and_all_future_counters()
     {

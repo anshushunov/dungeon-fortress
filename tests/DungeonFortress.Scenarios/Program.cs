@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 using DungeonFortress.Simulation;
 
@@ -166,7 +167,7 @@ public static class Program
             threat = result.State.Threat,
             waves = result.State.Waves,
             domain = result.State.Domain,
-            sessionResult = result.State.SessionResult,
+            sessionResult = SessionResultLine(result.State.SessionResult),
             injuries = creatures
                 .Select(creature => new
                 {
@@ -187,5 +188,31 @@ public static class Program
             elapsedMilliseconds = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3),
         }));
         return 0;
+    }
+
+    /// <summary>
+    /// The session summary as the headline `prototype_result` line carries it.
+    /// `prototype_result` is a derived report and may hold facts the canonical
+    /// snapshot does not — but where it repeats a canonical fact it repeats its
+    /// form, and the score is a fact whose form is its presence: a party that
+    /// has not ended has no score at all rather than an empty one (ADR 0016,
+    /// contract 12.1, and the versioning rule in
+    /// docs/engineering/PROTOTYPE_HEADLESS.md).
+    ///
+    /// Reflection over the record cannot say that — an `int?` that is null comes
+    /// out as `"Score": null`, which is the single form the decision rules out —
+    /// so the one field is dropped after serialising rather than the whole
+    /// summary being rewritten by hand. Written by hand it would silently lose
+    /// every field added to the record later.
+    /// </summary>
+    private static JsonNode SessionResultLine(PrototypeSessionResultSnapshot sessionResult)
+    {
+        var line = JsonSerializer.SerializeToNode(sessionResult)!.AsObject();
+        if (sessionResult.Score is null)
+        {
+            line.Remove(nameof(PrototypeSessionResultSnapshot.Score));
+        }
+
+        return line;
     }
 }
