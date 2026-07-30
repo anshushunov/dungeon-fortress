@@ -1,10 +1,11 @@
 # Godot graybox — Prototype 1
 
 Status: active
-Source: Issues #10–#12, #24, #26, #28, #36, #48, #55, #58, #79
+Source: Issues #10–#12, #24, #26, #28, #36, #48, #55, #58, #79, #83
 
-The graybox is the visual, top-down projection of the headless Prototype 1
-economy and raid. It starts with the `baseline` gameplay-v2 fixture.
+The graybox is the visual, three-quarter projection of the headless Prototype 1
+economy and raid on its unchanged orthogonal grid. It starts with the `baseline`
+gameplay-v2 fixture.
 
 The authored baseline and launcher default are 1280x720. It used to be 960x540,
 and that frame could not hold the HUD text: at its worst moment the side column
@@ -15,8 +16,9 @@ frame rather than inheriting the live window.
 The world uses a 40 px tile and a `Camera2D`; the HUD is a separate `CanvasLayer`
 and does not move or zoom with the world. The five discrete camera levels are
 `0.5`, `0.75`, `1`, `1.5` and `2`. This is the first camera-and-scale slice of
-[ADR 0008](../decisions/0008-three-quarter-projection.md); it does not change the
-current top-down projection.
+[ADR 0008](../decisions/0008-three-quarter-projection.md). Rock now has a raised
+top, an observer-facing facade and depth order with bodies and tall structures;
+the grid, camera and input geometry remain orthogonal.
 
 ## Run
 
@@ -409,6 +411,93 @@ None of this is state. The interpolation buffer is written from snapshots and is
 never read by `PrototypeWorld`, and `--frame-pacing` below is the check that says
 so out loud.
 
+## Wall volume and depth order (Issue #83)
+
+Rock is rendered in immediate mode rather than through `TileMapLayer`. This is
+an implementation choice inside ADR 0008, not a new architecture decision:
+
+- the same interpolated body center already used to draw a goblin is also its
+  depth anchor;
+- neighbour choice and Y-order remain pure .NET functions in
+  `DungeonFortress.Presentation`, with no Godot runtime in their tests;
+- the existing explicit screenshot path continues to render the exact adapter
+  used by play.
+
+Each rock cell selects one of sixteen variants from a four-bit `N/E/S/W`
+neighbour mask. Diagonals never join walls. Connected sides have no internal
+seam, so a rock mass remains continuous instead of becoming a checkerboard.
+Missing sides receive an outer edge; a missing south neighbour also exposes the
+dark facade facing the observer. A wall's top rises eight reference pixels into
+the cell behind it and the facade overhangs the lower edge of its footprint by
+three reference pixels. These two small overlaps make both sides of depth visible
+without changing the cell or collision model. No atlas or generated asset is
+involved.
+
+The world draws in four passes:
+
+1. floor and base material that belongs below elevated world geometry, including
+   blueprint and stockpile silhouettes but not their countable pips;
+2. walls, training posts, creatures and raiders in stable back-to-front Y-order;
+3. zone outlines, translucent routes and work goals, dig intent, material pips,
+   body information and zone labels above world depth;
+4. legal-target and selection outlines, followed by the active brush preview,
+   above the informational marks.
+
+Walls use the lower edge of their footprint as depth anchor. Training posts use
+the cell centre because a creature performing `Drill` legitimately occupies the
+same cell and must remain visible over the post. Creatures and raiders use their
+current **interpolated** centre. At an exact wall tie, bodies are still behind
+the wall; they move in front only after the interpolated anchor crosses it. At
+an exact post tie, the post is the background and the body is drawn above it. X
+and stable identifiers break otherwise equal ties, so collection order cannot
+change a frame.
+
+HP bars, state dots, downed marks and the selected-creature ring are information,
+not opaque world material. They use the same interpolated centre as the body but
+are drawn after the depth pass, so a wall can hide the lower body without also
+hiding its readable state. Zone borders, haul routes and work goals likewise
+remain complete instead of losing their south edge under a wall.
+
+**One rule governs every mark in this pass: a mark that can share a cell with a
+body must not hide it.** Its fill is translucent; an outline may stay opaque,
+which is what keeps a countable mark countable. The rule is stated once because
+it is not a style preference — three separate marks broke it in turn, each
+landing opaque on the very creature it explains. The simulation is what makes
+this the normal case rather than an edge one: `Drill` requires the post cell,
+`Build` requires the site cell for every one of its ticks, and storing stone
+requires the stockpile cell. So work-goal dots, blueprint delivery pips,
+stockpile occupancy pips and the build progress bar are all translucent, and a
+new mark added to this pass inherits the rule instead of rediscovering it.
+
+Rock selection, DIG previews and excavation progress use
+the wall's raised top-plus-facade bounds rather than the flat cell footprint;
+the outer frame of a multi-cell brush remains the exact grid rectangle that the
+command will receive.
+
+Two ignored, reproducible frames show the same internal wall column with a
+selected creature on opposite sides:
+
+```powershell
+# Creature #2 at (9,3), behind rock at (9,4): the raised wall hides its lower body.
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
+  -Fixture baseline -ScreenshotTicks 40 -SelectCreature 2 `
+  -TileSize 40 -CameraZoom 2 -CameraPosition '380,180' -UiScale 1 -FrameSize 1280x720 `
+  -ScreenshotPath issue83\behind-t40.png
+
+# Creature #7 at (9,6), in front of rock at (9,5): the whole body draws over it.
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
+  -Fixture baseline -ScreenshotTicks 740 -SelectCreature 7 `
+  -TileSize 40 -CameraZoom 2 -CameraPosition '380,220' -UiScale 1 -FrameSize 1280x720 `
+  -ScreenshotPath issue83\front-t740.png
+```
+
+The screenshot events state the selected cells, ticks, checksums and all five
+view inputs. The pure tests cover all sixteen neighbour masks and their stable
+numeric values, exposed-edge mapping, isolated rock, corners and map edges.
+Render-geometry tests cover a body north and south of a wall, a body sharing a
+training-post cell, stable cell-ID round trips, exact/stable ties and the order
+change on interpolated Y.
+
 The inspector exposes the selected creature's needs, martial form, mode,
 current job, carried item, last reason and its structured numeric details. Cell
 inspection shows its zones and relevant jobs. Colored lines/dots are jobs;
@@ -430,8 +519,8 @@ Reading the map without the log:
 
 | Reading | What it means |
 |---|---|
-| light warm block filling the whole cell, no grid gap | diggable internal rock |
-| dark warm block | the map boundary; it is never diggable |
+| light warm wall with raised top and dark facade | diggable internal rock |
+| dark warm wall with the same geometry | the map boundary; it is never diggable |
 | amber outline on every rock cell | shown only while the `DIG` brush is active: these are the legal targets of a stroke |
 | amber tile with an X | designated and reachable, or reserved by a worker |
 | amber fill rising from the bottom plus a yellow bar | excavation in progress |
@@ -440,10 +529,10 @@ Reading the map without the log:
 | pale blue tile | floor created by excavation |
 | gray dot with a dark rim | loose stone left by a finished dig |
 
-Rock is drawn as a gapless warm block, well above the cool blue floor in both
-hue and brightness, and it fills the 1px grid gap so a wall reads as one solid
-mass. The first attempt used a near-black rock that owner playtest reported as
-indistinguishable from floor.
+Rock is drawn as a gapless warm mass, well above the cool blue floor in both hue
+and brightness. Neighbour variants suppress internal seams; exposed south edges
+show a darker facade. The first attempt used a near-black flat block that owner
+playtest reported as indistinguishable from floor.
 
 The cell inspector states whether the tile is diggable, why it is not, who chose
 the job, which neighbouring tile they work from, the tick progress, and the
@@ -917,5 +1006,6 @@ economy state, and no input sends a direct creature command. The motion
 interpolation buffer is the one piece of per-frame state the adapter keeps: it
 holds the tile each body came from, it is written from snapshots only, and
 `--frame-pacing` is the check that it never travels the other way. It remains a
-graybox: art assets, animation, production onboarding and Ivan runtime
-integration are outside Prototype 1.
+graybox: the wall topology is derived from the published rock set and creates no
+new canonical fact or asset. Art assets, animation, production onboarding and
+Ivan runtime integration are outside Prototype 1.
