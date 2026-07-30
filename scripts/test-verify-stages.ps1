@@ -105,6 +105,46 @@ $stageTableBeginMarker = "<!-- stage-table:begin -->"
 $stageTableEndMarker = "<!-- stage-table:end -->"
 $stageRowPattern = '^\|\s*`([a-z][a-z0-9-]*)`\s*\|'
 
+function ConvertTo-ComparableCommandName {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$Name
+    )
+
+    # Spelling, not identity. `dotnet`, `dotnet.exe`, `DotNet.exe` and a full
+    # path ending in dotnet.exe are the same program, and a model that keys on
+    # the literal text would let two of those four walk past the APPDATA rule -
+    # the same brittleness Issue #71 was opened about, arriving inside its own
+    # fix. PowerShell's -eq is already case-insensitive; the suffix and the
+    # directory are not.
+    #
+    # This deliberately does not resolve variables: `-FilePath $someVariable`
+    # stays unrecognised, and making it otherwise is separate work with a
+    # non-obvious cost.
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        return ""
+    }
+
+    $trimmed = $Name.Trim().Trim('"', "'")
+    try {
+        $leaf = [IO.Path]::GetFileName($trimmed)
+    }
+    catch {
+        $leaf = $trimmed
+    }
+    if ([string]::IsNullOrEmpty($leaf)) {
+        $leaf = $trimmed
+    }
+    if ($leaf.EndsWith(".exe", [StringComparison]::OrdinalIgnoreCase)) {
+        $leaf = $leaf.Substring(0, $leaf.Length - 4)
+    }
+
+    return $leaf.ToLowerInvariant()
+}
+
 function Get-CommandFilePath {
     [CmdletBinding()]
     [OutputType([string])]
@@ -228,13 +268,17 @@ function Get-VerifyStructure {
         param($node)
         $node -is [Management.Automation.Language.CommandAst]
     }, $true)) {
+        $commandName = $command.GetCommandName()
+        $commandFilePath = Get-CommandFilePath -Command $command
         $commands += [pscustomobject]@{
-            Name = $command.GetCommandName()
+            Name = $commandName
             Text = ($command.Extent.Text -replace '\s+', ' ').Trim()
             Line = $command.Extent.StartLineNumber
             StartOffset = $command.Extent.StartOffset
             EndOffset = $command.Extent.EndOffset
-            FilePath = (Get-CommandFilePath -Command $command)
+            FilePath = $commandFilePath
+            ComparableName = (ConvertTo-ComparableCommandName -Name $commandName)
+            ComparableFilePath = (ConvertTo-ComparableCommandName -Name $commandFilePath)
         }
     }
     $commands = @($commands | Sort-Object -Property StartOffset)
@@ -423,6 +467,9 @@ function Get-ScopeEvents {
     # once per simulated run, at their first invocation - which is exactly why
     # `ui` is allowed to call Initialize-GameHostBuild after the `godot` stage has
     # already switched the profile.
+    $comparableDotnet = ConvertTo-ComparableCommandName -Name $DotnetCommand
+    $comparableSwitch = ConvertTo-ComparableCommandName -Name $ProfileSwitchCommand
+
     $events = @()
     foreach ($command in (Get-CommandsInRange -Structure $Structure `
             -StartOffset $StartOffset -EndOffset $EndOffset)) {
@@ -431,13 +478,13 @@ function Get-ScopeEvents {
             continue
         }
 
-        if ($name -eq $DotnetCommand -or
-            ($null -ne $command.FilePath -and $command.FilePath -eq $DotnetCommand)) {
+        if ($command.ComparableName -eq $comparableDotnet -or
+            $command.ComparableFilePath -eq $comparableDotnet) {
             $events += [pscustomobject]@{ Kind = "dotnet"; Line = $command.Line; Name = $name }
             continue
         }
 
-        if ($name -eq $ProfileSwitchCommand) {
+        if ($command.ComparableName -eq $comparableSwitch) {
             $events += [pscustomobject]@{ Kind = "profile"; Line = $command.Line; Name = $name }
             continue
         }
@@ -867,6 +914,17 @@ try {
             Replace = @(
                 '            Invoke-Checked -FilePath "dotnet" -Arguments @("--version")',
                 '            $baselineScreenshot = Join-Path $verifyRoot "baseline-t1.png"'
+            ) -join $newline
+            Append = ""
+            Expect = @("screenshots", "APPDATA")
+        },
+        [pscustomobject]@{
+            Name = "dotnet-after-the-switch-spelled-differently"
+            Why = "the same late dotnet call written as a path with an .exe suffix"
+            Find = '            $raidScreenshot = Join-Path $verifyRoot "prepared-raid.png"'
+            Replace = @(
+                '            Invoke-Checked -FilePath "C:\Program Files\dotnet\DotNet.exe" -Arguments @("--version")',
+                '            $raidScreenshot = Join-Path $verifyRoot "prepared-raid.png"'
             ) -join $newline
             Append = ""
             Expect = @("screenshots", "APPDATA")
