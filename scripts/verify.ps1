@@ -2,6 +2,7 @@
 param(
     [string]$GodotPath,
     [UInt64]$Seed = 424242,
+    [string]$TemporaryRoot,
     [string[]]$Stage,
     [string[]]$Skip,
     [switch]$ListStages
@@ -12,6 +13,7 @@ $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "GodotTools.ps1")
 . (Join-Path $PSScriptRoot "HudVerification.ps1")
+. (Join-Path $PSScriptRoot "TemporaryRoot.ps1")
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $artifactsRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot ".artifacts"))
@@ -27,6 +29,7 @@ $gameProjectPath = Join-Path $repoRoot "src\DungeonFortress.Game"
 $gameProjectFile = Join-Path $gameProjectPath "DungeonFortress.Game.csproj"
 $guardTestScript = Join-Path $repoRoot "scripts\test-godot-output-guard.ps1"
 $verifyStagesTestScript = Join-Path $repoRoot "scripts\test-verify-stages.ps1"
+$temporaryRootTestScript = Join-Path $repoRoot "scripts\test-temporary-root.ps1"
 $screenshotOutputPathTestScript = Join-Path $repoRoot "scripts\test-screenshot-output-path.ps1"
 $evidenceToolsTestScript = Join-Path $repoRoot "scripts\test-evidence-tools.ps1"
 $githubAuthToolsTestScript = Join-Path $repoRoot "scripts\test-github-auth-tools.ps1"
@@ -246,13 +249,20 @@ function Initialize-EngineRuntime {
 # agent can verify what it touched without paying for the rest.
 $stageCatalog = [ordered]@{
     scripts = [pscustomobject]@{
-        Summary = "Dependency-free script guards: stage selection, Godot output, screenshot/evidence paths, GitHub auth diagnostics, Ivan and domain MCP config."
+        Summary = "Dependency-free script guards: stage selection, temporary directory, Godot output, screenshot/evidence paths, GitHub auth diagnostics, Ivan and domain MCP config."
         Body = {
             # Stage selection is only honest while every check lives in a stage and
             # the documented table matches this script. Neither is visible in a green
             # run, so it is checked first and without a build.
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $verifyStagesTestScript
+            )
+            # The preflight above this stage refused to start on an unusable
+            # temporary directory. This proves the refusal still happens, still
+            # names the directory, and still lets cleanup fail without failing
+            # the run.
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $temporaryRootTestScript
             )
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $guardTestScript
@@ -804,8 +814,10 @@ if ($selectedStages.Count -eq 0) {
 
 $scope = if ($notRunStages.Count -eq 0) { "full" } else { "partial" }
 $executedStages = @()
+$currentPhase = "preflight"
 $currentStage = $null
 $godotVersion = $null
+$temporaryRootPath = $null
 
 New-Item -ItemType Directory -Force -Path $verifyRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $env:DOTNET_CLI_HOME | Out-Null
@@ -817,6 +829,21 @@ try {
         Write-Host ("Not running: {0}. A partial run does not replace a full one." -f
             ($notRunStages -join ", "))
     }
+
+    # The temporary directory is proven before anything else, because it is the
+    # cheapest thing to check, no stage can repair it, and every stage depends on
+    # it: the Godot runtime profile and the isolated sprite-import project are
+    # both created there. Issue #89 spent three sessions on a TEMP that allowed
+    # creating a directory and refused to delete it, because what verification
+    # reported was "'powershell' failed with exit code 1" at stage godot.
+    $temporaryRootSelection = Initialize-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot
+    $temporaryRootPath = $temporaryRootSelection.Path
+    [ordered]@{
+        event = "verification_temporary_root"
+        status = "ok"
+        path = $temporaryRootSelection.Path
+        source = $temporaryRootSelection.Source
+    } | ConvertTo-Json -Compress | Write-Host
 
     # The engine is resolved for every scope, including one without a Godot stage:
     # the NuGet profile the .NET builds use is written from the engine's bundled
@@ -830,6 +857,7 @@ try {
         -GodotNuGetSource $godotNuGetSource
 
     foreach ($stageName in $selectedStages) {
+        $currentPhase = "stage"
         $currentStage = $stageName
         Write-Host ""
         Write-Host ("--- stage {0}: {1}" -f $stageName, $stageCatalog[$stageName].Summary)
@@ -851,6 +879,7 @@ try {
         } | ConvertTo-Json -Compress | Write-Host
     }
 
+    $currentPhase = "summary"
     $currentStage = $null
 
     $summary = [ordered]@{
@@ -861,6 +890,7 @@ try {
         stagesNotRun = @($notRunStages)
         prerequisites = @($completedPrerequisites.Keys)
         seed = $Seed
+        temporaryRoot = $temporaryRootPath
     }
     if ($executedStages -contains "sim") {
         $summary["deterministicChecksum"] = $simResult.DeterministicChecksum
@@ -899,12 +929,15 @@ try {
 }
 catch {
     # A run that died halfway is the one most likely to be reported as a pass, so
-    # it gets the same structured line as a success, with the stage that failed
-    # and everything that never ran.
+    # it gets the same structured line as a success, with the phase and stage that
+    # failed and everything that never ran. `failedPhase` separates "the machine
+    # was never fit to run this" from "a check said no": a preflight failure has
+    # no failed stage and nothing it could have executed.
     [ordered]@{
         event = "verification_result"
         status = "error"
         scope = $scope
+        failedPhase = $currentPhase
         failedStage = $currentStage
         stagesExecuted = @($executedStages)
         stagesNotRun = @($allStages | Where-Object { $_ -notin $executedStages })
@@ -919,8 +952,12 @@ finally {
         [IO.Path]::DirectorySeparatorChar,
         [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
 
-    if ($resolvedVerifyRoot.StartsWith($expectedPrefix, [StringComparison]::OrdinalIgnoreCase) -and
-        (Test-Path -LiteralPath $resolvedVerifyRoot)) {
-        Remove-Item -LiteralPath $resolvedVerifyRoot -Recurse -Force
+    if ($resolvedVerifyRoot.StartsWith($expectedPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        # Best effort on purpose. A throw here replaces whatever the run was
+        # about to report - including a green result - with a cleanup error, and
+        # that is exactly how Issue #89 turned a passing check into a red run.
+        Remove-TemporaryItemBestEffort `
+            -Path $resolvedVerifyRoot `
+            -Description "verification run directory" | Out-Null
     }
 }
