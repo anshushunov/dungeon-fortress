@@ -28,6 +28,8 @@ $gameProjectFile = Join-Path $gameProjectPath "DungeonFortress.Game.csproj"
 $guardTestScript = Join-Path $repoRoot "scripts\test-godot-output-guard.ps1"
 $verifyStagesTestScript = Join-Path $repoRoot "scripts\test-verify-stages.ps1"
 $screenshotOutputPathTestScript = Join-Path $repoRoot "scripts\test-screenshot-output-path.ps1"
+$evidenceToolsTestScript = Join-Path $repoRoot "scripts\test-evidence-tools.ps1"
+$githubAuthToolsTestScript = Join-Path $repoRoot "scripts\test-github-auth-tools.ps1"
 $goblinImportTestScript = Join-Path $repoRoot "scripts\test-goblin-sprite-import.ps1"
 $ivanMcpConfigTestScript = Join-Path $repoRoot "scripts\test-ivan-mcp-config.ps1"
 $domainMcpConfigTestScript = Join-Path $repoRoot "scripts\test-domain-mcp-config.ps1"
@@ -244,7 +246,7 @@ function Initialize-EngineRuntime {
 # agent can verify what it touched without paying for the rest.
 $stageCatalog = [ordered]@{
     scripts = [pscustomobject]@{
-        Summary = "Dependency-free script guards: stage selection, Godot output guard, screenshot output path, Ivan MCP config, domain MCP config."
+        Summary = "Dependency-free script guards: stage selection, Godot output, screenshot/evidence paths, GitHub auth diagnostics, Ivan and domain MCP config."
         Body = {
             # Stage selection is only honest while every check lives in a stage and
             # the documented table matches this script. Neither is visible in a green
@@ -257,6 +259,12 @@ $stageCatalog = [ordered]@{
             )
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $screenshotOutputPathTestScript
+            )
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $evidenceToolsTestScript
+            )
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $githubAuthToolsTestScript
             )
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ivanMcpConfigTestScript

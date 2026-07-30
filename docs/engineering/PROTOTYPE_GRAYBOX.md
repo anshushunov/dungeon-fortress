@@ -679,6 +679,13 @@ commit the image. `--smoke` and
 `--visible-smoke` continue to report structured runtime diagnostics for
 automation.
 
+For PR evidence, prefer the bundled wrapper described in
+[`EVIDENCE_WORKFLOW.md`](EVIDENCE_WORKFLOW.md). It reads a tracked declarative
+spec, performs the capture twice, compares the canonical checksum and PNG bytes,
+then writes ignored JSON/Markdown manifests with the exact command and SHA-256.
+The direct command above remains the single-frame launcher and the command that
+the manifest records.
+
 A screenshot made by calling Godot directly is rejected unless all five
 pixel-affecting inputs are explicit: `--tile-size`, `--camera-zoom`,
 `--camera-position`, `--ui-scale` and `--frame-size`. `run-game.ps1` always

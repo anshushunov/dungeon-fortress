@@ -68,7 +68,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -GodotP
 
 | Стадия | Что проверяет | Время\* |
 |---|---|---|
-| `scripts` | пять dependency-free гвардов: контракт стадий, вывод Godot, путь скриншота, конфиг Ivan-MCP, конфиг domain MCP | 2 с |
+| `scripts` | семь dependency-free гвардов: контракт стадий, вывод Godot, пути screenshot/evidence, manifest, GitHub auth diagnostic, конфиги Ivan-MCP и domain MCP | 7 с |
 | `build` | `restore` решения, `--locked-mode` restore тестов domain MCP, `Release` build всего решения | 3 с |
 | `tests` | `dotnet test` для Simulation, Presentation и DomainMcp | 31 с |
 | `mcp` | реальный запуск launcher domain MCP и stdio-контракт `verify-domain-mcp.ps1` | 4 с |
@@ -99,7 +99,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -Skip l
 
 | Что изменено | Минимальный набор |
 |---|---|
-| `scripts/**`, конфигурация MCP-клиентов | `scripts`; плюс `mcp` при правке launcher или `verify-domain-mcp.ps1` |
+| `scripts/**`, evidence/auth tooling, конфигурация MCP-клиентов | `scripts`; плюс `mcp` при правке launcher или `verify-domain-mcp.ps1` |
 | `src/DungeonFortress.Simulation/**` | `tests,sim`; плюс `load` при изменении стоимости тика или структур данных; плюс `mcp` при изменении ответа `prototype_run` |
 | `src/DungeonFortress.Presentation/**` | `tests,ui` |
 | `src/DungeonFortress.Game/**`, сцены, ввод | `godot,ui`; плюс `screenshots` при изменении кадра или визуального слоя |
