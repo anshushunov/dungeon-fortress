@@ -149,27 +149,50 @@ function Get-TemporaryRootDiagnosis {
             (Get-CleanReason -Message $_.Exception.Message))
     }
 
+    $removalFailure = $null
     try {
-        # Deliberately the same call the real cleanup makes, and it has to stay
-        # that way. Measured on the machine that reported Issue #89, with TEMP at
-        # C:\WINDOWS\TEMP: [IO.Directory]::Delete on a directory this account
-        # created there succeeds, while Remove-Item -Recurse -Force on the same
-        # directory fails with a Win32Exception "Access is denied". A probe that
-        # used the cheaper API would certify a directory that every cleanup in
-        # this repository then chokes on, which is the original defect with an
-        # extra step.
+        # The deciding call, and deliberately the same one the real cleanup
+        # makes. It has to stay that way. Measured on the machine that reported
+        # Issue #89, with TEMP at C:\WINDOWS\TEMP: [IO.Directory]::Delete on a
+        # directory this account created there succeeds, while
+        # Remove-Item -Recurse -Force on the same directory fails with a
+        # Win32Exception "Access is denied". A probe that used the cheaper API
+        # would certify a directory that every cleanup in this repository then
+        # chokes on, which is the original defect with an extra step.
+        #
+        # The rule is not left to this comment: scripts\test-temporary-root.ps1
+        # asserts over the AST that the first deletion here, and in
+        # Remove-TemporaryItemBestEffort below, is this exact call.
         Remove-Item -LiteralPath $probeDirectory -Recurse -Force -ErrorAction Stop
     }
     catch {
-        return (
-            "'$probeDirectory' was created and then could not be deleted: " +
-            (Get-CleanReason -Message $_.Exception.Message) +
-            " A run creates a Godot runtime profile and an isolated import " +
-            "project here and has to be able to remove them. The probe " +
-            "directory is still there; delete it once the permissions are fixed.")
+        $removalFailure = Get-CleanReason -Message $_.Exception.Message
     }
 
-    return $null
+    if ($null -eq $removalFailure) {
+        return $null
+    }
+
+    # Tidy-up only, and only after the diagnosis is already decided above. In the
+    # environment this Issue came from, the run is refused and the probe would
+    # otherwise stay behind forever: that temporary directory cannot even be
+    # listed by this account, so the leftover is findable only through the path
+    # printed in the refusal. [IO.Directory]::Delete does succeed there, which is
+    # exactly why it may clean up and may not decide anything.
+    $leftover = " The probe directory is still there; delete it once the permissions are fixed."
+    try {
+        [IO.Directory]::Delete($probeDirectory, $true)
+        $leftover = " The probe directory itself was removed by a fallback, so nothing was left behind."
+    }
+    catch {
+        # Nothing to add: the diagnosis below already reports the real failure.
+    }
+
+    return (
+        "'$probeDirectory' was created and then could not be deleted: " +
+        $removalFailure +
+        " A run creates a Godot runtime profile and an isolated import " +
+        "project here and has to be able to remove them." + $leftover)
 }
 
 function Initialize-VerificationTemporaryRoot {
