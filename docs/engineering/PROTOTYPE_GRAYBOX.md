@@ -1052,28 +1052,41 @@ halves:
 
 | Rule | What it says | Where it bites |
 |---|---|---|
-| physical floor | no HUD text may be drawn smaller than the smallest size the HUD is authored with at the frame it is authored for — 8 px | a legend row re-authored smaller, or an automatic scale below 1 |
+| physical floor | no HUD text may be drawn smaller than the smallest size the HUD is authored with at the frame it is authored for — 8 px | a piece of HUD text re-authored smaller than the rest |
 | density ceiling | `logicalDensity` — how many authored 1280x720 rectangles the frame is worth, divided by the UI scale — may not exceed 1.25 while the scale can still rise | a window that grew without the HUD scale following it, which is the defect verbatim: 3044x1722 at scale 1 measures 2.38 |
 
 1.25 is not a taste. It is the largest ratio between two neighbouring automatic
 scale steps, so a policy that always picks the largest step a frame allows can
-never exceed it, and a change to those steps that breaks the property fails
-instead of surprising someone with a large monitor. Past scale 2 nothing can rise
-further, so a frame that reached the ceiling is excused **by name** rather than
-silently.
+never exceed it. `HudReadabilityTests` computes that ratio from
+`CameraView.AutomaticUiScales` and compares it with the constant, which closes
+both directions at once: raising the ceiling fails, and changing the steps
+without revisiting the ceiling fails too. Past scale 2 nothing can rise further,
+so a frame that reached the ceiling is excused **by name** rather than silently.
 
-The adapter measures and calls, nothing more: `HudTextSizes()` reads
-`GetThemeFontSize` off the live labels, toolbar buttons and hotkey badges, and
-`AssertHudTextReadable()` hands the result to the policy on every entry point.
-That is what makes the guard react to a change in the HUD rather than only to a
-change in its own constants.
+The adapter measures and calls, nothing more: `HudTextSizes()` **walks the HUD
+subtree** and reads `GetThemeFontSize` off every `Label` and `Button` it finds,
+and `AssertHudTextReadable()` hands the result to the policy on every entry
+point. The walk is the reason the guard reacts to a change in the HUD rather than
+only to a change in its own constants — and it is a walk rather than a list
+because review measured the difference: the first version listed the nodes the
+adapter kept a reference to, the inspector column's `STATE / WHY` heading is a
+local variable held by nothing, and re-authoring it at four physical pixels left
+every guard green.
 
 The policy is held against the supported frame matrix at the scale the automatic
 rule would choose for each frame — not against the run's own pair, because an
 explicit `--ui-scale` is an override a capture declares on purpose, including the
-deliberately small ones `verify.ps1` uses. It ends by requiring the pair Issue #86
-was opened about to still be refused, so relaxing the ceiling into decoration
-fails every entry point.
+deliberately small ones `verify.ps1` uses, and because a screen larger than the
+2× ceiling must not be refused a launch. It ends by requiring the pair Issue #86
+was opened about to still be refused; that is a floor under the rules rather than
+a pin on them, since it only fires once the ceiling has been relaxed past that
+frame's own 2.38 density. Pinning the ceiling is the unit test's job.
+
+A run does not act on its own pair, but it does state a verdict on it:
+`view.hudReadability.readable` and `violations` say whether the frame in front of
+the player is readable. `--frame-size 3044x1722 --ui-scale 1` — the pair the Issue
+was reported on — therefore exits 0 and says `"readable": false` with the density
+named, instead of exiting 0 and looking fine.
 
 Measured on the frames that matter, with today's 8 px smallest authored text:
 
@@ -1086,12 +1099,12 @@ Measured on the frames that matter, with today's 8 px smallest authored text:
 | 3840x2160 | 2 (ceiling) | 1.50 | 16 px |
 
 Every structured output carries these numbers as `view.hudReadability`: the
-thresholds, the live frame's scale, density and smallest physical text, the size
-of every measured piece of text, and the same measurement repeated over the whole
-supported matrix. A run on a laptop therefore still states what the owner's
-maximized window would get. The `godot` stage reads two of them and refuses a
-run where 1280x720 stops reporting 8 px at scale 1, or where 3044x1722 leaves the
-HUD anywhere in the 8–15 px band.
+thresholds, the live frame's scale, density, smallest physical text and verdict,
+the size of every measured piece of text, and the same measurement repeated over
+the whole supported matrix. A run on a laptop therefore still states what the
+owner's maximized window would get. The `godot` stage reads three of them and
+refuses a run where 1280x720 stops reporting 8 px at scale 1 or reports itself
+unreadable, or where 3044x1722 leaves the HUD anywhere in the 8–15 px band.
 
 `--smoke-hud-readability-regression` re-authors the first legend row at four
 pixels. Nothing about the text changes, so the overflow guard stays green and

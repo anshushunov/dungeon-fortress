@@ -1947,6 +1947,10 @@ public partial class Main : Node2D
         panel.AddChild(column);
 
         var heading = MakeHudLabel(13, new Color("#93c5fd"));
+        // Named because nothing holds a reference to it: the readability walk
+        // finds it in the tree and reports it by path, and a path with a default
+        // engine name in it is not a sentence anyone can act on.
+        heading.Name = "InspectorHeading";
         heading.AutowrapMode = TextServer.AutowrapMode.Off;
         heading.Text = "STATE / WHY";
         column.AddChild(heading);
@@ -2547,37 +2551,90 @@ public partial class Main : Node2D
     }
 
     /// <summary>
-    /// Every font the HUD draws text with, as the labels were actually given it.
-    /// Read rather than restated: a legend row re-authored at six pixels has to
-    /// change this list, which is what makes the engine-free policy react to a
-    /// change in the HUD instead of only to a change in itself.
+    /// Every font the HUD draws text with, read off the live subtree.
+    ///
+    /// <para>
+    /// The whole HUD tree is walked rather than a list of the nodes this file
+    /// happens to keep a reference to. The first version of this routine did the
+    /// latter, and independent review walked straight through it: the inspector
+    /// column's "STATE / WHY" heading is a local variable in
+    /// <see cref="CreateSideColumn"/>, held by nothing, so re-authoring it at
+    /// four pixels left every guard green — a check that looked passed, which is
+    /// the exact defect class Issue #86 is about. A hand-maintained list can only
+    /// ever be as complete as the last person to remember it; the subtree is
+    /// complete by construction, so "the policy reacts to a change in the HUD"
+    /// became a true sentence rather than an intention.
+    /// </para>
+    ///
+    /// <para>
+    /// Names are borrowed from the fields the overflow guard already names, so a
+    /// failure still says <c>legend[3]</c>; anything the walk finds that no field
+    /// holds is named by its path under the HUD root, which is exactly the case
+    /// the walk exists for.
+    /// </para>
     /// </summary>
     private IReadOnlyList<HudTextSize> HudTextSizes()
     {
-        var sizes = new List<HudTextSize>();
+        var named = new Dictionary<Control, string>();
         foreach (var (name, label) in HudLabels())
         {
             if (label is not null)
             {
-                sizes.Add(new HudTextSize(name, label.GetThemeFontSize("font_size")));
+                named[label] = name;
             }
         }
 
         foreach (var button in _controlButtons)
         {
-            sizes.Add(new HudTextSize(
-                $"control[{button.Name}]",
-                button.GetThemeFontSize("font_size")));
+            named[button] = $"control[{button.Name}]";
         }
 
         for (var index = 0; index < _hotkeyBadges.Count; index++)
         {
-            sizes.Add(new HudTextSize(
-                $"hotkey[{index}]",
-                _hotkeyBadges[index].GetThemeFontSize("font_size")));
+            named[_hotkeyBadges[index]] = $"hotkey[{index}]";
         }
 
+        var sizes = new List<HudTextSize>();
+        CollectHudTextSizes(_hudRoot!, named, sizes);
         return sizes;
+    }
+
+    /// <summary>
+    /// Depth-first over the HUD subtree, collecting the Controls that draw text.
+    /// <c>Label</c> and <c>Button</c> and nothing else on purpose: a
+    /// <c>PanelContainer</c> or an <c>HSeparator</c> has no <c>font_size</c> to
+    /// ask for, and asking anyway would report a theme default as if the HUD had
+    /// authored it.
+    /// </summary>
+    private void CollectHudTextSizes(
+        Node node,
+        IReadOnlyDictionary<Control, string> named,
+        List<HudTextSize> sizes)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Label or Button && child is Control text)
+            {
+                sizes.Add(new HudTextSize(
+                    named.TryGetValue(text, out var name) ? name : DescribeHudTextNode(text),
+                    text.GetThemeFontSize("font_size")));
+            }
+
+            CollectHudTextSizes(child, named, sizes);
+        }
+    }
+
+    /// <summary>
+    /// A name for a text node no field holds. Its own name when the scene gave
+    /// it one, and the whole path under the HUD root when it did not, because
+    /// <c>@Label@25</c> on its own would name nothing a reader could find.
+    /// </summary>
+    private string DescribeHudTextNode(Control text)
+    {
+        var name = text.Name.ToString();
+        return name.StartsWith('@')
+            ? $"{text.GetType().Name}[{_hudRoot!.GetPathTo(text)}]"
+            : $"{text.GetType().Name}[{name}]";
     }
 
     /// <summary>
@@ -2607,6 +2664,7 @@ public partial class Main : Node2D
         var viewport = GetViewportRect().Size;
         var frame = new ViewSize(viewport.X, viewport.Y);
         var texts = HudTextSizes();
+        var violations = HudReadability.Violations(frame, _uiScale, texts);
         return new
         {
             minimumPhysicalTextPixels = HudReadability.MinimumPhysicalTextPixels,
@@ -2615,6 +2673,15 @@ public partial class Main : Node2D
             logicalDensity = HudReadability.LogicalDensity(frame, _uiScale),
             smallestPhysicalTextPixels =
                 HudReadability.SmallestPhysicalTextPixels(texts, _uiScale),
+            // The verdict on this run's own pair, which the guard deliberately
+            // does not act on: an explicit --ui-scale is an override, and a
+            // window bigger than the largest supported scale must not be refused
+            // a launch. Deliberately not acting on it is not a reason to make a
+            // reader work the density out for themselves — a run that opens the
+            // pair Issue #86 was reported on now says so in its own output
+            // instead of exiting 0 and looking fine.
+            readable = violations.Count == 0,
+            violations,
             texts = texts
                 .Select(entry => (object)new
                 {

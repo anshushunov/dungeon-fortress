@@ -66,6 +66,16 @@ public static class HudReadability
     /// so a policy that always picks the largest step a frame allows can never
     /// exceed it — and a change to those steps that breaks the property is a
     /// failure rather than a surprise on someone's monitor.
+    ///
+    /// <para>
+    /// It is a literal because a <c>const</c> cannot be computed from another
+    /// type's array, and a literal is a number somebody can quietly raise. What
+    /// stops that is <c>HudReadabilityTests</c>, which derives the same value
+    /// from the steps and compares. Independent review measured the hole that
+    /// closes: the runtime self-check below only refuses a ceiling above the
+    /// 2.378 density of the defect frame, so 1.25 could have drifted anywhere up
+    /// to that with every test and every stage still green.
+    /// </para>
     /// </summary>
     public const double MaximumLogicalDensity = 1.25;
 
@@ -219,6 +229,11 @@ public static class HudReadability
         // The negative half, in the same call, for the same reason
         // CameraView.AssertStartupFramePolicy ends with one: a rule that has
         // never refused anything cannot be told apart from a rule that cannot.
+        //
+        // It is a floor under the rules, not a pin on them. It fires only once
+        // the ceiling has been relaxed past this frame's own density of 2.378,
+        // so it does not by itself keep MaximumLogicalDensity honest — that is
+        // the unit test which derives the number from the scale steps.
         if (IsReadable(DefectFrame, DefectUiScale, text))
         {
             throw new InvalidOperationException(

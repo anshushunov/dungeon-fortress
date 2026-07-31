@@ -613,12 +613,15 @@ $stageCatalog = [ordered]@{
             $baseReadability = $viewEvents["base"].view.hudReadability
             if ([double]$baseReadability.uiScale -ne 1 -or
                 [double]$baseReadability.logicalDensity -ne 1 -or
-                [double]$baseReadability.smallestPhysicalTextPixels -ne 8) {
+                [double]$baseReadability.smallestPhysicalTextPixels -ne 8 -or
+                -not [bool]$baseReadability.readable -or
+                @($baseReadability.violations).Count -ne 0) {
                 throw (
-                    "The authored 1280x720 frame no longer reports UI scale 1, density 1 and " +
-                    "8 px smallest HUD text: it reports scale " +
-                    "$($baseReadability.uiScale), density $($baseReadability.logicalDensity) " +
-                    "and $($baseReadability.smallestPhysicalTextPixels) px."
+                    "The authored 1280x720 frame no longer reports UI scale 1, density 1, " +
+                    "8 px smallest HUD text and no violations: it reports scale " +
+                    "$($baseReadability.uiScale), density $($baseReadability.logicalDensity), " +
+                    "$($baseReadability.smallestPhysicalTextPixels) px and " +
+                    "$(@($baseReadability.violations).Count) violation(s)."
                 )
             }
             $ownerFrame = @($baseReadability.checkedFrames | Where-Object {

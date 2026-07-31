@@ -17,10 +17,16 @@ public sealed class HudReadabilityTests
     /// <summary>
     /// The HUD as <c>Main.cs</c> authors it today: the four panels, the heading,
     /// the eight legend rows, a toolbar button and a hotkey badge. The adapter
-    /// does not read this list — it measures its own labels and passes those —
-    /// so this is a copy, and what keeps the copy honest is the negative run
-    /// <c>--smoke-hud-readability-regression</c> in the <c>godot</c> stage, which
-    /// shrinks a real legend row and requires the engine to exit 1.
+    /// does not read this list — it walks its own HUD subtree and passes what it
+    /// finds — so this is a copy, and what keeps the copy honest is the negative
+    /// run <c>--smoke-hud-readability-regression</c> in the <c>godot</c> stage,
+    /// which shrinks a real legend row and requires the engine to exit 1.
+    ///
+    /// The <c>heading</c> row below is why the adapter walks the tree. It used to
+    /// list the nodes it held references to, and the heading is a local variable
+    /// in <c>CreateSideColumn</c> held by nothing: this fixture claimed a
+    /// coverage the adapter did not have, and review found it by re-authoring
+    /// that heading at four pixels and watching the run exit 0.
     /// </summary>
     private static readonly HudTextSize[] AuthoredHud =
     [
@@ -124,12 +130,35 @@ public sealed class HudReadabilityTests
     }
 
     [Fact]
-    public void A_density_ceiling_that_stopped_refusing_the_defect_would_fail_the_guard()
+    public void The_density_ceiling_is_derived_from_the_scale_steps_rather_than_chosen()
     {
-        // AssertReadable ends by requiring the defect pair to still be refused,
-        // which is what stops the ceiling from being relaxed into decoration.
-        // Nothing in a test can move a const, so the claim is checked directly:
-        // the pair is unreadable no matter what text is measured.
+        // The test independent review asked for, and the one this file was
+        // missing. Every other check repeated 1.25 or measured something the
+        // number happened to permit, so the constant could be raised anywhere up
+        // to 2.378 — the density of the defect frame — with all 347 tests and
+        // the whole godot stage still green. Measured, not argued.
+        //
+        // Computing the value here instead of restating it closes both sides at
+        // once: raising the ceiling fails, and changing the scale steps without
+        // revisiting the ceiling fails too.
+        var ratios = CameraView.AutomaticUiScales
+            .Zip(CameraView.AutomaticUiScales.Skip(1), (smaller, larger) => larger / smaller)
+            .ToArray();
+
+        Assert.All(ratios, ratio => Assert.True(ratio > 1.0));
+        // The analyser wants the constant on the left. The direction of the
+        // comparison is not the point: whichever side it sits on, one number is
+        // computed from CameraView and the other is the literal under test.
+        Assert.Equal(HudReadability.MaximumLogicalDensity, ratios.Max(), 9);
+    }
+
+    [Fact]
+    public void The_defect_pair_stays_refused_whatever_the_HUD_is_authored_at()
+    {
+        // AssertReadable ends by requiring the defect pair to still be refused.
+        // That is a floor under the rules rather than a pin on them — it only
+        // fires once the ceiling is past 2.378 — so it is checked for what it is
+        // and not for what the ceiling test above covers.
         Assert.False(HudReadability.IsReadable(
             HudReadability.DefectFrame,
             HudReadability.DefectUiScale,
@@ -171,8 +200,19 @@ public sealed class HudReadabilityTests
         Assert.Contains("HudReadability.AssertReadable", guard, StringComparison.Ordinal);
         Assert.Contains("HudTextSizes", guard, StringComparison.Ordinal);
 
+        // The measurement walks the HUD subtree rather than listing the nodes
+        // this file keeps a reference to. A list can only be as complete as the
+        // last person to remember it, and review proved that: the inspector
+        // heading is held by nothing and was invisible to the guard.
         var measurement = AdapterSource.Body("HudTextSizes");
-        Assert.Contains("GetThemeFontSize", measurement, StringComparison.Ordinal);
+        Assert.Single(AdapterSource.CallsTo(measurement, "CollectHudTextSizes"));
+
+        var walk = AdapterSource.Body("CollectHudTextSizes");
+        Assert.Contains("GetThemeFontSize", walk, StringComparison.Ordinal);
+        Assert.Contains("GetChildren", walk, StringComparison.Ordinal);
+        // Depth first: the recursive call is what reaches a label nested inside
+        // a panel inside a column, which is where every one of them lives.
+        Assert.Single(AdapterSource.CallsTo(walk, "CollectHudTextSizes"));
     }
 
     [Fact]
