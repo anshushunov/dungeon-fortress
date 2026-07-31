@@ -7,16 +7,16 @@
               },
     "stone":  {
                   "stoneProduced":  4,
-                  "looseStone":  2,
+                  "looseStone":  0,
                   "carriedStone":  1,
-                  "storedStone":  1,
+                  "storedStone":  3,
                   "stockpileCapacity":  4
               },
     "ui":  {
-               "summary":  "BASELINE  •  t336  •  PAUSED  •  jobs 7  •  590aba75  •  renown 22  •  strength 19  •  crew 9\nWAVE 1/4 IN 964t ×5  •  food 20+3  •  raw 45+0  •  stone 2L 1C 1/4S  •  dug 4  •  marks 0",
-               "inspector":  "CREATURE #8 · Тишина — ALIVE HP 28/28\n\nsatiety 62   fatigue 12\nmartial form 0   readiness 49\nmode Moving\njob #60 Haul\ncarrying 1 Stone\nstone haul: carrying to (23,1), booked (23,1) x1\n\nWHY\nt334 · stone_picked_up\nSTATUS ALIVE • HP 28/28\nquantity=1, cellX=23, cellY=1, fromStockpile=0",
-               "feedback":  "EVENT FEEDBACK\nt335 · Обух\nchosen_traffic_yield\nt335 · Дёготь\nchosen_traffic_yield\nt334 · Тишина\nstone_picked_up\n\nDiagnostics: 0 (structured JSON is emitted by smoke/capture).",
-               "roster":  "CREW  Брусок WORK  •  Кремень MOVE  •  Мотылёк MOVE  •  Смола WORK  •  Дёготь MOVE  •  Уголёк MOVE  •  Прель READY  •  Обух READY  •  Тишина MOVE\nDemo: DIG marked (25,1) (25,2) (25,3) (26,1); [M] paints the material stockpile (22,1) (23,1) at tick 200. Nobody was ordered to carry anything.\nLOG t1 dig_designate (1) | t200 paint MaterialStockpile (2)",
+               "summary":  "BASELINE  •  t336  •  PAUSED  •  jobs 11  •  d3bb8a3a  •  renown 21  •  strength 19  •  crew 9\nWAVE 1/4 IN 964t ×5  •  food 17+3  •  raw 9+9  •  stone 0L 1C 3/4S  •  dug 4  •  marks 0",
+               "inspector":  "CELL (25, 1)\n\ntile floor (excavated)\nzones none\njobs none\n\nDIG\nnot diggable: already excavated.",
+               "feedback":  "EVENT FEEDBACK\nt334 · Обух stepped aside at (16,7) to let 2 past.\nt333 · Обух stopped on the way at (5,3): somebody is in the doorway.\nt333 · Обух took harvesting at (5,3): it was the nearest of the jobs on offer.\n\nDiagnostics: 0 (structured JSON is emitted by smoke/capture).",
+               "roster":  "CREW  Брусок WORK  •  Кремень MOVE  •  Мотылёк MOVE  •  Смола MOVE  •  Дёготь READY  •  Уголёк WORK  •  Прель WORK  •  Обух MOVE  •  Тишина MOVE\nDemo: DIG marked (25,1) (25,2) (25,3) (26,1); [M] paints the material stockpile (22,1) (23,1) at tick 200. Nobody was ordered to carry anything.\nLOG t1 dig_designate (1) | t200 paint MaterialStockpile (2)",
                "controlFeedback":  "Demo: DIG marked (25,1) (25,2) (25,3) (26,1); [M] paints the material stockpile (22,1) (23,1) at tick 200. Nobody was ordered to carry anything.",
                "editMode":  "Paint",
                "brushZone":  "MaterialStockpile",
@@ -24,6 +24,6 @@
                                     25,
                                     1
                                 ],
-               "selectedCreatureId":  8
+               "selectedCreatureId":  null
            }
 }

@@ -13,10 +13,10 @@
                   "stockpileCapacity":  4
               },
     "ui":  {
-               "summary":  "BASELINE  •  t950  •  PAUSED  •  jobs 6  •  8a6f542e  •  renown 35  •  strength 19  •  crew 9\nWAVE 1/4 IN 350t ×5  •  food 32+0  •  raw 36+0  •  stone 0L 0C 4/4S  •  dug 4  •  marks 0",
+               "summary":  "BASELINE  •  t950  •  PAUSED  •  jobs 18  •  b423fe6d  •  renown 23  •  strength 11  •  crew 9\nWAVE 1/4 IN 350t ×5  •  food 21+3  •  raw 27+30  •  stone 0L 0C 4/4S  •  dug 4  •  marks 0",
                "inspector":  "CELL (23, 1)\n\ntile floor\nzones MaterialStockpile\njobs none\n\nSTOCKPILE\n2/2 stored. Full. Loose 0 waits until you paint another cell with [M].\n\nDIG\nnot diggable: floor, feature or gate.",
-               "feedback":  "EVENT FEEDBACK\nt949 · Тишина\nrefused_zone_unreachable\nt949 · Уголёк\nwaiting_blocked_by_other\nt945 · Тишина\nrefused_zone_unreachable\n\nDiagnostics: 0 (structured JSON is emitted by smoke/capture).",
-               "roster":  "CREW  Брусок WORK  •  Кремень MOVE  •  Мотылёк MOVE  •  Смола MOVE  •  Дёготь MOVE  •  Уголёк WORK  •  Прель READY  •  Обух READY  •  Тишина READY\nDemo: DIG marked (25,1) (25,2) (25,3) (26,1); [M] paints the material stockpile (22,1) (23,1) at tick 200. Nobody was ordered to carry anything.\nLOG t1 dig_designate (1) | t200 paint MaterialStockpile (2)",
+               "feedback":  "EVENT FEEDBACK\nt949 · Обух stopped on the way at (5,7): somebody is in the doorway.\nt948 · Смола stopped on the way at (15,7): somebody is in the doorway.\nt948 · Кремень stopped on the way at (5,5): somebody is in the doorway.\n\nDiagnostics: 0 (structured JSON is emitted by smoke/capture).",
+               "roster":  "CREW  Брусок WORK  •  Кремень MOVE  •  Мотылёк READY  •  Смола READY  •  Дёготь MOVE  •  Уголёк READY  •  Прель READY  •  Обух MOVE  •  Тишина READY\nDemo: DIG marked (25,1) (25,2) (25,3) (26,1); [M] paints the material stockpile (22,1) (23,1) at tick 200. Nobody was ordered to carry anything.\nLOG t1 dig_designate (1) | t200 paint MaterialStockpile (2)",
                "controlFeedback":  "Demo: DIG marked (25,1) (25,2) (25,3) (26,1); [M] paints the material stockpile (22,1) (23,1) at tick 200. Nobody was ordered to carry anything.",
                "editMode":  "Paint",
                "brushZone":  "MaterialStockpile",

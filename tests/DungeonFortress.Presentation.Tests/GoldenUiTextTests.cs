@@ -77,14 +77,24 @@ public sealed class GoldenUiTextTests
     [Fact]
     public void The_three_frames_tell_three_different_stories()
     {
-        var inspectors = Frames()
-            .Select(row => HudText.Inspector(RebuildFrame((int)row[1]!, (string)row[2]!)))
+        var views = Frames()
+            .Select(row => RebuildFrame((int)row[1]!, (string)row[2]!))
             .ToArray();
+        var inspectors = views.Select(HudText.Inspector).ToArray();
 
         Assert.Equal(3, inspectors.Distinct(StringComparer.Ordinal).Count());
         Assert.Contains("No material stockpile yet", inspectors[0], StringComparison.Ordinal);
-        Assert.Contains("stone haul: carrying to", inspectors[1], StringComparison.Ordinal);
         Assert.Contains("Full. Loose 0 waits", inspectors[2], StringComparison.Ordinal);
+
+        // The middle frame is read off the summary rather than the inspector.
+        // Its cell used to hold the pile a carrier was still walking to; on the
+        // dungeon of Issue #117 the walk is longer and by this tick the pile has
+        // been lifted, so the tile is bare and the panel about it says nothing
+        // about the haul. What "in transit" means is unchanged and is on the
+        // summary line: one block on somebody's back, three already put away.
+        Assert.Contains("stone 0L 1C 3/4S", HudText.Summary(views[1]), StringComparison.Ordinal);
+        Assert.Contains("stone 4L 0C 0/0S", HudText.Summary(views[0]), StringComparison.Ordinal);
+        Assert.Contains("stone 0L 0C 4/4S", HudText.Summary(views[2]), StringComparison.Ordinal);
     }
 
     private static HudViewState RebuildFrame(int tick, string selectCell)
