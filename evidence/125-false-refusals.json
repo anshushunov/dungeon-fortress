@@ -78,6 +78,30 @@
           "waiting_input_missing": [8095, 8104]
         },
         "reading": "Summed over the 15 runs. The two memory codes lose the refusals they should never have claimed; the two that grow are the real reasons those creatures were waiting for, which RecordWaitingReason had been suppressing in favour of the memory code."
+      },
+      "whatItCostTheContract": {
+        "whichNumber": "T.memory_avoid_radius = 4 is justified in contract 15.5 by how often the refusal fires per party, and that measurement was taken while three refusals in five were false. Both halves of the comparison were re-measured rather than adjusted.",
+        "command": [
+          "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\evaluate-prototype.ps1",
+          "sum ReasonCodeOccurrences.refused_place_of_panic + refused_place_of_wound per run of docs/playtests/data/prototype-01-agent-batch.json",
+          "for the radius-2 half: set PrototypeTuning.MemoryAvoidRadius to 2, run the same evaluation to an out-of-repo path, count the same way, restore the constant"
+        ],
+        "atRadius4": {
+          "baseline": {"20260726": 28, "20260727": 6, "20260728": 14},
+          "prepared": {"20260726": 0, "20260727": 28, "20260728": 4},
+          "neglected": {"20260726": 0, "20260727": 0, "20260728": 0},
+          "range": "0-28 over baseline and prepared",
+          "wasPublishedAs": "9-69"
+        },
+        "atRadius2": {
+          "baseline": {"20260726": 0, "20260727": 0, "20260728": 0},
+          "prepared": {"20260726": 0, "20260727": 0, "20260728": 3},
+          "neglected": {"20260726": 0, "20260727": 0, "20260728": 0},
+          "range": "0-3 over nine parties, and zero on eight of the nine",
+          "wasPublishedAs": "never once in a party"
+        },
+        "theZero": "prepared/20260726 now refuses nothing all party. It is the party whose twenty refusals were all false — see the before block. The rule did not stop working there; it never was working there, and the panel said otherwise.",
+        "decision": "The radius stays 4. At 2 the rule still barely exists; at 4 it produces twenty-eight real changes of decision in the richest party. The tuning is unchanged and only the numbers under it moved, so this is a re-measurement of an existing decision and not a new one."
       }
     }
   ]

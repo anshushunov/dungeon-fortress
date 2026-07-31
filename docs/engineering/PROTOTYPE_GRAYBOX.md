@@ -676,7 +676,23 @@ that to the player, and none of them needs the log:
 - **the event feed**, as a sentence. Since this step the feed no longer prints
   reason codes at all: `DungeonFortress.Presentation.EventNarration` turns the
   code plus its own `details`, `jobKind` and `target` into a sentence with the
-  creature's name in front of it.
+  creature's name in front of it;
+- **the story of the selected creature** (Issue #128). The event feed is the
+  domain's until somebody is selected and that creature's afterwards: a header
+  naming it and how much is behind the panel — `STORY · Мотылёк · last 4 of 469`
+  — then its last `HudText.CreatureStoryLines` decisions, newest first, a folded
+  one printing the span of ticks it held and how many. The marks answered "it
+  remembers something happened here"; this answers "and here is what it did about
+  it". Reading it needs no tick: it is `events[]` filtered by creature id, which
+  the snapshot already publishes. Run one:
+
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
+    -GodotPath "<path-to-godot-console>" `
+    -Fixture baseline -ScreenshotTicks 1720 -SelectCreature 2 `
+    -ScreenshotPath .artifacts\story.png `
+    -TileSize 40 -CameraZoom 0.75 -CameraPosition 560,320 -UiScale 1 -FrameSize 1280x720
+  ```
 
 **The code did not go anywhere.** It is still what `lastDecision` and every
 entry of the canonical event log carry, which is an invariant of
