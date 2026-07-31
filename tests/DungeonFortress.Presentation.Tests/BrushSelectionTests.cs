@@ -20,8 +20,11 @@ public sealed class BrushSelectionTests
     /// A 4x3 block of plain floor away from every authored feature, zone and rock
     /// tile. Twelve cells: exactly the pocket the Issue counts clicks for.
     /// </summary>
-    private static readonly GridPoint PlainFloorFrom = new(11, 10);
-    private static readonly GridPoint PlainFloorTo = new(14, 12);
+    // Four by three of plain floor, in the south chamber. It moved off the old
+    // hall's open middle with the dungeon of Issue #117, where the same rectangle
+    // now takes in four tiles of wall.
+    private static readonly GridPoint PlainFloorFrom = new(12, 12);
+    private static readonly GridPoint PlainFloorTo = new(15, 14);
 
     [Fact]
     public void A_rectangle_covers_every_cell_between_its_corners()
@@ -29,8 +32,8 @@ public sealed class BrushSelectionTests
         var tiles = BrushSelection.Rectangle(PlainFloorFrom, PlainFloorTo);
         Assert.Equal(12, tiles.Count);
         Assert.Equal(tiles.Count, tiles.Distinct().Count());
-        Assert.Contains(new GridPoint(11, 10), tiles);
-        Assert.Contains(new GridPoint(14, 12), tiles);
+        Assert.Contains(PlainFloorFrom, tiles);
+        Assert.Contains(PlainFloorTo, tiles);
     }
 
     /// <summary>

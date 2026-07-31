@@ -24,6 +24,12 @@ internal static class PresentationFixtures
     /// </summary>
     internal static MapProjection Shown(this PrototypeSnapshot state) => MapProjection.Of(state);
 
+    /// <summary>
+    /// The quarry at the back of the dungeon, where the shipped demo journals
+    /// dig. Everything that needs to <em>watch</em> the chain uses it, because a
+    /// long walk is what makes "on the way to the pile", "carrying to a cell" and
+    /// "the stone is promised elsewhere" last longer than one tick.
+    /// </summary>
     internal static readonly GridPoint[] Pocket =
     [
         new(25, 1), new(25, 2), new(25, 3), new(26, 1),
@@ -34,6 +40,34 @@ internal static class PresentationFixtures
 
     /// <summary>The blueprint of the functional-room chain, on excavated ground.</summary>
     internal static readonly GridPoint Site = new(25, 2);
+
+    /// <summary>
+    /// The wall between the hearth and the spine, east of the larder's stair, and
+    /// a stockpile two tiles from it. Every tile of it is rock at tick 0, so
+    /// digging it still creates ground that did not exist.
+    ///
+    /// It exists because of the dungeon of Issue #117. Anything that needs the
+    /// chain to actually <em>finish</em> — a post standing, a cell holding part
+    /// of a load — has to run here: at the far quarry the stone loses every
+    /// scoring comparison to a food haul fifteen tiles nearer, so the post is
+    /// never raised and the explanation under test has no subject.
+    /// </summary>
+    internal static readonly GridPoint[] NearWall =
+    [
+        new(17, 9), new(18, 9), new(19, 9), new(20, 9),
+    ];
+
+    internal static readonly GridPoint NearStockLeft = new(16, 8);
+    internal static readonly GridPoint NearStockRight = new(17, 8);
+    internal static readonly GridPoint NearSite = new(18, 9);
+
+    /// <summary>The same chain as <see cref="BuildChain"/>, run next to the hearth.</summary>
+    internal static PrototypeCommandLog NearBuildChain() => Log(
+        new DigDesignateCommand(0, NearWall),
+        new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [NearStockLeft, NearStockRight]),
+        new BuildDesignateCommand(BlueprintTick, [NearSite]),
+        new ZonePaintCommand(BlueprintTick, ZoneKind.TrainingGround, [NearSite]),
+        new SetPriorityCommand(BlueprintTick, JobKind.Drill, 3));
 
     internal const int BlueprintTick = 1_000;
 
@@ -64,10 +98,14 @@ internal static class PresentationFixtures
     internal static PrototypeSnapshot BuildChainAt(int ticks) =>
         PrototypeScenario.Run(BuildChain(), ticks).State;
 
-    /// <summary>A session far enough along that the post actually stands.</summary>
+    /// <summary>
+    /// A session far enough along that the post actually stands. It runs the
+    /// near chain: see <see cref="NearWall"/> for why the far quarry cannot
+    /// raise one.
+    /// </summary>
     internal static PrototypeSnapshot BuiltPost(int ticks)
     {
-        var state = BuildChainAt(ticks);
+        var state = PrototypeScenario.Run(NearBuildChain(), ticks).State;
         if (state.Map.BuiltPostTiles.Count == 0)
         {
             throw new InvalidOperationException(

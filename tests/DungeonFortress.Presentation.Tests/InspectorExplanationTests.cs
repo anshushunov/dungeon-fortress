@@ -115,13 +115,17 @@ public sealed class InspectorExplanationTests
     public void Every_stockpile_status_the_simulation_publishes_is_covered_here()
     {
         var observed = new HashSet<string>(StringComparer.Ordinal);
+        // Three blocks into two cells of two, next to the hearth. Three rather
+        // than four because a cell only reads `stockpile_partial` while it holds
+        // an odd block, and next to the hearth rather than at the far quarry
+        // because the third block has to actually arrive inside the session.
         var world = new PrototypeWorld(PresentationFixtures.Log(
-            new DigDesignateCommand(0, PresentationFixtures.Pocket),
+            new DigDesignateCommand(0, [.. PresentationFixtures.NearWall.Take(3)]),
             new ZonePaintCommand(
                 0,
                 ZoneKind.MaterialStockpile,
-                [PresentationFixtures.StockLeft, PresentationFixtures.StockRight]),
-            new ZonePaintCommand(600, ZoneKind.Forbidden, [PresentationFixtures.StockLeft])));
+                [PresentationFixtures.NearStockLeft, PresentationFixtures.NearStockRight]),
+            new ZonePaintCommand(600, ZoneKind.Forbidden, [PresentationFixtures.NearStockLeft])));
         while (!world.IsComplete)
         {
             world.Step();
@@ -573,7 +577,7 @@ public sealed class InspectorExplanationTests
         var creature = state.Creatures[0] with
         {
             CurrentJobId = null,
-            LastDecision = new PrototypeDecision(0, "waiting_no_job", new Dictionary<string, int>()),
+            LastDecision = new PrototypeDecision(0, "waiting_no_job_available", new Dictionary<string, int>()),
         };
         state = state with { Creatures = [creature, .. state.Creatures.Skip(1)] };
 
