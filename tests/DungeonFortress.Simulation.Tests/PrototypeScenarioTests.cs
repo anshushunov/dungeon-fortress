@@ -525,59 +525,95 @@ public sealed class PrototypeScenarioTests
 
     /// <summary>
     /// A raider that reaches an empty larder turns round instead of standing
-    /// there. The branch itself is a rule; which party happens to walk a raider
-    /// onto the larder tile on the tick after the last portion left is not, and
-    /// pinning the witness to one fixture has now cost two false failures.
+    /// there.
     ///
-    /// The first: the witness used to be <c>neglected</c>, whose larder was empty
-    /// before the raid ever started, until that domain began falling from hunger
-    /// before a wave arrives. The second: the witness became <c>baseline</c> at
-    /// its default seed, until Issue #101 changed when defenders leave a fight
-    /// and with it who is standing where while the larder empties. Neither change
-    /// touched the branch under test.
+    /// The witness for this branch has now been wrong twice, both times without
+    /// the branch changing. It was <c>neglected</c>, whose larder was empty
+    /// before the raid started, until that domain began falling from hunger
+    /// before a wave arrives. It became <c>baseline</c> at its default seed,
+    /// until Issue #101 changed when defenders leave a fight and with it who is
+    /// standing where while the larder empties. The third version — hunt the
+    /// matrix for the same instant — was the same mistake with more surface: it
+    /// looked for a raider standing on one tile on the one tick after the last
+    /// portion left, and after the traffic change that instant survives in one
+    /// cell of six.
     ///
-    /// So the witness is now hunted over the whole matrix and the test says where
-    /// it found one. What it asserts is unchanged: the branch exists, is reached
-    /// by a party somebody actually plays, and behaves.
+    /// What this version asserts is split in two, and only the first half is the
+    /// rule:
+    ///
+    /// - **the rule, everywhere.** In every party of the matrix, at every tick,
+    ///   a raider that is standing on the larder tile with nothing to take has
+    ///   turned back by the next tick. Quantified over all of it rather than
+    ///   sampled, so it cannot pass by missing the case.
+    /// - **coverage, once.** The branch is reached at all, witnessed by its own
+    ///   lasting consequence rather than by its instant: a raider still inside
+    ///   the domain, already heading for the gate, carrying nothing. Nothing else
+    ///   in the simulation produces that state — the other way to start returning
+    ///   is a full load — and unlike the instant it persists for the whole walk
+    ///   back, measured at 18 to 162 raider-ticks in five cells of six.
+    ///
+    /// A built fixture was considered and rejected: an empty larder before the
+    /// first wave is a starving domain, and a starving domain is dead before tick
+    /// 1300, which is what retired the <c>neglected</c> witness in the first
+    /// place. The state this branch needs is one raiders create, late, and the
+    /// honest way to witness it is to watch for what it leaves behind.
     /// </summary>
     [Fact]
     public void Empty_larder_raider_turns_back_to_the_gate_instead_of_waiting()
     {
+        var witnessed = new List<string>();
         var searched = new List<string>();
+
         foreach (var fixtureName in new[] { "baseline", "prepared" })
         {
             foreach (var seed in new[] { 20_260_726UL, 20_260_727UL, 20_260_728UL })
             {
-                var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
                 searched.Add($"{fixtureName}/{seed}");
+                var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
+                var pending = new List<int>();
+                var turnedBackEmpty = 0;
+
                 while (!world.IsComplete)
                 {
-                    world.Step();
-                    var beforeReturn = world.GetSnapshot();
-                    var raider = beforeReturn.Raiders.FirstOrDefault(item =>
-                        item.Mode == RaiderMode.Raiding &&
-                        !item.ReturningToGate &&
-                        item.CarryingMeals == 0 &&
-                        item.Position == new GridPoint(14, 7) &&
-                        beforeReturn.Stocks.Meals == 0);
-                    if (raider is null)
+                    var state = world.GetSnapshot();
+                    foreach (var id in pending)
                     {
-                        continue;
+                        var moved = state.Raiders.Single(item => item.Id == id);
+                        Assert.True(
+                            moved.Mode != RaiderMode.Raiding || moved.ReturningToGate,
+                            $"{fixtureName}/{seed}: raider {id} stood on the larder tile with an " +
+                            $"empty larder and was still raiding forwards on tick {state.Tick}.");
+                        Assert.Equal(0, moved.CarryingMeals);
                     }
 
+                    pending.Clear();
+                    pending.AddRange(state.Raiders
+                        .Where(item =>
+                            item.Mode == RaiderMode.Raiding &&
+                            !item.ReturningToGate &&
+                            item.CarryingMeals == 0 &&
+                            item.Position == new GridPoint(14, 7) &&
+                            state.Stocks.Meals == 0)
+                        .Select(item => item.Id));
+
+                    turnedBackEmpty += state.Raiders.Count(item =>
+                        item.Mode == RaiderMode.Raiding &&
+                        item.ReturningToGate &&
+                        item.CarryingMeals == 0);
                     world.Step();
-                    var afterReturn = world.GetSnapshot();
-                    var moved = afterReturn.Raiders.Single(item => item.Id == raider.Id);
-                    Assert.Equal(RaiderMode.Raiding, moved.Mode);
-                    Assert.True(moved.ReturningToGate);
-                    Assert.Equal(0, moved.CarryingMeals);
-                    return;
+                }
+
+                if (turnedBackEmpty > 0)
+                {
+                    witnessed.Add($"{fixtureName}/{seed} ({turnedBackEmpty} raider-ticks)");
                 }
             }
         }
 
-        Assert.Fail(
-            "No party of the matrix reached the empty-larder return branch. Searched " +
+        Assert.True(
+            witnessed.Count > 0,
+            "No party of the matrix produced a raider heading for the gate empty-handed, " +
+            "which is the only thing the empty-larder branch can leave behind. Searched " +
             string.Join(", ", searched) + ".");
     }
 

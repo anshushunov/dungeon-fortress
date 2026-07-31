@@ -54,10 +54,17 @@ public sealed class PrototypeMoraleTests(ITestOutputHelper output)
     /// Chosen from the measurement, not from taste. On `origin/main` the largest
     /// cohort over the matrix was 6, 6 and 5 of nine on `baseline` and 2, 4 and 3
     /// on `prepared` — that is the herd the owner saw, and it fails this bound
-    /// twice over. With the personal check it is 1, 3, 2 and 1, 2, 1. Three is
-    /// therefore both the honest edge of what a spread distribution produces and
-    /// the point past which "a third of everyone at once" starts to read as one
-    /// event rather than as several decisions.
+    /// twice over. With the personal check it is 1, 3, 2 and 1, 2, 2.
+    ///
+    /// One cell of six therefore sits exactly on the bound, with no slack, and
+    /// that was raised in review as a reason to move it. It is deliberately not
+    /// moved. Three of nine is not a percentile of the current build that wants
+    /// a safety margin — it is the definition the bound exists to state, and a
+    /// tick that takes four of nine is the thing the owner complained about
+    /// whether or not the build that produced it was well tuned. The failure
+    /// mode this guards against sits at 5 and 6, nowhere near the line. If a
+    /// tuning change reddens this, the answer is to look at the distribution the
+    /// report below prints, not to raise the number.
     /// </summary>
     [Theory]
     [MemberData(nameof(Matrix))]
@@ -80,9 +87,9 @@ public sealed class PrototypeMoraleTests(ITestOutputHelper output)
     /// The average cohort separates the two shapes cleanly and with room to
     /// spare. On `origin/main` it was 4.00, 3.00, 2.83 on `baseline` and 1.57,
     /// 2.20, 1.57 on `prepared` — every cell of the matrix above 1.5. With the
-    /// personal check it is 1.00, 1.13, 1.04 and 1.00, 1.05, 1.00 — every cell
-    /// below 1.15. The bound is set at 1.5: below the cheapest thing the old
-    /// shape ever produced, and a quarter clear of the dearest the new one does.
+    /// personal check it is 1.00, 1.16, 1.04 and 1.00, 1.05, 1.15 — every cell
+    /// below 1.2. The bound is set at 1.5: below the cheapest thing the old
+    /// shape ever produced, and a fifth clear of the dearest the new one does.
     /// </summary>
     [Theory]
     [MemberData(nameof(Matrix))]
@@ -115,58 +122,119 @@ public sealed class PrototypeMoraleTests(ITestOutputHelper output)
     /// presentation layer had a jump to interpolate. Flight is now ordinary
     /// movement, which means it takes ticks and can be watched.
     ///
-    /// What is asserted is the walk itself — several ticks in flight, several
-    /// tiles apart, one tile at a time. That no creature ever moves more than a
-    /// tile, for the whole party and not only for a runner, is
+    /// The first version of this test asserted that *some* runner in the party
+    /// got at least three tiles from where it broke, and review was right that
+    /// this proves nothing: the actual maximum is 26, so the bound was met by a
+    /// margin that hid the thing worth measuring. Eleven flights out of
+    /// fifty-five on `prepared` moved the creature no tile at all, and the test
+    /// was green through all of them. What matters is not the best run of the
+    /// party but the share of runs that are runs.
+    ///
+    /// Measured over the matrix, per cell: 23/25, 22/22, 23/24 on `baseline` and
+    /// 12/13, 20/21, 10/15 on `prepared` — 110 of 120, and one cell at 67 %
+    /// because of an escalated cause recorded in contract 10.3. The bounds below
+    /// are set under those and above what would read as "flight is a pose": half
+    /// per cell, 85 % over the matrix.
+    ///
+    /// What this bound does **not** do is worth stating, because the alternative
+    /// is for somebody to assume it does. It does not separate this build from
+    /// the one review measured: that build's worst cell was 73 % against this
+    /// one's 67 %, and its total was 112 of 127 against 110 of 120. Traffic
+    /// arbitration moved the shape of the standing rather than removing it, and
+    /// the cause of what is left is not something a bound can express — it is
+    /// recorded, with numbers, in contract 10.3. This test is here to stop the
+    /// share getting worse, not to certify that it is good.
+    ///
+    /// That no creature ever moves more than a tile, for the whole party and not
+    /// only for a runner, is
     /// <c>Traffic_arbitration_preserves_one_move_no_overlap_and_no_swap</c>.
     /// </summary>
     [Fact]
-    public void A_broken_defender_walks_out_of_the_fight_rather_than_arriving()
+    public void Most_broken_defenders_actually_leave_the_tile_they_broke_on()
     {
-        var world = new PrototypeWorld(LoadFixture("baseline"));
-        var previous = world.GetSnapshot();
-        var runs = new Dictionary<int, List<GridPoint>>();
-        var longest = 0;
+        var walked = 0;
+        var total = 0;
+        var report = new StringBuilder();
 
-        while (!world.IsComplete)
+        foreach (var (fixtureName, seed) in Cells())
         {
-            world.Step();
-            var current = world.GetSnapshot();
-            foreach (var creature in current.Creatures)
-            {
-                var before = previous.Creatures.Single(other => other.Id == creature.Id);
-                if (creature.Mode != CreatureMode.Fled)
-                {
-                    runs.Remove(creature.Id);
-                    continue;
-                }
+            var runs = FlightRuns(fixtureName, seed);
+            var moved = runs.Count(run => run.Distance > 0);
+            walked += moved;
+            total += runs.Count;
+            report.AppendLine(CultureInfo.InvariantCulture,
+                $"{fixtureName}/{seed}: {moved} of {runs.Count} flights moved the creature, " +
+                $"furthest {(runs.Count == 0 ? 0 : runs.Max(run => run.Distance))} tiles");
 
-                if (!runs.TryGetValue(creature.Id, out var trail))
-                {
-                    // The tile the creature broke on: the run starts where it was
-                    // standing, which is the whole point.
-                    trail = [before.Position];
-                    runs.Add(creature.Id, trail);
-                }
-
-                Assert.InRange(Manhattan(before.Position, creature.Position), 0, 1);
-                if (creature.Position != trail[^1])
-                {
-                    trail.Add(creature.Position);
-                }
-
-                longest = Math.Max(longest, Manhattan(trail[0], creature.Position));
-            }
-
-            previous = current;
+            Assert.True(
+                moved * 2 >= runs.Count,
+                $"{fixtureName}/{seed}: only {moved} of {runs.Count} broken defenders left the " +
+                "tile they broke on. A creature that announces panic and then stands in the " +
+                $"middle of a fight reads as broken rather than as frightened.\n{report}");
         }
 
         Assert.True(
-            longest >= 3,
-            $"the furthest any broken defender got from the tile it broke on was {longest} " +
-            "tiles. Flight is supposed to be a walk that the domain can watch, so a run " +
-            "that never leaves the spot means the mode is set and nothing follows.");
+            walked * 100 >= total * 85,
+            $"over the matrix only {walked} of {total} flights moved the creature.\n{report}");
     }
+
+    /// <summary>
+    /// A runner that stands still is not automatically a defect — a corridor can
+    /// be full — but a runner that stands still for a reason the domain cannot
+    /// state is. This is the assertion that survives tuning: whatever the traffic
+    /// does, every tick a broken defender spends without moving, short of its
+    /// refuge, is a tick the canonical log explains.
+    ///
+    /// It is also the one that would have caught the teleport had it been written
+    /// first, and the one that catches the opposite failure — a mode that is set
+    /// and followed by nothing at all.
+    /// </summary>
+    [Fact]
+    public void Every_tick_a_runner_stands_still_is_explained_in_the_log()
+    {
+        foreach (var (fixtureName, seed) in Cells())
+        {
+            var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
+            var previous = world.GetSnapshot();
+
+            while (!world.IsComplete)
+            {
+                world.Step();
+                var current = world.GetSnapshot();
+                foreach (var creature in current.Creatures)
+                {
+                    var before = previous.Creatures.Single(other => other.Id == creature.Id);
+                    Assert.InRange(Manhattan(before.Position, creature.Position), 0, 1);
+                    if (creature.Mode != CreatureMode.Fled ||
+                        creature.Position != before.Position ||
+                        creature.Position.X <= RefugeColumn)
+                    {
+                        continue;
+                    }
+
+                    var decision = creature.LastDecision;
+                    Assert.True(
+                        decision is not null &&
+                        decision.Tick >= current.Tick - 1 &&
+                        // `chosen_traffic_yield` is deliberately not an accepted
+                        // explanation. A runner that was told to step aside and
+                        // then did not step is the defect review measured: the
+                        // canonical log claims a yield that never happened and
+                        // the booked tile is closed to everyone else for nothing.
+                        decision.ReasonCode is "waiting_blocked_by_other"
+                            or "refused_zone_unreachable",
+                        $"{fixtureName}/{seed}: creature {creature.Id} was in flight at " +
+                        $"({creature.Position.X},{creature.Position.Y}) on tick {current.Tick - 1}, " +
+                        $"did not move, and the last thing it said was " +
+                        $"'{decision?.ReasonCode ?? "nothing"}' on tick {decision?.Tick ?? -1}. " +
+                        "Standing is allowed; standing unexplained is not.");
+                }
+
+                previous = current;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The distribution itself, printed rather than asserted. The bounds above
@@ -183,8 +251,14 @@ public sealed class PrototypeMoraleTests(ITestOutputHelper output)
             {
                 var state = RunAtSeed(fixtureName, seed);
                 var flights = Flights(state);
+                var runs = FlightRuns(fixtureName, seed);
                 var summary = state.SessionResult;
                 report.AppendLine(CultureInfo.InvariantCulture, $"{fixtureName}/{seed} {Describe(flights)}");
+                report.AppendLine(CultureInfo.InvariantCulture,
+                    $"{fixtureName}/{seed} runs={runs.Count} " +
+                    $"movedNoTile={runs.Count(run => run.Distance == 0)} " +
+                    $"furthest={(runs.Count == 0 ? 0 : runs.Max(run => run.Distance))} " +
+                    $"longestRun={(runs.Count == 0 ? 0 : runs.Max(run => run.Ticks))} ticks");
                 report.AppendLine(CultureInfo.InvariantCulture,
                     $"{fixtureName}/{seed} outcome={summary.Outcome} score={summary.Score} " +
                     $"repelled={summary.WavesRepelled}/{summary.WavesResolved} " +
@@ -233,6 +307,69 @@ public sealed class PrototypeMoraleTests(ITestOutputHelper output)
                 .Select(cohort =>
                     $"{cohort.Key}: {string.Join(",", cohort.Select(flight => flight.CreatureId).Order())}")) +
         "]";
+
+    /// <summary>
+    /// The column the refuge tiles live in (contract 15.6, <c>T.flee_tile</c>).
+    /// A runner standing there has arrived and is not stalled.
+    /// </summary>
+    private const int RefugeColumn = 1;
+
+    private static IEnumerable<(string Fixture, ulong Seed)> Cells()
+    {
+        foreach (var fixtureName in new[] { "baseline", "prepared" })
+        {
+            foreach (var seed in MatrixSeeds)
+            {
+                yield return (fixtureName, seed);
+            }
+        }
+    }
+
+    /// <summary>
+    /// One entry per flight: how far the creature got from the tile it broke on,
+    /// and how long it was in flight. A run that ends because the wave resolved
+    /// counts as it stands — the point is whether the domain watched somebody
+    /// move, not whether they reached the wall.
+    /// </summary>
+    private static IReadOnlyList<(int Distance, int Ticks)> FlightRuns(string fixtureName, ulong seed)
+    {
+        var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
+        var previous = world.GetSnapshot();
+        var live = new Dictionary<int, (GridPoint Start, int Distance, int Ticks)>();
+        var finished = new List<(int Distance, int Ticks)>();
+
+        while (!world.IsComplete)
+        {
+            world.Step();
+            var current = world.GetSnapshot();
+            foreach (var creature in current.Creatures)
+            {
+                var before = previous.Creatures.Single(other => other.Id == creature.Id);
+                if (creature.Mode != CreatureMode.Fled)
+                {
+                    if (live.Remove(creature.Id, out var ended))
+                    {
+                        finished.Add((ended.Distance, ended.Ticks));
+                    }
+
+                    continue;
+                }
+
+                var run = live.TryGetValue(creature.Id, out var known)
+                    ? known
+                    : (Start: before.Position, Distance: 0, Ticks: 0);
+                live[creature.Id] = (
+                    run.Start,
+                    Math.Max(run.Distance, Manhattan(run.Start, creature.Position)),
+                    run.Ticks + 1);
+            }
+
+            previous = current;
+        }
+
+        finished.AddRange(live.Values.Select(run => (run.Distance, run.Ticks)));
+        return finished;
+    }
 
     private static int Manhattan(GridPoint left, GridPoint right) =>
         Math.Abs(left.X - right.X) + Math.Abs(left.Y - right.Y);

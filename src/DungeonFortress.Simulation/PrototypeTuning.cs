@@ -120,21 +120,26 @@ public static class PrototypeTuning
     // each of them is worth (tuning by ADR 0010; the numbers and the runs behind
     // them are in the pull request of #101):
     //
-    // - `MoralePerDowned` 10 → 14. The count it multiplies changed meaning. It
-    //   used to be every ally the domain had lost anywhere, which on a nine-strong
-    //   domain runs 0..8; it is now the allies down inside
-    //   `MoraleWitnessRadius`, which runs 0..2. A local count needs a heavier
-    //   weight to say the same thing about the same fight.
-    // - `MoraleHealthWeight` 24 → 40. Own wounds are the largest thing that
-    //   differs between two defenders standing in the same fight, so this term is
-    //   what decides who leaves and who stays. At 24 nobody could hold: the whole
-    //   line ran and `defendersDowned` fell to 0..1 a party, which quietly
-    //   retired injuries, recovery and the cost of a lost wave. At 40 a defender
-    //   at full health holds the line and a hurt one does not.
-    // - `MoralePerRaiderNear` 7 → 5. Being crowded pushes, but less than watching
-    //   somebody drop. At 7 a defender with two raiders in reach broke before a
-    //   single ally had fallen, which turned wave after wave into `overrun` —
-    //   nobody stayed long enough to put a raider down.
+    // - `MoralePerDowned` 10 → 14, the only one of the three that existed before.
+    //   The count it multiplies changed meaning: it used to be every ally the
+    //   domain had lost anywhere, which on a nine-strong domain runs 0..8, and it
+    //   is now the allies down inside `MoraleWitnessRadius`, which runs 0..2. A
+    //   local count needs a heavier weight to say the same thing about the same
+    //   fight.
+    // - `MoraleHealthWeight`, new, settled at 40. Own wounds are the largest thing
+    //   that differs between two defenders standing in the same fight, so this
+    //   term is what decides who leaves and who stays. Tried at 24 first, and at
+    //   24 nobody could hold: the whole line ran and `defendersDowned` fell to
+    //   0..1 a party, which quietly retired injuries, recovery and the cost of a
+    //   lost wave. At 40 a defender at full health holds and a hurt one does not.
+    // - `MoralePerRaiderNear`, new, settled at 5. Being crowded pushes, but less
+    //   than watching somebody drop. Tried at 7 first, and at 7 a defender with
+    //   two raiders in reach broke before a single ally had fallen, which turned
+    //   wave after wave into `overrun` — nobody stayed long enough to put a
+    //   raider down.
+    //
+    // The 24 and the 7 above are candidates weighed against 40 and 5 inside this
+    // change set, not values `main` ever ran: before #101 neither weight existed.
     //
     // `MoraleWitnessRadius` is what a defender can take in from where it stands;
     // `MoralePressRadius` is `RaiderAttackRange` plus one — the raiders that can

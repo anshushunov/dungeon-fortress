@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "captures": [
+    {"name": "flight-t1672-breaks", "fixture": "baseline", "screenshotTicks": 1672, "selectCreature": 0, "tileSize": 40, "cameraZoom": 0.5, "cameraPosition": "560,320", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "flight-t1678-underway", "fixture": "baseline", "screenshotTicks": 1678, "selectCreature": 0, "tileSize": 40, "cameraZoom": 0.5, "cameraPosition": "560,320", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "flight-t1686-underway", "fixture": "baseline", "screenshotTicks": 1686, "selectCreature": 0, "tileSize": 40, "cameraZoom": 0.5, "cameraPosition": "560,320", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "flight-t1698-arrived", "fixture": "baseline", "screenshotTicks": 1698, "selectCreature": 0, "tileSize": 40, "cameraZoom": 0.5, "cameraPosition": "560,320", "uiScale": 1.0, "frameSize": "1280x720"}
+  ]
+}

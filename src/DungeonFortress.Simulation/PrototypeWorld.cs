@@ -1479,8 +1479,33 @@ public sealed class PrototypeWorld
             : new MovementIntent(creature, target, next.Value);
     }
 
-    private static GridPoint? PrimaryDestination(CreatureState creature)
+    /// <summary>
+    /// Where this creature is trying to get to, as traffic arbitration sees it.
+    ///
+    /// A creature that broke has one too, and saying so is the whole of the fix
+    /// Issue #101 needed on this side. Flight stopped being a teleport and became
+    /// a walk, but a walk whose destination nobody published: <c>PrimaryDestination</c>
+    /// answered <c>null</c> for a runner, so it produced no
+    /// <see cref="MovementIntent"/>, took no part in the arbitration, and was
+    /// governed by nothing except "do not step onto an occupied tile". Nobody
+    /// stepped aside for it and no dependency cycle containing it was resolved.
+    /// Measured on the matrix: eleven of fifty-five flights on <c>prepared</c>
+    /// never moved the creature a single tile, one of them for sixty-seven ticks
+    /// — half a minute of a defender who announced panic and then stood in the
+    /// middle of a fight, which reads as broken rather than as frightened.
+    ///
+    /// The refuge is the destination, published exactly the way a worker's target
+    /// is, with no priority of its own: see <see cref="IsUrgentMover"/>, which a
+    /// runner deliberately does not join. Panic does not entitle anybody to the
+    /// corridor.
+    /// </summary>
+    private GridPoint? PrimaryDestination(CreatureState creature)
     {
+        if (creature.Mode == CreatureMode.Fled)
+        {
+            return FleeTile(creature);
+        }
+
         if (creature.IsMustering)
         {
             return creature.MusterNeedsRation
@@ -1581,7 +1606,7 @@ public sealed class PrototypeWorld
         return true;
     }
 
-    private static bool CanYield(CreatureState creature, bool allowUrgent)
+    private bool CanYield(CreatureState creature, bool allowUrgent)
     {
         return creature.TrafficTarget is null &&
             (allowUrgent ||
@@ -2013,6 +2038,25 @@ public sealed class PrototypeWorld
 
             if (creature.Mode == CreatureMode.Fled)
             {
+                // A runner honours a yield the same way a worker does, and for
+                // the same reason: `TryPlanYield` writes `chosen_traffic_yield`
+                // into the canonical log and books the tile for this tick. A mode
+                // that took the booking and then walked its own way would make
+                // both of those a lie — and it did, for tens of ticks a party,
+                // because a broken defender now spends real time in a corridor
+                // instead of vanishing to the far wall.
+                if (creature.TrafficTarget is { } refugeYield)
+                {
+                    if (Move(creature, refugeYield))
+                    {
+                        creature.YieldCount++;
+                        creature.LastYieldTick = CurrentTick;
+                    }
+
+                    creature.TrafficTarget = null;
+                    continue;
+                }
+
                 RunFromTheFight(creature);
                 continue;
             }
@@ -2511,7 +2555,7 @@ public sealed class PrototypeWorld
                 "combat_fled_morale",
                 new Dictionary<string, int>
                 {
-                    ["downedAllies"] = downedNear,
+                    ["downedAlliesNear"] = downedNear,
                     ["raidersNear"] = raidersNear,
                     ["hpPercent"] = creature.Hp * 100 / creature.MaxHp,
                 });
@@ -2535,8 +2579,11 @@ public sealed class PrototypeWorld
     /// </summary>
     private void RunFromTheFight(CreatureState creature)
     {
-        var refuge = FleeTile(creature);
-        if (creature.Position == refuge)
+        // The same destination traffic arbitration planned around this tick, read
+        // from the same place, so that what was arbitrated and what is walked
+        // cannot drift apart.
+        if (PrimaryDestination(creature) is not { } refuge ||
+            creature.Position == refuge)
         {
             return;
         }

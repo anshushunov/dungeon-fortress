@@ -270,18 +270,27 @@ public sealed class PrototypeSnapshotShapeTests
     /// them carries is tuning by ADR 0010 rather than a field of the schema.
     ///
     /// That has a consequence worth writing down rather than rediscovering.
-    /// Issue #101 gave <c>combat_fled_morale</c> two arguments it did not have —
-    /// <c>raidersNear</c> and <c>hpPercent</c>, beside the <c>downedAllies</c> it
-    /// always carried — and the shape above did not move, so the versioning rule
-    /// of <c>docs/engineering/PROTOTYPE_HEADLESS.md</c> has to be applied by hand
-    /// instead of being applied by a red test. It is applied here: the change is
-    /// **additive** — nothing was renamed, removed, retyped or given a new
-    /// meaning under an old name, and <c>downedAllies</c> in particular still
-    /// answers the same question it did, only counted within sight of the
-    /// creature rather than across the domain — so
-    /// <c>PrototypeCanonical.SchemaVersion</c> stays at 3.
+    /// Issue #101 rewrote the arguments of <c>combat_fled_morale</c>, the shape
+    /// above did not move, and so the versioning rule of
+    /// <c>docs/engineering/PROTOTYPE_HEADLESS.md</c> had to be applied by hand
+    /// rather than by a red test. It is applied here, and the first draft of it
+    /// got the answer right for the wrong reason, which is worth keeping:
     ///
-    /// This test is what stops the addition from being invisible: it pins the
+    /// - <c>raidersNear</c> and <c>hpPercent</c> are new arguments. Additive.
+    /// - <c>downedAllies</c> was **not** additive and was not left alone. The old
+    ///   name counted every ally the domain had lost, anywhere, 0..8; the new
+    ///   quantity counts the ones this creature can see, 0..2. That is the
+    ///   textbook breaking change of the rule — "a field kept its name and began
+    ///   answering a different question" — so the key was renamed to
+    ///   <c>downedAlliesNear</c>. The old name now means nothing rather than
+    ///   something else, which is the whole point of the rule.
+    ///
+    /// <c>PrototypeCanonical.SchemaVersion</c> stays at 3 regardless, and not by
+    /// exception: <c>$.events[].details</c> is not a field of the schema at all,
+    /// and the composition of a reason code is tuning by ADR 0010. The rename is
+    /// what makes that argument honest instead of merely convenient.
+    ///
+    /// This test is what stops the change from being invisible: it pins the
     /// arguments of the one reason code the change touched, so removing or
     /// renaming one of them is a red test and a decision rather than a silent
     /// edit. It does not pin the vocabulary at large — that is still tuning.
@@ -300,7 +309,7 @@ public sealed class PrototypeSnapshotShapeTests
 
         Assert.NotEmpty(flights);
         Assert.All(flights, flight => Assert.Equal(
-            ["downedAllies", "hpPercent", "raidersNear"],
+            ["downedAlliesNear", "hpPercent", "raidersNear"],
             flight.GetProperty("details")
                 .EnumerateObject()
                 .Select(argument => argument.Name)
