@@ -251,4 +251,42 @@ public sealed class HudReadabilityTests
             AdapterSource.Body("AssertLabelsFit"),
             StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void LayoutHud_applies_the_live_UI_scale_to_every_tooltip_button()
+    {
+        // HudFontSizesTests proves the arithmetic HudFontSizes.ScaledSize does is
+        // correct in isolation, but nothing proved LayoutHud still feeds it a live
+        // number: delete this loop and every HudButton.UiScale stays at its
+        // default 1.0 forever, which is Issue #127 verbatim, and every other
+        // check here — including the 599 tests and both negative --smoke flags —
+        // stays green, because they all exercise the arithmetic and not its
+        // wiring. Same technique as
+        // CameraViewTests.The_player_keeps_a_zoom_they_chose_and_the_HUD_scale_keeps_following_the_window
+        // (CameraViewTests.cs), which proves OnViewportResized still calls
+        // CameraView.AutomaticUiScale rather than a constant.
+        var layoutHud = AdapterSource.Body("LayoutHud");
+        Assert.Contains("button.UiScale = uiScale", layoutHud, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MakeCustomTooltip_reads_the_live_UI_scale_rather_than_a_fixed_one()
+    {
+        // The other half of the same gap: AdapterSource only reads Main.cs (ADR
+        // 0011 — no test project references DungeonFortress.Game), so it cannot
+        // see HudButton.cs. Read raw, the same way
+        // The_inert_strict_hud_fit_flag_is_gone_from_the_adapter reads Main.cs raw
+        // instead of through AdapterSource.Masked. If _MakeCustomTooltip were
+        // rewritten to call BuildTooltip(forText, 1.0) — a fixed baseline instead
+        // of the button's own live scale — Issue #127 returns exactly, and only
+        // this assertion would notice.
+        var path = Path.Combine(
+            PresentationFixtures.FindRepositoryRoot(), "src", "DungeonFortress.Game", "HudButton.cs");
+        var source = File.ReadAllText(path);
+
+        Assert.Contains(
+            "_MakeCustomTooltip(string forText) => BuildTooltip(forText, UiScale)",
+            source,
+            StringComparison.Ordinal);
+    }
 }
