@@ -221,6 +221,48 @@ public sealed record PrototypeStockpileCellSnapshot(
     string StatusCode);
 
 /// <summary>
+/// One object standing inside a room: where it is and what it is. It is read off
+/// the live map, so a training post the player built and one the map fixture
+/// authored are the same kind of content — the rule of contract 4.3 that nothing
+/// distinguishes them holds here too.
+/// </summary>
+public sealed record PrototypeRoomObjectSnapshot(GridPoint Position, TileKind Kind);
+
+/// <summary>
+/// A room, in the sense
+/// <see href="../../docs/decisions/0013-what-is-a-room.md">ADR 0013</see> chose:
+/// one connected patch of one zone, together with the objects standing in it.
+/// The six properties the ADR names are the six fields below.
+///
+/// <list type="bullet">
+/// <item><see cref="Id"/> — идентификатор. Derived from the purpose and the
+/// anchor, because a room is derived; see <c>PrototypeRooms.Identify</c>.</item>
+/// <item><see cref="Purpose"/> — назначение.</item>
+/// <item><see cref="Perimeter"/> — периметр: the painted cells this room consists
+/// of, in reading order. The ADR calls it «периметр покрашенных клеток», and this
+/// is that patch — the thing the drawn outline goes around. The outline itself is
+/// edge geometry and is computed by the presentation layer
+/// (<c>DungeonFortress.Presentation.RoomGeometry</c>), for the same reason
+/// <c>WallTopology</c> lives there: topology over a set of tiles follows from the
+/// published tiles and needs no tick to run (ADR 0011).</item>
+/// <item><see cref="Contents"/> — состав объектов.</item>
+/// <item><see cref="StatusCode"/> — состояние, as a reason code in the same
+/// vocabulary the dig, build and stockpile ladders use.</item>
+/// <item><see cref="Complete"/> — признак завершённости: whether the room covers
+/// the feature its purpose requires (contract 12.3). A room can be complete and
+/// still not working — that is what <see cref="StatusCode"/> is for — but an
+/// incomplete one never works.</item>
+/// </list>
+/// </summary>
+public sealed record PrototypeRoomSnapshot(
+    string Id,
+    ZoneKind Purpose,
+    IReadOnlyList<GridPoint> Perimeter,
+    IReadOnlyList<PrototypeRoomObjectSnapshot> Contents,
+    string StatusCode,
+    bool Complete);
+
+/// <summary>
 /// The mutable part of the map. Only <see cref="TileKind.Rock"/> can change, and
 /// only into <see cref="TileKind.Floor"/>, so the excavated delta plus the fixed
 /// initial layout fully determines the terrain.
@@ -477,7 +519,11 @@ public sealed record PrototypeSnapshot(
     IReadOnlyList<PrototypeWaveSnapshot> Waves,
     PrototypeDomainSnapshot Domain,
     IReadOnlyList<PrototypeRaiderSnapshot> Raiders,
-    PrototypeSessionResultSnapshot SessionResult);
+    PrototypeSessionResultSnapshot SessionResult,
+    // Appended on purpose, like every section added since v2: a new list at the
+    // end of the record cannot move the meaning of anything before it. Rooms are
+    // derived from Zones and Map on every snapshot (ADR 0013, variant C).
+    IReadOnlyList<PrototypeRoomSnapshot> Rooms);
 
 public sealed record PrototypeRunResult(
     int Tick,

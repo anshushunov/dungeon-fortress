@@ -102,7 +102,7 @@ public sealed class PrototypeSnapshotShapeTests
     /// </summary>
     private static readonly string[] RecordedShape =
     [
-        "$ -> beds, buildSites, commandsApplied, creatures, digDesignations, domain, economy, events, jobs, labor, looseItems, map, materialStockpile, nextJobId, pendingCommands, priorities, raiders, rules, schemaVersion, seed, sessionResult, stations, stocks, threat, tick, waves, zones",
+        "$ -> beds, buildSites, commandsApplied, creatures, digDesignations, domain, economy, events, jobs, labor, looseItems, map, materialStockpile, nextJobId, pendingCommands, priorities, raiders, rooms, rules, schemaVersion, seed, sessionResult, stations, stocks, threat, tick, waves, zones",
         "$.beds[] -> growthProgress, position, ripe",
         "$.buildSites[] -> delivered, incomingReserved, jobId, progressTicks, reachable, required, requiredTicks, reservedBy, statusCode, tile",
         "$.creatures[] -> affinities, blockedTicks, carryAmount, carrying, currentJobId, fatigue, grit, hp, id, injury, isMustering, lastDecision, lastMoveTick, lastYieldTick, martialForm, maxHp, mealReserved, mealTarget, mealTicksRemaining, might, mode, moveCount, musterNeedsRation, musterTarget, name, position, readiness, readinessAtRaid, recoveryTicks, rememberedPlaces, satiety, watchTicks, workTicks, yieldCount",
@@ -119,6 +119,8 @@ public sealed class PrototypeSnapshotShapeTests
         "$.materialStockpile[] -> capacity, incomingReserved, position, reachable, statusCode, stored",
         "$.pendingCommands[] -> jobKind, kind, ruleId, tick, tiles, value, zoneKind",
         "$.raiders[] -> carryingMeals, hp, id, might, mode, position, returningToGate, stealTicks, wave",
+        "$.rooms[] -> complete, contents, id, perimeter, purpose, statusCode",
+        "$.rooms[].contents[] -> kind, position",
         "$.sessionResult -> defendersDowned, defendersFled, endTick, lastWaveOutcome, mealsLeft, mealsStolen, outcome, raidersDowned, renown, score, strength, unresolved, waveCount, wavesRepelled, wavesResolved",
         "$.stations[] -> kind, occupiedBy, occupiedTicks, position",
         "$.stocks -> capacity, carriedStone, looseMeals, looseRawMushroom, looseStone, meals, mealsEaten, mealsProduced, rawMushroom, reservedStone, siteStone, stockpileCapacity, storedStone",

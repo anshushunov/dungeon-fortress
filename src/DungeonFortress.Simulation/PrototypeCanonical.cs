@@ -225,6 +225,48 @@ public static class PrototypeCanonical
         }
 
         writer.WriteEndObject();
+
+        // Rooms (Issue #52, ADR 0013 variant C). Additive: a new top-level
+        // section, no field renamed, removed, retyped or re-pointed, so the schema
+        // version does not move — see docs/engineering/PROTOTYPE_HEADLESS.md,
+        // "Версионирование канонического снапшота". Every frame's checksum does
+        // move, because the four default zones make four rooms from tick 0, and
+        // that is what a golden regeneration is for.
+        //
+        // The order is (purpose, anchor) and is imposed here rather than trusted
+        // from the producer, so the canonical document cannot depend on the order
+        // the patches were walked in.
+        writer.WriteStartArray("rooms");
+        foreach (var room in state.Rooms
+                     .OrderBy(room => room.Purpose)
+                     .ThenBy(room => room.Perimeter[0]))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("id", room.Id);
+            writer.WriteString("purpose", ToJson(room.Purpose));
+            writer.WriteStartArray("perimeter");
+            foreach (var tile in room.Perimeter.Order())
+            {
+                WritePointValue(writer, tile);
+            }
+
+            writer.WriteEndArray();
+            writer.WriteStartArray("contents");
+            foreach (var item in room.Contents.OrderBy(item => item.Position))
+            {
+                writer.WriteStartObject();
+                WritePoint(writer, "position", item.Position);
+                writer.WriteString("kind", ToJson(item.Kind));
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
+            writer.WriteString("statusCode", room.StatusCode);
+            writer.WriteBoolean("complete", room.Complete);
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
         writer.WriteStartObject("priorities");
         foreach (var priority in state.Priorities.OrderBy(pair => pair.Key))
         {
