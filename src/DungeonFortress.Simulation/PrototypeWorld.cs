@@ -495,6 +495,24 @@ public sealed class PrototypeWorld
         };
     }
 
+    /// <summary>
+    /// The nine, where they stand at tick 0.
+    ///
+    /// Three of the starting tiles moved with the dungeon of Issue #117 and the
+    /// reason is named for each, because "the fixture changed" is not a reason:
+    ///
+    /// - Мотылёк was on <c>(13,9)</c>, which the wall between the kitchen and
+    ///   the larder now runs through. It moved into the larder, which is where a
+    ///   carrier belongs;
+    /// - Прель was on <c>(10,9)</c> and Уголёк on <c>(21,9)</c>. Both tiles
+    ///   survived the change, and both became **doors** — the kitchen's only way
+    ///   to the spine and the quarters' only way down. A creature standing in a
+    ///   doorway on tick 0 blocks the room behind it for as long as it takes to
+    ///   pick a job, which is a start position picking a fight with the traffic
+    ///   arbitration. Both stepped one tile back into their own room.
+    ///
+    /// Everything else — id, name, might, grit, affinities — is untouched.
+    /// </summary>
     private static List<CreatureState> CreateCreatures(ulong seed)
     {
         var random = new DeterministicRandom(seed ^ 0x776F726C645F696EUL);
@@ -502,11 +520,11 @@ public sealed class PrototypeWorld
         {
             new CreatureDefinition(0, "Брусок", 2, 3, Affinities((JobKind.Cook, 2)), new(11, 8)),
             new CreatureDefinition(1, "Кремень", 4, 4, Affinities((JobKind.Watch, 2)), new(24, 12)),
-            new CreatureDefinition(2, "Мотылёк", 1, 2, Affinities((JobKind.Haul, 2)), new(13, 9)),
+            new CreatureDefinition(2, "Мотылёк", 1, 2, Affinities((JobKind.Haul, 2)), new(16, 8)),
             new CreatureDefinition(3, "Смола", 2, 3, Affinities((JobKind.Harvest, 2)), new(4, 3)),
             new CreatureDefinition(4, "Дёготь", 3, 2, Affinities((JobKind.Harvest, 1), (JobKind.Haul, 1)), new(6, 5)),
-            new CreatureDefinition(5, "Уголёк", 3, 3, Affinities((JobKind.Drill, 2)), new(21, 9)),
-            new CreatureDefinition(6, "Прель", 1, 4, Affinities((JobKind.Cook, 1), (JobKind.Harvest, 1)), new(10, 9)),
+            new CreatureDefinition(5, "Уголёк", 3, 3, Affinities((JobKind.Drill, 2)), new(20, 5)),
+            new CreatureDefinition(6, "Прель", 1, 4, Affinities((JobKind.Cook, 1), (JobKind.Harvest, 1)), new(9, 8)),
             new CreatureDefinition(7, "Обух", 5, 2, Affinities((JobKind.Watch, 1)), new(25, 13)),
             new CreatureDefinition(8, "Тишина", 2, 5, Affinities((JobKind.Haul, 1), (JobKind.Drill, 1)), new(17, 10)),
         };
@@ -1606,9 +1624,35 @@ public sealed class PrototypeWorld
         return true;
     }
 
+    /// <summary>
+    /// Whether this creature may be told to step aside.
+    ///
+    /// The order has to go to somebody who will actually take the step, and two
+    /// modes will not (Issue #119). <see cref="ActCreatures"/> hands a
+    /// <see cref="CreatureMode.Fighting"/> creature to
+    /// <see cref="ActCombatant"/> before it ever reads
+    /// <c>TrafficTarget</c>, and it skips a <see cref="CreatureMode.Downed"/>
+    /// one outright. Choosing either as the yielder cost the tick twice: the
+    /// booked tile stayed shut for everybody, including the creature the yield
+    /// was made for, and <c>chosen_traffic_yield</c> went into the canonical log
+    /// for a move that never happened.
+    ///
+    /// Measured on the hall layout of `main`, per party over the seed matrix:
+    /// 21 to 109 such orders to a defender in a fight and 0 to 173 to a creature
+    /// on the floor. The dungeon of Issue #117 is what made the cost visible —
+    /// in a hall the traffic walks around a tile locked for nothing, in a
+    /// doorway there is nothing to walk around — and the traffic measurement
+    /// behind the decision to fix it here is
+    /// <c>evidence/117-traffic.json</c>.
+    ///
+    /// <see cref="CreatureMode.Fled"/> is deliberately not in the list: a runner
+    /// does read the booking and does take the step, which is the half of this
+    /// Issue #101 already closed.
+    /// </summary>
     private bool CanYield(CreatureState creature, bool allowUrgent)
     {
         return creature.TrafficTarget is null &&
+            creature.Mode is not (CreatureMode.Fighting or CreatureMode.Downed) &&
             (allowUrgent ||
              (!creature.MealReserved && !creature.IsMustering)) &&
             PrimaryDestination(creature) != creature.Position;
@@ -1641,6 +1685,10 @@ public sealed class PrototypeWorld
             .OrderBy(job => job.Id)
             .ToList();
         var pairs = new List<MatchPair>();
+        foreach (var creature in candidates)
+        {
+            creature.AvoidedThisTick = null;
+        }
 
         foreach (var creature in candidates)
         {
@@ -1687,6 +1735,17 @@ public sealed class PrototypeWorld
                     continue;
                 }
 
+                // Where a creature broke or was put down, it will not start work
+                // again (Issue #117). Lying down is deliberately exempt: a wound
+                // closes in a bunk and nowhere else, so a creature that refused
+                // the bunk it was carried to would be refusing to heal, which is
+                // not a decision about work at all.
+                if (job.Kind != JobKind.Rest && AvoidedPlace(creature, target) is { } avoided)
+                {
+                    creature.AvoidedThisTick ??= (job.Kind, target, avoided);
+                    continue;
+                }
+
                 var targetOccupant = _creatures.FirstOrDefault(
                     other => other != creature && other.Position == target);
                 if (targetOccupant is not null && targetOccupant.CurrentJob is null)
@@ -1714,6 +1773,29 @@ public sealed class PrototypeWorld
                     pairs.Add(new MatchPair(creature, job, target, score, urgency, affinity, distance.Value));
                 }
             }
+        }
+
+        // The refusal goes into the canonical log before anything is assigned, so
+        // that a creature which then takes other work still tells the domain what
+        // it would not do. `lastDecision` is overwritten a moment later by the job
+        // it did take, which is right: the panel answers "what is it doing", and
+        // the event feed answers "what happened".
+        foreach (var creature in candidates
+                     .Where(item => item.AvoidedThisTick is not null)
+                     .OrderBy(item => item.Id))
+        {
+            var (kind, target, place) = creature.AvoidedThisTick!.Value;
+            RecordDecision(
+                creature,
+                AvoidanceReason(place),
+                new Dictionary<string, int>
+                {
+                    ["placeX"] = place.Place.X,
+                    ["placeY"] = place.Place.Y,
+                    ["sinceTick"] = place.Tick,
+                },
+                kind,
+                target);
         }
 
         while (pairs.Count > 0)
@@ -1820,6 +1902,30 @@ public sealed class PrototypeWorld
 
     private void RecordWaitingReason(CreatureState creature)
     {
+        // A creature standing idle because it will not go back to where it broke
+        // says so, instead of reporting the next-best diagnostic about a job it
+        // was never going to take. This is the branch the player is looking at
+        // when they ask why somebody is doing nothing.
+        //
+        // The decision is **not written again here**. It was written for this
+        // creature, with these exact arguments, by the loop above the matching in
+        // <see cref="MatchJobs"/>, and it is already this creature's
+        // <c>lastDecision</c>. Writing it a second time did not create a second
+        // event — <see cref="RecordDecision"/> folds an identical repeat — it
+        // incremented <c>repeats</c> on the first one, so a refusal that happened
+        // once was published as having happened twice, on its very first tick.
+        //
+        // That is a canonical counter, not a display detail: the feed printed
+        // "(x2)", `ReasonCodeOccurrences` sums `Repeats`, and every count of this
+        // code quoted anywhere was inflated by it. The rule the fix restores is
+        // the one the counter is named for: <c>repeats</c> counts **ticks on
+        // which the decision was taken**, not calls that recorded it.
+        if (creature.AvoidedThisTick is not null)
+        {
+            creature.Mode = CreatureMode.Waiting;
+            return;
+        }
+
         var diagnosticKind = Enum.GetValues<JobKind>()
             .Where(kind =>
                 _priorities[kind] > 0 &&
@@ -2275,6 +2381,7 @@ public sealed class PrototypeWorld
                     defender.Injury = InjuryKind.Heavy;
                     defender.Mode = CreatureMode.Downed;
                     CurrentWave()?.CountDefenderDowned();
+                    Remember(defender, "wound");
                     RecordDecision(defender, "combat_downed", new Dictionary<string, int> { ["raiderId"] = raider.Id, ["damage"] = damage });
                 }
                 continue;
@@ -2550,6 +2657,7 @@ public sealed class PrototypeWorld
 
             creature.Mode = CreatureMode.Fled;
             CurrentWave()?.CountDefenderFled();
+            Remember(creature, "panic");
             RecordDecision(
                 creature,
                 "combat_fled_morale",
@@ -2669,6 +2777,64 @@ public sealed class PrototypeWorld
         creature.Mode != CreatureMode.Downed &&
         creature.Injury != InjuryKind.Heavy &&
         creature.Satiety >= PrototypeTuning.CombatMinSatiety;
+
+    /// <summary>
+    /// One creature writes down where it is standing and what happened to it
+    /// there. Called from exactly two places — the tick its nerve failed and the
+    /// tick a raider put it down — because those are the two events Issue #117
+    /// calls "паника или травма".
+    ///
+    /// The memory is written at <see cref="CreatureState.Position"/> and nowhere
+    /// else, which is the whole of what keeps it from becoming a herd: two
+    /// defenders who broke in the same fight broke on different tiles, so they
+    /// avoid different places, and a third who held remembers nothing at all.
+    /// That is the property #101 bought for panic and this must not spend.
+    ///
+    /// A place already remembered for a wound stays a wound even if the creature
+    /// later panics on it. Being put down is the worse of the two and the one
+    /// worth telling the player about; letting the softer cause overwrite it
+    /// would make the reason a function of which event happened last rather than
+    /// of what happened.
+    /// </summary>
+    private void Remember(CreatureState creature, string cause)
+    {
+        var place = creature.Position;
+        if (creature.RememberedPlaces.TryGetValue(place, out var known) && known.Cause == "wound")
+        {
+            cause = "wound";
+        }
+
+        creature.RememberedPlaces[place] = new PrototypeRememberedPlace(place, CurrentTick, cause);
+        while (creature.RememberedPlaces.Count > PrototypeTuning.MemoryPlacesMax)
+        {
+            var oldest = creature.RememberedPlaces.Values
+                .OrderBy(item => item.Tick)
+                .ThenBy(item => item.Place)
+                .First();
+            creature.RememberedPlaces.Remove(oldest.Place);
+        }
+    }
+
+    /// <summary>
+    /// Whether this creature will refuse to start work on this tile, and which
+    /// memory refuses it. The nearest remembered place wins, and ties go to the
+    /// newer memory and then to the tile order, so the answer never depends on
+    /// the order the dictionary happens to enumerate in.
+    /// </summary>
+    private static PrototypeRememberedPlace? AvoidedPlace(CreatureState creature, GridPoint target)
+    {
+        return creature.RememberedPlaces.Count == 0
+            ? null
+            : creature.RememberedPlaces.Values
+                .Where(place => Manhattan(place.Place, target) <= PrototypeTuning.MemoryAvoidRadius)
+                .OrderBy(place => Manhattan(place.Place, target))
+                .ThenByDescending(place => place.Tick)
+                .ThenBy(place => place.Place)
+                .FirstOrDefault();
+    }
+
+    private static string AvoidanceReason(PrototypeRememberedPlace place) =>
+        place.Cause == "wound" ? "refused_place_of_wound" : "refused_place_of_panic";
 
     private int CombatJitter(int amplitude) => _combatRandom.NextInt32(amplitude * 2 + 1) - amplitude;
 
@@ -4339,7 +4505,8 @@ public sealed class PrototypeWorld
             creature.LastDecision,
             ComputeReadiness(creature),
             creature.ReadinessAtRaid,
-            creature.RecoveryTicks);
+            creature.RecoveryTicks,
+            [.. creature.RememberedPlaces.Values]);
     }
 
     private PrototypeDigDesignationSnapshot ToSnapshot(GridPoint tile)
@@ -4634,6 +4801,22 @@ public sealed class PrototypeWorld
         public int YieldCount { get; set; }
         public int LastYieldTick { get; set; } = -1;
         public bool WaitThisTick { get; set; }
+
+        /// <summary>
+        /// Where this creature broke or was put down. Keyed by tile so that the
+        /// same place remembered twice stays one entry, and sorted so that the
+        /// canonical document does not depend on the order the events arrived
+        /// in. Capped at <see cref="PrototypeTuning.MemoryPlacesMax"/>.
+        /// </summary>
+        public SortedDictionary<GridPoint, PrototypeRememberedPlace> RememberedPlaces { get; } = [];
+
+        /// <summary>
+        /// The work this creature turned down this tick because of where it
+        /// would have had to start. Transient — it is recomputed every tick from
+        /// the memory and the job list, exactly like <see cref="WaitThisTick"/>,
+        /// so it is not canonical state.
+        /// </summary>
+        public (JobKind Kind, GridPoint Target, PrototypeRememberedPlace Place)? AvoidedThisTick { get; set; }
 
         public int Affinity(JobKind kind)
         {

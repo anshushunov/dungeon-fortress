@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "issue": 117,
+  "what": "Traffic on the seed matrix: refused steps, yield orders, and yield orders handed to a creature that cannot take the step (Issue #119).",
+  "command": "dotnet test tests/DungeonFortress.Simulation.Tests --configuration Release --filter \"FullyQualifiedName~PrototypeTrafficTests.Report_traffic_over_the_seed_matrix\" --logger \"console;verbosity=detailed\"",
+  "columns": {
+    "blockedSteps": "waiting_blocked_by_other decisions recorded over the party",
+    "yields": "chosen_traffic_yield decisions recorded over the party",
+    "unexecutedYields": "yields whose creature did not move that tick",
+    "ordersToFighting": "unexecuted yields where the creature was Fighting",
+    "ordersToDowned": "unexecuted yields where the creature was Downed"
+  },
+  "measurements": [
+    {
+      "stage": "before",
+      "layout": "hall",
+      "commit": "1b41555",
+      "takenOn": "main, before this branch: the hall layout, no memory of place",
+      "note": "The starting map of main: one hall, six internal pillars and the dig pocket. This block keeps its hash because it names a commit on `main`, which survives rebase and squash and still resolves; the 'after' block below names the tree in prose instead, because an in-branch hash does not (Issue #106 is the general form).",
+      "runs": [
+        {"fixture": "baseline", "seed": 20260726, "ticks": 2416, "blockedSteps": 6313, "yields": 556, "unexecutedYields": 126, "ordersToFighting": 23, "ordersToDowned": 87},
+        {"fixture": "baseline", "seed": 20260727, "ticks": 2408, "blockedSteps": 4540, "yields": 406, "unexecutedYields": 49, "ordersToFighting": 21, "ordersToDowned": 0},
+        {"fixture": "baseline", "seed": 20260728, "ticks": 2410, "blockedSteps": 5828, "yields": 540, "unexecutedYields": 176, "ordersToFighting": 88, "ordersToDowned": 44},
+        {"fixture": "prepared", "seed": 20260726, "ticks": 2414, "blockedSteps": 5355, "yields": 467, "unexecutedYields": 200, "ordersToFighting": 109, "ordersToDowned": 82},
+        {"fixture": "prepared", "seed": 20260727, "ticks": 2406, "blockedSteps": 4530, "yields": 351, "unexecutedYields": 77, "ordersToFighting": 73, "ordersToDowned": 0},
+        {"fixture": "prepared", "seed": 20260728, "ticks": 2409, "blockedSteps": 5841, "yields": 524, "unexecutedYields": 280, "ordersToFighting": 95, "ordersToDowned": 173}
+      ]
+    },
+    {
+      "stage": "dungeon-before-the-119-fix",
+      "layout": "dungeon",
+      "note": "The dungeon on its own, with CanYield untouched. This is the measurement Issue #117 asks for: did the new layout raise how often a step stalls. It did, by half again, which is what authorised fixing #119 inside this task.",
+      "runs": [
+        {"fixture": "baseline", "seed": 20260726, "blockedSteps": 8864, "yields": 1479, "unexecutedYields": 335, "ordersToFighting": 201, "ordersToDowned": 0},
+        {"fixture": "baseline", "seed": 20260727, "blockedSteps": 9872, "yields": 1807, "unexecutedYields": 282, "ordersToFighting": 88, "ordersToDowned": 0},
+        {"fixture": "baseline", "seed": 20260728, "blockedSteps": 9550, "yields": 2109, "unexecutedYields": 433, "ordersToFighting": 82, "ordersToDowned": 14},
+        {"fixture": "prepared", "seed": 20260726, "blockedSteps": 9249, "yields": 739, "unexecutedYields": 186, "ordersToFighting": 86, "ordersToDowned": 20},
+        {"fixture": "prepared", "seed": 20260727, "blockedSteps": 7875, "yields": 1557, "unexecutedYields": 373, "ordersToFighting": 103, "ordersToDowned": 78},
+        {"fixture": "prepared", "seed": 20260728, "blockedSteps": 9577, "yields": 1004, "unexecutedYields": 255, "ordersToFighting": 156, "ordersToDowned": 26}
+      ],
+      "caveat": "Taken on an intermediate layout of this branch, not on the one that shipped: the chambers were the same, the doorways were narrower. It is kept because it is the measurement the decision to fix #119 was made on, and because a later, wider layout cannot be used to justify a fix that was needed by the narrow one."
+    },
+    {
+      "stage": "after",
+      "layout": "dungeon",
+      "takenOn": "the head of this branch after the review round: dungeon, CanYield fix, memory of place, the re-authored prepared plan and the R4 repeat fix",
+      "note": "No yield order goes to a creature that cannot take the step, and stalled steps are back inside the range the hall produced.",
+      "supersedes": "An earlier 'after' block, taken when the dungeon and the CanYield fix landed but before memory of place and before the R4 repeat fix. It read 5850-9500 stalled steps and was quoted by contract 4.5 as 5002-9500; both were stale by the time the branch was reviewed.",
+      "runs": [
+        {"fixture": "baseline", "seed": 20260726, "ticks": 2404, "blockedSteps": 5962, "yields": 517, "unexecutedYields": 21, "ordersToFighting": 0, "ordersToDowned": 0},
+        {"fixture": "baseline", "seed": 20260727, "ticks": 2404, "blockedSteps": 9721, "yields": 1402, "unexecutedYields": 20, "ordersToFighting": 0, "ordersToDowned": 0},
+        {"fixture": "baseline", "seed": 20260728, "ticks": 2424, "blockedSteps": 6144, "yields": 691, "unexecutedYields": 85, "ordersToFighting": 0, "ordersToDowned": 0},
+        {"fixture": "prepared", "seed": 20260726, "ticks": 2406, "blockedSteps": 5791, "yields": 428, "unexecutedYields": 7, "ordersToFighting": 0, "ordersToDowned": 0},
+        {"fixture": "prepared", "seed": 20260727, "ticks": 2406, "blockedSteps": 6592, "yields": 1014, "unexecutedYields": 24, "ordersToFighting": 0, "ordersToDowned": 0},
+        {"fixture": "prepared", "seed": 20260728, "ticks": 2409, "blockedSteps": 5183, "yields": 382, "unexecutedYields": 14, "ordersToFighting": 0, "ordersToDowned": 0}
+      ],
+      "blockedStepsRange": [5183, 9721]
+    }
+  ]
+}

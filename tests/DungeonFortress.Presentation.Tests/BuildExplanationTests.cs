@@ -255,7 +255,7 @@ public sealed class BuildExplanationTests
             InspectorText.UnbuildableReason(chain, Assert.Single(chain.Map.BuiltPostTiles)));
         Assert.Equal(
             "it is a material stockpile cell — erase it first, a building site is not a warehouse",
-            InspectorText.UnbuildableReason(chain, PresentationFixtures.StockLeft));
+            InspectorText.UnbuildableReason(chain, PresentationFixtures.NearStockLeft));
     }
 
     /// <summary>

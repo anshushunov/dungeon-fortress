@@ -533,9 +533,10 @@ public sealed class PrototypeContractRegressionTests
                     0,
                     ZoneKind.TrainingGround,
                     [
-                        new(7, 11), new(8, 11), new(9, 11), new(10, 11),
-                        new(7, 12), new(8, 12), new(9, 12), new(10, 12),
-                        new(7, 13), new(8, 13), new(9, 13), new(10, 13),
+                        new(9, 1), new(10, 1), new(11, 1), new(12, 1),
+                        new(9, 2), new(10, 2), new(11, 2), new(12, 2),
+                        new(9, 3), new(10, 3), new(11, 3), new(12, 3),
+                        new(9, 4), new(10, 4), new(11, 4), new(12, 4),
                     ]),
                 new SetPriorityCommand(0, JobKind.Drill, 4),
                 new SetPriorityCommand(0, JobKind.Rest, 0),

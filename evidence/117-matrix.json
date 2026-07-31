@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "issue": 117,
+  "what": "The seed matrix of docs/playtests/data/prototype-01-agent-batch.json, read down to the numbers Issue #117 moves: the party score, the gap between the two plans on one seed, and the ranking of a live domain over a dead one.",
+  "command": [
+    "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\evaluate-prototype.ps1",
+    "python -c \"import json,io; d=json.load(io.open(r'docs/playtests/data/prototype-01-agent-batch.json',encoding='utf-8')); [print(r['Scenario'], r['Seed'], r['Metrics']['Session']['Outcome'], r['Metrics']['Session']['Score']) for r in d['Runs']]\""
+  ],
+  "measurements": [
+    {
+      "stage": "before",
+      "layout": "hall",
+      "commit": "1b41555",
+      "takenOn": "main, before this branch: the hall layout, the old prepared plan",
+      "note": "Read from the committed evidence file as it stood on main; no run was needed to produce it. This block keeps its hash because it names a commit on `main`, which survives rebase and squash and still resolves; the 'after' block below names the tree in prose instead, because an in-branch hash does not (Issue #106 is the general form).",
+      "score": {
+        "baseline": {"20260726": 669, "20260727": 701, "20260728": 784},
+        "prepared": {"20260726": 871, "20260727": 788, "20260728": 928},
+        "neglected": {"20260726": 0, "20260727": 0, "20260728": 0}
+      },
+      "planGapPerSeed": {"20260726": 202, "20260727": 87, "20260728": 144},
+      "minimumPlanGap": 87,
+      "livingOverFallenGap": 669,
+      "renown": {
+        "baseline": {"20260726": 137, "20260727": 133, "20260728": 149},
+        "prepared": {"20260726": 169, "20260727": 147, "20260728": 173},
+        "neglected": {"20260726": 4, "20260727": 4, "20260728": 4}
+      },
+      "mealsProduced": {
+        "baseline": {"20260726": 108, "20260727": 102, "20260728": 108},
+        "prepared": {"20260726": 108, "20260727": 93, "20260728": 87}
+      },
+      "mealsStolen": {
+        "baseline": {"20260726": 51, "20260727": 49, "20260728": 40},
+        "prepared": {"20260726": 33, "20260727": 30, "20260728": 24}
+      },
+      "defendersFled": {
+        "baseline": {"20260726": 25, "20260727": 22, "20260728": 24},
+        "prepared": {"20260726": 13, "20260727": 21, "20260728": 15}
+      },
+      "neglectedFallenTick": {"20260726": 649, "20260727": 604, "20260728": 599}
+    },
+    {
+      "stage": "after",
+      "layout": "dungeon",
+      "takenOn": "the head of this branch after the review round: dungeon, CanYield fix, memory of place, the re-authored prepared plan and the R4 repeat fix",
+      "supersedes": "An earlier 'after' block, taken when the dungeon and the CanYield fix landed but before memory of place, before the re-authored plan settled and before the R4 repeat fix. Every key below moved. Four of them were quoted by the contract or by this file's own prose while stale, and each is named here rather than silently overwritten: planGapPerSeed read 62/105/234 where it is 72/62/198 (the minimum was right by coincidence, the source was not); livingOverFallenGap read 659 for 660; combatRefusedStarving read 13/25/0 for 13/21/0, and an owner decision rests on that number; and invariantMisses claimed invariant 4 fails on seed 20260728 at 22 against 22, which the contract contradicted — the contract was right, this file was wrong, and 22 < 23 holds.",
+      "score": {
+        "baseline": {"20260726": 727, "20260727": 806, "20260728": 660},
+        "prepared": {"20260726": 799, "20260727": 868, "20260728": 858},
+        "neglected": {"20260726": 0, "20260727": 0, "20260728": 0}
+      },
+      "planGapPerSeed": {"20260726": 72, "20260727": 62, "20260728": 198},
+      "minimumPlanGap": 62,
+      "livingOverFallenGap": 660,
+      "renown": {
+        "baseline": {"20260726": 125, "20260727": 124, "20260728": 138},
+        "prepared": {"20260726": 153, "20260727": 154, "20260728": 164},
+        "neglected": {"20260726": 4, "20260727": 4, "20260728": 4}
+      },
+      "mealsProduced": {
+        "baseline": {"20260726": 102, "20260727": 78, "20260728": 117},
+        "prepared": {"20260726": 84, "20260727": 84, "20260728": 93}
+      },
+      "mealsStolen": {
+        "baseline": {"20260726": 43, "20260727": 26, "20260728": 56},
+        "prepared": {"20260726": 21, "20260727": 22, "20260728": 30}
+      },
+      "combatFledMorale": {
+        "baseline": {"20260726": 23, "20260727": 21, "20260728": 23},
+        "prepared": {"20260726": 18, "20260727": 16, "20260728": 22}
+      },
+      "combatRefusedStarving": {
+        "prepared": {"20260726": 13, "20260727": 21, "20260728": 0},
+        "prepared-watch-zero": {"20260726": 0, "20260727": 2, "20260728": 2},
+        "whyTheNeighbourIsHere": "The zero at prepared/20260728 is what invariant 5 was weakened for, so what produced it has to be checkable. prepared-watch-zero differs from prepared in one command — the watch switched off at tick 900 — and on that same seed it records 2. The code is therefore reachable on 20260728: the zero comes from the plan, not from the dungeon and not from a mechanism that stopped working."
+      },
+      "refusedPlaceOfPanic": {
+        "baseline": {"20260726": 41, "20260727": 9, "20260728": 14},
+        "prepared": {"20260726": 17, "20260727": 61, "20260728": 13},
+        "neglected": {"20260726": 0, "20260727": 0, "20260728": 0}
+      },
+      "refusedPlaceOfWound": {
+        "baseline": {"20260726": 0, "20260727": 0, "20260728": 3},
+        "prepared": {"20260726": 3, "20260727": 8, "20260728": 0}
+      },
+      "refusedPlaceTotalRange": [9, 69],
+      "atFirstWave": {
+        "command": "dotnet tests/DungeonFortress.Scenarios/bin/Release/net8.0/DungeonFortress.Scenarios.dll --prototype --commands <fixture with the seed patched in> --ticks 1301 --snapshot <file>",
+        "note": "All three seeds. It carried one before, while the contract published three-seed corridors and a per-seed invariant table off it — numbers the command in the file did not reproduce.",
+        "averageReadinessAtRaid": {
+          "baseline": {"20260726": 46, "20260727": 47, "20260728": 48},
+          "prepared": {"20260726": 57, "20260727": 53, "20260728": 59}
+        },
+        "strength": {
+          "baseline": {"20260726": 14, "20260727": 17, "20260728": 16},
+          "prepared": {"20260726": 51, "20260727": 34, "20260728": 52}
+        },
+        "averageMartialForm": {
+          "baseline": {"20260726": 0, "20260727": 0, "20260728": 0},
+          "prepared": {"20260726": 49, "20260727": 20, "20260728": 48}
+        },
+        "averageSatiety": {
+          "baseline": {"20260726": 57, "20260727": 60, "20260728": 60},
+          "prepared": {"20260726": 56, "20260727": 63, "20260728": 61}
+        }
+      },
+      "invariantMisses": [],
+      "invariantNotes": "Invariants 1, 2, 3, 4 and 11 hold on all three seeds; the per-seed table is in contract 13.4. Invariant 5's combat_refused_starving clause was weakened from every seed to the matrix by owner decision of 2026-07-31, as a consequence of re-authoring the prepared plan — see combatRefusedStarving.whyTheNeighbourIsHere for the fact that keeps the chain checkable.",
+      "neglectedFallenTick": {"20260726": 614, "20260727": 594, "20260728": 659}
+    }
+  ]
+}

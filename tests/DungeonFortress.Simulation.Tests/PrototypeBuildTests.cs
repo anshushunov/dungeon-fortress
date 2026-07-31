@@ -17,17 +17,39 @@ namespace DungeonFortress.Simulation.Tests;
 /// </summary>
 public sealed class PrototypeBuildTests
 {
+    // The wall between the hearth and the spine, east of the larder's stair. It
+    // moved here from the quarry in the far corner with the dungeon of Issue
+    // #117: every tile of it is rock at tick 0, so digging it still creates
+    // ground that did not exist, and it is where a domain would actually widen
+    // itself. At the corner the whole chain stopped being demonstrable — the
+    // stone lost every scoring comparison to a food haul fifteen tiles nearer,
+    // and a post raised out there was never trained at.
     private static readonly GridPoint[] Pocket =
+    [
+        new(17, 9), new(18, 9), new(19, 9), new(20, 9),
+    ];
+
+    private static readonly GridPoint StockLeft = new(16, 8);
+    private static readonly GridPoint StockRight = new(17, 8);
+
+    // The quarry at the back of the dungeon, and the stockpile in the quarters
+    // next to it. Two of the ten build statuses are only reachable from a long
+    // walk — `build_reserved` is the window between a builder volunteering and
+    // arriving, and `build_stone_reserved` needs every block to be booked while
+    // a site waits — and next to the hearth that window is one tick wide or
+    // shut. This is where the shipped demo fixtures dig.
+    private static readonly GridPoint[] FarPocket =
     [
         new(25, 1), new(25, 2), new(25, 3), new(26, 1),
     ];
 
-    private static readonly GridPoint StockLeft = new(22, 1);
-    private static readonly GridPoint StockRight = new(23, 1);
+    private static readonly GridPoint FarStockLeft = new(22, 1);
+    private static readonly GridPoint FarStockRight = new(23, 1);
+    private static readonly GridPoint FarSite = new(25, 2);
 
-    // The site is inside the dig pocket on purpose: it is ground that does not
+    // The site is inside the dug wall on purpose: it is ground that does not
     // exist at tick 0, so a post standing there is a room the player created.
-    private static readonly GridPoint Site = new(25, 2);
+    private static readonly GridPoint Site = new(18, 9);
 
     // Late enough that every block the pocket yields is already in the stockpile,
     // which makes the stockpile the only possible source of the build material.
@@ -46,7 +68,7 @@ public sealed class PrototypeBuildTests
     [InlineData("[[10,7]]")]
     [InlineData("[[14,7]]")]
     [InlineData("[[20,3]]")]
-    [InlineData("[[8,12]]")]
+    [InlineData("[[10,2]]")]
     // Atomicity: one bad tile rejects the whole stroke.
     [InlineData("[[12,12],[14,7]]")]
     public void Build_designate_is_rejected_outside_plain_floor(string tiles)
@@ -174,7 +196,7 @@ public sealed class PrototypeBuildTests
         Assert.DoesNotContain(new GridPoint(10, 7), floor);   // kitchen station
         Assert.DoesNotContain(new GridPoint(14, 7), floor);   // larder
         Assert.DoesNotContain(new GridPoint(20, 3), floor);   // bunk
-        Assert.DoesNotContain(new GridPoint(8, 12), floor);   // authored post
+        Assert.DoesNotContain(new GridPoint(10, 2), floor);   // authored post
         Assert.DoesNotContain(StockLeft, floor);              // stockpile cell
         Assert.All(state.Map.RockTiles, tile => Assert.DoesNotContain(tile, floor));
 
@@ -182,7 +204,7 @@ public sealed class PrototypeBuildTests
         Assert.All(
             floor.Where(tile => !state.Map.ExcavatedTiles.Contains(tile)),
             tile => PrototypeScenario.Run(Log(new BuildDesignateCommand(0, [tile])), 2));
-        foreach (var rejected in new GridPoint[] { new(14, 7), new(2, 1), new(8, 12), new(20, 3) })
+        foreach (var rejected in new GridPoint[] { new(14, 7), new(2, 1), new(10, 2), new(20, 3) })
         {
             Assert.Throws<InvalidDataException>(() => new PrototypeWorld(
                 Log(new BuildDesignateCommand(0, [rejected]))));
@@ -268,23 +290,38 @@ public sealed class PrototypeBuildTests
     [Fact]
     public void A_blueprint_outranks_a_stockpile_as_a_destination_for_loose_stone()
     {
+        // Run at the far quarry, and the tick is the one on which the site's own
+        // tile becomes floor rather than the first block anywhere: a blueprint on
+        // rock is refused before the world runs.
+        //
+        // The far quarry is what makes the claim observable at all. Next to the
+        // hearth the stockpile is two tiles from the rock, so every block is put
+        // away before a blueprint can be marked and the race this test is about
+        // never happens — measured, all four stored instead of two.
         var digTick = FindTick(
-            Log(new DigDesignateCommand(0, Pocket)),
-            state => state.Economy.DigsCompleted > 0);
+            Log(new DigDesignateCommand(0, FarPocket)),
+            state => state.Map.ExcavatedTiles.Contains(FarSite));
         var state = PrototypeScenario.Run(
             Log(
-                new DigDesignateCommand(0, Pocket),
-                new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [StockLeft, StockRight]),
-                new BuildDesignateCommand(digTick, [new GridPoint(24, 2)])),
-            900).State;
+                new DigDesignateCommand(0, FarPocket),
+                new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [FarStockLeft, FarStockRight]),
+                new BuildDesignateCommand(digTick, [FarSite])),
+            1_250).State;
 
         Assert.Equal(1, state.Economy.BuildsCompleted);
-        Assert.Contains(new GridPoint(24, 2), state.Map.BuiltPostTiles);
+        Assert.Contains(FarSite, state.Map.BuiltPostTiles);
         Assert.Equal(PrototypeTuning.BuildStoneCost, state.Economy.StoneConsumed);
-        // The two blocks the post ate never entered the stockpile.
-        Assert.Equal(
-            Pocket.Length - PrototypeTuning.BuildStoneCost,
-            state.Economy.StoneStored);
+        // The two blocks the post ate never entered the stockpile. Stated as a
+        // bound rather than as an equality: how many of the remaining blocks have
+        // been put away by this tick is a question about walking, and on the
+        // dungeon one of them is still in transit here. What the test is about is
+        // that no block was stored and then fetched back out — that is what a
+        // count above this bound would mean.
+        Assert.True(
+            state.Economy.StoneStored <= FarPocket.Length - PrototypeTuning.BuildStoneCost,
+            $"stoneStored={state.Economy.StoneStored} of {FarPocket.Length} dug, with " +
+            $"{PrototypeTuning.BuildStoneCost} eaten by the post: the blueprint stopped " +
+            "outranking the stockpile as a destination.");
     }
 
     // ------------------------------------------------------- 3. conservation
@@ -297,7 +334,7 @@ public sealed class PrototypeBuildTests
     [Fact]
     public void Stone_is_conserved_on_every_tick_including_construction_and_cancellation()
     {
-        var second = new GridPoint(24, 2);
+        var second = new GridPoint(19, 9);
         var world = new PrototypeWorld(new PrototypeCommandLog(
             "custom",
             PrototypeTuning.DefaultSeed,
@@ -306,13 +343,13 @@ public sealed class PrototypeBuildTests
                 new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [StockLeft, StockRight]),
                 new BuildDesignateCommand(BlueprintTick, [Site]),
                 new ZonePaintCommand(BlueprintTick, ZoneKind.TrainingGround, [Site]),
-                new SetPriorityCommand(BlueprintTick, JobKind.Drill, 3),
+                new SetPriorityCommand(BlueprintTick, JobKind.Drill, 4),
                 // A second site that never gets built: construction is switched
                 // off once the first post is up, so this one collects its stone
                 // and then has the intention withdrawn from under it.
-                new SetPriorityCommand(BlueprintTick + 120, JobKind.Build, 0),
-                new BuildDesignateCommand(BlueprintTick + 120, [second]),
-                new BuildCancelCommand(BlueprintTick + 420, [second]),
+                new SetPriorityCommand(BlueprintTick + 400, JobKind.Build, 0),
+                new BuildDesignateCommand(BlueprintTick + 400, [second]),
+                new BuildCancelCommand(BlueprintTick + 900, [second]),
             ]));
         var sawSiteStone = false;
         var sawConsumed = false;
@@ -348,7 +385,7 @@ public sealed class PrototypeBuildTests
 
             sawSiteStone |= siteByBlueprint > 0;
             sawConsumed |= state.Economy.StoneConsumed > 0;
-            if (state.Tick == BlueprintTick + 420)
+            if (state.Tick == BlueprintTick + 900)
             {
                 sawCancelledWithStone = state.BuildSites
                     .Where(site => site.Tile == second)
@@ -419,8 +456,8 @@ public sealed class PrototypeBuildTests
         // "the stone exists but it is spoken for" reading.
         var bookedTick = FindTick(
             Log(
-                new DigDesignateCommand(0, Pocket),
-                new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [StockLeft, StockRight])),
+                new DigDesignateCommand(0, FarPocket),
+                new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [FarStockLeft, FarStockRight])),
             state => state.Stocks.CarriedStone > 0);
 
         var observed = new HashSet<string>(StringComparer.Ordinal);
@@ -433,22 +470,32 @@ public sealed class PrototypeBuildTests
                      Log(
                          new DigDesignateCommand(0, Pocket),
                          new SetPriorityCommand(0, JobKind.Build, 0),
-                         new BuildDesignateCommand(200, [new GridPoint(24, 2)])),
+                         new BuildDesignateCommand(200, [new GridPoint(19, 9)])),
                      // Nobody may step on the site any more.
                      Log(
                          new DigDesignateCommand(0, Pocket),
-                         new BuildDesignateCommand(200, [new GridPoint(24, 2)]),
-                         new ZonePaintCommand(201, ZoneKind.Forbidden, [new GridPoint(24, 2)])),
+                         new BuildDesignateCommand(200, [new GridPoint(19, 9)]),
+                         new ZonePaintCommand(201, ZoneKind.Forbidden, [new GridPoint(19, 9)])),
                      // Carrying is switched off while a blueprint waits.
                      Log(
                          new DigDesignateCommand(0, Pocket),
-                         new BuildDesignateCommand(200, [new GridPoint(24, 2)]),
+                         new BuildDesignateCommand(200, [new GridPoint(19, 9)]),
                          new SetPriorityCommand(201, JobKind.Haul, 0)),
-                     // Every block is already booked somewhere else.
+                     // Every block is already booked somewhere else. Dug at the
+                     // far quarry, because the booking has to still be open when
+                     // the blueprint lands and next to the hearth it is not.
                      Log(
-                         new DigDesignateCommand(0, Pocket),
-                         new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [StockLeft, StockRight]),
+                         new DigDesignateCommand(0, FarPocket),
+                         new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [FarStockLeft, FarStockRight]),
                          new BuildDesignateCommand(bookedTick, [new GridPoint(12, 12)])),
+                     // A builder chosen and still walking: the same chain run at
+                     // the far quarry, where the walk lasts long enough to see.
+                     Log(
+                         new DigDesignateCommand(0, FarPocket),
+                         new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [FarStockLeft, FarStockRight]),
+                         new BuildDesignateCommand(BlueprintTick, [FarSite]),
+                         new ZonePaintCommand(BlueprintTick, ZoneKind.TrainingGround, [FarSite]),
+                         new SetPriorityCommand(BlueprintTick, JobKind.Drill, 4)),
                  })
         {
             var world = new PrototypeWorld(log);
@@ -531,7 +578,7 @@ public sealed class PrototypeBuildTests
     [Fact]
     public void A_site_nobody_may_step_on_keeps_its_stone_and_says_it_is_unreachable()
     {
-        var target = new GridPoint(24, 2);
+        var target = new GridPoint(19, 9);
         var state = PrototypeScenario.Run(
             Log(
                 new DigDesignateCommand(0, Pocket),
@@ -556,7 +603,7 @@ public sealed class PrototypeBuildTests
         var state = PrototypeScenario.Run(
             Log(
                 new DigDesignateCommand(0, Pocket),
-                new BuildDesignateCommand(200, [new GridPoint(24, 2)]),
+                new BuildDesignateCommand(200, [new GridPoint(19, 9)]),
                 new SetPriorityCommand(200, JobKind.Build, 0)),
             900).State;
 
@@ -572,8 +619,8 @@ public sealed class PrototypeBuildTests
     [Fact]
     public void The_whole_chain_replays_byte_for_byte_and_is_visible_in_canonical_json()
     {
-        var first = PrototypeScenario.Run(BuildChain(), BlueprintTick + 300);
-        var second = PrototypeScenario.Run(BuildChain(), BlueprintTick + 300);
+        var first = PrototypeScenario.Run(BuildChain(), PrototypeTuning.SessionTicks);
+        var second = PrototypeScenario.Run(BuildChain(), PrototypeTuning.SessionTicks);
 
         Assert.Equal(first.CanonicalJson, second.CanonicalJson);
         Assert.Equal(first.CanonicalEventLog, second.CanonicalEventLog);
@@ -598,15 +645,15 @@ public sealed class PrototypeBuildTests
     public void A_different_blueprint_position_changes_the_canonical_checksum()
     {
         Assert.NotEqual(
-            PrototypeScenario.Run(BuildChain(), BlueprintTick + 300).Checksum,
+            PrototypeScenario.Run(BuildChain(), PrototypeTuning.SessionTicks).Checksum,
             PrototypeScenario.Run(
                 Log(
                     new DigDesignateCommand(0, Pocket),
                     new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [StockLeft, StockRight]),
-                    new BuildDesignateCommand(BlueprintTick, [new GridPoint(25, 3)]),
-                    new ZonePaintCommand(BlueprintTick, ZoneKind.TrainingGround, [new GridPoint(25, 3)]),
+                    new BuildDesignateCommand(BlueprintTick, [new GridPoint(20, 9)]),
+                    new ZonePaintCommand(BlueprintTick, ZoneKind.TrainingGround, [new GridPoint(20, 9)]),
                     new SetPriorityCommand(BlueprintTick, JobKind.Drill, 3)),
-                BlueprintTick + 300).Checksum);
+                PrototypeTuning.SessionTicks).Checksum);
     }
 
     [Fact]
@@ -748,6 +795,13 @@ public sealed class PrototypeBuildTests
     [Fact]
     public void Build_demo_fixture_matches_the_documented_headless_walkthrough()
     {
+        // The shipped fixture digs the quarry in the far corner and builds there.
+        // It keeps its own coordinates rather than the ones this class uses,
+        // which moved next to the hearth with the dungeon of Issue #117: the
+        // walkthrough is about what the shipped journal does, and the document it
+        // guards quotes those tiles.
+        var demoSite = new GridPoint(25, 2);
+        const int demoPocketSize = 4;
         var log = LoadFixture("build-demo");
 
         var beforeBlueprint = PrototypeScenario.Run(log, BlueprintTick).State;
@@ -757,19 +811,19 @@ public sealed class PrototypeBuildTests
 
         var afterBlueprint = PrototypeScenario.Run(log, BlueprintTick + 1).State;
         var site = Assert.Single(afterBlueprint.BuildSites);
-        Assert.Equal(Site, site.Tile);
+        Assert.Equal(demoSite, site.Tile);
         Assert.Equal(0, site.Delivered);
         Assert.Equal(PrototypeTuning.BuildStoneCost, site.Required);
 
-        var settled = PrototypeScenario.Run(log, BlueprintTick + 300).State;
+        var settled = PrototypeScenario.Run(log, BlueprintTick + 700).State;
         Assert.Empty(settled.BuildSites);
-        Assert.Equal([Site], settled.Map.BuiltPostTiles);
+        Assert.Equal([demoSite], settled.Map.BuiltPostTiles);
         Assert.Equal(1, settled.Economy.BuildsCompleted);
         Assert.Equal(PrototypeTuning.BuildStoneCost, settled.Economy.StoneConsumed);
         Assert.Equal(
-            Pocket.Length - PrototypeTuning.BuildStoneCost,
+            demoPocketSize - PrototypeTuning.BuildStoneCost,
             settled.Stocks.StoredStone);
-        Assert.Contains(settled.Jobs, job => job.Kind == JobKind.Drill && job.Origin == Site);
+        Assert.Contains(settled.Jobs, job => job.Kind == JobKind.Drill && job.Origin == demoSite);
     }
 
     // ------------------------------------------------------------- helpers
@@ -781,7 +835,14 @@ public sealed class PrototypeBuildTests
             new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [StockLeft, StockRight]),
             new BuildDesignateCommand(BlueprintTick, [Site]),
             new ZonePaintCommand(BlueprintTick, ZoneKind.TrainingGround, [Site]),
-            new SetPriorityCommand(BlueprintTick, JobKind.Drill, 3));
+            // Four rather than three. The post this chain raises stands in the
+            // quarry at the back of the dungeon of Issue #117, and on the default
+            // priority a training job that far away loses every comparison to
+            // work in the hearth, so the built post never gets used and the step
+            // it demonstrates — that a post the player built produces real work —
+            // cannot be seen. Saying "this matters more" is the lever the player
+            // has.
+            new SetPriorityCommand(BlueprintTick, JobKind.Drill, 4));
     }
 
     private static PrototypeCommandLog Log(params PrototypeCommand[] commands)

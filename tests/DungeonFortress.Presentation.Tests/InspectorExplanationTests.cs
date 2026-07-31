@@ -115,13 +115,17 @@ public sealed class InspectorExplanationTests
     public void Every_stockpile_status_the_simulation_publishes_is_covered_here()
     {
         var observed = new HashSet<string>(StringComparer.Ordinal);
+        // Three blocks into two cells of two, next to the hearth. Three rather
+        // than four because a cell only reads `stockpile_partial` while it holds
+        // an odd block, and next to the hearth rather than at the far quarry
+        // because the third block has to actually arrive inside the session.
         var world = new PrototypeWorld(PresentationFixtures.Log(
-            new DigDesignateCommand(0, PresentationFixtures.Pocket),
+            new DigDesignateCommand(0, [.. PresentationFixtures.NearWall.Take(3)]),
             new ZonePaintCommand(
                 0,
                 ZoneKind.MaterialStockpile,
-                [PresentationFixtures.StockLeft, PresentationFixtures.StockRight]),
-            new ZonePaintCommand(600, ZoneKind.Forbidden, [PresentationFixtures.StockLeft])));
+                [PresentationFixtures.NearStockLeft, PresentationFixtures.NearStockRight]),
+            new ZonePaintCommand(600, ZoneKind.Forbidden, [PresentationFixtures.NearStockLeft])));
         while (!world.IsComplete)
         {
             world.Step();
@@ -561,7 +565,12 @@ public sealed class InspectorExplanationTests
             $"CREATURE #{creature.Id} · {creature.Name} — ALIVE HP {creature.Hp}/{creature.MaxHp}\n\n",
             text,
             StringComparison.Ordinal);
-        Assert.Contains($"STATUS ALIVE • HP {creature.Hp}/{creature.MaxHp}\n", text, StringComparison.Ordinal);
+        // The status used to be repeated above the decision details as well. It
+        // was dropped with Issue #117: the inspector gained a line for what the
+        // creature will not go near and a line of plain English for its last
+        // decision, and the HUD overflow guard refuses a panel that needs more
+        // lines than it has. The header above already carries the same two facts.
+        Assert.DoesNotContain("STATUS ", text, StringComparison.Ordinal);
         // A selected creature wins over a selected cell, so no CELL section appears.
         Assert.DoesNotContain("CELL (", text, StringComparison.Ordinal);
     }
@@ -573,14 +582,14 @@ public sealed class InspectorExplanationTests
         var creature = state.Creatures[0] with
         {
             CurrentJobId = null,
-            LastDecision = new PrototypeDecision(0, "waiting_no_job", new Dictionary<string, int>()),
+            LastDecision = new PrototypeDecision(0, "waiting_no_job_available", new Dictionary<string, int>()),
         };
         state = state with { Creatures = [creature, .. state.Creatures.Skip(1)] };
 
         var text = InspectorText.Build(state.Shown(), creature.Id, null);
 
         Assert.Contains("job none\n", text, StringComparison.Ordinal);
-        Assert.EndsWith($"HP {creature.Hp}/{creature.MaxHp}\nnone", text, StringComparison.Ordinal);
+        Assert.EndsWith("is standing about: nothing to do.\nnone", text, StringComparison.Ordinal);
     }
 
     [Fact]

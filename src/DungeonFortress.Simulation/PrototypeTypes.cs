@@ -111,6 +111,26 @@ public sealed record PrototypeEvent(
     JobKind? JobKind,
     GridPoint? Target);
 
+/// <summary>
+/// A place one creature will not forget, and why.
+///
+/// This is the first thing in Prototype 1 that makes a creature's past change
+/// its future, and it is deliberately the cheapest such thing that could work:
+/// a tile, the tick it was written on, and one of two causes — <c>panic</c>
+/// when nerve failed there, <c>wound</c> when a raider put the creature down
+/// there.
+///
+/// It is memory of a **place** and not of a creature or of the player, which is
+/// what keeps it personal by construction: it is written at the position of the
+/// one creature it happened to, so no second creature inherits it. Memory of
+/// somebody else would be a relation, which
+/// <c>docs/decisions/0006-defer-relations-from-prototype-1.md</c> defers; memory
+/// of the player would be a grudge, and the player never addresses anybody by
+/// name (ADR 0005), so the blame would land on everyone equally and the herd
+/// Issue #101 removed would come back through the other door.
+/// </summary>
+public sealed record PrototypeRememberedPlace(GridPoint Place, int Tick, string Cause);
+
 public sealed record PrototypeCreatureSnapshot(
     int Id,
     string Name,
@@ -147,7 +167,11 @@ public sealed record PrototypeCreatureSnapshot(
     // Ticks already spent mending. It is canonical state and not a UI counter,
     // because "this one is halfway healed" is the answer the window between two
     // waves exists to give.
-    int RecoveryTicks);
+    int RecoveryTicks,
+    // Where this creature broke or was put down, newest last, capped at
+    // T.memory_places_max and ordered by tile so the canonical document does not
+    // depend on the order events happened to arrive in.
+    IReadOnlyList<PrototypeRememberedPlace> RememberedPlaces);
 
 public sealed record PrototypeJobSnapshot(
     long JobId,

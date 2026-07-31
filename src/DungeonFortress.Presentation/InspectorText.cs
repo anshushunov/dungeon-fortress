@@ -42,7 +42,6 @@ public static class InspectorText
             var details = creature.LastDecision.Details.Count == 0
                 ? "none"
                 : string.Join(", ", creature.LastDecision.Details.Select(pair => $"{pair.Key}={pair.Value}"));
-            details = $"STATUS {HudText.CreatureLifeState(creature)} • HP {creature.Hp}/{creature.MaxHp}\n" + details;
             return
                 $"CREATURE #{creature.Id} · {creature.Name}\n\n" +
                 $"satiety {creature.Satiety}   fatigue {creature.Fatigue}\n" +
@@ -50,8 +49,10 @@ public static class InspectorText
                 $"mode {creature.Mode}\n" +
                 $"job {(job is null ? "none" : $"#{job.JobId} {job.Kind}")}\n" +
                 $"carrying {(creature.Carrying is null ? "nothing" : $"{creature.CarryAmount} {creature.Carrying}")}\n" +
-                $"{DescribeCarrierRoute(creature, job, state.BuildSites)}\n" +
-                $"WHY\nt{creature.LastDecision.Tick} · {creature.LastDecision.ReasonCode}\n" +
+                $"{DescribeCarrierRoute(creature, job, state.BuildSites)}" +
+                $"{DescribeMemory(creature)}" +
+                $"WHY t{creature.LastDecision.Tick} · {creature.LastDecision.ReasonCode}\n" +
+                $"{EventNarration.Sentence(creature.LastDecision.ReasonCode, creature.LastDecision.Details, creature.LastDecision.JobKind, creature.LastDecision.Target)}\n" +
                 $"{details}";
         }
 
@@ -178,6 +179,35 @@ public static class InspectorText
         // Deliberately terse: on a stockpile cell this section is the least
         // important one on the panel and must not push the rest out of the box.
         return $"not diggable: {ShortUndiggableReason(state, cell)}.";
+    }
+
+    /// <summary>
+    /// What this creature will not go back to, and why (Issue #117).
+    ///
+    /// It is on the panel and not only in the feed because the feed scrolls: a
+    /// player who asks "why is this one standing about" a hundred ticks after the
+    /// wave needs the answer where they are looking. Empty for a creature that
+    /// has been through nothing, which is most of them for most of a party.
+    ///
+    /// One line, and the newest place first. It was three lines with a heading
+    /// first, and the HUD overflow guard refused the frame: the panel fits
+    /// sixteen lines at 1280x720 and a creature carrying three memories needed
+    /// eighteen. The guard is right — text that does not fit is dropped or drawn
+    /// over the panel below — so the block is compact rather than the panel
+    /// taller.
+    /// </summary>
+    public static string DescribeMemory(PrototypeCreatureSnapshot creature)
+    {
+        ArgumentNullException.ThrowIfNull(creature);
+        if (creature.RememberedPlaces.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var places = creature.RememberedPlaces
+            .OrderByDescending(place => place.Tick)
+            .Select(place => $"({place.Place.X},{place.Place.Y}) t{place.Tick} {place.Cause}");
+        return "AVOIDS " + string.Join(" · ", places) + "\n";
     }
 
     /// <summary>

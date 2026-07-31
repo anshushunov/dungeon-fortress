@@ -82,6 +82,11 @@ public sealed class PrototypeSnapshotShapeTests
         ("prepared @ first raid + 5", "prepared", PrototypeTuning.FirstRaidTick + 5),
         // A party that ended: the only state in which the score exists.
         ("neglected @ session end", "neglected", PrototypeTuning.SessionTicks),
+        // Far enough past the first wave that somebody has broken or been put
+        // down, which is the only way a creature carries a remembered place
+        // (Issue #117). Without it the array is present but never populated, and
+        // the composition of its elements would go unrecorded.
+        ("baseline @ after the first wave", "baseline", PrototypeTuning.FirstRaidTick + 200),
     ];
 
     /// <summary>
@@ -100,8 +105,9 @@ public sealed class PrototypeSnapshotShapeTests
         "$ -> beds, buildSites, commandsApplied, creatures, digDesignations, domain, economy, events, jobs, labor, looseItems, map, materialStockpile, nextJobId, pendingCommands, priorities, raiders, rules, schemaVersion, seed, sessionResult, stations, stocks, threat, tick, waves, zones",
         "$.beds[] -> growthProgress, position, ripe",
         "$.buildSites[] -> delivered, incomingReserved, jobId, progressTicks, reachable, required, requiredTicks, reservedBy, statusCode, tile",
-        "$.creatures[] -> affinities, blockedTicks, carryAmount, carrying, currentJobId, fatigue, grit, hp, id, injury, isMustering, lastDecision, lastMoveTick, lastYieldTick, martialForm, maxHp, mealReserved, mealTarget, mealTicksRemaining, might, mode, moveCount, musterNeedsRation, musterTarget, name, position, readiness, readinessAtRaid, recoveryTicks, satiety, watchTicks, workTicks, yieldCount",
+        "$.creatures[] -> affinities, blockedTicks, carryAmount, carrying, currentJobId, fatigue, grit, hp, id, injury, isMustering, lastDecision, lastMoveTick, lastYieldTick, martialForm, maxHp, mealReserved, mealTarget, mealTicksRemaining, might, mode, moveCount, musterNeedsRation, musterTarget, name, position, readiness, readinessAtRaid, recoveryTicks, rememberedPlaces, satiety, watchTicks, workTicks, yieldCount",
         "$.creatures[].lastDecision -> details, jobKind, reasonCode, target, tick",
+        "$.creatures[].rememberedPlaces[] -> cause, place, tick",
         "$.digDesignations[] -> jobId, progressTicks, reachable, requiredTicks, reservedBy, statusCode, tile, workTile",
         "$.domain -> downedCreatures, injuredCreatures, livingCreatures, peakMeals, renown, renownAtPreviousWave, strength, strengthAtPreviousWave, waveCount, wavesArrived, wavesResolved",
         "$.economy -> buildsCompleted, cookBatchesCompleted, digsCompleted, harvestsCompleted, mealHaulsCompleted, mealsEaten, mealsProduced, rawHaulsCompleted, stoneConsumed, stoneDelivered, stoneHaulsCompleted, stoneProduced, stoneSpilled, stoneStored",

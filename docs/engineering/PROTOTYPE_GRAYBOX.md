@@ -612,18 +612,25 @@ clamp stopped being a formality.
 Two ignored, reproducible frames show the same internal wall column with a
 selected creature on opposite sides:
 
+Both pairs moved with the dungeon of Issue #117 and were re-derived rather than
+guessed: the tiles the old commands named — `(9,4)` and `(9,5)` — are floor on
+the new map, so the two commands framed empty ground and the check they document
+could not be repeated. The positions below were found by walking the shipped
+`baseline` journal and asking which creature stands orthogonally next to
+masonry.
+
 ```powershell
-# Creature #2 at (9,3), behind rock at (9,4): the raised wall hides its lower body.
+# Creature #2 at (10,4), behind rock at (10,5): the raised wall hides its lower body.
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -Fixture baseline -ScreenshotTicks 40 -SelectCreature 2 `
-  -TileSize 40 -CameraZoom 2 -CameraPosition '380,180' -UiScale 1 -FrameSize 1280x720 `
+  -TileSize 40 -CameraZoom 2 -CameraPosition '420,180' -UiScale 1 -FrameSize 1280x720 `
   -ScreenshotPath issue83\behind-t40.png
 
-# Creature #7 at (9,6), in front of rock at (9,5): the whole body draws over it.
+# Creature #0 at (13,6), in front of rock at (13,5): the whole body draws over it.
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
-  -Fixture baseline -ScreenshotTicks 740 -SelectCreature 7 `
-  -TileSize 40 -CameraZoom 2 -CameraPosition '380,220' -UiScale 1 -FrameSize 1280x720 `
-  -ScreenshotPath issue83\front-t740.png
+  -Fixture baseline -ScreenshotTicks 80 -SelectCreature 0 `
+  -TileSize 40 -CameraZoom 2 -CameraPosition '540,260' -UiScale 1 -FrameSize 1280x720 `
+  -ScreenshotPath issue83\front-t80.png
 ```
 
 The screenshot events state the selected cells, ticks, checksums and all five
@@ -644,6 +651,44 @@ The inspector exposes the selected creature's needs, martial form, mode,
 current job, carried item, last reason and its structured numeric details. Cell
 inspection shows its zones and relevant jobs. Colored lines/dots are jobs;
 colored circle/square pairs and name labels distinguish all nine creatures.
+
+## Memory of place (Issue #117)
+
+A creature that broke or was put down remembers the tile it was standing on and
+will not start work within `T.memory_avoid_radius` of it again. Three things show
+that to the player, and none of them needs the log:
+
+- **the map.** Selecting a creature outlines the places it remembers: a ring and
+  a diagonal, amber for a broken nerve and red for a wound. `DrawRememberedPlaces`
+  in the adapter, declared in `WorldDrawOrder` and governed by
+  `OverlayMark.RememberedPlace`, which is `StrokeOnly` — the mark never fills,
+  because the whole reading is that somebody else is visibly still working on the
+  tile next to it. It is drawn for the selected creature only: nine creatures'
+  memories at once would be a map full of crosses saying nothing about anybody;
+- **the inspector**, on one line beginning `AVOIDS`: every remembered place,
+  newest first, each naming the tile, the tick and which of the two things
+  happened there — `AVOIDS (18,7) t1703 panic · (24,7) t1316 panic`. It is one
+  line rather than a heading and a line per place because the HUD overflow guard
+  refused the taller version: the panel fits sixteen lines at 1280x720 and a
+  creature carrying three memories needed eighteen. It is on the panel and not
+  only in the feed because the feed scrolls, and the question "why is this one
+  standing about" is asked long after;
+- **the event feed**, as a sentence. Since this step the feed no longer prints
+  reason codes at all: `DungeonFortress.Presentation.EventNarration` turns the
+  code plus its own `details`, `jobKind` and `target` into a sentence with the
+  creature's name in front of it.
+
+**The code did not go anywhere.** It is still what `lastDecision` and every
+entry of the canonical event log carry, which is an invariant of
+[ADR 0010](../decisions/0010-contract-invariants-and-tuning.md); the adapter
+reads it. A code the adapter has never been taught is refused rather than
+rendered as a code it knows — the same choice `HudText.WavePhase` makes about the
+end of a party, and for the same reason.
+
+The boundary this side of the seam is unchanged and the overlay respects it: the
+remembered places are read straight off `creatures[].rememberedPlaces` in the
+published snapshot, so the mark is a projection of facts and needs no tick to
+run.
 
 ## Excavation (Issue #24)
 

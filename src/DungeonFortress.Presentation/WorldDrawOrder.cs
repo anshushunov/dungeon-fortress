@@ -120,6 +120,10 @@ public static class WorldDrawOrder
         new("DrawHpBar", WorldDrawPass.Informational, OverlayMark.BodyState),
         new("DrawZoneLabels", WorldDrawPass.Informational, OverlayMark.ZoneLabel),
         new("DrawZoneLabel", WorldDrawPass.Informational, OverlayMark.ZoneLabel),
+        new(
+            "DrawRememberedPlaces",
+            WorldDrawPass.Informational,
+            OverlayMark.RememberedPlace),
 
         // Pass 4 — input affordances.
         new(
@@ -153,6 +157,7 @@ public static class WorldDrawOrder
         "DrawStockpileInformationOverlays",
         "DrawBodyInformationOverlays",
         "DrawZoneLabels",
+        "DrawRememberedPlaces",
         "DrawCellInteractionOverlays",
         "DrawBrushPreview",
     ];

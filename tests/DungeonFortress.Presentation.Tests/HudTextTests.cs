@@ -309,12 +309,18 @@ public sealed class HudTextTests
 
         var lines = feedback.Split('\n');
         Assert.Equal("EVENT FEEDBACK", lines[0]);
-        Assert.Equal(
-            $"t{newest.LastTick} · {HudText.CreatureName(state, newest.CreatureId)}",
-            lines[1]);
-        Assert.Equal(newest.ReasonCode, lines[2]);
-        // Header, three events at two lines each, a blank line, the diagnostics line.
-        Assert.Equal(9, lines.Length);
+        // One line per event since Issue #117, and it is a sentence rather than a
+        // code: the name in front, then what the creature decided. The code is
+        // still in the canonical state — the feed reads it through
+        // <see cref="EventNarration"/> — and it is deliberately not on screen.
+        Assert.Equal($"t{newest.LastTick} · {EventNarration.Describe(state, newest)}", lines[1]);
+        Assert.Contains(
+            HudText.CreatureName(state, newest.CreatureId),
+            lines[1],
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(newest.ReasonCode, feedback, StringComparison.Ordinal);
+        // Header, three event lines, a blank line, the diagnostics line.
+        Assert.Equal(6, lines.Length);
         Assert.EndsWith(
             "Diagnostics: 2 (structured JSON is emitted by smoke/capture).",
             feedback,
