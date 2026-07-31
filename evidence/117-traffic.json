@@ -14,8 +14,9 @@
     {
       "stage": "before",
       "layout": "hall",
+      "commit": "1b41555",
       "takenOn": "main, before this branch: the hall layout, no memory of place",
-      "note": "The starting map of main: one hall, six internal pillars and the dig pocket. Named by what was in the tree rather than by a commit hash: this branch has been rebased once already, so a hash here would point at nothing (Issue #106 is the general form).",
+      "note": "The starting map of main: one hall, six internal pillars and the dig pocket. This block keeps its hash because it names a commit on `main`, which survives rebase and squash and still resolves; the 'after' block below names the tree in prose instead, because an in-branch hash does not (Issue #106 is the general form).",
       "runs": [
         {"fixture": "baseline", "seed": 20260726, "ticks": 2416, "blockedSteps": 6313, "yields": 556, "unexecutedYields": 126, "ordersToFighting": 23, "ordersToDowned": 87},
         {"fixture": "baseline", "seed": 20260727, "ticks": 2408, "blockedSteps": 4540, "yields": 406, "unexecutedYields": 49, "ordersToFighting": 21, "ordersToDowned": 0},

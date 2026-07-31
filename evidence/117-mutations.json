@@ -60,6 +60,22 @@
       "edit": "EventNarration.Describe -> CreatureName + event.ReasonCode",
       "filter": "HudTextTests, GoldenUiTextTests",
       "result": "red: 4 of 27 failed"
+    },
+    {
+      "half": "the refusal is written a second time on the same tick (review R4)",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "edit": "restore the RecordDecision call in RecordWaitingReason that the fix removed",
+      "filter": "PrototypeMemoryTests.A_repeat_counts_a_tick_rather_than_a_call_that_recorded_it",
+      "result": "red: 2 of 2 failed",
+      "addedIn": "the review round, with the fix it guards"
+    },
+    {
+      "half": "the creature panel stops printing what the creature will not go near (review R5)",
+      "file": "src/DungeonFortress.Presentation/InspectorText.cs",
+      "edit": "delete the {DescribeMemory(creature)} interpolation from InspectorText.Build",
+      "filter": "MemoryInspectorTests",
+      "result": "red: 1 of 3 failed",
+      "addedIn": "the review round. Before it the deletion reddened nothing at all: the AVOIDS line had no test, and the golden frames cannot cover it because all three are captured before tick 1300, when no creature can yet carry a memory."
     }
   ]
 }
