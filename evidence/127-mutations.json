@@ -1,0 +1,43 @@
+{
+  "issue": 127,
+  "checkpoint": "2 — fix mutated on each half, per the project's mutate-each-half rule",
+  "rule": "A new check does not count as done until it is shown to fail when the specific part of the fix it is meant to catch is reverted, not the change as a whole (AGENTS.md / task brief).",
+  "halves": {
+    "a_sizeAndScaling": {
+      "description": "The pure arithmetic in DungeonFortress.Presentation.HudFontSizes: the ordering rule (tooltip body not smaller than the button label) and the scaling rule (ScaledSize multiplies by UiScale). Both are provable without the engine, per ADR 0011.",
+      "mutants": [
+        {
+          "name": "a-i: tooltip body reverted to its pre-Issue-#127 size",
+          "change": "HudFontSizes.cs: public const int TooltipBodyFontSize = ButtonLabelFontSize; -> public const int TooltipBodyFontSize = ButtonLabelFontSize - 1;",
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~HudFontSizesTests\"",
+          "result": "FAILED: 4 of 7 (The_tooltip_body_is_not_smaller_than_the_button_label_it_explains plus 3 Scaled_size_grows_exactly_with_UI_scale cases, whose expected literals no longer match the mutated constant)",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "a-ii: ScaledSize stops applying UiScale",
+          "change": "HudFontSizes.cs: return (int)Math.Round(authoredSize * uiScale, MidpointRounding.AwayFromZero); -> return authoredSize;",
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~HudFontSizesTests\"",
+          "result": "FAILED: 3 of 7 (A_larger_UI_scale_never_produces_a_smaller_physical_size, plus 2 Scaled_size_grows_exactly_with_UI_scale cases at 1.5 and 2.0 — the 1.0 case still passes by coincidence, since authoredSize == ScaledSize(authoredSize, 1.0))",
+          "revertedAndReverifiedGreen": true
+        }
+      ],
+      "note": "After each mutant, src/DungeonFortress.Presentation/HudFontSizes.cs was restored from a byte-for-byte backup (.artifacts/HudFontSizes.cs.orig, diffed with `diff` to confirm identity) and the full `dotnet test` (599 tests across DomainMcp.Tests, Presentation.Tests, Simulation.Tests) was re-run green before continuing."
+    },
+    "b_guardInclusion": {
+      "description": "Whether the HUD readability guard actually measures the tooltip, proven the same way the project already proves the legend guard is alive: a CLI regression flag that shrinks the thing being measured and requires the engine to exit 1. This mutant doubles as checkpoint 3's guard-liveness proof.",
+      "mechanism": "Main.cs: new CLI flag --smoke-hud-tooltip-readability-regression (parsed next to the existing --smoke-hud-readability-regression), calling InjectHudTooltipReadabilityRegression(), which finds the persistent tooltip readability sample Main.CreateControlStrips keeps (_tooltipReadabilitySample, an invisible child of _hudRoot built by HudButton.MakeAuthoredTooltip) and sets its body label's font_size override to 4 — the same magnitude InjectHudReadabilityRegression already uses for a legend row.",
+      "command": "& 'C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe' --headless --resolution 1280x720 --path src/DungeonFortress.Game -- --smoke --smoke-hud-tooltip-readability-regression --fixture baseline --tile-size 40 --camera-position 560,320 --ui-scale 1 --frame-size 1280x720",
+      "result": {
+        "exitCode": 1,
+        "event": "godot_headless_smoke",
+        "status": "error",
+        "message": "HUD text is unreadable in 7 place(s): 'Label[TooltipBody]' is drawn at 4 physical pixels on frame 1280x720 at UI scale 1, under the 8 px floor; ... (6 more frame/UiScale pairs) ... Text that formally fits its rectangle can still be too small to read, which is what Issue #86 measured at 8-15 physical pixels."
+      },
+      "interpretation": "The guard rejects the mutated tooltip at 7 of the 12 SupportedFrameMatrix entries (every frame whose automatic UiScale keeps the mutated 4px body under the 8px floor). Before Issue #127, no CLI flag and no guard measurement could have produced this failure at all, because the tooltip did not appear in HudTextSizes() / hudReadability.texts — this is the concrete difference the fix makes, not merely the number 4 being small."
+    }
+  },
+  "unrelatedRegressionCheck": {
+    "command": "dotnet test (full solution, after restoring HudFontSizes.cs and rebuilding DungeonFortress.Game.csproj)",
+    "result": "599 tests passed, 0 failed (8 DomainMcp.Tests, 363 Presentation.Tests, 228 Simulation.Tests)"
+  }
+}

@@ -16,11 +16,19 @@ public sealed class HudReadabilityTests
 {
     /// <summary>
     /// The HUD as <c>Main.cs</c> authors it today: the four panels, the heading,
-    /// the eight legend rows, a toolbar button and a hotkey badge. The adapter
-    /// does not read this list — it walks its own HUD subtree and passes what it
-    /// finds — so this is a copy, and what keeps the copy honest is the negative
-    /// run <c>--smoke-hud-readability-regression</c> in the <c>godot</c> stage,
-    /// which shrinks a real legend row and requires the engine to exit 1.
+    /// the eight legend rows, a toolbar button, a hotkey badge and — since Issue
+    /// #127 — the tooltip's title and body. The adapter does not read this list —
+    /// it walks its own HUD subtree and passes what it finds — so this is a copy,
+    /// and what keeps the copy honest is the negative run
+    /// <c>--smoke-hud-readability-regression</c> in the <c>godot</c> stage, which
+    /// shrinks a real legend row and requires the engine to exit 1, plus its
+    /// tooltip counterpart <c>--smoke-hud-tooltip-readability-regression</c>.
+    ///
+    /// <para>
+    /// The tooltip entries are <see cref="HudFontSizes"/> constants rather than
+    /// the literals 12 and 10, for the same reason <c>HudButton</c> reads them
+    /// from there instead of repeating them: one number, one place.
+    /// </para>
     ///
     /// The <c>heading</c> row below is why the adapter walks the tree. It used to
     /// list the nodes it held references to, and the heading is a local variable
@@ -46,6 +54,8 @@ public sealed class HudReadabilityTests
         new("legend[7]", 8),
         new("control[inspect]", 10),
         new("hotkey[0]", 8),
+        new("tooltip.title", HudFontSizes.TooltipTitleFontSize),
+        new("tooltip.body", HudFontSizes.TooltipBodyFontSize),
     ];
 
     [Fact]
