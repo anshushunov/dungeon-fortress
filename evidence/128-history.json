@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "issue": 128,
+  "what": "The history of one creature's decisions, as the player reads it, and the arithmetic that decides how much of it fits.",
+  "theOwnersWords": "Метки вижу, они остаются на месте боев. Но без лога событий по каждому персонажу трудно понять, как он реагирует на них.",
+  "form": {
+    "where": "The event panel. With nothing selected it is the domain feed it always was; with a creature selected it is that creature's story. Same surface, no new panel, no height taken from the inspector.",
+    "why": "A player asking what happened to this one is already reading the feed. Scoping it to the creature they clicked puts the answer where they are looking and is undone by clicking anywhere else.",
+    "source": "state.Events filtered by creature id — the canonical journal and nothing else. Every line is rendered by EventNarration from that entry's own reason code, details, job kind and target, so selecting a creature needs no tick to run.",
+    "bound": 4,
+    "boundIsNamedOnThePanel": "the header reads 'STORY · <name> · last 4 of 469', so a panel showing four of four hundred says so."
+  },
+  "howTheBoundWasChosen": {
+    "claim": "Four is arithmetic, not taste.",
+    "longestStoryOnTheMatrix": 961,
+    "longestStoryCommand": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --no-build --no-restore --filter \"FullyQualifiedName~CreatureStoryTests.The_story_is_bounded_and_the_bound_is_on_the_panel\" --logger \"console;verbosity=detailed\"",
+    "panelBudget": "ten drawn lines at the tightest frame the HUD overflow guard checks (viewport 2048x1440 at UI scale 2, i.e. a logical 1024x720). A story sentence runs to about sixty characters and wraps onto two drawn lines in the 287-pixel panel.",
+    "sixWasRefused": {
+      "command": "<godot> --headless --path src/DungeonFortress.Game -- --smoke --fixture baseline --demo-stone --screenshot-ticks 950 --select-cell 22,1   (with HudText.CreatureStoryLines temporarily set to 6)",
+      "result": "godot_headless_smoke status error: \"the story of 'Дёготь' needs 12 lines but only 11 fit at viewport (1024, 768), UI scale 1; ... the story of 'Обух' needs 11 lines but only 10 fit at viewport (2048, 1440), UI scale 2\"",
+      "note": "Nobody is selected in that run, so the live feedback label carries the domain feed and is fine. Every failure named is a story the new guard measured, which is what says the guard is doing the catching and not something that was there already."
+    },
+    "fourIsGreen": {
+      "command": "the same command with the shipped bound of 4",
+      "result": "godot_headless_smoke status ok"
+    }
+  },
+  "whatItReads": {
+    "command": "<godot> --headless --path src/DungeonFortress.Game -- --smoke --fixture baseline --screenshot .artifacts/probe.png --screenshot-ticks 1720 --select-creature 2 --tile-size 40 --camera-zoom 0.75 --camera-position 560,320 --ui-scale 1 --frame-size 1280x720",
+    "fixture": "baseline",
+    "seed": 20260726,
+    "tick": 1720,
+    "creature": "Мотылёк (#2)",
+    "panel": [
+      "STORY · Мотылёк · last 4 of 469",
+      "t1719 · will not take cooking at (15,7): nerve broke at (19,7) t1363.",
+      "t1718 · came back to work after the wave.",
+      "t1679-1683 · stopped at (1,3): somebody in the way. (x3)",
+      "t1669 · broke and ran: 54% health, 6 raiders close, 0 ally down."
+    ],
+    "reading": "Read bottom to top it is the exit criterion of the slice in four lines: it broke and ran at t1669, it came back after the wave at t1718, and on the next tick it would not take the cooking at (15,7) because its nerve had gone at (19,7). What happened to it, and how that changed its next decision.",
+    "beside": "The inspector on the same frame reads 'AVOIDS (25,7) t1669 panic · (19,7) t1363 panic' and 'WHY t1719 · refused_place_of_panic'. The panel and the inspector are two views of the same journal entry, and neither invents anything."
+  },
+  "checks": {
+    "againstTheJournal": "CreatureStoryTests.The_story_a_creature_shows_is_its_own_tail_of_the_canonical_journal — every creature of every party of the matrix, line by line against state.Events. This is criterion 2 of the issue and it runs without an engine.",
+    "noTickNeeded": "CreatureStoryTests.Reading_a_creature_s_story_needs_no_tick_to_run — one snapshot, taken once, answers for all nine creatures.",
+    "noReasonCodeOnScreen": "CreatureStoryTests.No_line_of_a_story_shows_a_raw_reason_code — the code stays canonical (ADR 0010) and the player reads a sentence.",
+    "theSliceQuestion": "CreatureStoryTests.A_refusal_by_memory_reads_in_the_creature_s_own_story — a refusal by memory of place is read off the panel with its tile and the tick it has been remembered since.",
+    "theFrame": "Main.AssertLabelsFit measures the panel as every creature's story, plus a padded worst case, on every entry point and every frame in HudFitFrames."
+  },
+  "mutations": {
+    "howToReproduce": "Apply the edit to src/DungeonFortress.Presentation/HudText.cs, build the presentation test project, run the whole of it, then restore. Scratch runner: .artifacts/mutate-pres.sh with one .artifacts/pN.py per mutation.",
+    "baseline": "366 of 366 green on the shipped tree",
+    "each": [
+      {
+        "half": "the panel is scoped to the selected creature at all",
+        "edit": "make the SelectedCreatureId branch unreachable, so the panel is always the domain feed",
+        "result": "red: 2 of 366 failed"
+      },
+      {
+        "half": "the story is bounded",
+        "edit": "`var shown = Math.Min(CreatureStoryLines, story.Length)` -> `var shown = story.Length`",
+        "result": "red: 3 of 366 failed"
+      },
+      {
+        "half": "the header says how much it is hiding",
+        "edit": "replace the two-armed header with a bare `STORY · {name}`",
+        "result": "red: 1 of 366 failed"
+      },
+      {
+        "half": "the story is newest first",
+        "edit": "drop the `.Reverse()` from the line selection",
+        "result": "red: 3 of 366 failed"
+      },
+      {
+        "half": "a folded decision prints its span and how long it held",
+        "edit": "always print `t{FirstTick}` and never the `(xN)` suffix",
+        "result": "red: 1 of 366 failed"
+      },
+      {
+        "half": "the frame guard measures the story",
+        "edit": "not a code edit: raise HudText.CreatureStoryLines to 6 and run the headless smoke",
+        "result": "red: godot_headless_smoke status error, and every place it names is a story the new guard measured — see howTheBoundWasChosen.sixWasRefused"
+      }
+    ]
+  }
+}

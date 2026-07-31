@@ -114,29 +114,154 @@ public static class HudText
         InspectorText.Build(projection, view.SelectedCreatureId, view.SelectedCell);
 
     /// <summary>
-    /// The last three autonomous choices, newest first, plus the diagnostics
-    /// count. The header is deliberately part of both the empty and the populated
-    /// case, which is why the empty panel repeats it.
+    /// How many of a creature's own decisions the story panel shows at once.
     ///
-    /// Since Issue #117 the line is a sentence about a named creature rather than
-    /// the raw reason code. The code has not gone anywhere: it is still what the
-    /// canonical state and the canonical event log carry, and
-    /// <see cref="EventNarration"/> reads it. Its existence is an invariant of
+    /// <para>
+    /// A party leaves a creature with up to 961 entries in the canonical journal
+    /// — measured, by
+    /// <c>CreatureStoryTests.The_story_is_bounded_and_the_bound_is_on_the_panel</c>
+    /// — and the panel holds ten drawn lines at the tightest frame the HUD guard
+    /// checks. The bound is therefore arithmetic and not a preference: a story
+    /// sentence runs to about sixty characters and wraps onto two drawn lines in
+    /// a 287-pixel panel, so four of them plus the header is nine, and text that
+    /// does not fit is dropped or drawn over the panel below. That is what
+    /// <c>Main.AssertLabelsFit</c> refuses, and it refused six.
+    /// </para>
+    ///
+    /// <para>
+    /// What keeps four honest is that the header says how many entries are
+    /// behind them.
+    /// </para>
+    /// </summary>
+    public const int CreatureStoryLines = 4;
+
+    /// <summary>
+    /// The event panel. With nothing selected it is the domain's feed: the last
+    /// three autonomous choices, newest first, plus the diagnostics count. With a
+    /// creature selected it becomes <b>that creature's story</b> — the last
+    /// <see cref="CreatureStoryLines"/> decisions it took this party, newest
+    /// first (Issue #128).
+    ///
+    /// <para>
+    /// The owner played the first slice of memory of place and said: "Метки вижу,
+    /// они остаются на месте боев. Но без лога событий по каждому персонажу
+    /// трудно понять, как он реагирует на них." The marks were readable and the
+    /// reaction to them was not, because the only feed there was is the whole
+    /// domain's and one creature cannot be found in it. The exit criterion of the
+    /// slice ends "…и как это изменило его следующее решение", and that is the
+    /// third of it this panel answers.
+    /// </para>
+    ///
+    /// <para>
+    /// It is the same surface rather than a new one on purpose. A player asking
+    /// "what happened to this one" is already reading the feed; scoping the feed
+    /// to the creature they clicked puts the answer where they are looking,
+    /// costs the side column no height, and is undone by clicking anywhere else.
+    /// </para>
+    ///
+    /// <para>
+    /// Nothing here is computed. Every line is one entry of the canonical journal
+    /// — <c>state.Events</c> filtered by creature id — rendered by
+    /// <see cref="EventNarration"/> from that entry's own code, details, job kind
+    /// and target. Selecting a creature therefore needs no tick to run: the facts
+    /// are already published, and this is a projection of them. Since Issue #117
+    /// the line is a sentence rather than the raw reason code; the code has not
+    /// gone anywhere, it is still what the canonical state and the canonical
+    /// event log carry, and its existence is an invariant of
     /// <see href="../../docs/decisions/0010-contract-invariants-and-tuning.md">
-    /// ADR 0010</see>; what a player sees instead of it is presentation.
+    /// ADR 0010</see>. What a player sees instead of it is presentation.
+    /// </para>
+    ///
+    /// <para>
+    /// The header is deliberately part of both the empty and the populated case,
+    /// which is why the empty panel repeats it.
+    /// </para>
     /// </summary>
     public static string Feedback(HudViewState view)
     {
+        ArgumentNullException.ThrowIfNull(view);
         var state = view.Snapshot;
+        // The diagnostics counter is a fact about the session, so it stays on the
+        // session's own feed. Giving it up while a creature is selected is not a
+        // tidy-up: the line and the blank line above it are three of the ten
+        // drawn lines this panel has, and three lines is more than one entry of
+        // a creature's story. The count is one click away and the story is what
+        // the panel was clicked for.
+        return view.SelectedCreatureId is { } creatureId
+            ? CreatureStory(state, creatureId)
+            : DomainFeed(state) +
+                $"\n\nDiagnostics: {view.DiagnosticCount} (structured JSON is emitted by smoke/capture).";
+    }
+
+    private static string DomainFeed(PrototypeSnapshot state)
+    {
         var eventText = state.Events.Count == 0
             ? "EVENT FEEDBACK\nNo events yet. Step or unpause to watch autonomous choices."
             : string.Join(
                 "\n",
                 state.Events.TakeLast(3).Reverse().Select(@event =>
                     $"t{@event.LastTick} · {EventNarration.Describe(state, @event)}"));
-        return
-            "EVENT FEEDBACK\n" + eventText +
-            $"\n\nDiagnostics: {view.DiagnosticCount} (structured JSON is emitted by smoke/capture).";
+        return "EVENT FEEDBACK\n" + eventText;
+    }
+
+    /// <summary>
+    /// One creature's decisions this party, newest first and bounded by
+    /// <see cref="CreatureStoryLines"/>.
+    ///
+    /// <para>
+    /// The header carries the name and the bound together — "last 6 of 43" —
+    /// because a panel that silently shows six of forty-three is a panel that
+    /// lies about how much there is. The name is on the header and not on every
+    /// line: the whole panel is about one creature, and repeating the name six
+    /// times would spend the width the sentences need.
+    /// </para>
+    ///
+    /// <para>
+    /// An entry the journal folded over several ticks prints its whole span —
+    /// <c>t1204-1240</c> — and how many ticks it held. That is not decoration:
+    /// "it refused this for thirty-six ticks" and "it refused this once" are
+    /// different stories, and the deduplication rule of contract 11.1 is the
+    /// reason the difference is a count rather than thirty-six lines.
+    /// </para>
+    /// </summary>
+    public static string CreatureStory(PrototypeSnapshot state, int creatureId)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        var story = state.Events.Where(@event => @event.CreatureId == creatureId).ToArray();
+        var name = CreatureName(state, creatureId);
+        if (story.Length == 0)
+        {
+            return
+                $"STORY · {name}\n" +
+                "Nothing decided yet. Step or unpause, and what it chooses shows up here.";
+        }
+
+        var shown = Math.Min(CreatureStoryLines, story.Length);
+        var head = story.Length > shown
+            ? string.Create(CultureInfo.InvariantCulture, $"STORY · {name} · last {shown} of {story.Length}")
+            : string.Create(CultureInfo.InvariantCulture, $"STORY · {name} · {story.Length} in all");
+        return head + "\n" + string.Join(
+            "\n",
+            story.TakeLast(shown).Reverse().Select(StoryLine));
+    }
+
+    /// <summary>
+    /// One line of one creature's story: when it decided, and what it decided.
+    /// </summary>
+    private static string StoryLine(PrototypeEvent @event)
+    {
+        var when = @event.FirstTick == @event.LastTick
+            ? string.Create(CultureInfo.InvariantCulture, $"t{@event.LastTick}")
+            : string.Create(CultureInfo.InvariantCulture, $"t{@event.FirstTick}-{@event.LastTick}");
+        var held = @event.Repeats > 1
+            ? string.Create(CultureInfo.InvariantCulture, $" (x{@event.Repeats})")
+            : string.Empty;
+        var sentence = EventNarration.Sentence(
+            @event.ReasonCode,
+            @event.Details,
+            @event.JobKind,
+            @event.Target);
+        return $"{when} · {sentence}{held}";
     }
 
     /// <summary>
