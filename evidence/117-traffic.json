@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "issue": 117,
+  "what": "Traffic on the seed matrix: refused steps, yield orders, and yield orders handed to a creature that cannot take the step (Issue #119).",
+  "command": "dotnet test tests/DungeonFortress.Simulation.Tests --configuration Release --filter \"FullyQualifiedName~PrototypeTrafficTests.Report_traffic_over_the_seed_matrix\" --logger \"console;verbosity=detailed\"",
+  "columns": {
+    "blockedSteps": "waiting_blocked_by_other decisions recorded over the party",
+    "yields": "chosen_traffic_yield decisions recorded over the party",
+    "unexecutedYields": "yields whose creature did not move that tick",
+    "ordersToFighting": "unexecuted yields where the creature was Fighting",
+    "ordersToDowned": "unexecuted yields where the creature was Downed"
+  },
+  "measurements": [
+    {
+      "stage": "before",
+      "layout": "hall",
+      "commit": "1b41555",
+      "note": "The starting map of main: one hall, six internal pillars and the dig pocket.",
+      "runs": [
+        {"fixture": "baseline", "seed": 20260726, "ticks": 2416, "blockedSteps": 6313, "yields": 556, "unexecutedYields": 126, "ordersToFighting": 23, "ordersToDowned": 87},
+        {"fixture": "baseline", "seed": 20260727, "ticks": 2408, "blockedSteps": 4540, "yields": 406, "unexecutedYields": 49, "ordersToFighting": 21, "ordersToDowned": 0},
+        {"fixture": "baseline", "seed": 20260728, "ticks": 2410, "blockedSteps": 5828, "yields": 540, "unexecutedYields": 176, "ordersToFighting": 88, "ordersToDowned": 44},
+        {"fixture": "prepared", "seed": 20260726, "ticks": 2414, "blockedSteps": 5355, "yields": 467, "unexecutedYields": 200, "ordersToFighting": 109, "ordersToDowned": 82},
+        {"fixture": "prepared", "seed": 20260727, "ticks": 2406, "blockedSteps": 4530, "yields": 351, "unexecutedYields": 77, "ordersToFighting": 73, "ordersToDowned": 0},
+        {"fixture": "prepared", "seed": 20260728, "ticks": 2409, "blockedSteps": 5841, "yields": 524, "unexecutedYields": 280, "ordersToFighting": 95, "ordersToDowned": 173}
+      ]
+    }
+  ]
+}

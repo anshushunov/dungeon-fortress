@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "issue": 117,
+  "what": "The seed matrix of docs/playtests/data/prototype-01-agent-batch.json, read down to the numbers Issue #117 moves: the party score, the gap between the two plans on one seed, and the ranking of a live domain over a dead one.",
+  "command": [
+    "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\evaluate-prototype.ps1",
+    "python -c \"import json,io; d=json.load(io.open(r'docs/playtests/data/prototype-01-agent-batch.json',encoding='utf-8')); [print(r['Scenario'], r['Seed'], r['Metrics']['Session']['Outcome'], r['Metrics']['Session']['Score']) for r in d['Runs']]\""
+  ],
+  "measurements": [
+    {
+      "stage": "before",
+      "layout": "hall",
+      "commit": "1b41555",
+      "note": "Read from the committed evidence file as it stood on main; no run was needed to produce it.",
+      "score": {
+        "baseline": {"20260726": 669, "20260727": 701, "20260728": 784},
+        "prepared": {"20260726": 871, "20260727": 788, "20260728": 928},
+        "neglected": {"20260726": 0, "20260727": 0, "20260728": 0}
+      },
+      "planGapPerSeed": {"20260726": 202, "20260727": 87, "20260728": 144},
+      "minimumPlanGap": 87,
+      "livingOverFallenGap": 669,
+      "renown": {
+        "baseline": {"20260726": 137, "20260727": 133, "20260728": 149},
+        "prepared": {"20260726": 169, "20260727": 147, "20260728": 173},
+        "neglected": {"20260726": 4, "20260727": 4, "20260728": 4}
+      },
+      "mealsProduced": {
+        "baseline": {"20260726": 108, "20260727": 102, "20260728": 108},
+        "prepared": {"20260726": 108, "20260727": 93, "20260728": 87}
+      },
+      "mealsStolen": {
+        "baseline": {"20260726": 51, "20260727": 49, "20260728": 40},
+        "prepared": {"20260726": 33, "20260727": 30, "20260728": 24}
+      },
+      "defendersFled": {
+        "baseline": {"20260726": 25, "20260727": 22, "20260728": 24},
+        "prepared": {"20260726": 13, "20260727": 21, "20260728": 15}
+      },
+      "neglectedFallenTick": {"20260726": 649, "20260727": 604, "20260728": 599}
+    }
+  ]
+}
