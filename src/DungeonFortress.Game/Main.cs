@@ -4295,12 +4295,12 @@ public partial class Main : Node2D
         // the UI in a mouse-capturing edit mode.
         var strokeStart = _playerCommands.Count;
         _editMode = BrushMode.Paint;
-        TryApplyPlayerCommand(new ZonePaintCommand(_state!.Tick, ZoneKind.TrainingGround, [new GridPoint(10, 11)]));
-        TryApplyPlayerCommand(new ZonePaintCommand(_state!.Tick, ZoneKind.TrainingGround, [new GridPoint(11, 11)]));
+        TryApplyPlayerCommand(new ZonePaintCommand(_state!.Tick, ZoneKind.TrainingGround, [new GridPoint(17, 10)]));
+        TryApplyPlayerCommand(new ZonePaintCommand(_state!.Tick, ZoneKind.TrainingGround, [new GridPoint(18, 10)]));
         Advance(1); // Commands at the current tick become visible on the next simulation tick.
         if (_playerCommands.Count != strokeStart + 2 ||
-            !_state!.Zones[ZoneKind.TrainingGround].Contains(new GridPoint(10, 11)) ||
-            !_state.Zones[ZoneKind.TrainingGround].Contains(new GridPoint(11, 11)))
+            !_state!.Zones[ZoneKind.TrainingGround].Contains(new GridPoint(17, 10)) ||
+            !_state.Zones[ZoneKind.TrainingGround].Contains(new GridPoint(18, 10)))
         {
             throw new InvalidOperationException("Brush smoke did not apply two independent cells.");
         }
@@ -4349,10 +4349,12 @@ public partial class Main : Node2D
     /// </summary>
     private void VerifyRectangleSelectionSmoke()
     {
-        // Plain floor clear of every authored feature, of the internal rock and of
-        // the two cells the zone stroke above already painted.
-        var from = new GridPoint(12, 10);
-        var to = new GridPoint(15, 12);
+        // Plain floor clear of every authored feature, of the masonry and of the
+        // two cells the zone stroke above already painted. It moved into the south
+        // chamber with the dungeon of Issue #117: on the old hall the middle of
+        // the map was open, and the same rectangle now takes in four walls.
+        var from = new GridPoint(12, 12);
+        var to = new GridPoint(15, 14);
         _brushZone = ZoneKind.TrainingGround;
         SelectEditMode(BrushMode.Paint);
 
@@ -4587,7 +4589,7 @@ public partial class Main : Node2D
 
         var guardedChecksum = _checksum;
         var guardedCount = _playerCommands.Count;
-        ApplyBrushStroke(new GridPoint(9, 4), new GridPoint(9, 4));   // internal rock
+        ApplyBrushStroke(new GridPoint(7, 1), new GridPoint(7, 1));   // internal rock
         ApplyBrushStroke(new GridPoint(0, 0), new GridPoint(0, 0));   // map boundary
         ApplyBrushStroke(PrototypeMapGate, PrototypeMapGate);
         ApplyBrushStroke(new GridPoint(14, 7), new GridPoint(14, 7));  // larder feature
@@ -4665,11 +4667,11 @@ public partial class Main : Node2D
 
         var guardedChecksum = _checksum;
         var guardedCount = _playerCommands.Count;
-        ApplyBrushStroke(new GridPoint(9, 4), new GridPoint(9, 4));   // internal rock
+        ApplyBrushStroke(new GridPoint(7, 1), new GridPoint(7, 1));   // internal rock
         ApplyBrushStroke(new GridPoint(0, 0), new GridPoint(0, 0));   // map boundary
         ApplyBrushStroke(PrototypeMapGate, PrototypeMapGate);
         ApplyBrushStroke(new GridPoint(14, 7), new GridPoint(14, 7));  // larder feature
-        ApplyBrushStroke(new GridPoint(8, 12), new GridPoint(8, 12));  // an existing post
+        ApplyBrushStroke(new GridPoint(10, 2), new GridPoint(10, 2));  // an existing post
         ApplyBrushStroke(new GridPoint(22, 1), new GridPoint(22, 1));  // a stockpile cell
         if (_playerCommands.Count != guardedCount || _checksum != guardedChecksum)
         {
