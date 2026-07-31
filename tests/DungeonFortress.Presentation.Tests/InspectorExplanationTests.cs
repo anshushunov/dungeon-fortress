@@ -538,17 +538,19 @@ public sealed class InspectorExplanationTests
     }
 
     /// <summary>
-    /// The QUARTERS rule is appended to the zone list rather than being a section
-    /// of its own, which is easy to lose in a reflow.
+    /// The QUARTERS rule is appended to the room line rather than being a section
+    /// of its own, which is easy to lose in a reflow. Since Issue #52 that line is
+    /// the room line and not the zone line — every painted zone is a room, so the
+    /// two said the same thing and the panel has no line to spare.
     /// </summary>
     [Fact]
-    public void A_quarters_cell_carries_its_rest_rule_in_the_zone_line()
+    public void A_quarters_cell_carries_its_rest_rule_in_the_room_line()
     {
         var state = PresentationFixtures.Baseline(1);
         var quarters = state.Zones[ZoneKind.Quarters][0];
 
         Assert.Contains(
-            "zones Quarters, QUARTERS: rest only at fatigue 50+, free bunk\n",
+            "room QUARTERS [quarters@19,2] · QUARTERS: rest only at fatigue 50+, free bunk\n",
             InspectorText.Build(state.Shown(), null, quarters),
             StringComparison.Ordinal);
     }
