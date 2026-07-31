@@ -394,10 +394,13 @@ public sealed class PrototypeContractRegressionTests
             flightsWitnessed >= 5,
             $"only {flightsWitnessed} defenders broke in this party, which is too few " +
             "for the walk out of a fight to have been read at all.");
-        // A soft fairness bound, not a rule: the corridor was re-measured over the
-        // whole party rather than over the run-up to the first wave, and came out
-        // at 30 against the 27 of the shorter window on `origin/main`. The bound
-        // keeps roughly the proportion of slack it had before.
+        // A soft fairness bound, not a rule. Re-measured over the whole party
+        // rather than over the run-up to the first wave, and re-measured again
+        // after a broken defender became a participant in traffic arbitration:
+        // 27 over the short window on `origin/main`, 30 over the whole party, 28
+        // now that a runner both yields and is yielded to and so carries its own
+        // share of the count. The bound keeps roughly the proportion of slack it
+        // had before.
         Assert.InRange(
             previous.Creatures.Max(creature => creature.YieldCount) -
             previous.Creatures.Min(creature => creature.YieldCount),

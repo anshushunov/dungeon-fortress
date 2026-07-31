@@ -188,6 +188,13 @@ public sealed class PrototypeMoraleTests(ITestOutputHelper output)
     /// It is also the one that would have caught the teleport had it been written
     /// first, and the one that catches the opposite failure — a mode that is set
     /// and followed by nothing at all.
+    ///
+    /// What it does **not** catch is a runner that was told to yield and walked
+    /// its own way instead: <c>Move</c> writes <c>waiting_blocked_by_other</c>
+    /// after the yield was recorded, so the last word of the tick is an accepted
+    /// explanation either way. That claim used to be made here and was false.
+    /// It is made, and proved by mutation, in
+    /// <see cref="A_runner_told_to_yield_goes_to_the_booked_tile_or_nowhere"/>.
     /// </summary>
     [Fact]
     public void Every_tick_a_runner_stands_still_is_explained_in_the_log()
@@ -216,11 +223,6 @@ public sealed class PrototypeMoraleTests(ITestOutputHelper output)
                     Assert.True(
                         decision is not null &&
                         decision.Tick >= current.Tick - 1 &&
-                        // `chosen_traffic_yield` is deliberately not an accepted
-                        // explanation. A runner that was told to step aside and
-                        // then did not step is the defect review measured: the
-                        // canonical log claims a yield that never happened and
-                        // the booked tile is closed to everyone else for nothing.
                         decision.ReasonCode is "waiting_blocked_by_other"
                             or "refused_zone_unreachable",
                         $"{fixtureName}/{seed}: creature {creature.Id} was in flight at " +
@@ -235,6 +237,102 @@ public sealed class PrototypeMoraleTests(ITestOutputHelper output)
         }
     }
 
+    /// <summary>
+    /// The whole of what the traffic half of Issue #101 changed, stated so that
+    /// removing the change fails.
+    ///
+    /// A creature that traffic arbitration picks as a yielder is given one tile
+    /// to step onto, that tile is booked for the tick in
+    /// <c>_yieldReservations</c>, and <c>chosen_traffic_yield</c> goes into the
+    /// canonical log naming it. A broken defender used to take all three and then
+    /// walk towards its refuge instead, because the <c>Fled</c> branch never read
+    /// <c>TrafficTarget</c>: the log claimed a yield that did not happen and the
+    /// booked tile was closed to everybody else for nothing.
+    ///
+    /// So the assertion is about where the creature actually is at the end of the
+    /// tick. Having been booked onto tile T it may be **on T** — it yielded — or
+    /// **where it started** — the step was blocked by somebody the chain had not
+    /// cleared yet. A third tile means it went its own way, which is exactly the
+    /// removed defect and nothing else: the refuge lies in the other direction
+    /// from the yield by construction, or there would have been no need to yield.
+    ///
+    /// The booking is read from the event log rather than from
+    /// <c>lastDecision</c>, because the decision is overwritten later in the same
+    /// tick by whatever the movement routine says. That overwrite is what made
+    /// the previous attempt at this test unable to fail.
+    /// </summary>
+    [Fact]
+    public void A_runner_told_to_yield_goes_to_the_booked_tile_or_nowhere()
+    {
+        var observed = 0;
+        var yieldedFor = 0;
+
+        foreach (var (fixtureName, seed) in Cells())
+        {
+            var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
+            var previous = world.GetSnapshot();
+
+            while (!world.IsComplete)
+            {
+                world.Step();
+                var current = world.GetSnapshot();
+                var acted = current.Tick - 1;
+
+                foreach (var @event in current.Events)
+                {
+                    if (@event.ReasonCode != "chosen_traffic_yield" || @event.LastTick != acted)
+                    {
+                        continue;
+                    }
+
+                    // The other half of the change, read from the same event: a
+                    // yield names who it was made for, and a runner can only be
+                    // named there if it published a destination and took part in
+                    // the arbitration as a mover.
+                    var beneficiary = @event.Details["beneficiaryId"];
+                    if (previous.Creatures.Single(item => item.Id == beneficiary).Mode
+                        == CreatureMode.Fled)
+                    {
+                        yieldedFor++;
+                    }
+
+                    var creature = current.Creatures.Single(item => item.Id == @event.CreatureId);
+                    var before = previous.Creatures.Single(item => item.Id == @event.CreatureId);
+                    if (before.Mode != CreatureMode.Fled && creature.Mode != CreatureMode.Fled)
+                    {
+                        continue;
+                    }
+
+                    var booked = new GridPoint(@event.Details["targetX"], @event.Details["targetY"]);
+                    observed++;
+                    Assert.True(
+                        creature.Position == booked || creature.Position == before.Position,
+                        $"{fixtureName}/{seed}: on tick {acted} creature {@event.CreatureId} was in " +
+                        $"flight, was booked onto ({booked.X},{booked.Y}) and the tile was closed to " +
+                        $"everybody else for the tick — and it went to " +
+                        $"({creature.Position.X},{creature.Position.Y}) instead of yielding or " +
+                        "waiting. A yield in the canonical log has to be a yield that happened.");
+                }
+
+                previous = current;
+            }
+        }
+
+        Assert.True(
+            observed >= 5,
+            $"traffic arbitration booked a runner {observed} times over the whole matrix — 71 " +
+            "is what it does today — " +
+            "which is too few for the rule above to have been exercised at all. Either the " +
+            "runner has dropped out of the arbitration again, or the fixtures stopped " +
+            "producing corridors.");
+        Assert.True(
+            yieldedFor >= 5,
+            $"over the whole matrix somebody stepped aside for a runner {yieldedFor} times, " +
+            "against 640 today. A runner that publishes no destination is not a mover and " +
+            "nothing is arbitrated on its behalf: reverting that half of the fix drops this " +
+            "to 2, and the two survivors are creatures that broke after the arbitration had " +
+            "already planned the tick. That is the state Issue #101 found.");
+    }
 
     /// <summary>
     /// The distribution itself, printed rather than asserted. The bounds above
