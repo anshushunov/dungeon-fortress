@@ -490,6 +490,26 @@ $stageCatalog = [ordered]@{
                 -ExpectedErrorEvent "godot_headless_smoke" `
                 -MessagePattern "HUD text is unreadable.*physical pixels"
 
+            # Issue #127: the tooltip is the one HUD text surface the guard could
+            # not reach until CreateControlStrips started keeping a permanent,
+            # invisible sample of it. This is that guard's own negative run,
+            # exact counterpart of the one above, shrinking the sample instead of
+            # a legend row.
+            Write-Host "Proving the readability policy rejects an unreadable tooltip..."
+            $hudTooltipReadabilityFailure = Invoke-GodotExpectedFailure `
+                -GodotPath $godot `
+                -Arguments @(
+                    "--headless", "--resolution", "1280x720", "--path", $gameProjectPath,
+                    "--", "--smoke", "--smoke-hud-tooltip-readability-regression",
+                    "--tile-size", "40",
+                    "--camera-zoom", "1",
+                    "--camera-position", "560,320",
+                    "--ui-scale", "1",
+                    "--frame-size", "1280x720"
+                ) `
+                -ExpectedErrorEvent "godot_headless_smoke" `
+                -MessagePattern "Label\[TooltipBody\].*physical pixels"
+
             Write-Host "Proving a misplaced Camera2D fails the independent transform check..."
             $cameraTransformFailure = Invoke-GodotExpectedFailure `
                 -GodotPath $godot `

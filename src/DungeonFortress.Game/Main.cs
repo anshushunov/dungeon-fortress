@@ -1559,13 +1559,25 @@ public partial class Main : Node2D
         // HudButton.MakeAuthoredTooltip for why this is built at UI scale 1
         // rather than the live one. Issue #127: the tooltip was the one HUD
         // text surface no guard measured.
-        if (_controlButtons.Count > 0)
+        //
+        // Failing loudly rather than silently skipping this block when
+        // UiControls.Build ever returns zero controls is deliberate: review on
+        // Issue #127 found that the earlier `if (_controlButtons.Count > 0)`
+        // guard had exactly the failure shape of the inert --strict-hud-fit
+        // flag (Issue #49) — the tooltip would drop out of the guard with every
+        // check still green, and InjectHudTooltipReadabilityRegression would
+        // crash on a bare null-reference instead of naming what broke.
+        if (_controlButtons.Count == 0)
         {
-            _tooltipReadabilitySample = _controlButtons[0].MakeAuthoredTooltip(
-                TooltipReadabilitySampleText);
-            _tooltipReadabilitySample.Visible = false;
-            _hudRoot!.AddChild(_tooltipReadabilitySample);
+            throw new InvalidOperationException(
+                "The HUD readability guard needs at least one control button to build a " +
+                "tooltip readability sample from, and UiControls.Build returned none.");
         }
+
+        _tooltipReadabilitySample = _controlButtons[0].MakeAuthoredTooltip(
+            TooltipReadabilitySampleText);
+        _tooltipReadabilitySample.Visible = false;
+        _hudRoot!.AddChild(_tooltipReadabilitySample);
 
         RefreshControls();
         return band;
