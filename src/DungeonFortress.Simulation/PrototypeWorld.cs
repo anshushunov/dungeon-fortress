@@ -1904,22 +1904,24 @@ public sealed class PrototypeWorld
     {
         // A creature standing idle because it will not go back to where it broke
         // says so, instead of reporting the next-best diagnostic about a job it
-        // was never going to take. This is the only branch where the refusal is
-        // also the creature's last word, and it is the branch the player is
-        // looking at when they ask why somebody is doing nothing.
-        if (creature.AvoidedThisTick is { } avoided)
+        // was never going to take. This is the branch the player is looking at
+        // when they ask why somebody is doing nothing.
+        //
+        // The decision is **not written again here**. It was written for this
+        // creature, with these exact arguments, by the loop above the matching in
+        // <see cref="MatchJobs"/>, and it is already this creature's
+        // <c>lastDecision</c>. Writing it a second time did not create a second
+        // event — <see cref="RecordDecision"/> folds an identical repeat — it
+        // incremented <c>repeats</c> on the first one, so a refusal that happened
+        // once was published as having happened twice, on its very first tick.
+        //
+        // That is a canonical counter, not a display detail: the feed printed
+        // "(x2)", `ReasonCodeOccurrences` sums `Repeats`, and every count of this
+        // code quoted anywhere was inflated by it. The rule the fix restores is
+        // the one the counter is named for: <c>repeats</c> counts **ticks on
+        // which the decision was taken**, not calls that recorded it.
+        if (creature.AvoidedThisTick is not null)
         {
-            RecordDecision(
-                creature,
-                AvoidanceReason(avoided.Place),
-                new Dictionary<string, int>
-                {
-                    ["placeX"] = avoided.Place.Place.X,
-                    ["placeY"] = avoided.Place.Place.Y,
-                    ["sinceTick"] = avoided.Place.Tick,
-                },
-                avoided.Kind,
-                avoided.Target);
             creature.Mode = CreatureMode.Waiting;
             return;
         }

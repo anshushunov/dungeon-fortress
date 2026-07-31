@@ -292,6 +292,71 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// <c>repeats</c> counts the ticks a decision was taken on, not the calls
+    /// that recorded it.
+    ///
+    /// This is a statement about the canonical event log rather than about
+    /// memory, and it is here because memory is what broke it. The refusal was
+    /// written twice on the same tick — once before matching, so that a creature
+    /// which then took other work still said what it would not do, and once again
+    /// by <c>RecordWaitingReason</c> for a creature that ended up with nothing.
+    /// <c>RecordDecision</c> folds an identical repeat, so the second call did not
+    /// make a second event: it made the first one claim two. On its first tick.
+    ///
+    /// The damage was canonical and it was published: the feed printed "(x2)" for
+    /// one refusal, and <c>ReasonCodeOccurrences</c> — which sums <c>Repeats</c>,
+    /// and which the contract quotes — doubled every count of these two codes.
+    ///
+    /// The check is written over every reason code rather than over the two this
+    /// slice added, because the rule is not about them.
+    /// </summary>
+    [Theory]
+    [InlineData("baseline")]
+    [InlineData("prepared")]
+    public void A_repeat_counts_a_tick_rather_than_a_call_that_recorded_it(string fixtureName)
+    {
+        foreach (var seed in MatrixSeeds)
+        {
+            var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
+            // An event is identified by its position in the log. The list is
+            // append-only and never reordered, so the index is stable across
+            // snapshots — and it is the only stable identity: one creature can
+            // legitimately take two *different* decisions on one tick, so
+            // (creature, firstTick) is not unique and keying on it made this test
+            // fail on `waiting_crop_not_ripe` for a reason that was not a defect.
+            var ticksSeen = new Dictionary<int, int>();
+
+            while (!world.IsComplete)
+            {
+                world.Step();
+                var state = world.GetSnapshot();
+                var acted = state.Tick - 1;
+                for (var index = 0; index < state.Events.Count; index++)
+                {
+                    if (state.Events[index].LastTick == acted)
+                    {
+                        ticksSeen[index] = ticksSeen.GetValueOrDefault(index) + 1;
+                    }
+                }
+            }
+
+            var events = world.GetSnapshot().Events;
+            for (var index = 0; index < events.Count; index++)
+            {
+                var @event = events[index];
+                Assert.True(
+                    @event.Repeats == ticksSeen[index],
+                    $"{fixtureName}/{seed}: the event '{@event.ReasonCode}' of creature " +
+                    $"{@event.CreatureId}, first seen on tick {@event.FirstTick}, claims " +
+                    $"{@event.Repeats} repeats and was recorded on {ticksSeen[index]} tick(s). " +
+                    "A repeat counts a tick the decision was taken on; anything else means " +
+                    "some path writes the same decision twice in one tick and the canonical " +
+                    "counter is inflated.");
+            }
+        }
+    }
+
+    /// <summary>
     /// The distribution itself, printed rather than asserted: which places each
     /// creature came out of the party carrying. This is what a person reads when
     /// they want to know whether the stories are worth telling.
