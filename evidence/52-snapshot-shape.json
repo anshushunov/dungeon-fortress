@@ -51,6 +51,6 @@
       {"file": "tests/golden/ui/stone-t336-in-transit.json", "before": "d3bb8a3a", "after": "4864e76a"},
       {"file": "tests/golden/ui/stone-t950-stockpile-full.json", "before": "b423fe6d", "after": "aa16b043"}
     ],
-    "note": "The prefixes above are the eight characters the HUD summary prints. The whole diff of the three files is those three strings and nothing else, which is what `git diff --stat tests/golden/ui` (3 files, 3 insertions, 3 deletions) says."
+    "note": "The prefixes above are the eight characters the HUD summary prints. At the commit that added the section the whole diff of the three files was those three strings and nothing else — `git diff --stat tests/golden/ui` said 3 files, 3 insertions, 3 deletions. The frames moved a second time later in the same branch, for a reason that is not the snapshot: the inspector's `zones` line became a `room` line, which is text and does not touch the canonical document. The checksums above are still the ones the frames carry; `verification_result.viewInvariantChecksum` is 7e9fffa7... for the same reason."
   }
 }
