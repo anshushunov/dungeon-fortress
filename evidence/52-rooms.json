@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "captures": [
+    {"name": "rooms-t1-whole-map", "fixture": "baseline", "screenshotTicks": 1, "tileSize": 40, "cameraZoom": 0.5, "cameraPosition": "560,320", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "rooms-t1-posts-with-no-room", "fixture": "baseline", "screenshotTicks": 1, "selectCell": "10,2", "tileSize": 40, "cameraZoom": 1.0, "cameraPosition": "440,140", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "rooms-t1010-gym-with-no-post", "fixture": "baseline", "demoBuild": true, "screenshotTicks": 1010, "selectCell": "25,2", "tileSize": 40, "cameraZoom": 1.0, "cameraPosition": "960,140", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "rooms-t1200-gym-with-a-post", "fixture": "baseline", "demoBuild": true, "screenshotTicks": 1200, "selectCell": "25,2", "tileSize": 40, "cameraZoom": 1.0, "cameraPosition": "960,140", "uiScale": 1.0, "frameSize": "1280x720"}
+  ]
+}

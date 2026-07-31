@@ -605,9 +605,13 @@ public sealed class InspectorExplanationTests
 
         var text = InspectorText.Build(state.Shown(), null, cell);
 
+        // The headings, not the words. Since Issue #52 the panel names the room
+        // the cell is in, and a material stockpile is a room called STOCKPILE, so
+        // a bare substring search finds the caption three lines above the section
+        // it is meant to be about.
         Assert.True(
-            text.IndexOf("LOOSE STONE", StringComparison.Ordinal) <
-            text.IndexOf("STOCKPILE", StringComparison.Ordinal),
+            text.IndexOf("\nLOOSE STONE\n", StringComparison.Ordinal) <
+            text.IndexOf("\nSTOCKPILE\n", StringComparison.Ordinal),
             text);
         Assert.Contains("\nDIG\n", text, StringComparison.Ordinal);
     }

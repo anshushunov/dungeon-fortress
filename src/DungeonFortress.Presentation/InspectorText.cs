@@ -94,6 +94,7 @@ public static class InspectorText
                 $"CELL ({cell.X}, {cell.Y})\n\n" +
                 $"tile {TileDescription(view, cell)}\n" +
                 $"zones {(zones.Length == 0 ? "none" : string.Join(", ", zones))}\n" +
+                DescribeRooms(view, cell) +
                 $"jobs {(jobs.Length == 0 ? "none" : string.Join(", ", jobs.Select(job => $"#{job.JobId} {job.Kind}")))}\n\n" +
                 looseSection +
                 buildSection +
@@ -179,6 +180,46 @@ public static class InspectorText
         // Deliberately terse: on a stockpile cell this section is the least
         // important one on the panel and must not push the rest out of the box.
         return $"not diggable: {ShortUndiggableReason(state, cell)}.";
+    }
+
+    /// <summary>
+    /// Which rooms this cell belongs to, and what is standing on it with no room
+    /// around it (Issue #52).
+    ///
+    /// One line each and no heading, for the reason
+    /// <see cref="DescribeMemory"/> already had to learn: the panel fits sixteen
+    /// lines at 1280x720 and the HUD overflow guard refuses a frame that does not,
+    /// so a block with a heading and a blank line costs three lines for one fact.
+    /// The room's own caption already carries its state — <c>TRAIN · no post</c> —
+    /// so the line is the caption plus the id the map draws the caption under.
+    ///
+    /// Empty for the great majority of cells, which are in no room at all.
+    /// </summary>
+    public static string DescribeRooms(MapProjection view, GridPoint cell)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        var lines = string.Empty;
+        var rooms = view.State.Rooms
+            .Where(room => room.Perimeter.Contains(cell))
+            .ToArray();
+        if (rooms.Length > 0)
+        {
+            lines += "room " + string.Join(
+                " · ",
+                rooms.Select(room => $"{RoomLabels.Caption(room)} [{room.Id}]")) + "\n";
+        }
+
+        // The other half of the silence: a post nobody has zoned is in no room, so
+        // no room's caption can mention it. The map marks it; the panel says what
+        // to do about it.
+        var orphan = RoomObjects.Unroomed(view).FirstOrDefault(item => item.Position == cell);
+        if (orphan is not null)
+        {
+            lines += $"no room: this {RoomLabels.FeatureName(orphan.Kind)} needs " +
+                $"{orphan.Needs} painted over it\n";
+        }
+
+        return lines;
     }
 
     /// <summary>
