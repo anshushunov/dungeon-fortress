@@ -10,8 +10,8 @@
     {
       "stage": "before",
       "layout": "hall",
-      "commit": "1b41555",
-      "note": "Read from the committed evidence file as it stood on main; no run was needed to produce it.",
+      "takenOn": "main, before this branch: the hall layout, the old prepared plan",
+      "note": "Read from the committed evidence file as it stood on main; no run was needed to produce it. Named by what was in the tree rather than by a commit hash: this branch has been rebased once already, so a hash here would point at nothing (Issue #106 is the general form).",
       "score": {
         "baseline": {"20260726": 669, "20260727": 701, "20260728": 784},
         "prepared": {"20260726": 871, "20260727": 788, "20260728": 928},
@@ -42,9 +42,8 @@
     {
       "stage": "after",
       "layout": "dungeon",
-      "commit": "b0dc87d",
-      "note": "The head of the branch: the shipped dungeon, the CanYield fix, memory of place, the re-authored prepared plan and the R4 repeat fix.",
-      "supersedes": "An earlier 'after' block taken at commit 089ee65 — before memory of place, before the re-authored plan settled and before the R4 repeat fix. Every key below moved. Four of them were quoted by the contract or by this file's own prose while stale, and each is named here rather than silently overwritten: planGapPerSeed read 62/105/234 where it is 72/62/198 (the minimum was right by coincidence, the source was not); livingOverFallenGap read 659 for 660; combatRefusedStarving read 13/25/0 for 13/21/0, and an owner decision rests on that number; and invariantMisses claimed invariant 4 fails on seed 20260728 at 22 against 22, which the contract contradicted — the contract was right, this file was wrong, and 22 < 23 holds.",
+      "takenOn": "the head of this branch after the review round: dungeon, CanYield fix, memory of place, the re-authored prepared plan and the R4 repeat fix",
+      "supersedes": "An earlier 'after' block, taken when the dungeon and the CanYield fix landed but before memory of place, before the re-authored plan settled and before the R4 repeat fix. Every key below moved. Four of them were quoted by the contract or by this file's own prose while stale, and each is named here rather than silently overwritten: planGapPerSeed read 62/105/234 where it is 72/62/198 (the minimum was right by coincidence, the source was not); livingOverFallenGap read 659 for 660; combatRefusedStarving read 13/25/0 for 13/21/0, and an owner decision rests on that number; and invariantMisses claimed invariant 4 fails on seed 20260728 at 22 against 22, which the contract contradicted — the contract was right, this file was wrong, and 22 < 23 holds.",
       "score": {
         "baseline": {"20260726": 727, "20260727": 806, "20260728": 660},
         "prepared": {"20260726": 799, "20260727": 868, "20260728": 858},

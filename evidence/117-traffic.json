@@ -14,8 +14,8 @@
     {
       "stage": "before",
       "layout": "hall",
-      "commit": "1b41555",
-      "note": "The starting map of main: one hall, six internal pillars and the dig pocket.",
+      "takenOn": "main, before this branch: the hall layout, no memory of place",
+      "note": "The starting map of main: one hall, six internal pillars and the dig pocket. Named by what was in the tree rather than by a commit hash: this branch has been rebased once already, so a hash here would point at nothing (Issue #106 is the general form).",
       "runs": [
         {"fixture": "baseline", "seed": 20260726, "ticks": 2416, "blockedSteps": 6313, "yields": 556, "unexecutedYields": 126, "ordersToFighting": 23, "ordersToDowned": 87},
         {"fixture": "baseline", "seed": 20260727, "ticks": 2408, "blockedSteps": 4540, "yields": 406, "unexecutedYields": 49, "ordersToFighting": 21, "ordersToDowned": 0},
@@ -42,9 +42,9 @@
     {
       "stage": "after",
       "layout": "dungeon",
-      "commit": "b0dc87d",
-      "note": "The head of the branch: the shipped dungeon, the CanYield fix, memory of place, the re-authored prepared plan and the R4 repeat fix. No yield order goes to a creature that cannot take the step, and stalled steps are back inside the range the hall produced.",
-      "supersedes": "An earlier 'after' block taken at commit 089ee65, before memory of place and before the R4 repeat fix. It read 5850-9500 stalled steps and was quoted by contract 4.5 as 5002-9500; both were stale by the time the branch was reviewed.",
+      "takenOn": "the head of this branch after the review round: dungeon, CanYield fix, memory of place, the re-authored prepared plan and the R4 repeat fix",
+      "note": "No yield order goes to a creature that cannot take the step, and stalled steps are back inside the range the hall produced.",
+      "supersedes": "An earlier 'after' block, taken when the dungeon and the CanYield fix landed but before memory of place and before the R4 repeat fix. It read 5850-9500 stalled steps and was quoted by contract 4.5 as 5002-9500; both were stale by the time the branch was reviewed.",
       "runs": [
         {"fixture": "baseline", "seed": 20260726, "ticks": 2404, "blockedSteps": 5962, "yields": 517, "unexecutedYields": 21, "ordersToFighting": 0, "ordersToDowned": 0},
         {"fixture": "baseline", "seed": 20260727, "ticks": 2404, "blockedSteps": 9721, "yields": 1402, "unexecutedYields": 20, "ordersToFighting": 0, "ordersToDowned": 0},
