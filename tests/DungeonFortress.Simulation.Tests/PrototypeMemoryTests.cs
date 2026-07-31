@@ -357,6 +357,90 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// The counterfactual of Issue #125 is a <b>question</b> about the party and
+    /// never a change to it.
+    ///
+    /// <see cref="PrototypeWorld.TrackMemoryFreeMatching"/> makes every tick
+    /// resolve the matching a second time with memory switched off. The second
+    /// pass books nothing, records no decision and moves nobody, so the canonical
+    /// document and the canonical event log of a probed party have to be the same
+    /// bytes as those of an unprobed one. Without this check the measurement
+    /// below would be evidence about a world nobody plays.
+    /// </summary>
+    [Theory]
+    [InlineData("baseline")]
+    [InlineData("prepared")]
+    public void The_counterfactual_probe_changes_nothing_the_party_does(string fixtureName)
+    {
+        foreach (var seed in MatrixSeeds)
+        {
+            var plain = PrototypeScenario.Capture(RunToEnd(fixtureName, seed, probe: false));
+            var probed = PrototypeScenario.Capture(RunToEnd(fixtureName, seed, probe: true));
+            Assert.Equal(plain.Checksum, probed.Checksum);
+            Assert.Equal(plain.CanonicalEventLog, probed.CanonicalEventLog);
+        }
+    }
+
+    /// <summary>
+    /// Criterion 1 of Issue #125, measured rather than argued: for every refusal
+    /// by memory of place, does the same tick with memory switched off give that
+    /// creature the very job the refusal names?
+    ///
+    /// <para>
+    /// Three outcomes are counted apart, because they are three different
+    /// sentences to a player:
+    /// </para>
+    ///
+    /// <list type="bullet">
+    /// <item><b>named</b> — memory took exactly this work away, and the refusal
+    /// is true;</item>
+    /// <item><b>other</b> — without memory the creature would have taken a
+    /// different job, so the refusal names work it was not going to do
+    /// anyway;</item>
+    /// <item><b>nothing</b> — without memory the creature would still have been
+    /// left with no work at all, so memory explains an idleness it did not
+    /// cause.</item>
+    /// </list>
+    ///
+    /// <para>
+    /// Printed rather than asserted here; the assertion —
+    /// <c>A_refusal_by_memory_names_the_work_the_creature_would_have_taken</c> —
+    /// arrives with the fix, because on this tree it is red by construction.
+    /// This one is the number that goes into evidence before and after the fix,
+    /// and it stays afterwards because a count that only ever reads zero is how
+    /// a regression announces itself in one line.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Report_whether_a_refusal_names_work_the_creature_would_have_taken()
+    {
+        var report = new StringBuilder();
+        var totals = (Refusals: 0, Named: 0, Other: 0, Nothing: 0);
+
+        foreach (var fixtureName in new[] { "baseline", "prepared" })
+        {
+            foreach (var seed in MatrixSeeds)
+            {
+                var counts = CountRefusals(fixtureName, seed);
+                totals = (
+                    totals.Refusals + counts.Refusals,
+                    totals.Named + counts.Named,
+                    totals.Other + counts.Other,
+                    totals.Nothing + counts.Nothing);
+                report.AppendLine(CultureInfo.InvariantCulture,
+                    $"{fixtureName}/{seed}: refusals {counts.Refusals}, named {counts.Named}, " +
+                    $"other {counts.Other}, nothing {counts.Nothing}");
+            }
+        }
+
+        report.AppendLine(CultureInfo.InvariantCulture,
+            $"matrix: refusals {totals.Refusals}, named {totals.Named}, " +
+            $"other {totals.Other}, nothing {totals.Nothing}, " +
+            $"false {totals.Other + totals.Nothing}");
+        output.WriteLine(report.ToString());
+    }
+
+    /// <summary>
     /// The distribution itself, printed rather than asserted: which places each
     /// creature came out of the party carrying. This is what a person reads when
     /// they want to know whether the stories are worth telling.
@@ -383,6 +467,88 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
 
     private static int Manhattan(GridPoint left, GridPoint right) =>
         Math.Abs(left.X - right.X) + Math.Abs(left.Y - right.Y);
+
+    private static string Format(GridPoint? point) =>
+        point is { } tile
+            ? string.Create(CultureInfo.InvariantCulture, $"({tile.X},{tile.Y})")
+            : "nowhere";
+
+    /// <summary>
+    /// A whole party, optionally answering the counterfactual of Issue #125 on
+    /// every tick.
+    /// </summary>
+    private static PrototypeWorld RunToEnd(string fixtureName, ulong seed, bool probe)
+    {
+        var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed })
+        {
+            TrackMemoryFreeMatching = probe,
+        };
+        while (!world.IsComplete)
+        {
+            world.Step();
+        }
+
+        return world;
+    }
+
+    /// <summary>
+    /// The same party, with <paramref name="inspect"/> shown every probe of every
+    /// tick as it happens. The probe is per-tick state, so it cannot be read off
+    /// the end of the run.
+    /// </summary>
+    private static PrototypeWorld RunProbed(
+        string fixtureName,
+        ulong seed,
+        Action<int, PrototypeWorld.MemoryProbe> inspect)
+    {
+        var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed })
+        {
+            TrackMemoryFreeMatching = true,
+        };
+        while (!world.IsComplete)
+        {
+            var tick = world.CurrentTick;
+            world.Step();
+            foreach (var probe in world.MemoryProbes)
+            {
+                inspect(tick, probe);
+            }
+        }
+
+        return world;
+    }
+
+    private static (int Refusals, int Named, int Other, int Nothing) CountRefusals(
+        string fixtureName,
+        ulong seed)
+    {
+        var refusals = 0;
+        var named = 0;
+        var other = 0;
+        var nothing = 0;
+        RunProbed(fixtureName, seed, (_, probe) =>
+        {
+            if (probe.RefusedJobId is not { } refused)
+            {
+                return;
+            }
+
+            refusals++;
+            if (probe.MemoryFreeJobId == refused)
+            {
+                named++;
+            }
+            else if (probe.MemoryFreeJobId is null)
+            {
+                nothing++;
+            }
+            else
+            {
+                other++;
+            }
+        });
+        return (refusals, named, other, nothing);
+    }
 
     private static PrototypeSnapshot RunAtSeed(string fixtureName, ulong seed) =>
         PrototypeScenario.Run(

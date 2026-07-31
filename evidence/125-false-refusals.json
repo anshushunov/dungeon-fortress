@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "issue": 125,
+  "what": "How many refusals by memory of place name work the creature would not have taken anyway. Issue #125 states its criterion as a counterfactual — 'the same tick, run with memory switched off, gives this creature the job the refusal names' — so the measurement is that counterfactual, resolved inside the tick it belongs to.",
+  "howItIsMeasured": "PrototypeWorld.TrackMemoryFreeMatching (diagnostic, off by default) makes every tick resolve the same matching a second time with the memory arm skipped, and publishes through PrototypeWorld.MemoryProbes both the job each refusal names and the job the memory-free matching would have given that creature. Refusals are counted per tick, not per event: one event folded over eight ticks is eight refusals, which is the number a player reads.",
+  "whyNotTwoRuns": "A counterfactual cannot be measured by playing the party twice with memory on and off. The second party diverges on the first tick where memory changed anything, and from there the two runs are different worlds, so 'the same tick' has nothing to compare. Resolved inside the tick it is exact. That the probe changes nothing is itself checked: PrototypeMemoryTests.The_counterfactual_probe_changes_nothing_the_party_does compares the canonical checksum and the canonical event log of a probed party against an unprobed one over the whole matrix.",
+  "matrix": "fixtures baseline and prepared, seeds 20260726, 20260727, 20260728 — the same six parties PrototypeMemoryTests runs on.",
+  "columns": {
+    "refusals": "refusals by memory of place, counted per tick",
+    "named": "the memory-free matching gives the creature exactly the job the refusal names — the refusal is true",
+    "other": "the memory-free matching gives the creature a different job — the refusal names work it was not going to do",
+    "nothing": "the memory-free matching gives the creature no work at all — memory explains an idleness it did not cause",
+    "false": "other + nothing"
+  },
+  "command": [
+    "dotnet build tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj -c Release",
+    "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --no-build --no-restore --filter \"FullyQualifiedName~PrototypeMemoryTests.Report_whether_a_refusal_names_work_the_creature_would_have_taken\" --logger \"console;verbosity=detailed\""
+  ],
+  "measurements": [
+    {
+      "stage": "before",
+      "takenOn": "this branch at the checkpoint that adds the probe and nothing else: the memory arm still sits before the occupancy check, before reachability and before scoring, and still keeps the first job by id it hits.",
+      "refactorIsBehaviourNeutral": {
+        "claim": "Extracting CollectPairs/ResolveMatching out of MatchJobs moved no decision. The whole 15-run evaluation matrix is byte-identical before and after the extraction.",
+        "command": [
+          "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\evaluate-prototype.ps1 -OutputPath <out-of-repo>\\matrix-before.json   # with the branch changes stashed",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\evaluate-prototype.ps1 -OutputPath <out-of-repo>\\matrix-refactor.json  # with them restored",
+          "diff <out-of-repo>\\matrix-before.json <out-of-repo>\\matrix-refactor.json"
+        ],
+        "result": "no difference"
+      },
+      "perParty": {
+        "baseline/20260726": {"refusals": 41, "named": 24, "other": 6, "nothing": 11},
+        "baseline/20260727": {"refusals": 9, "named": 2, "other": 7, "nothing": 0},
+        "baseline/20260728": {"refusals": 17, "named": 8, "other": 3, "nothing": 6},
+        "prepared/20260726": {"refusals": 20, "named": 0, "other": 20, "nothing": 0},
+        "prepared/20260727": {"refusals": 69, "named": 30, "other": 38, "nothing": 1},
+        "prepared/20260728": {"refusals": 13, "named": 4, "other": 9, "nothing": 0}
+      },
+      "matrix": {"refusals": 169, "named": 68, "other": 83, "nothing": 18, "false": 101},
+      "reading": "Three refusals in five name work the creature would not have taken. On prepared/20260726 not one of the twenty refusals is true. The refusal count itself agrees with the one PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next already prints from the canonical event log (41/9/17 and 20/69/13), so the probe is counting the same refusals the player reads and not a second population."
+    }
+  ]
+}

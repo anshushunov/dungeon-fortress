@@ -154,6 +154,62 @@ public sealed class PrototypeWorld
         CurrentTick >= PrototypeTuning.SessionTicks || _sessionOutcome is not null;
 
     /// <summary>
+    /// Diagnostic only, and off by default: with it on, every tick additionally
+    /// resolves the same job matching <b>as if memory of place did not exist</b>,
+    /// and publishes what each creature would have been given through
+    /// <see cref="MemoryProbes"/>.
+    ///
+    /// <para>
+    /// It exists because Issue #125 states its criterion as a counterfactual —
+    /// "the same tick, run with memory switched off, gives this creature the job
+    /// the refusal names" — and a counterfactual cannot be measured by playing
+    /// the party twice. The second party diverges on the first tick where memory
+    /// changed anything, and from there on the two runs are different worlds, so
+    /// "the same tick" no longer exists to compare. Resolved inside the tick it
+    /// is exact, and it costs one extra matching pass, which is why play, the
+    /// load stage and the canonical runs leave it off.
+    /// </para>
+    ///
+    /// <para>
+    /// It writes nothing. The canonical snapshot, the event log and the checksum
+    /// are the same whether it is on or off, and
+    /// <c>PrototypeMemoryTests.The_counterfactual_probe_changes_nothing_the_party_does</c>
+    /// is the check that says so rather than the comment.
+    /// </para>
+    /// </summary>
+    public bool TrackMemoryFreeMatching { get; set; }
+
+    /// <summary>
+    /// For the tick just stepped: every creature that either refused work by
+    /// memory of place or would have been given work with memory switched off.
+    /// Always empty unless <see cref="TrackMemoryFreeMatching"/> is on.
+    /// </summary>
+    public IReadOnlyList<MemoryProbe> MemoryProbes => _memoryProbe;
+
+    private IReadOnlyList<MemoryProbe> _memoryProbe = [];
+
+    /// <summary>
+    /// One creature's counterfactual for one tick: the job its refusal by memory
+    /// named, and the job the same tick would have given it had memory of place
+    /// not existed. Either half can be absent.
+    ///
+    /// <para>
+    /// It is diagnostic and deliberately not part of
+    /// <see cref="PrototypeSnapshot"/>: the canonical document says what the
+    /// world did, and what the world would have done under a rule it does not
+    /// have is a question, not a fact about the party.
+    /// </para>
+    /// </summary>
+    public sealed record MemoryProbe(
+        int CreatureId,
+        long? RefusedJobId,
+        JobKind? RefusedKind,
+        GridPoint? RefusedTarget,
+        long? MemoryFreeJobId,
+        JobKind? MemoryFreeKind,
+        GridPoint? MemoryFreeTarget);
+
+    /// <summary>
     /// Runs up to <paramref name="tickCount"/> ticks and stops early when the
     /// party ends. Stopping rather than throwing is what lets a caller say "play
     /// the whole session" without first knowing which tick it will end on.
@@ -1684,12 +1740,60 @@ public sealed class PrototypeWorld
             .Where(job => job.ReservedBy is null)
             .OrderBy(job => job.Id)
             .ToList();
-        var pairs = new List<MatchPair>();
         foreach (var creature in candidates)
         {
             creature.AvoidedThisTick = null;
         }
 
+        var pairs = CollectPairs(candidates, jobs, applyMemory: true);
+        RecordMemoryProbe(candidates, jobs);
+
+        // The refusal goes into the canonical log before anything is assigned, so
+        // that a creature which then takes other work still tells the domain what
+        // it would not do. `lastDecision` is overwritten a moment later by the job
+        // it did take, which is right: the panel answers "what is it doing", and
+        // the event feed answers "what happened".
+        foreach (var creature in candidates
+                     .Where(item => item.AvoidedThisTick is not null)
+                     .OrderBy(item => item.Id))
+        {
+            var avoided = creature.AvoidedThisTick!.Value;
+            RecordDecision(
+                creature,
+                AvoidanceReason(avoided.Place),
+                new Dictionary<string, int>
+                {
+                    ["placeX"] = avoided.Place.Place.X,
+                    ["placeY"] = avoided.Place.Place.Y,
+                    ["sinceTick"] = avoided.Place.Tick,
+                },
+                avoided.Kind,
+                avoided.Target);
+        }
+
+        ResolveMatching(pairs, apply: true);
+
+        foreach (var creature in candidates.Where(creature => creature.CurrentJob is null))
+        {
+            RecordWaitingReason(creature);
+        }
+    }
+
+    /// <summary>
+    /// Every (creature, job) pair this tick that the creature could actually
+    /// take, scored. One copy of the conditions, called twice: once for the
+    /// matching the party runs on, and once — only under
+    /// <see cref="TrackMemoryFreeMatching"/> — with
+    /// <paramref name="applyMemory"/> off, so that the counterfactual Issue #125
+    /// states its criterion in is measured against the same rules rather than
+    /// against a second implementation of them.
+    /// </summary>
+    private List<MatchPair> CollectPairs(
+        IReadOnlyList<CreatureState> candidates,
+        IReadOnlyList<JobState> jobs,
+        bool applyMemory)
+    {
+        var pairs = new List<MatchPair>();
         foreach (var creature in candidates)
         {
             foreach (var job in jobs)
@@ -1740,9 +1844,11 @@ public sealed class PrototypeWorld
                 // closes in a bunk and nowhere else, so a creature that refused
                 // the bunk it was carried to would be refusing to heal, which is
                 // not a decision about work at all.
-                if (job.Kind != JobKind.Rest && AvoidedPlace(creature, target) is { } avoided)
+                if (applyMemory &&
+                    job.Kind != JobKind.Rest &&
+                    AvoidedPlace(creature, target) is { } avoided)
                 {
-                    creature.AvoidedThisTick ??= (job.Kind, target, avoided);
+                    creature.AvoidedThisTick ??= (job.Kind, target, avoided, job.Id);
                     continue;
                 }
 
@@ -1775,29 +1881,19 @@ public sealed class PrototypeWorld
             }
         }
 
-        // The refusal goes into the canonical log before anything is assigned, so
-        // that a creature which then takes other work still tells the domain what
-        // it would not do. `lastDecision` is overwritten a moment later by the job
-        // it did take, which is right: the panel answers "what is it doing", and
-        // the event feed answers "what happened".
-        foreach (var creature in candidates
-                     .Where(item => item.AvoidedThisTick is not null)
-                     .OrderBy(item => item.Id))
-        {
-            var (kind, target, place) = creature.AvoidedThisTick!.Value;
-            RecordDecision(
-                creature,
-                AvoidanceReason(place),
-                new Dictionary<string, int>
-                {
-                    ["placeX"] = place.Place.X,
-                    ["placeY"] = place.Place.Y,
-                    ["sinceTick"] = place.Tick,
-                },
-                kind,
-                target);
-        }
+        return pairs;
+    }
 
+    /// <summary>
+    /// The global matching of 8.2, run over a set of scored pairs. With
+    /// <paramref name="apply"/> it is the party's own matching and books
+    /// everything it decides; without it, nothing is written and the plan is
+    /// only returned, which is what makes the counterfactual measurable without
+    /// a second copy of the algorithm.
+    /// </summary>
+    private Dictionary<int, MatchPair> ResolveMatching(List<MatchPair> pairs, bool apply)
+    {
+        var chosen = new Dictionary<int, MatchPair>();
         while (pairs.Count > 0)
         {
             var selected = pairs
@@ -1811,7 +1907,7 @@ public sealed class PrototypeWorld
                 .ThenBy(pair => pair.Job.Id)
                 .ToArray();
 
-            if (!Assign(selected, competitors.FirstOrDefault()))
+            if (!(apply ? Assign(selected, competitors.FirstOrDefault()) : CanAssign(selected)))
             {
                 // Capacity is a property of the job, not of the volunteer: if the
                 // booking failed once it fails for everyone this tick.
@@ -1819,6 +1915,7 @@ public sealed class PrototypeWorld
                 continue;
             }
 
+            chosen[selected.Creature.Id] = selected;
             pairs.RemoveAll(pair =>
                 pair.Creature == selected.Creature ||
                 pair.Job == selected.Job ||
@@ -1826,10 +1923,54 @@ public sealed class PrototypeWorld
                  pair.InitialTarget == selected.InitialTarget));
         }
 
-        foreach (var creature in candidates.Where(creature => creature.CurrentJob is null))
+        return chosen;
+    }
+
+    /// <summary>
+    /// The one way <see cref="Assign"/> can refuse a pair it was handed, asked
+    /// without booking anything. Stone is the only kind of work whose
+    /// destination can vanish between being scored and being taken.
+    /// </summary>
+    private bool CanAssign(MatchPair selected) =>
+        selected.Job.Kind != JobKind.Haul ||
+        selected.Job.Resource != ResourceKind.Stone ||
+        (TryPlanStoneDestination(
+            selected.Job,
+            selected.Job.Origin,
+            selected.Job.Quantity,
+            out _,
+            out var amount) && amount > 0);
+
+    /// <summary>
+    /// The counterfactual of Issue #125, resolved inside the tick it belongs to:
+    /// what each creature would have been assigned had memory of place not
+    /// existed. Off unless <see cref="TrackMemoryFreeMatching"/> asks for it.
+    /// </summary>
+    private void RecordMemoryProbe(IReadOnlyList<CreatureState> candidates, IReadOnlyList<JobState> jobs)
+    {
+        if (!TrackMemoryFreeMatching)
         {
-            RecordWaitingReason(creature);
+            _memoryProbe = [];
+            return;
         }
+
+        var free = ResolveMatching(CollectPairs(candidates, jobs, applyMemory: false), apply: false);
+        _memoryProbe = candidates
+            .Select(creature =>
+            {
+                var refused = creature.AvoidedThisTick;
+                var choice = free.GetValueOrDefault(creature.Id);
+                return new MemoryProbe(
+                    creature.Id,
+                    refused?.JobId,
+                    refused?.Kind,
+                    refused?.Target,
+                    choice?.Job.Id,
+                    choice?.Job.Kind,
+                    choice?.InitialTarget);
+            })
+            .Where(probe => probe.RefusedJobId is not null || probe.MemoryFreeJobId is not null)
+            .ToArray();
     }
 
     private bool Assign(MatchPair selected, MatchPair? competitor)
@@ -4816,7 +4957,7 @@ public sealed class PrototypeWorld
         /// the memory and the job list, exactly like <see cref="WaitThisTick"/>,
         /// so it is not canonical state.
         /// </summary>
-        public (JobKind Kind, GridPoint Target, PrototypeRememberedPlace Place)? AvoidedThisTick { get; set; }
+        public (JobKind Kind, GridPoint Target, PrototypeRememberedPlace Place, long JobId)? AvoidedThisTick { get; set; }
 
         public int Affinity(JobKind kind)
         {
