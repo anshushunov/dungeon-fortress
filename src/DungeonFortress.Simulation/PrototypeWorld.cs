@@ -1479,8 +1479,33 @@ public sealed class PrototypeWorld
             : new MovementIntent(creature, target, next.Value);
     }
 
-    private static GridPoint? PrimaryDestination(CreatureState creature)
+    /// <summary>
+    /// Where this creature is trying to get to, as traffic arbitration sees it.
+    ///
+    /// A creature that broke has one too, and saying so is the whole of the fix
+    /// Issue #101 needed on this side. Flight stopped being a teleport and became
+    /// a walk, but a walk whose destination nobody published: <c>PrimaryDestination</c>
+    /// answered <c>null</c> for a runner, so it produced no
+    /// <see cref="MovementIntent"/>, took no part in the arbitration, and was
+    /// governed by nothing except "do not step onto an occupied tile". Nobody
+    /// stepped aside for it and no dependency cycle containing it was resolved.
+    /// Measured on the matrix: eleven of fifty-five flights on <c>prepared</c>
+    /// never moved the creature a single tile, one of them for sixty-seven ticks
+    /// — half a minute of a defender who announced panic and then stood in the
+    /// middle of a fight, which reads as broken rather than as frightened.
+    ///
+    /// The refuge is the destination, published exactly the way a worker's target
+    /// is, with no priority of its own: see <see cref="IsUrgentMover"/>, which a
+    /// runner deliberately does not join. Panic does not entitle anybody to the
+    /// corridor.
+    /// </summary>
+    private GridPoint? PrimaryDestination(CreatureState creature)
     {
+        if (creature.Mode == CreatureMode.Fled)
+        {
+            return FleeTile(creature);
+        }
+
         if (creature.IsMustering)
         {
             return creature.MusterNeedsRation
@@ -1581,7 +1606,7 @@ public sealed class PrototypeWorld
         return true;
     }
 
-    private static bool CanYield(CreatureState creature, bool allowUrgent)
+    private bool CanYield(CreatureState creature, bool allowUrgent)
     {
         return creature.TrafficTarget is null &&
             (allowUrgent ||
@@ -1996,6 +2021,13 @@ public sealed class PrototypeWorld
 
     private void ActCreatures()
     {
+        // Nerve is asked before anybody acts, so a defender that broke this tick
+        // leaves instead of striking, and everyone reads the same world when
+        // they answer. It sits here rather than in the raiders' subphase because
+        // fear is now a standing condition rather than a reflex to one event:
+        // the tick after an ally falls is the earliest anyone can react to it.
+        ApplyMorale();
+
         foreach (var creature in _creatures.OrderBy(creature => creature.Id))
         {
             if (creature.Mode == CreatureMode.Fighting)
@@ -2004,7 +2036,32 @@ public sealed class PrototypeWorld
                 continue;
             }
 
-            if (creature.Mode is CreatureMode.Fled or CreatureMode.Downed)
+            if (creature.Mode == CreatureMode.Fled)
+            {
+                // A runner honours a yield the same way a worker does, and for
+                // the same reason: `TryPlanYield` writes `chosen_traffic_yield`
+                // into the canonical log and books the tile for this tick. A mode
+                // that took the booking and then walked its own way would make
+                // both of those a lie — and it did, for tens of ticks a party,
+                // because a broken defender now spends real time in a corridor
+                // instead of vanishing to the far wall.
+                if (creature.TrafficTarget is { } refugeYield)
+                {
+                    if (Move(creature, refugeYield))
+                    {
+                        creature.YieldCount++;
+                        creature.LastYieldTick = CurrentTick;
+                    }
+
+                    creature.TrafficTarget = null;
+                    continue;
+                }
+
+                RunFromTheFight(creature);
+                continue;
+            }
+
+            if (creature.Mode == CreatureMode.Downed)
             {
                 continue;
             }
@@ -2219,7 +2276,6 @@ public sealed class PrototypeWorld
                     defender.Mode = CreatureMode.Downed;
                     CurrentWave()?.CountDefenderDowned();
                     RecordDecision(defender, "combat_downed", new Dictionary<string, int> { ["raiderId"] = raider.Id, ["damage"] = damage });
-                    ApplyMorale();
                 }
                 continue;
             }
@@ -2430,28 +2486,120 @@ public sealed class PrototypeWorld
         creature.Mode != CreatureMode.Downed &&
         creature.Satiety >= PrototypeTuning.CollapseThreshold;
 
+    /// <summary>
+    /// Whether each defender still holds, asked of every one of them separately
+    /// once a tick rather than of all of them at once when an ally goes down.
+    ///
+    /// The old shape was a single domain-wide count of the fallen against a
+    /// single threshold, evaluated only at the instant somebody dropped. Two
+    /// properties of that shape made panic a herd rather than a decision, and
+    /// neither was a mistake in the arithmetic. The pressure term was the same
+    /// number for everybody, so one casualty raised the bar for the whole
+    /// company at the same moment; and the resisting side — grit plus readiness
+    /// — barely moves during a fight, so whoever sat in the band the bar had
+    /// just crossed all broke on that one tick. Measured on the seed matrix
+    /// before this change: five and six of a nine-strong domain leaving on a
+    /// single tick, every wave.
+    ///
+    /// What replaces it is the same question asked from where the creature is
+    /// standing. Dread is what this defender can see: allies down within
+    /// <see cref="PrototypeTuning.MoraleWitnessRadius"/> and raiders pressing
+    /// within <see cref="PrototypeTuning.MoralePressRadius"/>. Nerve now carries
+    /// the defender's own wounds beside its character. Both sides change tick by
+    /// tick, and they change differently for each creature, because raiders pick
+    /// their target by distance and the wounded are not the same people as the
+    /// crowded ones. So the moment of breaking spreads by itself, out of facts
+    /// the snapshot already publishes, without a hidden counter and without a
+    /// combat trait — the latter is deliberately somebody else's work
+    /// (Issue #101 non-goals).
+    ///
+    /// Asking every tick rather than once per casualty also raises how often the
+    /// question can be answered "no", and that is a real cost rather than a
+    /// rounding error: at the weights the shape was first written with, the whole
+    /// line left every wave and `defendersDowned` fell to 0..1 a party. The
+    /// weights in <see cref="PrototypeTuning"/> were re-measured against that,
+    /// and what they are worth now is argued there.
+    ///
+    /// Distance is Manhattan rather than a path: the question is "what can I see
+    /// from here", and a breadth-first search per defender per fallen ally per
+    /// tick would buy a corner case at a price the whole party pays.
+    /// </summary>
     private void ApplyMorale()
     {
-        var downed = _creatures.Count(creature => creature.Mode == CreatureMode.Downed);
-        foreach (var creature in _creatures.Where(creature => creature.Mode == CreatureMode.Fighting).OrderBy(creature => creature.Id))
+        foreach (var creature in _creatures
+                     .Where(creature => creature.Mode == CreatureMode.Fighting)
+                     .OrderBy(creature => creature.Id))
         {
-            if (creature.Grit * PrototypeTuning.MoraleGritWeight + ComputeReadiness(creature) / PrototypeTuning.MoraleReadinessDivisor >=
-                PrototypeTuning.MoraleBase + PrototypeTuning.MoralePerDowned * downed)
+            var downedNear = _creatures.Count(other =>
+                other != creature &&
+                other.Mode == CreatureMode.Downed &&
+                Manhattan(creature.Position, other.Position) <= PrototypeTuning.MoraleWitnessRadius);
+            var raidersNear = _raiders.Count(raider =>
+                raider.Mode == RaiderMode.Raiding &&
+                Manhattan(creature.Position, raider.Position) <= PrototypeTuning.MoralePressRadius);
+            var nerve = creature.Grit * PrototypeTuning.MoraleGritWeight +
+                ComputeReadiness(creature) / PrototypeTuning.MoraleReadinessDivisor +
+                creature.Hp * PrototypeTuning.MoraleHealthWeight / creature.MaxHp;
+            var dread = PrototypeTuning.MoraleBase +
+                PrototypeTuning.MoralePerDowned * downedNear +
+                PrototypeTuning.MoralePerRaiderNear * raidersNear;
+            if (nerve >= dread)
             {
                 continue;
             }
+
             creature.Mode = CreatureMode.Fled;
-            creature.Position = FleeTile(creature);
             CurrentWave()?.CountDefenderFled();
-            RecordDecision(creature, "combat_fled_morale", new Dictionary<string, int> { ["downedAllies"] = downed });
+            RecordDecision(
+                creature,
+                "combat_fled_morale",
+                new Dictionary<string, int>
+                {
+                    ["downedAlliesNear"] = downedNear,
+                    ["raidersNear"] = raidersNear,
+                    ["hpPercent"] = creature.Hp * 100 / creature.MaxHp,
+                });
         }
     }
 
     /// <summary>
-    /// Where a broken defender ends up. It used to be one tile per creature id
+    /// A defender who broke leaves the fight on foot. The position used to be
+    /// assigned outright, which put a creature half a map away inside one tick
+    /// and gave the presentation layer a jump to interpolate — the one thing
+    /// Presentation pass A promised would never happen, because movement that
+    /// does not read as movement cannot be read at all.
+    ///
+    /// Running is therefore ordinary movement through <see cref="Move"/>: one
+    /// tile a tick, no tile shared with anybody, no swapping past a neighbour.
+    /// It also means the domain watches somebody run, which is the whole
+    /// observable point — a wave usually ends before the runner reaches the far
+    /// wall, and that is fine. Whoever is still on the way is put back to work
+    /// by <see cref="ResolveWave"/> from wherever the end of the fight found
+    /// them.
+    /// </summary>
+    private void RunFromTheFight(CreatureState creature)
+    {
+        // The same destination traffic arbitration planned around this tick, read
+        // from the same place, so that what was arbitrated and what is walked
+        // cannot drift apart.
+        if (PrimaryDestination(creature) is not { } refuge ||
+            creature.Position == refuge)
+        {
+            return;
+        }
+
+        _ = Move(creature, refuge);
+    }
+
+    /// <summary>
+    /// Where a broken defender is heading. It used to be one tile per creature id
     /// with nothing checking it was free; a creature that flees and then comes
     /// back to work after the wave makes that shortcut visible, because two
     /// creatures on one tile break movement for both.
+    ///
+    /// It is recomputed every tick of the flight rather than remembered, and it
+    /// is a pure function of the published world, so the run stays deterministic
+    /// and needs no field of its own in the canonical snapshot.
     /// </summary>
     private GridPoint FleeTile(CreatureState creature)
     {

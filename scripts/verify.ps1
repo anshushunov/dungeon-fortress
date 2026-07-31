@@ -777,10 +777,12 @@ $stageCatalog = [ordered]@{
             #   takes ten ticks) and none can yet have walked to the larder,
             #   stolen a load and walked back out, which needs about fifty;
             # - it is the richest frame for what this stage actually guards,
-            #   the goblin sprite diagnostics. Measured there: three raiders
-            #   alive on the map, ten drawn including the downed of wave 1,
-            #   six defenders fighting and one downed — all four sprite states
-            #   on screen at once.
+            #   the goblin sprite diagnostics. Re-measured after #101 changed
+            #   when defenders leave a fight: three raiders alive on the map,
+            #   ten drawn including the downed of wave 1, and on the domain
+            #   side five fighting, two in flight, one downed and one still
+            #   mustering — every sprite state the stage guards on screen at
+            #   once, and now the flight state as well.
             $raidResult = Invoke-GodotChecked `
                 -GodotPath $godot `
                 -Arguments @(

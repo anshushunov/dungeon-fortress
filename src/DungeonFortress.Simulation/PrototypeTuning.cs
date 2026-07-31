@@ -107,10 +107,51 @@ public static class PrototypeTuning
     public const int ArmourReadinessDivisor = 50;
     public const int DamageJitter = 1;
     public const int LightInjuryShare = 40;
+    // Nerve is measured per creature and dread is measured from where that
+    // creature is standing. The two new terms are what keep the moment of
+    // breaking personal: `MoraleGritWeight` and `MoraleReadinessDivisor` barely
+    // move during a fight, while a defender's own wounds and the crowd on top of
+    // it change from tick to tick and differently for each of them. A single
+    // domain-wide counter against a single threshold broke everyone who happened
+    // to sit in the same band on the same tick, which is what Issue #101 saw.
+    //
+    // Three of the weights were then re-measured on the seed matrix, because
+    // asking the question every tick instead of once per casualty changes what
+    // each of them is worth (tuning by ADR 0010; the numbers and the runs behind
+    // them are in the pull request of #101):
+    //
+    // - `MoralePerDowned` 10 → 14, the only one of the three that existed before.
+    //   The count it multiplies changed meaning: it used to be every ally the
+    //   domain had lost anywhere, which on a nine-strong domain runs 0..8, and it
+    //   is now the allies down inside `MoraleWitnessRadius`, which runs 0..2. A
+    //   local count needs a heavier weight to say the same thing about the same
+    //   fight.
+    // - `MoraleHealthWeight`, new, settled at 40. Own wounds are the largest thing
+    //   that differs between two defenders standing in the same fight, so this
+    //   term is what decides who leaves and who stays. Tried at 24 first, and at
+    //   24 nobody could hold: the whole line ran and `defendersDowned` fell to
+    //   0..1 a party, which quietly retired injuries, recovery and the cost of a
+    //   lost wave. At 40 a defender at full health holds and a hurt one does not.
+    // - `MoralePerRaiderNear`, new, settled at 5. Being crowded pushes, but less
+    //   than watching somebody drop. Tried at 7 first, and at 7 a defender with
+    //   two raiders in reach broke before a single ally had fallen, which turned
+    //   wave after wave into `overrun` — nobody stayed long enough to put a
+    //   raider down.
+    //
+    // The 24 and the 7 above are candidates weighed against 40 and 5 inside this
+    // change set, not values `main` ever ran: before #101 neither weight existed.
+    //
+    // `MoraleWitnessRadius` is what a defender can take in from where it stands;
+    // `MoralePressRadius` is `RaiderAttackRange` plus one — the raiders that can
+    // hit it this tick or the next.
     public const int MoraleGritWeight = 12;
     public const int MoraleReadinessDivisor = 2;
     public const int MoraleBase = 50;
-    public const int MoralePerDowned = 10;
+    public const int MoralePerDowned = 14;
+    public const int MoraleHealthWeight = 40;
+    public const int MoralePerRaiderNear = 5;
+    public const int MoraleWitnessRadius = 6;
+    public const int MoralePressRadius = 2;
     public const ulong DefaultSeed = 20_260_726UL;
 
     public const int MapWidth = 28;

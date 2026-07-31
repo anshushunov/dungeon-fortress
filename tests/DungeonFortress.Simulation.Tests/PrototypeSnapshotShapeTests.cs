@@ -264,6 +264,61 @@ public sealed class PrototypeSnapshotShapeTests
     }
 
     /// <summary>
+    /// The arguments of a reason code are the one part of the snapshot the
+    /// inventory above deliberately does not walk into: <c>$.events[].details</c>
+    /// is an open map, because the vocabulary of reason codes and what each of
+    /// them carries is tuning by ADR 0010 rather than a field of the schema.
+    ///
+    /// That has a consequence worth writing down rather than rediscovering.
+    /// Issue #101 rewrote the arguments of <c>combat_fled_morale</c>, the shape
+    /// above did not move, and so the versioning rule of
+    /// <c>docs/engineering/PROTOTYPE_HEADLESS.md</c> had to be applied by hand
+    /// rather than by a red test. It is applied here, and the first draft of it
+    /// got the answer right for the wrong reason, which is worth keeping:
+    ///
+    /// - <c>raidersNear</c> and <c>hpPercent</c> are new arguments. Additive.
+    /// - <c>downedAllies</c> was **not** additive and was not left alone. The old
+    ///   name counted every ally the domain had lost, anywhere, 0..8; the new
+    ///   quantity counts the ones this creature can see, 0..2. That is the
+    ///   textbook breaking change of the rule — "a field kept its name and began
+    ///   answering a different question" — so the key was renamed to
+    ///   <c>downedAlliesNear</c>. The old name now means nothing rather than
+    ///   something else, which is the whole point of the rule.
+    ///
+    /// <c>PrototypeCanonical.SchemaVersion</c> stays at 3 regardless, and not by
+    /// exception: <c>$.events[].details</c> is not a field of the schema at all,
+    /// and the composition of a reason code is tuning by ADR 0010. The rename is
+    /// what makes that argument honest instead of merely convenient.
+    ///
+    /// This test is what stops the change from being invisible: it pins the
+    /// arguments of the one reason code the change touched, so removing or
+    /// renaming one of them is a red test and a decision rather than a silent
+    /// edit. It does not pin the vocabulary at large — that is still tuning.
+    /// </summary>
+    [Fact]
+    public void The_reason_code_for_a_broken_defender_carries_the_arguments_recorded_for_it()
+    {
+        var run = PrototypeScenario.Run(LoadFixture("baseline"), PrototypeTuning.SessionTicks);
+        using var document = JsonDocument.Parse(run.CanonicalEventLog);
+
+        var flights = document.RootElement
+            .GetProperty("events")
+            .EnumerateArray()
+            .Where(@event => @event.GetProperty("reasonCode").GetString() == "combat_fled_morale")
+            .ToArray();
+
+        Assert.NotEmpty(flights);
+        Assert.All(flights, flight => Assert.Equal(
+            ["downedAlliesNear", "hpPercent", "raidersNear"],
+            flight.GetProperty("details")
+                .EnumerateObject()
+                .Select(argument => argument.Name)
+                .Order(StringComparer.Ordinal)
+                .ToArray()));
+        Assert.Equal(ShapeRecordedForSchemaVersion, PrototypeCanonical.SchemaVersion);
+    }
+
+    /// <summary>
     /// The event log is the second canonical document and carries the same
     /// version. It is checked here so that a bump cannot leave it behind: state
     /// and event log are read together or not at all.
