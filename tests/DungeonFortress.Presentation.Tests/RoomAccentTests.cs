@@ -109,6 +109,28 @@ public sealed class RoomAccentTests
     }
 
     /// <summary>
+    /// Half a room forbidden is not a forbidden room: the crew can still use the
+    /// part that is left.
+    ///
+    /// This test exists because of a hole the mutation rule found rather than
+    /// because it was foreseen. Turning <c>All</c> into <c>Any</c> on the forbidden
+    /// rung left every check in this file green: the swept session only ever
+    /// painted <c>Forbidden</c> over a whole room, where the two words agree. The
+    /// partial case is now both here and inside the sweep.
+    /// </summary>
+    [Fact]
+    public void A_partly_forbidden_room_still_reads_as_working()
+    {
+        var view = View(
+            4,
+            new ZonePaintCommand(1, ZoneKind.Watch, [EmptyFloorA, EmptyFloorB]),
+            new SetPriorityCommand(1, JobKind.Watch, 2),
+            new ZonePaintCommand(2, ZoneKind.Forbidden, [EmptyFloorA]));
+
+        Assert.Equal(RoomAccent.Ready, MapAccents.Room(view, Room(view, "watch@25,6")));
+    }
+
+    /// <summary>
     /// The sweep. On every tick where nothing is waiting, the ladder walked in the
     /// presentation layer has to give the same answer as the world's own status
     /// code — which is what makes repeating the ladder safe rather than a second
@@ -153,16 +175,18 @@ public sealed class RoomAccentTests
 
     /// <summary>
     /// A session that reaches every rung: a watch post switched off and then on, a
-    /// gym painted with nothing in it, and a room shut by a <c>Forbidden</c> paint
-    /// and opened again. Without it a sweep that only ever saw "ready" would prove
-    /// nothing at all.
+    /// gym painted with nothing in it, and a room forbidden by halves — one cell
+    /// first, then both, then released. Without it a sweep that only ever saw
+    /// "ready" would prove nothing at all, and without the half-forbidden stretch
+    /// it could not tell <c>All</c> from <c>Any</c>.
     /// </summary>
     internal static PrototypeCommand[] SweptRooms() =>
     [
         new ZonePaintCommand(5, ZoneKind.Watch, [EmptyFloorA, EmptyFloorB]),
         new ZonePaintCommand(15, ZoneKind.TrainingGround, [EmptyFloorC]),
         new SetPriorityCommand(30, JobKind.Watch, 2),
-        new ZonePaintCommand(50, ZoneKind.Forbidden, [EmptyFloorA, EmptyFloorB]),
+        new ZonePaintCommand(40, ZoneKind.Forbidden, [EmptyFloorA]),
+        new ZonePaintCommand(50, ZoneKind.Forbidden, [EmptyFloorB]),
         new ZoneEraseCommand(80, ZoneKind.Forbidden, [EmptyFloorA, EmptyFloorB]),
     ];
 }
