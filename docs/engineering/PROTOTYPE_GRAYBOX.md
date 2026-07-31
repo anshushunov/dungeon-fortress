@@ -1,7 +1,7 @@
 # Godot graybox — Prototype 1
 
 Status: active
-Source: Issues #10–#12, #24, #26, #28, #36, #48, #55, #58, #79, #83
+Source: Issues #10–#12, #24, #26, #28, #36, #48, #49, #55, #58, #79, #83, #86
 
 The graybox is the visual, three-quarter projection of the headless Prototype 1
 economy and raid on its unchanged orthogonal grid. It starts with the `baseline`
@@ -16,10 +16,12 @@ hold the HUD text at all — at its worst moment the side column needs about 33
 lines of explanation and 540 px offers about 29, which is the deficit Issue #28
 measured and Issue #36 cleared.
 
-`run-game.ps1` therefore has no `-FrameSize` or `-UiScale` default. A launch
-without them asks the screen: the window takes 90 % of the usable area of the
-screen it opens on, and the UI scale is the largest of `1`, `1.25`, `1.5`,
-`1.75`, `2` at which the authored rectangle still fits that frame. The rule, its
+`run-game.ps1` therefore has no `-FrameSize`, `-UiScale` or `-CameraZoom`
+default. A launch without them asks the screen and the layout: the window takes
+90 % of the usable area of the screen it opens on, the UI scale is the largest of
+`1`, `1.25`, `1.5`, `1.75`, `2` at which the authored rectangle still fits that
+frame, and the camera starts at the largest declared level at which the whole map
+still fits the world viewport. The rule, its
 measurements and what happens without a screen are in
 [`ENVIRONMENT_SETUP.md`](ENVIRONMENT_SETUP.md#стартовый-кадр-и-масштаб-интерфейса).
 A reproducible capture never reaches that rule: it names its exact frame rather
@@ -92,8 +94,17 @@ affordances rather than game actions.
 
 The wheel steps only through the five declared zoom levels. At `0.5` the whole
 28×16 ownership grid fits in the default world viewport; `2` is the detail view.
-The launcher starts at `0.75`, which keeps the whole fortress legible while
-making the 40 px tile materially larger than the former 22 px tile.
+
+`run-game.ps1` has no `-CameraZoom` default either. A launch without one starts
+at the largest declared level at which the whole ownership map still fits the
+world viewport the HUD reserved — `0.75` in the authored 1280x720 frame, `1.5` in
+the owner's maximized one. The fixed `0.75` it used to pass was chosen for the
+small frame, and on a large window it left a 1120×640 map drawn at 1:1 in the
+middle of a viewport twice its size: the second half of Issue #86. A resize
+re-derives it, **until the player turns the wheel** — from that moment the zoom
+is theirs and only the HUD scale keeps following the window. An explicit
+`-CameraZoom` is an override the rule never touches, and a capture must name one.
+
 Pan stops when the camera focus reaches the center of an edge tile. This keeps
 the focus on the ownership map without cancelling movement at overview zooms
 where the whole map fits in the world viewport.
@@ -908,8 +919,10 @@ the manifest records.
 
 A screenshot made by calling Godot directly is rejected unless all five
 pixel-affecting inputs are explicit: `--tile-size`, `--camera-zoom`,
-`--camera-position`, `--ui-scale` and `--frame-size`. `run-game.ps1` always
-supplies them. The project remains `canvas_items` + `expand`; for an explicit
+`--camera-position`, `--ui-scale` and `--frame-size`. `run-game.ps1` passes every
+one it was given and refuses a `-ScreenshotPath` without `-CameraZoom` before
+restore and build, so a capture can never inherit the zoom the automatic rule
+picked for this window. The project remains `canvas_items` + `expand`; for an explicit
 frame the launcher also makes that frame the logical rendering size, so
 1600x900 at zoom 1 exposes more world than 1280x720 instead of scaling the same
 1280x720 rectangle. An ordinary interactive window resize synchronizes the
@@ -997,17 +1010,19 @@ and each legend row. It is measured against the rectangle the layout produced,
 never against a window constant, because ADR 0008 removes the fixed frame.
 
 **It runs in `_Ready`, on every entry point, at the live frame/UI-scale pair plus
-six fixed pairs.** Since the HUD became a Control tree the measurement is only
+seven fixed pairs.** Since the HUD became a Control tree the measurement is only
 meaningful *after* a layout pass,
 which is the opposite of what the old absolute layout needed: a container hands a
 label its size, so that size is the designed one and an unclipped label can no
 longer re-expand to its own content. Godot sorts containers on a deferred pass, so
 `LayoutHud()` notifies the subtree and gets the same placement a frame would
 produce, synchronously. It then repeats the whole check at 1280x720@1,
-1366x768@1, 1600x900@1, 1024x768@1, 1920x1080@1.25 and 2048x1440@2, so "the
-layout follows the viewport and UI scale" is a checked claim rather than an
-intention — a guard that only ever saw one pair cannot tell a responsive layout
-from a lucky one.
+1366x768@1, 1600x900@1, 1024x768@1, 1920x1080@1.25, 2048x1440@2 and
+3044x1722@2, so "the layout follows the viewport and UI scale" is a checked claim
+rather than an intention — a guard that only ever saw one pair cannot tell a
+responsive layout from a lucky one. The last pair is the owner's maximized client
+area at the scale the automatic rule gives it, and until Issue #86 no check had
+ever measured a frame that large.
 
 The Godot stage also injects an 80-line inspector at 1024x768@1 and requires the
 guard to emit a structured error and exit 1. This negative proof pins the
@@ -1022,6 +1037,67 @@ Every structured output carries `labelFit`, now shaped as the live `viewport`, t
 `checkedViewports`, and a `labels` array with `neededLines`, `visibleLines`,
 `hardLines`, `width` and `height` per label. A run therefore states what the guard
 had to work with instead of the guard being trusted.
+
+### HUD readability guard
+
+Fitting and being readable are different questions, and until Issue #86 only the
+first one had a check. On a 3044x1722 client area at UI scale 1 every line fitted
+its rectangle and the legend was drawn at eight physical pixels; the overflow
+guard was green and the interface was unusable.
+
+The rule is engine-free and lives in
+`src/DungeonFortress.Presentation/HudReadability.cs`, per
+[ADR 0011](../decisions/0011-presentation-layer-without-engine.md). It has two
+halves:
+
+| Rule | What it says | Where it bites |
+|---|---|---|
+| physical floor | no HUD text may be drawn smaller than the smallest size the HUD is authored with at the frame it is authored for — 8 px | a legend row re-authored smaller, or an automatic scale below 1 |
+| density ceiling | `logicalDensity` — how many authored 1280x720 rectangles the frame is worth, divided by the UI scale — may not exceed 1.25 while the scale can still rise | a window that grew without the HUD scale following it, which is the defect verbatim: 3044x1722 at scale 1 measures 2.38 |
+
+1.25 is not a taste. It is the largest ratio between two neighbouring automatic
+scale steps, so a policy that always picks the largest step a frame allows can
+never exceed it, and a change to those steps that breaks the property fails
+instead of surprising someone with a large monitor. Past scale 2 nothing can rise
+further, so a frame that reached the ceiling is excused **by name** rather than
+silently.
+
+The adapter measures and calls, nothing more: `HudTextSizes()` reads
+`GetThemeFontSize` off the live labels, toolbar buttons and hotkey badges, and
+`AssertHudTextReadable()` hands the result to the policy on every entry point.
+That is what makes the guard react to a change in the HUD rather than only to a
+change in its own constants.
+
+The policy is held against the supported frame matrix at the scale the automatic
+rule would choose for each frame — not against the run's own pair, because an
+explicit `--ui-scale` is an override a capture declares on purpose, including the
+deliberately small ones `verify.ps1` uses. It ends by requiring the pair Issue #86
+was opened about to still be refused, so relaxing the ceiling into decoration
+fails every entry point.
+
+Measured on the frames that matter, with today's 8 px smallest authored text:
+
+| Frame | Automatic UI scale | Logical density | Smallest HUD text |
+|---|---|---|---|
+| 1280x720 (authored) | 1 | 1.00 | 8 px |
+| 1920x1080 | 1.5 | 1.00 | 12 px |
+| 2560x1440 | 2 | 1.00 | 16 px |
+| 3044x1722 (owner, maximized) | 2 | 1.19 | 16 px |
+| 3840x2160 | 2 (ceiling) | 1.50 | 16 px |
+
+Every structured output carries these numbers as `view.hudReadability`: the
+thresholds, the live frame's scale, density and smallest physical text, the size
+of every measured piece of text, and the same measurement repeated over the whole
+supported matrix. A run on a laptop therefore still states what the owner's
+maximized window would get. The `godot` stage reads two of them and refuses a
+run where 1280x720 stops reporting 8 px at scale 1, or where 3044x1722 leaves the
+HUD anywhere in the 8–15 px band.
+
+`--smoke-hud-readability-regression` re-authors the first legend row at four
+pixels. Nothing about the text changes, so the overflow guard stays green and
+only readability can notice; the `godot` stage requires that run to exit 1. It is
+the exact counterpart of the overflow guard's own negative run, and together they
+are what replaced the inert `--strict-hud-fit` flag removed in Issue #49.
 
 Godot 4.7.1 `--headless` was suspected of degrading font metrics, which would make
 the guard vacuous. It does not: shaping, wrapping and font metrics are identical to

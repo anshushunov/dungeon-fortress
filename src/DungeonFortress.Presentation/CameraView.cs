@@ -218,6 +218,81 @@ public static class CameraView
     }
 
     /// <summary>
+    /// The whole automatic scale decision for one frame, including the refusal
+    /// to leave less than <paramref name="minimumLogical"/> logical pixels.
+    ///
+    /// <para>
+    /// This overload exists because the decision used to be half here and half
+    /// in the Godot adapter: the adapter asked for a scale, asked whether it
+    /// fitted, and simply <em>did nothing</em> when it did not — so a window
+    /// that started at scale 2 and was then dragged under the minimum logical
+    /// frame kept scale 2 and halved the HUD's logical area again. The result is
+    /// now a function of the frame alone, so there is no previous value left for
+    /// a resize to keep (Issue #86).
+    /// </para>
+    ///
+    /// <para>
+    /// The loop steps down rather than dropping straight to 1. With today's
+    /// constants those are the same answer, because the minimum logical frame is
+    /// smaller than the authored rectangle every step is chosen against; written
+    /// this way the two constants stay independent of each other.
+    /// </para>
+    /// </summary>
+    public static double AutomaticUiScale(ViewSize frame, ViewSize minimumLogical)
+    {
+        var fit = Math.Min(
+            frame.Width / DesignFrameSize.Width,
+            frame.Height / DesignFrameSize.Height);
+        var chosen = DefaultUiScale;
+        foreach (var step in AutomaticUiScaleSteps)
+        {
+            if (step <= fit + 1e-9 && FitsLogicalFrame(frame, step, minimumLogical))
+            {
+                chosen = step;
+            }
+        }
+
+        return chosen;
+    }
+
+    /// <summary>
+    /// The zoom a run starts at when it was not told one: the largest declared
+    /// level at which the whole ownership map still fits in the world viewport
+    /// it was given, and the smallest level when none of them does.
+    ///
+    /// <para>
+    /// The launcher used to hand every run the same fixed number, which is the
+    /// second half of Issue #86: the window grew, the world did not, and a map
+    /// 1120x640 world pixels wide sat in the middle of a 2200 px viewport
+    /// drawing at 1:1. Zoom is a pure function of the rectangle the map is drawn
+    /// into, so it belongs here rather than in the adapter, and an explicit
+    /// <c>--camera-zoom</c> never reaches it.
+    /// </para>
+    /// </summary>
+    public static double AutomaticZoom(ViewSize worldViewport, int tileSize)
+    {
+        var map = MapSize(tileSize);
+        if (!double.IsFinite(worldViewport.Width) || !double.IsFinite(worldViewport.Height))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(worldViewport),
+                "The world viewport must be finite.");
+        }
+
+        var fit = Math.Min(worldViewport.Width / map.Width, worldViewport.Height / map.Height);
+        var chosen = DiscreteZoomLevels[0];
+        foreach (var level in DiscreteZoomLevels)
+        {
+            if (level <= fit + 1e-9)
+            {
+                chosen = level;
+            }
+        }
+
+        return chosen;
+    }
+
+    /// <summary>
     /// Whether a frame at a UI scale leaves at least <paramref name="minimumLogical"/>
     /// logical pixels. The minimum belongs to the launch options rather than to
     /// the camera, so it is passed in rather than reached for.
@@ -230,8 +305,8 @@ public static class CameraView
         new(frame.Width / uiScale, frame.Height / uiScale);
 
     /// <summary>
-    /// Proves the properties of the two functions above over a fixed matrix of
-    /// real display sizes and returns how many assertions it made.
+    /// Proves the properties of the functions above over a fixed matrix of real
+    /// display sizes.
     ///
     /// It exists because this arithmetic would otherwise only ever run against
     /// whichever single display is in front of it: the machine that developed it
@@ -239,6 +314,14 @@ public static class CameraView
     /// Godot adapter calls it on every entry point, so every headless smoke,
     /// golden UI capture and screenshot in <c>verify.ps1</c> runs it — and it is
     /// engine-free, so a unit test can call it directly.
+    ///
+    /// It used to return how many assertions it had made, and a run printed that
+    /// number as <c>startupFramePolicyChecks</c>. Nothing compared it with
+    /// anything: review of PR #107 switched an assertion off, the run stayed
+    /// green and the number stayed 17. The guard is the throw; the evidence that
+    /// the throw is live is <c>CameraViewTests</c>, which makes it fire from both
+    /// directions. A count that only ever grows when the matrix grows was
+    /// decoration on top of that, so it is gone (Issue #86).
     ///
     /// 1. a chosen scale is one of the declared steps and inside the range an
     ///    explicit <c>--ui-scale</c> may use;
@@ -251,7 +334,7 @@ public static class CameraView
     /// 6. and <see cref="FitsLogicalFrame"/> rejects a pair that violates it,
     ///    because a guard never seen to fail is not evidence.
     /// </summary>
-    public static int AssertStartupFramePolicy(ViewSize minimumLogical)
+    public static void AssertStartupFramePolicy(ViewSize minimumLogical)
     {
         ViewSize[] screens =
         [
@@ -281,12 +364,10 @@ public static class CameraView
             new(3840, 2160),
         ];
 
-        var checks = 0;
         foreach (var screen in screens)
         {
             var frame = AutomaticFrameSize(screen);
             var scale = AutomaticUiScale(frame);
-            checks++;
 
             if (!AutomaticUiScaleSteps.Contains(scale) ||
                 scale < MinimumUiScale ||
@@ -330,7 +411,6 @@ public static class CameraView
         {
             var frame = AutomaticFrameSize(screen);
             var scale = AutomaticUiScale(frame);
-            checks++;
             if (previousFrame is { } earlierFrame && previousScale is { } earlierScale &&
                 (frame.Width < earlierFrame.Width || frame.Height < earlierFrame.Height ||
                  scale < earlierScale))
@@ -348,7 +428,6 @@ public static class CameraView
         // The smallest window this policy can open, asked for at the largest
         // scale an explicit --ui-scale may name: 640x360 logical, far under any
         // sane minimum. If this starts fitting, the guard has stopped guarding.
-        checks++;
         if (FitsLogicalFrame(DesignFrameSize, MaximumUiScale, minimumLogical))
         {
             throw new InvalidOperationException(
@@ -356,8 +435,6 @@ public static class CameraView
                 $"{Format(MaximumUiScale)}, which leaves less than {Format(minimumLogical)} " +
                 "logical pixels.");
         }
-
-        return checks;
     }
 
     private static string Format(double value) =>

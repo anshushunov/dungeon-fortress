@@ -389,7 +389,7 @@ $stageCatalog = [ordered]@{
     }
 
     godot = [pscustomobject]@{
-        Summary = "Godot host, sprite import, smoke, camera input, view-state checksum and frame pacing independence."
+        Summary = "Godot host, sprite import, smoke, camera input, HUD readability, view-state checksum and frame pacing independence."
         Body = {
             Initialize-GameHostBuild
 
@@ -469,6 +469,26 @@ $stageCatalog = [ordered]@{
                 ) `
                 -ExpectedErrorEvent "godot_headless_smoke" `
                 -MessagePattern "HUD loses text.*1024"
+
+            # Fitting and being readable are different questions. The run above
+            # proves the first guard reacts to text that does not fit; this one
+            # proves the second reacts to text that fits perfectly and is too
+            # small to read, which is the defect Issue #86 was opened about and
+            # the one no check could see.
+            Write-Host "Proving the readability policy rejects HUD text under the physical floor..."
+            $hudReadabilityFailure = Invoke-GodotExpectedFailure `
+                -GodotPath $godot `
+                -Arguments @(
+                    "--headless", "--resolution", "1280x720", "--path", $gameProjectPath,
+                    "--", "--smoke", "--smoke-hud-readability-regression",
+                    "--tile-size", "40",
+                    "--camera-zoom", "1",
+                    "--camera-position", "560,320",
+                    "--ui-scale", "1",
+                    "--frame-size", "1280x720"
+                ) `
+                -ExpectedErrorEvent "godot_headless_smoke" `
+                -MessagePattern "HUD text is unreadable.*physical pixels"
 
             Write-Host "Proving a misplaced Camera2D fails the independent transform check..."
             $cameraTransformFailure = Invoke-GodotExpectedFailure `
@@ -583,6 +603,45 @@ $stageCatalog = [ordered]@{
                 throw "Tile-relative goblin art is not readable across overview, base and detail views."
             }
 
+            # HUD text is measured in the same spirit as the goblin above: the
+            # run states how many physical pixels its smallest text ends up
+            # being, on its own frame and on every supported one. The authored
+            # 1280x720 pair has to stay exactly where it was, and the owner's
+            # maximized 3044x1722 has to leave the 8-15 px band Issue #86 was
+            # opened about.
+            Write-Host "Checking the physical size of HUD text on the supported frame matrix..."
+            $baseReadability = $viewEvents["base"].view.hudReadability
+            if ([double]$baseReadability.uiScale -ne 1 -or
+                [double]$baseReadability.logicalDensity -ne 1 -or
+                [double]$baseReadability.smallestPhysicalTextPixels -ne 8) {
+                throw (
+                    "The authored 1280x720 frame no longer reports UI scale 1, density 1 and " +
+                    "8 px smallest HUD text: it reports scale " +
+                    "$($baseReadability.uiScale), density $($baseReadability.logicalDensity) " +
+                    "and $($baseReadability.smallestPhysicalTextPixels) px."
+                )
+            }
+            $ownerFrame = @($baseReadability.checkedFrames | Where-Object {
+                [double]$_.frame[0] -eq 3044 -and [double]$_.frame[1] -eq 1722
+            })
+            if ($ownerFrame.Count -ne 1) {
+                throw (
+                    "The readability matrix no longer measures the owner's maximized 3044x1722 " +
+                    "frame, which is the one Issue #86 was reported on."
+                )
+            }
+            $ownerSmallestTextPixels = [double]$ownerFrame[0].smallestPhysicalTextPixels
+            if ($ownerSmallestTextPixels -lt 16 -or
+                [double]$ownerFrame[0].uiScale -ne 2 -or
+                [double]$ownerFrame[0].logicalDensity -gt 1.25) {
+                throw (
+                    "At 3044x1722 the automatic policy leaves HUD text at " +
+                    "$ownerSmallestTextPixels physical pixels (UI scale " +
+                    "$($ownerFrame[0].uiScale), density $($ownerFrame[0].logicalDensity)). " +
+                    "Issue #86 is 8-15 px text on exactly that frame."
+                )
+            }
+
             # Rendering was separated from the tick, so the simulation must not be able to
             # tell. The same fixture is driven through the real _Process loop at two frame
             # rates and both have to land on the checksum a frameless replay produces.
@@ -599,6 +658,11 @@ $stageCatalog = [ordered]@{
                 CameraExitCode = $cameraResult.ExitCode
                 InvalidViewFailuresChecked = $invalidViewCases.Count
                 HudGuardRegressionExitCode = $hudGuardFailure.ExitCode
+                HudReadabilityRegressionExitCode = $hudReadabilityFailure.ExitCode
+                HudSmallestPhysicalTextPixels = [pscustomobject]@{
+                    Authored = [double]$baseReadability.smallestPhysicalTextPixels
+                    OwnerMaximized = $ownerSmallestTextPixels
+                }
                 CameraTransformRegressionExitCode = $cameraTransformFailure.ExitCode
                 CameraInputChecks = [int]$cameraEvent.view.cameraInputChecks
                 CameraTransformChecks = [int]$cameraEvent.view.cameraTransformChecks
@@ -907,6 +971,10 @@ try {
         $summary["godotCameraExitCode"] = $godotStageResult.CameraExitCode
         $summary["invalidViewFailuresChecked"] = $godotStageResult.InvalidViewFailuresChecked
         $summary["hudGuardRegressionExitCode"] = $godotStageResult.HudGuardRegressionExitCode
+        $summary["hudReadabilityRegressionExitCode"] =
+            $godotStageResult.HudReadabilityRegressionExitCode
+        $summary["hudSmallestPhysicalTextPixels"] =
+            $godotStageResult.HudSmallestPhysicalTextPixels
         $summary["cameraTransformRegressionExitCode"] =
             $godotStageResult.CameraTransformRegressionExitCode
         $summary["cameraInputChecks"] = $godotStageResult.CameraInputChecks

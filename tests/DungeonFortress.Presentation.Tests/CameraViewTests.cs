@@ -199,6 +199,146 @@ public sealed class CameraViewTests
     }
 
     [Fact]
+    public void The_startup_frame_policy_holds_over_every_display_it_names()
+    {
+        CameraView.AssertStartupFramePolicy(ViewLaunchOptions.MinimumLogicalFrameSize);
+    }
+
+    [Fact]
+    public void The_startup_frame_policy_fails_when_a_frame_stops_leaving_enough_logical_room()
+    {
+        // The first of two directions. Until PR #110 there was no test project
+        // that could reference this at all, so the only evidence the guard was
+        // alive was a count printed next to it — which is exactly the kind of
+        // evidence Issue #86 asked to be replaced with this.
+        var failure = Assert.Throws<InvalidOperationException>(
+            () => CameraView.AssertStartupFramePolicy(new ViewSize(4000, 3000)));
+
+        Assert.Contains("logical pixels", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_startup_frame_policy_fails_when_the_minimum_stops_rejecting_anything()
+    {
+        // The other direction: a minimum so small that the smallest window this
+        // policy can open would pass at the largest scale. The guard's own
+        // closing clause has to notice.
+        var failure = Assert.Throws<InvalidOperationException>(
+            () => CameraView.AssertStartupFramePolicy(new ViewSize(1, 1)));
+
+        Assert.Contains("accepted", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_shrinking_window_never_keeps_the_automatic_scale_of_the_larger_one()
+    {
+        // The resize sequence a review measured on the owner's screen, plus a
+        // frame under the minimum logical rectangle at the end. That last one is
+        // the defect: the adapter used to ask for a scale, find that the pair
+        // did not fit, and leave the previous larger scale in place, so a window
+        // dragged small halved the HUD's logical area a second time.
+        var minimum = ViewLaunchOptions.MinimumLogicalFrameSize;
+        (ViewSize Frame, double Scale)[] sequence =
+        [
+            (new ViewSize(2764, 1641), 2.0),
+            (new ViewSize(3072, 1779), 2.0),
+            (new ViewSize(1774, 1229), 1.25),
+            (new ViewSize(1000, 700), 1.0),
+            (new ViewSize(1280, 720), 1.0),
+        ];
+
+        foreach (var (frame, expected) in sequence)
+        {
+            Assert.Equal(expected, CameraView.AutomaticUiScale(frame, minimum));
+        }
+
+        // And the property that makes the sequence above impossible to break by
+        // forgetting a branch: the scale is a function of the frame alone, so
+        // there is no earlier value for a resize to keep.
+        Assert.Equal(
+            CameraView.AutomaticUiScale(new ViewSize(1000, 700), minimum),
+            CameraView.AutomaticUiScale(new ViewSize(1000, 700), minimum));
+    }
+
+    [Fact]
+    public void The_startup_zoom_shows_the_whole_map_in_the_world_viewport_it_is_given()
+    {
+        var map = CameraView.MapSize(CameraView.DefaultTileSize);
+
+        for (var width = 400.0; width <= 3000.0; width += 37.0)
+        {
+            var viewport = new ViewSize(width, width * 0.6);
+            var zoom = CameraView.AutomaticZoom(viewport, CameraView.DefaultTileSize);
+
+            Assert.Contains(zoom, CameraView.ZoomLevels);
+            if (zoom > CameraView.ZoomLevels[0])
+            {
+                Assert.True(
+                    map.Width * zoom <= viewport.Width + 1e-9 &&
+                        map.Height * zoom <= viewport.Height + 1e-9,
+                    $"Zoom {zoom} pushes the map outside a {viewport.Width}x{viewport.Height} " +
+                    "world viewport.");
+                // And it is the largest such level, so a bigger window really
+                // does draw a bigger world instead of leaving it in a corner.
+                var next = CameraView.StepZoom(zoom, 1);
+                Assert.True(
+                    next == zoom ||
+                        map.Width * next > viewport.Width + 1e-9 ||
+                        map.Height * next > viewport.Height + 1e-9,
+                    $"Zoom {zoom} is not the largest level a {viewport.Width}x{viewport.Height} " +
+                    "world viewport allows.");
+            }
+        }
+    }
+
+    [Fact]
+    public void The_startup_zoom_grows_with_the_window_instead_of_staying_at_one()
+    {
+        // Issue #86, second half. The world viewports below are the rectangles
+        // the HUD reserves at 1280x720 and at the owner's maximized 3044x1722:
+        // the launcher used to draw the map at 1:1 in both, so on the large one
+        // a 1120x640 map sat in the middle of a viewport twice its size.
+        var baseline = CameraView.AutomaticZoom(new ViewSize(864, 520), CameraView.DefaultTileSize);
+        var maximized = CameraView.AutomaticZoom(
+            new ViewSize(2212, 1322),
+            CameraView.DefaultTileSize);
+
+        Assert.Equal(0.75, baseline);
+        Assert.Equal(1.5, maximized);
+        Assert.True(maximized > baseline);
+    }
+
+    [Fact]
+    public void A_world_viewport_smaller_than_the_map_falls_back_to_the_overview_level()
+    {
+        Assert.Equal(
+            CameraView.ZoomLevels[0],
+            CameraView.AutomaticZoom(new ViewSize(320, 200), CameraView.DefaultTileSize));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => CameraView.AutomaticZoom(
+                new ViewSize(double.NaN, 200),
+                CameraView.DefaultTileSize));
+    }
+
+    [Fact]
+    public void The_player_keeps_a_zoom_they_chose_and_the_HUD_scale_keeps_following_the_window()
+    {
+        // Two adapter rules that cannot be expressed as values, checked as the
+        // structure of the routines that own them: the wheel turns the automatic
+        // zoom off for good, and a resize re-derives both.
+        var wheel = AdapterSource.Body("StepCameraZoom");
+        Assert.Contains("_cameraZoomIsAutomatic = false", wheel, StringComparison.Ordinal);
+
+        var automatic = AdapterSource.Body("ApplyAutomaticCameraZoom");
+        Assert.Contains("_cameraZoomIsAutomatic", automatic, StringComparison.Ordinal);
+        Assert.Contains("CameraView.AutomaticZoom", automatic, StringComparison.Ordinal);
+
+        var resize = AdapterSource.Body("OnViewportResized");
+        Assert.Single(AdapterSource.CallsTo(resize, "ApplyAutomaticCameraZoom"));
+        Assert.Contains("CameraView.AutomaticUiScale", resize, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void View_validation_messages_do_not_depend_on_the_process_culture()
     {
         var originalCulture = CultureInfo.CurrentCulture;

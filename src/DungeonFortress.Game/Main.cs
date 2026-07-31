@@ -49,6 +49,7 @@ public partial class Main : Node2D
     private Control? _timeStrip;
     private Control? _brushStrip;
     private readonly List<Button> _controlButtons = [];
+    private readonly List<Label> _hotkeyBadges = [];
     private readonly List<Label> _legendLines = [];
     private PrototypeCommandLog? _fixtureLog;
     private readonly List<PrototypeCommand> _playerCommands = [];
@@ -71,8 +72,11 @@ public partial class Main : Node2D
     // never does, because a capture has to declare every pixel-affecting value.
     private ViewSize? _autoFrameSize;
     private bool _uiScaleIsAutomatic;
+    // Same distinction as _uiScaleIsAutomatic, for the world rather than the
+    // HUD. It stops being true the moment the player turns the wheel: after
+    // that the zoom is theirs and no resize may take it back (Issue #86).
+    private bool _cameraZoomIsAutomatic;
     private ViewRect? _screenUsableRect;
-    private int _startupFramePolicyChecks;
     private bool _cameraPanning;
     private Vector2 _lastPanPointer;
     private int? _selectedCreatureId;
@@ -122,6 +126,12 @@ public partial class Main : Node2D
                 cameraTransformRegression;
             var hudGuardRegression =
                 arguments.Contains("--smoke-hud-guard-regression", StringComparer.Ordinal);
+            // The readability counterpart of the flag above: it re-authors a
+            // legend row below the physical floor, so verify.ps1 can require the
+            // readability policy to reject a HUD instead of trusting that it
+            // would (Issues #86 and #49).
+            var hudReadabilityRegression =
+                arguments.Contains("--smoke-hud-readability-regression", StringComparer.Ordinal);
             failureEventName = cameraSmoke
                 ? "godot_camera_smoke"
                 : controlsSmoke
@@ -148,8 +158,8 @@ public partial class Main : Node2D
             // number, which is what a reproducible frame needs and what
             // ViewLaunchOptions already demands from every capture.
             _uiScaleIsAutomatic = CommandLineArguments.Read(arguments, "--ui-scale") is null;
-            _startupFramePolicyChecks = CameraView.AssertStartupFramePolicy(
-                ViewLaunchOptions.MinimumLogicalFrameSize);
+            _cameraZoomIsAutomatic = CommandLineArguments.Read(arguments, "--camera-zoom") is null;
+            CameraView.AssertStartupFramePolicy(ViewLaunchOptions.MinimumLogicalFrameSize);
             ConfigureStartupFrame();
             var selectCreature = CommandLineArguments.ReadInt(arguments, "--select-creature");
             var selectCell = CommandLineArguments.Read(arguments, "--select-cell");
@@ -157,10 +167,6 @@ public partial class Main : Node2D
             var demoDig = arguments.Contains("--demo-dig", StringComparer.Ordinal);
             var demoStone = arguments.Contains("--demo-stone", StringComparer.Ordinal);
             var demoBuild = arguments.Contains("--demo-build", StringComparer.Ordinal);
-            // Holds the HUD to "every line fits", ignoring the deficit Issue #36
-            // still owns. verify.ps1 runs it and requires it to fail: that is what
-            // proves the guard reacts at all instead of passing on everything.
-            var strictHudFit = arguments.Contains("--strict-hud-fit", StringComparer.Ordinal);
             var requiresSprites = !headlessSmoke && !controlsSmoke && !cameraSmoke;
 
             // World sprites are sampled below 1x at the two overview zoom levels.
@@ -175,6 +181,10 @@ public partial class Main : Node2D
             // changes no code at all.
             LoadIcons();
             CreateHud();
+            // After the HUD, because the zoom is derived from the rectangle the
+            // layout reserves for the world, and before the camera, so the node
+            // is created at the zoom it will keep.
+            ApplyAutomaticCameraZoom();
             CreateCamera();
             LoadGoblinSprites();
             if (requiresSprites)
@@ -190,6 +200,11 @@ public partial class Main : Node2D
             if (hudGuardRegression)
             {
                 InjectHudGuardRegression();
+            }
+
+            if (hudReadabilityRegression)
+            {
+                InjectHudReadabilityRegression();
             }
 
             if (demoControls || controlsSmoke)
@@ -252,8 +267,13 @@ public partial class Main : Node2D
             // the rectangles the HUD was designed around. Later is too late: by the
             // time a frame is drawn an unclipped label has re-expanded to its own
             // content and the check would silently pass on anything.
-            AssertLabelsFit(strictHudFit);
+            AssertLabelsFit();
             AssertControlStripsFit();
+            // Fitting and being readable are different questions, and until
+            // Issue #86 only the first one had an answer. This one measures the
+            // fonts the labels above were actually given and hands them to the
+            // engine-free policy.
+            AssertHudTextReadable();
             ApplyCameraView();
             AssertRequestedFrameSize();
 
@@ -308,6 +328,10 @@ public partial class Main : Node2D
         if (!_cameraSynchronizedAfterLayout && _camera is not null && _worldViewport is not null)
         {
             LayoutHud(GetViewportRect().Size, _uiScale);
+            // Same re-derivation as on a resize, and for the same reason: this
+            // is the first moment the world rectangle is the one a frame will
+            // actually be drawn with.
+            ApplyAutomaticCameraZoom();
             ApplyCameraView();
             AssertCameraNodeMatchesFrame();
             _cameraSynchronizedAfterLayout = true;
@@ -1051,10 +1075,42 @@ public partial class Main : Node2D
 
         if (_uiScaleIsAutomatic)
         {
-            _uiScale = CameraView.AutomaticUiScale(frame);
+            _uiScale = CameraView.AutomaticUiScale(
+                frame,
+                ViewLaunchOptions.MinimumLogicalFrameSize);
         }
 
         AssertLogicalFrameFits(frame, _uiScale);
+    }
+
+    /// <summary>
+    /// Points the camera at the rectangle the HUD reserved for the world. It is
+    /// two lines because everything that could be decided was decided in
+    /// <see cref="CameraView.AutomaticZoom"/>; what is left is the measurement,
+    /// which needs the engine.
+    ///
+    /// The world viewport is measured through the live canvas transform rather
+    /// than as <c>_worldViewport.Size</c>: the HUD subtree is scaled by the UI
+    /// scale, so the Control's own size is in logical pixels while the camera
+    /// works in the frame's pixels, and mixing the two would zoom by the UI
+    /// scale a second time.
+    /// </summary>
+    private void ApplyAutomaticCameraZoom()
+    {
+        if (!_cameraZoomIsAutomatic || _worldViewport is null)
+        {
+            return;
+        }
+
+        var world = WorldViewportScreenRect();
+        if (world.Size.X <= 0 || world.Size.Y <= 0)
+        {
+            return;
+        }
+
+        _cameraZoom = CameraView.AutomaticZoom(
+            new ViewSize(world.Size.X, world.Size.Y),
+            _tileSize);
     }
 
     /// <summary>
@@ -1099,20 +1155,25 @@ public partial class Main : Node2D
         // leave the HUD at its launch-time scale, so a 3044x1722 client area
         // still drew 8 px legend text. An automatic scale follows the window it
         // was derived from; an explicit one never moves.
+        //
+        // The assignment is unconditional on purpose. It used to be guarded by
+        // "and the new pair fits the minimum logical frame", which turned a
+        // window dragged below that minimum into a window that kept the scale of
+        // the larger one it used to be — a second, quieter copy of the same
+        // defect. The decision now lives whole in CameraView.AutomaticUiScale,
+        // which answers for every frame including the ones under the minimum.
         if (_uiScaleIsAutomatic && _requestedFrameSize is null && _screenshotPath is null)
         {
-            var live = new ViewSize(size.X, size.Y);
-            var scale = CameraView.AutomaticUiScale(live);
-            if (CameraView.FitsLogicalFrame(
-                    live,
-                    scale,
-                    ViewLaunchOptions.MinimumLogicalFrameSize))
-            {
-                _uiScale = scale;
-            }
+            _uiScale = CameraView.AutomaticUiScale(
+                new ViewSize(size.X, size.Y),
+                ViewLaunchOptions.MinimumLogicalFrameSize);
         }
 
         LayoutHud(size, _uiScale);
+        // The world viewport moved with the HUD, so a run that never chose its
+        // own zoom re-derives it here. A run that did — because the player
+        // turned the wheel, or because --camera-zoom was declared — keeps it.
+        ApplyAutomaticCameraZoom();
         ApplyCameraView();
         QueueRedraw();
     }
@@ -1213,6 +1274,10 @@ public partial class Main : Node2D
 
     private void StepCameraZoom(int direction)
     {
+        // The player has taken the zoom over. From here a resize may still move
+        // the HUD scale, because that is legibility, but it may not move the
+        // world scale, because that is a decision somebody made.
+        _cameraZoomIsAutomatic = false;
         _cameraZoom = CameraView.StepZoom(_cameraZoom, direction);
         ApplyCameraView();
         QueueRedraw();
@@ -1553,6 +1618,10 @@ public partial class Main : Node2D
         button.AddChild(badge);
         badge.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         badge.OffsetRight = -2;
+        // Kept, because the badge carries the smallest font in the toolbar and
+        // the readability policy measures what is smallest rather than what is
+        // easy to reach.
+        _hotkeyBadges.Add(badge);
         return button;
     }
 
@@ -2150,6 +2219,15 @@ public partial class Main : Node2D
     }
 
     /// <summary>
+    /// Re-authors the first legend row at four pixels. Nothing about the text
+    /// changes, so the overflow guard stays green and only the readability
+    /// policy can notice — which is exactly the shape of the defect Issue #86
+    /// was opened about, and the reason a run with this flag is required to fail.
+    /// </summary>
+    private void InjectHudReadabilityRegression() =>
+        _legendLines[0].AddThemeFontSizeOverride("font_size", 4);
+
+    /// <summary>
     /// The adapter state the HUD text is allowed to depend on, gathered in one
     /// place. Everything else about this node — labels, viewport, brushes,
     /// pointer — stays on this side of the seam on purpose.
@@ -2358,6 +2436,10 @@ public partial class Main : Node2D
             new HudFitFrame(new Vector2(1024, 768), 1.0),
             new HudFitFrame(new Vector2(1920, 1080), 1.25),
             new HudFitFrame(new Vector2(2048, 1440), 2.0),
+            // The owner's maximized client area at the scale the automatic
+            // policy gives it: logical 1522x861, and the frame Issue #86 was
+            // opened about. The overflow guard had never measured it.
+            new HudFitFrame(new Vector2(3044, 1722), 2.0),
         }
         .DistinctBy(frame => (frame.LogicalViewport.X, frame.LogicalViewport.Y))
         .ToArray();
@@ -2402,17 +2484,18 @@ public partial class Main : Node2D
     /// and an unclipped label can no longer re-expand to its own content.
     /// <see cref="LayoutHud"/> forces that pass, so <c>_Ready</c> is still a valid
     /// place to run this on every entry point.
+    ///
+    /// <para>
+    /// It took a <c>strict</c> parameter and a <c>--strict-hud-fit</c> flag until
+    /// Issue #49: they used to switch off a recorded line deficit, PR #45 removed
+    /// the deficit, and both spent three Issues doing nothing at all. What the
+    /// flag was for — proving this check is able to fail — is now the negative
+    /// run in the <c>godot</c> stage of <c>verify.ps1</c>, which requires exit
+    /// code 1 at logical width 1024.
+    /// </para>
     /// </summary>
-    /// <param name="strict">
-    /// Kept so that the <c>--strict-hud-fit</c> flag parsed in <c>_Ready</c> still
-    /// compiles. There is no longer a recorded deficit to ignore — every panel
-    /// must hold all of its text on every run — so strict and ordinary runs are
-    /// the same check. Removing the now-inert flag touches <c>_Ready</c>, which
-    /// Issue #39 owns in parallel.
-    /// </param>
-    private void AssertLabelsFit(bool strict = false)
+    private void AssertLabelsFit()
     {
-        _ = strict;
         var live = GetViewportRect().Size;
         var failures = new List<string>();
         var terminal = TerminalSummaries();
@@ -2461,6 +2544,104 @@ public partial class Main : Node2D
                 ". Text that does not fit its rectangle is dropped or drawn over " +
                 "the panel below it.");
         }
+    }
+
+    /// <summary>
+    /// Every font the HUD draws text with, as the labels were actually given it.
+    /// Read rather than restated: a legend row re-authored at six pixels has to
+    /// change this list, which is what makes the engine-free policy react to a
+    /// change in the HUD instead of only to a change in itself.
+    /// </summary>
+    private IReadOnlyList<HudTextSize> HudTextSizes()
+    {
+        var sizes = new List<HudTextSize>();
+        foreach (var (name, label) in HudLabels())
+        {
+            if (label is not null)
+            {
+                sizes.Add(new HudTextSize(name, label.GetThemeFontSize("font_size")));
+            }
+        }
+
+        foreach (var button in _controlButtons)
+        {
+            sizes.Add(new HudTextSize(
+                $"control[{button.Name}]",
+                button.GetThemeFontSize("font_size")));
+        }
+
+        for (var index = 0; index < _hotkeyBadges.Count; index++)
+        {
+            sizes.Add(new HudTextSize(
+                $"hotkey[{index}]",
+                _hotkeyBadges[index].GetThemeFontSize("font_size")));
+        }
+
+        return sizes;
+    }
+
+    /// <summary>
+    /// The readability guard: measure here, decide in
+    /// <see cref="HudReadability"/>. It is held against the supported frame
+    /// matrix and the scale the automatic policy would choose for each frame,
+    /// not against this run's own pair, because an explicit <c>--ui-scale</c> is
+    /// an override a capture declares on purpose — including the deliberately
+    /// small ones <c>verify.ps1</c> uses to prove the frame does not reach
+    /// canonical state.
+    /// </summary>
+    private void AssertHudTextReadable() => HudReadability.AssertReadable(HudTextSizes());
+
+    /// <summary>
+    /// What the readability guard measured, published so a run states the
+    /// physical size of its smallest text instead of a reader inferring it from
+    /// a screenshot. This is the number Issue #86 was opened about: 8 px on a
+    /// 3044x1722 client area.
+    /// </summary>
+    private object? HudReadabilityFit()
+    {
+        if (_hudRoot is null)
+        {
+            return null;
+        }
+
+        var viewport = GetViewportRect().Size;
+        var frame = new ViewSize(viewport.X, viewport.Y);
+        var texts = HudTextSizes();
+        return new
+        {
+            minimumPhysicalTextPixels = HudReadability.MinimumPhysicalTextPixels,
+            maximumLogicalDensity = HudReadability.MaximumLogicalDensity,
+            uiScale = _uiScale,
+            logicalDensity = HudReadability.LogicalDensity(frame, _uiScale),
+            smallestPhysicalTextPixels =
+                HudReadability.SmallestPhysicalTextPixels(texts, _uiScale),
+            texts = texts
+                .Select(entry => (object)new
+                {
+                    name = entry.Name,
+                    logicalPixels = entry.LogicalPixels,
+                    physicalPixels =
+                        HudReadability.PhysicalTextPixels(entry.LogicalPixels, _uiScale),
+                })
+                .ToArray(),
+            // The same measurement on every supported frame, at the scale the
+            // automatic policy chooses there. A run on a laptop therefore still
+            // reports what the owner's maximized window would get.
+            checkedFrames = HudReadability.SupportedFrames
+                .Select(supported =>
+                {
+                    var automatic = CameraView.AutomaticUiScale(supported);
+                    return (object)new
+                    {
+                        frame = new[] { supported.Width, supported.Height },
+                        uiScale = automatic,
+                        logicalDensity = HudReadability.LogicalDensity(supported, automatic),
+                        smallestPhysicalTextPixels =
+                            HudReadability.SmallestPhysicalTextPixels(texts, automatic),
+                    };
+                })
+                .ToArray(),
+        };
     }
 
     /// <summary>
@@ -2554,6 +2735,9 @@ public partial class Main : Node2D
             // declare --frame-size and --ui-scale before anything else runs.
             frameMode = _requestedFrameSize is null ? "auto" : "explicit",
             uiScaleMode = _uiScaleIsAutomatic ? "auto" : "explicit",
+            // "auto" survives a resize and dies on the first turn of the wheel,
+            // so this field also answers "has the player chosen a zoom yet".
+            cameraZoomMode = _cameraZoomIsAutomatic ? "auto" : "explicit",
             autoFrameSize = _autoFrameSize is { } automatic
                 ? new[] { automatic.Width, automatic.Height }
                 : null,
@@ -2562,7 +2746,10 @@ public partial class Main : Node2D
             screenUsableRect = _screenUsableRect is { } usable
                 ? new[] { usable.X, usable.Y, usable.Width, usable.Height }
                 : null,
-            startupFramePolicyChecks = _startupFramePolicyChecks,
+            // What the readability policy measured on this frame and on every
+            // supported one. It replaces startupFramePolicyChecks, which counted
+            // assertions nothing compared with anything (Issue #86).
+            hudReadability = HudReadabilityFit(),
             worldViewport = world is { } worldRect
                 ? new[]
                 {
