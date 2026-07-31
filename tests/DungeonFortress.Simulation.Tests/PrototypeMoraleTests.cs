@@ -54,7 +54,7 @@ public sealed class PrototypeMoraleTests(ITestOutputHelper output)
     /// Chosen from the measurement, not from taste. On `origin/main` the largest
     /// cohort over the matrix was 6, 6 and 5 of nine on `baseline` and 2, 4 and 3
     /// on `prepared` — that is the herd the owner saw, and it fails this bound
-    /// twice over. With the personal check it is 2, 3, 2 and 1, 2, 1. Three is
+    /// twice over. With the personal check it is 1, 3, 2 and 1, 2, 1. Three is
     /// therefore both the honest edge of what a spread distribution produces and
     /// the point past which "a third of everyone at once" starts to read as one
     /// event rather than as several decisions.
