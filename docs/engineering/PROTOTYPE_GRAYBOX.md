@@ -645,6 +645,40 @@ current job, carried item, last reason and its structured numeric details. Cell
 inspection shows its zones and relevant jobs. Colored lines/dots are jobs;
 colored circle/square pairs and name labels distinguish all nine creatures.
 
+## Memory of place (Issue #117)
+
+A creature that broke or was put down remembers the tile it was standing on and
+will not start work within `T.memory_avoid_radius` of it again. Three things show
+that to the player, and none of them needs the log:
+
+- **the map.** Selecting a creature outlines the places it remembers: a ring and
+  a diagonal, amber for a broken nerve and red for a wound. `DrawRememberedPlaces`
+  in the adapter, declared in `WorldDrawOrder` and governed by
+  `OverlayMark.RememberedPlace`, which is `StrokeOnly` — the mark never fills,
+  because the whole reading is that somebody else is visibly still working on the
+  tile next to it. It is drawn for the selected creature only: nine creatures'
+  memories at once would be a map full of crosses saying nothing about anybody;
+- **the inspector**, under `WILL NOT WORK NEAR`: one line per place, newest
+  first, each naming the tile, the tick and which of the two things happened
+  there. It is on the panel and not only in the feed because the feed scrolls,
+  and the question "why is this one standing about" is asked long after;
+- **the event feed**, as a sentence. Since this step the feed no longer prints
+  reason codes at all: `DungeonFortress.Presentation.EventNarration` turns the
+  code plus its own `details`, `jobKind` and `target` into a sentence with the
+  creature's name in front of it.
+
+**The code did not go anywhere.** It is still what `lastDecision` and every
+entry of the canonical event log carry, which is an invariant of
+[ADR 0010](../decisions/0010-contract-invariants-and-tuning.md); the adapter
+reads it. A code the adapter has never been taught is refused rather than
+rendered as a code it knows — the same choice `HudText.WavePhase` makes about the
+end of a party, and for the same reason.
+
+The boundary this side of the seam is unchanged and the overlay respects it: the
+remembered places are read straight off `creatures[].rememberedPlaces` in the
+published snapshot, so the mark is a projection of facts and needs no tick to
+run.
+
 ## Excavation (Issue #24)
 
 `DIG [D]` marks internal rock for excavation; `CANCEL DIG [X]` withdraws a mark.
