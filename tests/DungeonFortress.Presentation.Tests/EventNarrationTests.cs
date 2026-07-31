@@ -101,7 +101,7 @@ public sealed class EventNarrationTests(ITestOutputHelper output)
         }
 
         Assert.Contains("nerve broke", panic, StringComparison.Ordinal);
-        Assert.Contains("put them down", wound, StringComparison.Ordinal);
+        Assert.Contains("put down", wound, StringComparison.Ordinal);
         Assert.NotEqual(panic, wound);
     }
 

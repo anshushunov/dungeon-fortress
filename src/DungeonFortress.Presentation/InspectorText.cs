@@ -42,7 +42,6 @@ public static class InspectorText
             var details = creature.LastDecision.Details.Count == 0
                 ? "none"
                 : string.Join(", ", creature.LastDecision.Details.Select(pair => $"{pair.Key}={pair.Value}"));
-            details = $"STATUS {HudText.CreatureLifeState(creature)} • HP {creature.Hp}/{creature.MaxHp}\n" + details;
             return
                 $"CREATURE #{creature.Id} · {creature.Name}\n\n" +
                 $"satiety {creature.Satiety}   fatigue {creature.Fatigue}\n" +
@@ -51,10 +50,9 @@ public static class InspectorText
                 $"job {(job is null ? "none" : $"#{job.JobId} {job.Kind}")}\n" +
                 $"carrying {(creature.Carrying is null ? "nothing" : $"{creature.CarryAmount} {creature.Carrying}")}\n" +
                 $"{DescribeCarrierRoute(creature, job, state.BuildSites)}" +
-                $"{DescribeMemory(creature)}\n" +
-                $"WHY\nt{creature.LastDecision.Tick} · " +
+                $"{DescribeMemory(creature)}" +
+                $"WHY t{creature.LastDecision.Tick} · {creature.LastDecision.ReasonCode}\n" +
                 $"{EventNarration.Sentence(creature.LastDecision.ReasonCode, creature.LastDecision.Details, creature.LastDecision.JobKind, creature.LastDecision.Target)}\n" +
-                $"{creature.LastDecision.ReasonCode}\n" +
                 $"{details}";
         }
 
@@ -190,6 +188,13 @@ public static class InspectorText
     /// player who asks "why is this one standing about" a hundred ticks after the
     /// wave needs the answer where they are looking. Empty for a creature that
     /// has been through nothing, which is most of them for most of a party.
+    ///
+    /// One line, and the newest place first. It was three lines with a heading
+    /// first, and the HUD overflow guard refused the frame: the panel fits
+    /// sixteen lines at 1280x720 and a creature carrying three memories needed
+    /// eighteen. The guard is right — text that does not fit is dropped or drawn
+    /// over the panel below — so the block is compact rather than the panel
+    /// taller.
     /// </summary>
     public static string DescribeMemory(PrototypeCreatureSnapshot creature)
     {
@@ -201,10 +206,8 @@ public static class InspectorText
 
         var places = creature.RememberedPlaces
             .OrderByDescending(place => place.Tick)
-            .Select(place =>
-                $"({place.Place.X},{place.Place.Y}) t{place.Tick} " +
-                (place.Cause == "wound" ? "put down here" : "nerve broke here"));
-        return "WILL NOT WORK NEAR\n" + string.Join("\n", places) + "\n";
+            .Select(place => $"({place.Place.X},{place.Place.Y}) t{place.Tick} {place.Cause}");
+        return "AVOIDS " + string.Join(" · ", places) + "\n";
     }
 
     /// <summary>

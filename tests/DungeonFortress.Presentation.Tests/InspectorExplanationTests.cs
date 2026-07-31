@@ -565,7 +565,12 @@ public sealed class InspectorExplanationTests
             $"CREATURE #{creature.Id} · {creature.Name} — ALIVE HP {creature.Hp}/{creature.MaxHp}\n\n",
             text,
             StringComparison.Ordinal);
-        Assert.Contains($"STATUS ALIVE • HP {creature.Hp}/{creature.MaxHp}\n", text, StringComparison.Ordinal);
+        // The status used to be repeated above the decision details as well. It
+        // was dropped with Issue #117: the inspector gained a line for what the
+        // creature will not go near and a line of plain English for its last
+        // decision, and the HUD overflow guard refuses a panel that needs more
+        // lines than it has. The header above already carries the same two facts.
+        Assert.DoesNotContain("STATUS ", text, StringComparison.Ordinal);
         // A selected creature wins over a selected cell, so no CELL section appears.
         Assert.DoesNotContain("CELL (", text, StringComparison.Ordinal);
     }
@@ -584,7 +589,7 @@ public sealed class InspectorExplanationTests
         var text = InspectorText.Build(state.Shown(), creature.Id, null);
 
         Assert.Contains("job none\n", text, StringComparison.Ordinal);
-        Assert.EndsWith($"HP {creature.Hp}/{creature.MaxHp}\nnone", text, StringComparison.Ordinal);
+        Assert.EndsWith("is standing about: nothing to do.\nnone", text, StringComparison.Ordinal);
     }
 
     [Fact]

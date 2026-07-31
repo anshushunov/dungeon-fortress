@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "captures": [
+    {"name": "dungeon-t1-whole-map", "fixture": "baseline", "screenshotTicks": 1, "tileSize": 40, "cameraZoom": 0.5, "cameraPosition": "560,320", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "dungeon-t1-hearth", "fixture": "baseline", "screenshotTicks": 1, "tileSize": 40, "cameraZoom": 1.0, "cameraPosition": "560,320", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "refusal-t1760-brusok-avoids-the-larder", "fixture": "baseline", "screenshotTicks": 1760, "selectCreature": 0, "tileSize": 40, "cameraZoom": 1.0, "cameraPosition": "640,320", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "refusal-t1703-brusok-breaks", "fixture": "baseline", "screenshotTicks": 1703, "selectCreature": 0, "tileSize": 40, "cameraZoom": 1.0, "cameraPosition": "800,320", "uiScale": 1.0, "frameSize": "1280x720"}
+  ]
+}

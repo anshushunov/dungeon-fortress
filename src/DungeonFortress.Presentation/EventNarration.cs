@@ -78,89 +78,87 @@ public static class EventNarration
         {
             // Choosing work.
             "chosen_highest_priority" => $"took {work}{where}: you said it matters most.",
-            "chosen_bottleneck" => $"took {work}{where}: it is the chain's tightest link right now.",
+            "chosen_bottleneck" => $"took {work}{where}: the tightest link right now.",
             "chosen_affinity_match" => $"took {work}{where}: it is what they are good at.",
-            "chosen_nearest" => $"took {work}{where}: it was the nearest of the jobs on offer.",
-            "chosen_only_option" => $"took {work}{where}: it was the only work they could reach.",
-            "chosen_tie_break" => $"took {work}{where}: nothing separated it from the alternative.",
-            "chosen_need_hunger" => "went to eat: hunger came before anything you asked for.",
-            "chosen_need_fatigue" => "went to lie down: exhaustion came before anything you asked for.",
-            "chosen_muster" => "dropped everything and went to the muster point.",
+            "chosen_nearest" => $"took {work}{where}: the nearest job on offer.",
+            "chosen_only_option" => $"took {work}{where}: the only work in reach.",
+            "chosen_tie_break" => $"took {work}{where}: nothing told it from the next.",
+            "chosen_need_hunger" => "went to eat: hunger came first.",
+            "chosen_need_fatigue" => "went to lie down: exhaustion came first.",
+            "chosen_muster" => "dropped everything for the muster point.",
             "chosen_ration" => "ate on the way to the muster point.",
             "chosen_traffic_yield" =>
-                $"stepped aside{where} to let {Number(details, "beneficiaryId", "somebody")} past.",
+                $"stepped aside{where} for #{Number(details, "beneficiaryId", "?")}.",
 
             // Waiting.
-            "waiting_no_job_available" => "is standing about: there is nothing to do.",
-            "waiting_input_missing" => $"is waiting on {work}: what it needs has not arrived.",
+            "waiting_no_job_available" => "is standing about: nothing to do.",
+            "waiting_input_missing" => $"waits on {work}: nothing to work with.",
             "waiting_storage_full" => "is waiting: the larder is full.",
-            "waiting_stock_sufficient" => $"is waiting on {work}: the domain already has enough.",
-            "waiting_crop_not_ripe" => "is waiting: nothing in the farm is ripe yet.",
-            "waiting_blocked_by_other" => $"stopped on the way{where}: somebody is in the doorway.",
-            "waiting_no_designation" => "would dig, but you have not marked any rock.",
-            "waiting_no_blueprint" => "would build, but you have not marked a site.",
-            "waiting_no_stockpile" => "left the stone where it lies: there is no stockpile to put it in.",
-            "waiting_stockpile_full" => "left the stone where it lies: every stockpile cell is spoken for.",
+            "waiting_stock_sufficient" => $"waits on {work}: enough already.",
+            "waiting_crop_not_ripe" => "is waiting: nothing is ripe.",
+            "waiting_blocked_by_other" => $"stopped{where}: somebody in the way.",
+            "waiting_no_designation" => "would dig: no rock marked.",
+            "waiting_no_blueprint" => "would build: no site marked.",
+            "waiting_no_stockpile" => "left the stone: no stockpile.",
+            "waiting_stockpile_full" => "left the stone: every cell spoken for.",
 
             // Refusing.
-            "refused_zone_not_designated" => $"will not do {work}: you have not marked the zone for it.",
-            "refused_zone_unreachable" => $"cannot get to{where}: the way is walled off or forbidden.",
+            "refused_zone_not_designated" => $"will not do {work}: no zone for it.",
+            "refused_zone_unreachable" => $"cannot reach{where}: walled off or forbidden.",
             "refused_priority_zero" => $"stopped doing {work}: you set it to zero.",
-            "refused_rule_reserve" => "went hungry rather than break into the ration you reserved.",
+            "refused_rule_reserve" => "went hungry: your ration reserve holds.",
             "refused_rule_min_satiety" =>
-                $"will not train on {Number(details, "satiety", "that")} satiety: your rule says " +
-                $"{Number(details, "threshold", "more")}.",
-            "refused_too_exhausted" => "is too far gone to work; only food will help now.",
+                $"will not train on {Number(details, "satiety", "that")} satiety: " +
+                $"your rule says {Number(details, "threshold", "more")}.",
+            "refused_too_exhausted" => "is too far gone to work.",
             "refused_injured" => "is too badly hurt to work.",
             "refused_place_of_panic" =>
-                $"will not take {work}{where}: their nerve broke {Place(details)} and they " +
-                "have not been back since.",
+                $"will not take {work}{where}: nerve broke {Place(details)}.",
             "refused_place_of_wound" =>
-                $"will not take {work}{where}: a raider put them down {Place(details)} and they " +
-                "will not go near it.",
+                $"will not take {work}{where}: put down {Place(details)}.",
 
             // The fight.
             "combat_joined" => $"joined the fight for wave {Number(details, "wave", "?")}.",
-            "combat_refused_starving" => "was too hungry to be let into the fight.",
-            "combat_refused_injured" => "was too badly hurt to be let into the fight.",
-            "combat_absent_unreachable" => "was too far from the larder to reach the fight.",
+            "combat_refused_starving" => "was too hungry for the fight.",
+            "combat_refused_injured" => "was too hurt for the fight.",
+            "combat_absent_unreachable" => "was too far to reach the fight.",
             "combat_attack" =>
                 $"struck raider {Number(details, "raiderId", "?")} for " +
                 $"{Number(details, "damage", "?")}.",
             "combat_raider_downed" => $"put raider {Number(details, "raiderId", "?")} down.",
             "combat_fled_morale" =>
-                $"broke and ran: {Number(details, "hpPercent", "?")}% of their health left, " +
-                $"{Number(details, "raidersNear", "?")} raider(s) on top of them and " +
-                $"{Number(details, "downedAlliesNear", "?")} ally down in sight.",
+                $"broke and ran: {Number(details, "hpPercent", "?")}% health, " +
+                $"{Number(details, "raidersNear", "?")} raiders close, " +
+                $"{Number(details, "downedAlliesNear", "?")} ally down.",
             "combat_downed" => $"was put down by raider {Number(details, "raiderId", "?")}.",
-            "combat_returned" => "came back to work once the wave was over.",
+            "combat_returned" => "came back to work after the wave.",
 
             // Wounds.
             "injury_tended" => "was carried off the floor, badly hurt.",
-            "injury_mending" => "is mending: the wound is no longer a bad one.",
+            "injury_mending" => "is mending: the wound is no longer bad.",
             "injury_healed" => "is whole again.",
 
             // Digging.
             "dig_started" => $"started cutting the rock{where}.",
-            "dig_completed" => $"cut through{where}; the block is on the floor.",
+            "dig_completed" => $"cut through{where}; the block is down.",
             "dig_cancelled" => $"stopped digging{where}.",
-            "dig_unreachable" => $"cannot reach the rock{where}: nothing next to it can be stood on.",
+            "dig_unreachable" => $"cannot reach the rock{where}: nowhere to stand.",
 
             // Stone.
             "stone_picked_up" => $"picked up the stone{where}.",
             "stone_stored" => $"put the stone away{where}.",
-            "stone_spilled" => $"could not fit it all in and left the rest{where}.",
-            "stone_target_replanned" => $"changed where the stone is going{where}.",
-            "stone_haul_cancelled" => $"put the stone down{where}: no cell will take it.",
-            "stone_unreachable" => "cannot reach any stockpile cell with the stone.",
+            "stone_spilled" => $"could not fit it all; left the rest{where}.",
+            "stone_target_replanned" => $"changed where the stone goes{where}.",
+            "stone_haul_cancelled" => $"put the stone down{where}: no cell takes it.",
+            "stone_unreachable" => "cannot reach a stockpile with the stone.",
             "stone_delivered" => $"delivered the stone to the site{where}.",
 
             // Building.
             "build_started" => $"started building{where}.",
             "build_completed" => $"finished the post{where}.",
             "build_cancelled" => $"stopped building{where}.",
-            "build_no_stone" => "would build, but there is no stone in the world at all.",
-            "build_waiting_material" => "would build, but the stone has not been brought yet.",
+            "build_no_stone" => "would build: no stone anywhere.",
+            "build_waiting_material" => "would build: the stone is not here yet.",
             "build_unreachable" => $"cannot get onto the site{where}.",
 
             _ => throw new ArgumentOutOfRangeException(
@@ -196,7 +194,7 @@ public static class EventNarration
         details.TryGetValue("placeX", out var x) && details.TryGetValue("placeY", out var y)
             ? string.Create(
                 CultureInfo.InvariantCulture,
-                $"at ({x},{y}) on tick {(details.TryGetValue("sinceTick", out var tick) ? tick : 0)}")
+                $"at ({x},{y}) t{(details.TryGetValue("sinceTick", out var tick) ? tick : 0)}")
             : "there";
 
     private static string Number(IReadOnlyDictionary<string, int> details, string key, string fallback) =>
