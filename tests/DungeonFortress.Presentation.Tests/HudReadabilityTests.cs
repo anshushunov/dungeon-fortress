@@ -183,6 +183,14 @@ public sealed class HudReadabilityTests
     {
         // An empty measurement would pass every frame, which is the failure mode
         // Issue #72 named for causal pairs and Issue #86 named for this number.
+        //
+        // The guard itself is the one that has to say no. Until review found it,
+        // only the structured-output builder did: AssertReadable returned quietly
+        // on an empty list, because nothing to measure produces no violations and
+        // the negative half refuses the defect pair on density alone. _Ready would
+        // have reported "ok" and the complaint would have arrived later, from a
+        // different method, about a different thing.
+        Assert.Throws<ArgumentException>(() => HudReadability.AssertReadable([]));
         Assert.Throws<ArgumentException>(
             () => HudReadability.SmallestPhysicalTextPixels([], 1.0));
     }

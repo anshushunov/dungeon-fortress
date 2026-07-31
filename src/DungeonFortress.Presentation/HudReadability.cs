@@ -207,9 +207,27 @@ public static class HudReadability
     /// to a change in the HUD and not only to a change in this file. The Godot
     /// adapter calls it on every entry point; a unit test calls it directly.
     /// </para>
+    ///
+    /// <para>
+    /// An empty measurement is refused rather than passed. Nothing to measure
+    /// produces no violations, and the negative half below would still refuse
+    /// the defect pair on density alone, so the whole call would return quietly
+    /// having checked nothing. It became reachable when the adapter started
+    /// walking the HUD subtree instead of listing named fields: a fuller source
+    /// is also one that can empty out all at once, if the HUD is ever reparented
+    /// away from the root the walk starts at.
+    /// </para>
     /// </summary>
     public static void AssertReadable(IReadOnlyList<HudTextSize> text)
     {
+        if (text.Count == 0)
+        {
+            throw new ArgumentException(
+                "Readability is measured from the HUD's own labels; an empty measurement " +
+                "would make every frame pass.",
+                nameof(text));
+        }
+
         var failures = new List<string>();
         foreach (var frame in SupportedFrameMatrix)
         {

@@ -1073,6 +1073,16 @@ adapter kept a reference to, the inspector column's `STATE / WHY` heading is a
 local variable held by nothing, and re-authoring it at four physical pixels left
 every guard green.
 
+**Visibility is deliberately not consulted.** The walk measures what a piece of
+text is authored at, not whether it happens to be on screen at that moment: a
+four-pixel font is an authoring mistake whether or not a flag currently hides it,
+and a rule that skipped hidden nodes would go quiet exactly when a panel is
+collapsed. The cost is stated rather than discovered — the first HUD panel with
+conditional display will be measured while nobody is looking at it, and the
+answer is to author it at a readable size, not to hide it from the guard. An
+empty measurement is refused outright for the same reason: nothing to measure
+produces no violations, which would read as a pass.
+
 The policy is held against the supported frame matrix at the scale the automatic
 rule would choose for each frame — not against the run's own pair, because an
 explicit `--ui-scale` is an override a capture declares on purpose, including the
