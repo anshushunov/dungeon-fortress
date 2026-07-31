@@ -34,10 +34,33 @@
         "message": "HUD text is unreadable in 7 place(s): 'Label[TooltipBody]' is drawn at 4 physical pixels on frame 1280x720 at UI scale 1, under the 8 px floor; ... (6 more frame/UiScale pairs) ... Text that formally fits its rectangle can still be too small to read, which is what Issue #86 measured at 8-15 physical pixels."
       },
       "interpretation": "The guard rejects the mutated tooltip at 7 of the 12 SupportedFrameMatrix entries (every frame whose automatic UiScale keeps the mutated 4px body under the 8px floor). Before Issue #127, no CLI flag and no guard measurement could have produced this failure at all, because the tooltip did not appear in HudTextSizes() / hudReadability.texts — this is the concrete difference the fix makes, not merely the number 4 being small."
+    },
+    "c_scaleApplication": {
+      "description": "Added in review round 2. The gap independent review found in round 1: every mutant in a_sizeAndScaling targets the pure HudFontSizes arithmetic, but nothing mutated its application — whether Main.LayoutHud actually hands HudButton a live uiScale, and whether HudButton._MakeCustomTooltip actually reads it rather than a fixed baseline. Review measured the hole directly: Label[TooltipBody].logicalPixels is 10 at --ui-scale 1 AND 10 at --ui-scale 2, because the guard's own sample (HudButton.MakeAuthoredTooltip) is deliberately frozen at scale 1 and therefore structurally cannot see this half of the fix. Reverting either of the two lines below reproduces Issue #127 exactly, while dotnet test (599/599), both existing negative --smoke flags and the full godot stage stayed green in round 1 — proof the gap was real, not hypothetical.",
+      "mutants": [
+        {
+          "name": "c-i: Main.LayoutHud stops telling buttons the live scale",
+          "change": "Main.cs, LayoutHud: removed `foreach (var button in _controlButtons) { button.UiScale = uiScale; }` (the block at what was lines 2520-2527)",
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~LayoutHud_applies\"",
+          "result": "FAILED: LayoutHud_applies_the_live_UI_scale_to_every_tooltip_button (Assert.Contains(\"button.UiScale = uiScale\", ...) — substring no longer present in AdapterSource.Body(\"LayoutHud\"))",
+          "revertedAndReverifiedGreen": true,
+          "revertVerification": "diff .artifacts/Main.cs.orig2 src/DungeonFortress.Game/Main.cs -> identical; dotnet build src/DungeonFortress.Game/DungeonFortress.Game.csproj succeeded"
+        },
+        {
+          "name": "c-ii: HudButton._MakeCustomTooltip built from a fixed baseline instead of UiScale",
+          "change": "HudButton.cs: `_MakeCustomTooltip(string forText) => BuildTooltip(forText, UiScale);` -> `_MakeCustomTooltip(string forText) => BuildTooltip(forText, 1.0);`",
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~MakeCustomTooltip_reads\"",
+          "result": "FAILED: MakeCustomTooltip_reads_the_live_UI_scale_rather_than_a_fixed_one (Assert.Contains(\"_MakeCustomTooltip(string forText) => BuildTooltip(forText, UiScale)\", ...) — raw HudButton.cs source no longer contains that exact line)",
+          "revertedAndReverifiedGreen": true,
+          "revertVerification": "diff .artifacts/HudButton.cs.orig2 src/DungeonFortress.Game/HudButton.cs -> identical; dotnet build src/DungeonFortress.Game/DungeonFortress.Game.csproj succeeded"
+        }
+      ],
+      "note": "Technique for c-i mirrors the repository's existing precedent, CameraViewTests.The_player_keeps_a_zoom_they_chose_and_the_HUD_scale_keeps_following_the_window (CameraViewTests.cs), which proves OnViewportResized still calls CameraView.AutomaticUiScale rather than a constant. c-ii cannot use AdapterSource, since AdapterSource.RelativePath is hardcoded to src/DungeonFortress.Game/Main.cs (ADR 0011 keeps the engine assembly out of every test project) and HudButton.cs is a different file; it reads HudButton.cs raw instead, the same way HudReadabilityTests.The_inert_strict_hud_fit_flag_is_gone_from_the_adapter reads Main.cs raw rather than through AdapterSource.Masked."
     }
   },
+  "closesReviewFinding": "Independent review, round 1: 'масштабирование подсказки не покрыто ни одной исполняемой проверкой' / 'правило мутации каждой половины поэтому не выполнено'. c_scaleApplication above is the remedy: two new structural tests (HudReadabilityTests.cs), each proven to fail under the exact mutation review named as sufficient to silently reintroduce Issue #127.",
   "unrelatedRegressionCheck": {
-    "command": "dotnet test (full solution, after restoring HudFontSizes.cs and rebuilding DungeonFortress.Game.csproj)",
-    "result": "599 tests passed, 0 failed (8 DomainMcp.Tests, 363 Presentation.Tests, 228 Simulation.Tests)"
+    "command": "dotnet test (full solution, after restoring HudFontSizes.cs, Main.cs and HudButton.cs, and rebuilding DungeonFortress.Game.csproj)",
+    "result": "601 tests passed, 0 failed (8 DomainMcp.Tests, 365 Presentation.Tests, 228 Simulation.Tests) — 365 rather than round 1's 363, +2 for the tests c_scaleApplication describes"
   }
 }

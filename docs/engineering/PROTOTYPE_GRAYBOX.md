@@ -1167,6 +1167,25 @@ only readability can notice; the `godot` stage requires that run to exit 1. It i
 the exact counterpart of the overflow guard's own negative run, and together they
 are what replaced the inert `--strict-hud-fit` flag removed in Issue #49.
 
+**The tooltip (Issue #127).** A toolbar button's tooltip is not a descendant of
+`_hudRoot`: Godot 4.7 parents it to a separate `PopupPanel` (a `Window`) next to
+the hovered button, and that `Window` scales its own content by
+`content_scale_factor`, not by `_hudRoot.Scale`. `HudButton.UiScale` carries the
+live scale there instead, kept in step by `Main.LayoutHud`. `CreateControlStrips`
+keeps one instance of the tooltip's Control tree, built at UI scale 1
+(`HudButton.MakeAuthoredTooltip`), invisible and permanent under `_hudRoot`, so
+`HudTextSizes`' existing subtree walk reaches it under the names
+`Label[TooltipTitle]` / `Label[TooltipBody]` without any change to the walk
+itself. `--smoke-hud-tooltip-readability-regression` is that guard's negative
+run, shrinking the sample instead of a legend row.
+
+Two more things prove the *live* scale actually reaches the popup, since the
+readability sample above is deliberately frozen at scale 1 and cannot: a
+structural test on `Main.LayoutHud`'s own body proves it still assigns the live
+`uiScale` to every button, and a raw read of `HudButton.cs` proves
+`_MakeCustomTooltip` still calls `BuildTooltip` with that scale rather than a
+fixed `1.0` — both in `HudReadabilityTests.cs`, both provable without an engine.
+
 Godot 4.7.1 `--headless` was suspected of degrading font metrics, which would make
 the guard vacuous. It does not: shaping, wrapping and font metrics are identical to
 a windowed run — the same wrapped line counts and the same font height. The
