@@ -205,9 +205,24 @@ public sealed class PrototypeWorld
         long? RefusedJobId,
         JobKind? RefusedKind,
         GridPoint? RefusedTarget,
+        // The best pair this creature had in the memory-free collection, before
+        // anyone competed for anything: the work it would have put first had
+        // memory of place not existed. This is the half of the counterfactual
+        // that is a fact about *this* creature, and it is what the refusal is
+        // required to name.
+        long? MemoryFreeBestJobId,
+        // What the memory-free matching actually leaves this creature with once
+        // everybody has competed. It can differ from the line above for one
+        // reason only, and the two fields below say which.
         long? MemoryFreeJobId,
         JobKind? MemoryFreeKind,
-        GridPoint? MemoryFreeTarget);
+        GridPoint? MemoryFreeTarget,
+        // Who ends up with the refused job in the memory-free plan, and who ends
+        // up starting work on the tile the refusal names. Between them they say
+        // whether a creature that does not get the work it would have put first
+        // lost it to somebody, which is the only thing allowed to stand there.
+        int? MemoryFreeWinnerOfRefusedJob,
+        int? MemoryFreeWinnerOfRefusedTile);
 
     /// <summary>
     /// Runs up to <paramref name="tickCount"/> ticks and stops early when the
@@ -1796,6 +1811,8 @@ public sealed class PrototypeWorld
         var pairs = new List<MatchPair>();
         foreach (var creature in candidates)
         {
+            var bestTaken = int.MinValue;
+            (JobKind Kind, GridPoint Target, PrototypeRememberedPlace Place, long JobId, int Score)? refused = null;
             foreach (var job in jobs)
             {
                 if (job.PersonalCreatureId is { } personal && personal != creature.Id)
@@ -1839,19 +1856,6 @@ public sealed class PrototypeWorld
                     continue;
                 }
 
-                // Where a creature broke or was put down, it will not start work
-                // again (Issue #117). Lying down is deliberately exempt: a wound
-                // closes in a bunk and nowhere else, so a creature that refused
-                // the bunk it was carried to would be refusing to heal, which is
-                // not a decision about work at all.
-                if (applyMemory &&
-                    job.Kind != JobKind.Rest &&
-                    AvoidedPlace(creature, target) is { } avoided)
-                {
-                    creature.AvoidedThisTick ??= (job.Kind, target, avoided, job.Id);
-                    continue;
-                }
-
                 var targetOccupant = _creatures.FirstOrDefault(
                     other => other != creature && other.Position == target);
                 if (targetOccupant is not null && targetOccupant.CurrentJob is null)
@@ -1874,10 +1878,59 @@ public sealed class PrototypeWorld
                     affinity * PrototypeTuning.ScoreAffinityWeight +
                     urgency -
                     distance.Value;
-                if (score >= PrototypeTuning.ScoreFloor)
+                if (score < PrototypeTuning.ScoreFloor)
                 {
-                    pairs.Add(new MatchPair(creature, job, target, score, urgency, affinity, distance.Value));
+                    continue;
                 }
+
+                // Where a creature broke or was put down, it will not start work
+                // again (Issue #117). Lying down is deliberately exempt: a wound
+                // closes in a bunk and nowhere else, so a creature that refused
+                // the bunk it was carried to would be refusing to heal, which is
+                // not a decision about work at all.
+                //
+                // The arm is **last**, after every other condition on the pair and
+                // after the score (Issue #125). Standing first it refused work the
+                // creature was never going to take — unreachable, occupied, below
+                // the floor — and the refusal named that work to the player, so
+                // "memory changed what this one did" was said about a job memory
+                // never touched. Three refusals in five over the matrix were of
+                // that kind; the count is in evidence/125-false-refusals.json.
+                //
+                // Among the pairs memory does take away, the one named is the one
+                // with the highest score, ties going to the lower job id — the
+                // same order ResolveMatching picks a winner in, so the refusal
+                // names the work this creature would have put first rather than
+                // whichever job happened to be oldest in the list.
+                if (applyMemory &&
+                    job.Kind != JobKind.Rest &&
+                    AvoidedPlace(creature, target) is { } avoided)
+                {
+                    if (refused is not { } held || score > held.Score)
+                    {
+                        refused = (job.Kind, target, avoided, job.Id, score);
+                    }
+
+                    continue;
+                }
+
+                bestTaken = Math.Max(bestTaken, score);
+                pairs.Add(new MatchPair(creature, job, target, score, urgency, affinity, distance.Value));
+            }
+
+            // And the refusal is only recorded when memory actually changed what
+            // this creature put first (Issue #125). A creature whose best work is
+            // untouched by memory takes that work either way: saying it "will not
+            // take cooking at (15,7)" while it walks off to the harvest it was
+            // always going to do names a change that did not happen. Twenty of the
+            // twenty refusals on prepared/20260726 were of exactly that kind.
+            //
+            // Strictly greater, not greater-or-equal: on a tie the matching would
+            // have preferred the lower job id, and a creature that ends up doing
+            // work of equal worth has not been changed by the memory either.
+            if (refused is { } best && best.Score > bestTaken)
+            {
+                creature.AvoidedThisTick = best;
             }
         }
 
@@ -1954,20 +2007,38 @@ public sealed class PrototypeWorld
             return;
         }
 
-        var free = ResolveMatching(CollectPairs(candidates, jobs, applyMemory: false), apply: false);
+        var memoryFreePairs = CollectPairs(candidates, jobs, applyMemory: false);
+        var best = memoryFreePairs
+            .GroupBy(pair => pair.Creature.Id)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderByDescending(pair => pair.Score)
+                    .ThenBy(pair => pair.Job.Id)
+                    .First());
+        var free = ResolveMatching(memoryFreePairs, apply: false);
         _memoryProbe = candidates
             .Select(creature =>
             {
                 var refused = creature.AvoidedThisTick;
                 var choice = free.GetValueOrDefault(creature.Id);
+                var jobWinner = refused is { } taken
+                    ? free.Values.FirstOrDefault(pair => pair.Job.Id == taken.JobId)?.Creature.Id
+                    : null;
+                var tileWinner = refused is { } tile
+                    ? free.Values.FirstOrDefault(pair => pair.InitialTarget == tile.Target)?.Creature.Id
+                    : null;
                 return new MemoryProbe(
                     creature.Id,
                     refused?.JobId,
                     refused?.Kind,
                     refused?.Target,
+                    best.GetValueOrDefault(creature.Id)?.Job.Id,
                     choice?.Job.Id,
                     choice?.Job.Kind,
-                    choice?.InitialTarget);
+                    choice?.InitialTarget,
+                    jobWinner,
+                    tileWinner);
             })
             .Where(probe => probe.RefusedJobId is not null || probe.MemoryFreeJobId is not null)
             .ToArray();
@@ -4956,8 +5027,16 @@ public sealed class PrototypeWorld
         /// would have had to start. Transient — it is recomputed every tick from
         /// the memory and the job list, exactly like <see cref="WaitThisTick"/>,
         /// so it is not canonical state.
+        ///
+        /// <para>
+        /// <c>Score</c> and <c>JobId</c> are carried so that the pair kept is the
+        /// best of the ones memory took away rather than the first one met
+        /// (Issue #125). Nothing outside the matching reads them; the journal
+        /// entry is still built from the kind, the tile and the place.
+        /// </para>
         /// </summary>
-        public (JobKind Kind, GridPoint Target, PrototypeRememberedPlace Place, long JobId)? AvoidedThisTick { get; set; }
+        public (JobKind Kind, GridPoint Target, PrototypeRememberedPlace Place, long JobId, int Score)?
+            AvoidedThisTick { get; set; }
 
         public int Affinity(JobKind kind)
         {

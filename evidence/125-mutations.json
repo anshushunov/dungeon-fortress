@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "issue": 125,
+  "what": "Every separable part of the #125 fix, reverted on its own, against the checks that have to notice. The project rule is that a check is not done until it reddens for *each* half rather than for the change as a whole.",
+  "howToReproduce": "Apply the named edit to src/DungeonFortress.Simulation/PrototypeWorld.cs, build the simulation test project, run the named filter, then restore the file. The runner used here is .artifacts/mutate.sh with one .artifacts/mN.py per mutation; both are scratch and ignored, not shipped.",
+  "filter": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --no-build --no-restore --filter \"FullyQualifiedName~PrototypeMemoryTests\"  (17 cases green on the fixed tree)",
+  "mutations": [
+    {
+      "half": "the memory arm goes back before the pair is judged viable (position)",
+      "edit": "move the `if (applyMemory && job.Kind != JobKind.Rest && AvoidedPlace(...))` block from below the score-floor guard back to immediately after TryInitialTarget, and — because no score exists that early — keep the first job by id there",
+      "result": "red: 2 of 17 failed",
+      "whichFailed": "A_refusal_by_memory_names_the_work_the_creature_would_have_taken, both fixtures",
+      "note": "This mutant necessarily reverts the choice of pair as well as the position, because the score the choice is made on does not exist before the pair has been judged. The two conditions below revert one viability condition each without touching the choice, which is how the position half is covered on its own."
+    },
+    {
+      "half": "the arm no longer requires the target tile to be free (position, one condition alone)",
+      "edit": "move the `targetOccupant` guard from above the memory arm to below it",
+      "result": "red: 4 of 17 failed",
+      "whichFailed": "A_refusal_by_memory_names_the_work_the_creature_would_have_taken and A_refusal_the_memory_free_tick_does_not_honour_lost_the_work_to_somebody, both fixtures"
+    },
+    {
+      "half": "the arm keeps the first job by id among the pairs memory takes away (choice)",
+      "edit": "`if (refused is not { } held || score > held.Score)` -> `if (refused is null)`",
+      "result": "red: 2 of 17 failed",
+      "whichFailed": "A_refusal_by_memory_names_the_work_the_creature_would_have_taken, both fixtures"
+    },
+    {
+      "half": "a refusal is recorded even when memory changed nothing the creature put first",
+      "edit": "`if (refused is { } best && best.Score > bestTaken)` -> `if (refused is { } best)`",
+      "result": "red: 4 of 17 failed",
+      "whichFailed": "A_refusal_by_memory_names_the_work_the_creature_would_have_taken and A_refusal_the_memory_free_tick_does_not_honour_lost_the_work_to_somebody, both fixtures"
+    },
+    {
+      "half": "the arm no longer requires the pair to clear the score floor (position, the other condition alone)",
+      "edit": "move the `if (score < PrototypeTuning.ScoreFloor)` guard from above the memory arm to below it",
+      "result": "GREEN: 17 of 17 passed",
+      "finding": "The score floor never refuses a pair that memory would have taken away — not once on the six parties. Measured, not inferred: the same tree under this mutation prints the identical refusal counts (matrix: refusals 80, named 69, other 2, nothing 9, false 11) as the unmutated one, so no refusal anywhere on the matrix changed. The guard belongs where it is by the rule the fix states — memory is the last condition on the pair, after every other one — but this matrix does not exercise it, and a mutant that stays green is recorded rather than dropped. What would exercise it is a party where a creature's only remembered-place work also scores below the floor, and writing one for this alone would be a fixture built to satisfy a mutant.",
+      "command": "the same filter, plus PrototypeMemoryTests.Report_whether_a_refusal_names_work_the_creature_would_have_taken with --logger \"console;verbosity=detailed\" to read the counts"
+    }
+  ],
+  "alsoCovered": {
+    "note": "The two halves #117 already had mutants for still redden on this tree; they were not re-run here because neither the avoidance arm nor its Rest exemption was touched by this change. They are in evidence/117-mutations.json.",
+    "counterfactualProbe": "The probe the whole measurement rests on has its own check rather than a mutant: The_counterfactual_probe_changes_nothing_the_party_does compares the canonical checksum and the canonical event log of a probed party against an unprobed one over the whole matrix. A probe that moved anything would fail it."
+  }
+}

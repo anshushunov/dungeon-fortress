@@ -403,9 +403,10 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
     /// </list>
     ///
     /// <para>
-    /// Printed rather than asserted here; the assertion —
-    /// <c>A_refusal_by_memory_names_the_work_the_creature_would_have_taken</c> —
-    /// arrives with the fix, because on this tree it is red by construction.
+    /// Printed rather than asserted here; the assertions are
+    /// <see cref="A_refusal_by_memory_names_the_work_the_creature_would_have_taken"/>
+    /// and
+    /// <see cref="A_refusal_the_memory_free_tick_does_not_honour_lost_the_work_to_somebody"/>.
     /// This one is the number that goes into evidence before and after the fix,
     /// and it stays afterwards because a count that only ever reads zero is how
     /// a regression announces itself in one line.
@@ -421,7 +422,7 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
         {
             foreach (var seed in MatrixSeeds)
             {
-                var counts = CountRefusals(fixtureName, seed);
+                var counts = CountRefusals(fixtureName, seed, report);
                 totals = (
                     totals.Refusals + counts.Refusals,
                     totals.Named + counts.Named,
@@ -438,6 +439,131 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
             $"other {totals.Other}, nothing {totals.Nothing}, " +
             $"false {totals.Other + totals.Nothing}");
         output.WriteLine(report.ToString());
+    }
+
+    /// <summary>
+    /// Issue #125, both halves of it, as one sentence about one creature:
+    /// <b>a refusal by memory of place names the work that creature would have
+    /// put first had the memory not been there.</b>
+    ///
+    /// <para>
+    /// The claim is deliberately about the creature's own ranking rather than
+    /// about who ends up with the job, because the ranking is the thing memory
+    /// touches. Written this way it reddens for each half of the fix on its own:
+    /// </para>
+    ///
+    /// <list type="bullet">
+    /// <item>put the memory arm back before the occupancy check, the reachability
+    /// check and the score, and the refusal can name a job that is not in the
+    /// memory-free set at all — nothing there to be anybody's best;</item>
+    /// <item>go back to keeping the first job by id, and the refusal names a
+    /// memory-free pair that is not the top-scoring one;</item>
+    /// <item>drop the rule that a refusal is only recorded when memory changed
+    /// what the creature put first, and the refusal names a job that loses to
+    /// work the creature was free to take.</item>
+    /// </list>
+    ///
+    /// <para>
+    /// The comparison is by job id rather than by (kind, tile), because two jobs
+    /// can legitimately share a first tile — two cook jobs on the same larder
+    /// tile do, on this very matrix — and a check that could not tell them apart
+    /// would pass on exactly the confusion the issue is about.
+    /// </para>
+    ///
+    /// <para>
+    /// The count is asserted as well as the pairing. A run in which memory never
+    /// refused anything satisfies "no refusal is wrong" without having looked at
+    /// one, which is the shape of green this whole class exists to refuse.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("baseline")]
+    [InlineData("prepared")]
+    public void A_refusal_by_memory_names_the_work_the_creature_would_have_taken(string fixtureName)
+    {
+        var refusals = 0;
+        foreach (var seed in MatrixSeeds)
+        {
+            var world = RunProbed(fixtureName, seed, (tick, probe) =>
+            {
+                if (probe.RefusedJobId is not { } refused)
+                {
+                    return;
+                }
+
+                refusals++;
+                Assert.True(
+                    probe.MemoryFreeBestJobId == refused,
+                    $"{fixtureName}/{seed}: on tick {tick} creature {probe.CreatureId} refused job " +
+                    $"#{refused} ({probe.RefusedKind} at {Format(probe.RefusedTarget)}) because of a " +
+                    "place it remembers, but with memory switched off the work it would have put " +
+                    "first is " +
+                    (probe.MemoryFreeBestJobId is { } best
+                        ? $"job #{best}. The refusal names work the creature was not going to do."
+                        : "no work at all: the job the refusal names was not something this " +
+                          "creature could have taken in the first place."));
+            });
+            Assert.True(world.IsComplete);
+        }
+
+        Assert.True(
+            refusals >= 5,
+            $"{fixtureName}: memory refused work {refusals} times over the matrix, which is too few " +
+            "for the pairing above to have been tested at all.");
+    }
+
+    /// <summary>
+    /// The other half of criterion 1 of Issue #125, and the honest statement of
+    /// where it stops: when the memory-free tick does <b>not</b> hand the creature
+    /// the work its refusal names, the only thing that may stand in the way is
+    /// <b>another creature</b> taking that job or the tile it starts on.
+    ///
+    /// <para>
+    /// The criterion as the issue words it — "the same tick with memory switched
+    /// off gives this creature that job" — cannot hold outright, and the reason
+    /// is not the memory. Cooking starts on a larder tile, larder tiles are few,
+    /// and the matching gives a contested one to whoever scores highest; a
+    /// creature can therefore have put a job first and still have lost it to a
+    /// colleague. Measured on the shipped matrix that is 11 refusals in 80, every
+    /// one of them a Cook or a Watch on a contested tile, and every one of them
+    /// still naming the creature's own first choice — see
+    /// <c>evidence/125-false-refusals.json</c>. What this check forbids is the
+    /// other explanation: a refusal that goes unhonoured because the work was
+    /// never there to take.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("baseline")]
+    [InlineData("prepared")]
+    public void A_refusal_the_memory_free_tick_does_not_honour_lost_the_work_to_somebody(string fixtureName)
+    {
+        var contested = 0;
+        foreach (var seed in MatrixSeeds)
+        {
+            RunProbed(fixtureName, seed, (tick, probe) =>
+            {
+                if (probe.RefusedJobId is not { } refused || probe.MemoryFreeJobId == refused)
+                {
+                    return;
+                }
+
+                contested++;
+                var winner = probe.MemoryFreeWinnerOfRefusedJob ?? probe.MemoryFreeWinnerOfRefusedTile;
+                Assert.True(
+                    winner is not null,
+                    $"{fixtureName}/{seed}: on tick {tick} creature {probe.CreatureId} refused job " +
+                    $"#{refused} ({probe.RefusedKind} at {Format(probe.RefusedTarget)}), and with " +
+                    "memory switched off nobody at all takes that job or starts work on that tile. " +
+                    "A refusal that nothing and nobody stands in the way of names work that was not " +
+                    "there to take.");
+            });
+        }
+
+        Assert.True(
+            contested > 0,
+            $"{fixtureName}: every refusal over the matrix was honoured by the memory-free tick, so " +
+            "the branch above never ran. Either the matrix stopped contesting the larder, or this " +
+            "check has quietly stopped checking anything.");
     }
 
     /// <summary>
@@ -520,13 +646,14 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
 
     private static (int Refusals, int Named, int Other, int Nothing) CountRefusals(
         string fixtureName,
-        ulong seed)
+        ulong seed,
+        StringBuilder report)
     {
         var refusals = 0;
         var named = 0;
         var other = 0;
         var nothing = 0;
-        RunProbed(fixtureName, seed, (_, probe) =>
+        RunProbed(fixtureName, seed, (tick, probe) =>
         {
             if (probe.RefusedJobId is not { } refused)
             {
@@ -537,8 +664,10 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
             if (probe.MemoryFreeJobId == refused)
             {
                 named++;
+                return;
             }
-            else if (probe.MemoryFreeJobId is null)
+
+            if (probe.MemoryFreeJobId is null)
             {
                 nothing++;
             }
@@ -546,6 +675,22 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
             {
                 other++;
             }
+
+            // Every exception is named rather than counted, because a residue
+            // reported only as a number cannot be told apart from a residue
+            // nobody looked at.
+            var instead = probe.MemoryFreeJobId is { } free
+                ? string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"job {free} ({probe.MemoryFreeKind} at {Format(probe.MemoryFreeTarget)})")
+                : "no work";
+            report.AppendLine(string.Create(
+                CultureInfo.InvariantCulture,
+                $"  {fixtureName}/{seed} t{tick} #{probe.CreatureId}: refused job {refused} " +
+                $"({probe.RefusedKind} at {Format(probe.RefusedTarget)}), own best " +
+                $"{probe.MemoryFreeBestJobId}, memory-free would give {instead}; " +
+                $"job won by {probe.MemoryFreeWinnerOfRefusedJob}, tile won by " +
+                $"{probe.MemoryFreeWinnerOfRefusedTile}"));
         });
         return (refusals, named, other, nothing);
     }

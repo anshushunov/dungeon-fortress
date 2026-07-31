@@ -39,6 +39,46 @@
       },
       "matrix": {"refusals": 169, "named": 68, "other": 83, "nothing": 18, "false": 101},
       "reading": "Three refusals in five name work the creature would not have taken. On prepared/20260726 not one of the twenty refusals is true. The refusal count itself agrees with the one PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next already prints from the canonical event log (41/9/17 and 20/69/13), so the probe is counting the same refusals the player reads and not a second population."
+    },
+    {
+      "stage": "after the position was moved and the best-scoring pair was named, and nothing else",
+      "note": "Kept because it is the number the two halves the issue names buy on their own, and it is not the whole of the criterion. Taken on the same command, on the tree with the third rule below not yet written.",
+      "matrix": {"refusals": 159, "named": 72, "other": 78, "nothing": 9, "false": 87}
+    },
+    {
+      "stage": "after",
+      "takenOn": "the head of this branch: the memory arm sits last among the conditions on a pair, names the highest-scoring pair it takes away, and only records a refusal when that pair outscores everything the creature was still free to take.",
+      "perParty": {
+        "baseline/20260726": {"refusals": 28, "named": 26, "other": 0, "nothing": 2},
+        "baseline/20260727": {"refusals": 6, "named": 4, "other": 2, "nothing": 0},
+        "baseline/20260728": {"refusals": 14, "named": 8, "other": 0, "nothing": 6},
+        "prepared/20260726": {"refusals": 0, "named": 0, "other": 0, "nothing": 0},
+        "prepared/20260727": {"refusals": 28, "named": 27, "other": 0, "nothing": 1},
+        "prepared/20260728": {"refusals": 4, "named": 4, "other": 0, "nothing": 0}
+      },
+      "matrix": {"refusals": 80, "named": 69, "other": 2, "nothing": 9, "false": 11},
+      "theResidue": {
+        "count": 11,
+        "everyOneOfThem": "names the work its own creature would have put first: MemoryFreeBestJobId equals the refused job id in 80 of 80 refusals, residue included. What the memory-free tick does differently is give that work to somebody else.",
+        "whatTheyAre": "ten Cook jobs starting on the two larder tiles (14,7) and (15,7), and one Watch on (22,12). A larder tile is a contested resource: the matching gives it to whoever scores highest and removes every other pair that starts there, so a creature can have put a job first and still lose it to a colleague.",
+        "eachIsPrinted": "by the report command above, one line per exception, with the creature that wins the job and the creature that wins the tile.",
+        "checked": "PrototypeMemoryTests.A_refusal_the_memory_free_tick_does_not_honour_lost_the_work_to_somebody asserts that a refusal the memory-free tick does not honour always lost the job or its starting tile to another creature. The forbidden case — a refusal nothing at all stands in the way of — cannot occur silently.",
+        "whatThisMeansForCriterion1": "Criterion 1 of Issue #125 is met in the form that is a fact about the creature — the refused work is exactly what it would have put first, 80 of 80. It is met in the strict allocation form the criterion words it in — the memory-free tick assigns that creature that job — in 69 of 80. The gap is larder contention and not memory, and closing it would mean deciding a creature's own message from what its colleagues would have done. That is a design fork and it is named in the handoff rather than taken here."
+      },
+      "whatMovedInTheJournal": {
+        "command": [
+          "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\evaluate-prototype.ps1 -OutputPath <out-of-repo>\\matrix-after-125.json",
+          "compare Runs[].Metrics of the before and after files, field by field"
+        ],
+        "nonExplainabilityMetrics": "identical on all 15 runs — Economy, Labor, Creatures and Session, including every score and every outcome. The fix moves no creature and changes no party; it changes what the party says about itself.",
+        "reasonCodeOccurrences": {
+          "refused_place_of_panic": [298, 138],
+          "refused_place_of_wound": [25, 4],
+          "refused_rule_min_satiety": [4204, 4206],
+          "waiting_input_missing": [8095, 8104]
+        },
+        "reading": "Summed over the 15 runs. The two memory codes lose the refusals they should never have claimed; the two that grow are the real reasons those creatures were waiting for, which RecordWaitingReason had been suppressing in favour of the memory code."
+      }
     }
   ]
 }
