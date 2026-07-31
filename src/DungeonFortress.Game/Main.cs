@@ -2885,8 +2885,46 @@ public partial class Main : Node2D
         DrawStockpileInformationOverlays();
         DrawBodyInformationOverlays();
         DrawZoneLabels();
+        DrawRememberedPlaces(rockTiles);
         DrawCellInteractionOverlays(rockTiles);
         DrawBrushPreview(rockTiles);
+    }
+
+    /// <summary>
+    /// Where the selected creature will not go back to (Issue #117).
+    ///
+    /// It is drawn only for the creature the player is looking at, for the same
+    /// reason the selection ring is: nine creatures' memories at once would be a
+    /// map full of crosses saying nothing about anybody. Selecting one and
+    /// watching it walk around its own corner of the larder is the reading.
+    ///
+    /// A ring and a diagonal, no fill: <see cref="OverlayMark.RememberedPlace"/>
+    /// is declared <see cref="OverlayMarkPolicy.StrokeOnly"/>, and the whole
+    /// point of the mark is that somebody else is visibly still working on the
+    /// tile next to it.
+    /// </summary>
+    private void DrawRememberedPlaces(IReadOnlySet<GridPoint> rockTiles)
+    {
+        if (_selectedCreatureId is not { } selected)
+        {
+            return;
+        }
+
+        var creature = _state!.Creatures.SingleOrDefault(item => item.Id == selected);
+        if (creature is null)
+        {
+            return;
+        }
+
+        foreach (var place in creature.RememberedPlaces)
+        {
+            var rect = CellInteractionRect(place.Place, rockTiles);
+            var color = place.Cause == "wound"
+                ? new Color("#f87171")
+                : new Color("#fbbf24");
+            DrawRect(rect.Grow(-3), color, false, 2.0f);
+            DrawLine(rect.Position + rect.Size * 0.25f, rect.End - rect.Size * 0.25f, color, 2.0f);
+        }
     }
 
     private void DrawMapBackground() =>

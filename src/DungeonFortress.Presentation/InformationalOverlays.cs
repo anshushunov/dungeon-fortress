@@ -93,6 +93,7 @@ public enum OverlayMark
     CellInteraction,
     BrushPreview,
     SelectionCount,
+    RememberedPlace,
 }
 
 /// <param name="Mark">The reading this rule governs.</param>
@@ -270,6 +271,17 @@ public static class InformationalOverlays
             "anyway, for one reason — a number drawn over a sprite is " +
             "unreadable, and translucency would be an appearance change Issue " +
             "#90 forbids. It is bounded: it exists only while a button is held."),
+        new(
+            OverlayMark.RememberedPlace,
+            OverlayMarkSubject.Cell,
+            CellCanHoldBody: true,
+            OverlayMarkPolicy.StrokeOnly,
+            1.0,
+            1.0,
+            "A place a creature remembers is a place creatures walk through, and " +
+            "the refusal is only readable if the player can see somebody standing " +
+            "next to it still working. The mark is a ring and a cross-hatch with " +
+            "no fill, so it cannot hide whoever is on the tile."),
     ];
 
     public static IReadOnlyList<OverlayMarkRule> All => Rules;

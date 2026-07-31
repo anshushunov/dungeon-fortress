@@ -97,6 +97,17 @@ internal static class PresentationFixtures
         new PrototypeCommandLog("baseline", PrototypeTuning.DefaultSeed, []),
         ticks).State;
 
+    /// <summary>
+    /// A shipped scenario, run from its own command log rather than from a log
+    /// written here. Anything that claims to be about what the game produces has
+    /// to read the same journals the game ships with.
+    /// </summary>
+    internal static PrototypeSnapshot RunFixture(string fixtureName, int ticks) =>
+        PrototypeScenario.Run(
+            PrototypeCommandDocument.Load(Path.Combine(
+                FindRepositoryRoot(), "scenarios", "prototype1", $"{fixtureName}.commands.v2.json")),
+            ticks).State;
+
     internal static PrototypeCommandLog Log(params PrototypeCommand[] commands) =>
         new("custom", PrototypeTuning.DefaultSeed, commands);
 

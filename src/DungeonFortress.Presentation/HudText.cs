@@ -117,6 +117,13 @@ public static class HudText
     /// The last three autonomous choices, newest first, plus the diagnostics
     /// count. The header is deliberately part of both the empty and the populated
     /// case, which is why the empty panel repeats it.
+    ///
+    /// Since Issue #117 the line is a sentence about a named creature rather than
+    /// the raw reason code. The code has not gone anywhere: it is still what the
+    /// canonical state and the canonical event log carry, and
+    /// <see cref="EventNarration"/> reads it. Its existence is an invariant of
+    /// <see href="../../docs/decisions/0010-contract-invariants-and-tuning.md">
+    /// ADR 0010</see>; what a player sees instead of it is presentation.
     /// </summary>
     public static string Feedback(HudViewState view)
     {
@@ -126,7 +133,7 @@ public static class HudText
             : string.Join(
                 "\n",
                 state.Events.TakeLast(3).Reverse().Select(@event =>
-                    $"t{@event.LastTick} · {CreatureName(state, @event.CreatureId)}\n{@event.ReasonCode}"));
+                    $"t{@event.LastTick} · {EventNarration.Describe(state, @event)}"));
         return
             "EVENT FEEDBACK\n" + eventText +
             $"\n\nDiagnostics: {view.DiagnosticCount} (structured JSON is emitted by smoke/capture).";
