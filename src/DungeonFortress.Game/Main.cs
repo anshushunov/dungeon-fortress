@@ -48,7 +48,11 @@ public partial class Main : Node2D
     private Label? _roster;
     private Control? _timeStrip;
     private Control? _brushStrip;
-    private readonly List<Button> _controlButtons = [];
+    private readonly List<HudButton> _controlButtons = [];
+    // A permanent, invisible sample of the tooltip HudButton draws, kept for the
+    // HUD readability guard's subtree walk: see CreateControlStrips and
+    // HudButton.MakeAuthoredTooltip. Issue #127.
+    private Control? _tooltipReadabilitySample;
     private readonly List<Label> _hotkeyBadges = [];
     private readonly List<Label> _legendLines = [];
     private PrototypeCommandLog? _fixtureLog;
@@ -132,6 +136,12 @@ public partial class Main : Node2D
             // would (Issues #86 and #49).
             var hudReadabilityRegression =
                 arguments.Contains("--smoke-hud-readability-regression", StringComparer.Ordinal);
+            // The tooltip's own regression flag (Issue #127): the guard above
+            // never had a tooltip to reject, so this one shrinks the
+            // readability sample CreateControlStrips keeps rather than a
+            // legend row.
+            var hudTooltipReadabilityRegression =
+                arguments.Contains("--smoke-hud-tooltip-readability-regression", StringComparer.Ordinal);
             failureEventName = cameraSmoke
                 ? "godot_camera_smoke"
                 : controlsSmoke
@@ -205,6 +215,11 @@ public partial class Main : Node2D
             if (hudReadabilityRegression)
             {
                 InjectHudReadabilityRegression();
+            }
+
+            if (hudTooltipReadabilityRegression)
+            {
+                InjectHudTooltipReadabilityRegression();
             }
 
             if (demoControls || controlsSmoke)
@@ -1537,9 +1552,33 @@ public partial class Main : Node2D
             _controlButtons.Add(button);
         }
 
+        // A permanent, invisible sample of the tooltip HudButton draws for real,
+        // so the HUD readability guard's subtree walk (Main.HudTextSizes,
+        // Main.CollectHudTextSizes) reaches a text surface Godot otherwise
+        // creates only on hover and never as a child of _hudRoot. See
+        // HudButton.MakeAuthoredTooltip for why this is built at UI scale 1
+        // rather than the live one. Issue #127: the tooltip was the one HUD
+        // text surface no guard measured.
+        if (_controlButtons.Count > 0)
+        {
+            _tooltipReadabilitySample = _controlButtons[0].MakeAuthoredTooltip(
+                TooltipReadabilitySampleText);
+            _tooltipReadabilitySample.Visible = false;
+            _hudRoot!.AddChild(_tooltipReadabilitySample);
+        }
+
         RefreshControls();
         return band;
     }
+
+    /// <summary>
+    /// Fixed content for <see cref="_tooltipReadabilitySample"/> rather than a
+    /// real button's live tooltip text: the guard measures font size, not
+    /// wording, and a synthetic two-line string guarantees the sample always
+    /// has both a title and a body to measure regardless of what any button's
+    /// tooltip happens to say.
+    /// </summary>
+    private const string TooltipReadabilitySampleText = "Sample\nSample tooltip body";
 
     /// <summary>
     /// One strip: a panel that hugs its buttons. It shrinks to its content on
@@ -1573,7 +1612,7 @@ public partial class Main : Node2D
     /// symbols would be <em>less</em> friendly than the text it replaces — which
     /// is why RimWorld and Prison Architect ship all three too.
     /// </summary>
-    private Button CreateControlButton(UiControl control, int index)
+    private HudButton CreateControlButton(UiControl control, int index)
     {
         var accent = control.Strip == UiControlStrip.Time ? "#1d4ed8" : "#b45309";
         // HudButton rather than Button: the default theme draws a tooltip at font
@@ -1588,7 +1627,7 @@ public partial class Main : Node2D
             TooltipText = control.Tooltip,
             CustomMinimumSize = new Vector2(ControlButtonSize, ControlButtonSize),
         };
-        button.AddThemeFontSizeOverride("font_size", 10);
+        button.AddThemeFontSizeOverride("font_size", HudFontSizes.ButtonLabelFontSize);
         button.AddThemeColorOverride("font_color", new Color("#dbeafe"));
         button.AddThemeColorOverride("font_pressed_color", new Color("#fef3c7"));
         button.AddThemeColorOverride("font_hover_color", new Color("#f8fafc"));
@@ -2232,6 +2271,20 @@ public partial class Main : Node2D
         _legendLines[0].AddThemeFontSizeOverride("font_size", 4);
 
     /// <summary>
+    /// The tooltip counterpart of <see cref="InjectHudReadabilityRegression"/>
+    /// (Issue #127): shrinks the readability guard's own tooltip sample
+    /// instead of a legend row, so a run with this flag proves the guard
+    /// rejects an unreadable tooltip instead of trusting that the fix keeps it
+    /// covered forever.
+    /// </summary>
+    private void InjectHudTooltipReadabilityRegression()
+    {
+        var body = (Label)_tooltipReadabilitySample!.FindChild(
+            "TooltipBody", recursive: true, owned: false)!;
+        body.AddThemeFontSizeOverride("font_size", 4);
+    }
+
+    /// <summary>
     /// The adapter state the HUD text is allowed to depend on, gathered in one
     /// place. Everything else about this node — labels, viewport, brushes,
     /// pointer — stays on this side of the seam on purpose.
@@ -2464,6 +2517,15 @@ public partial class Main : Node2D
     {
         _hudRoot!.Scale = Vector2.One * (float)uiScale;
         _hudRoot.Size = size / (float)uiScale;
+        // The tooltip popup cannot inherit _hudRoot.Scale (see HudButton.UiScale
+        // for why), so every button is told the same uiScale this call gives
+        // the rest of the HUD, and applies it the next time Godot asks it for a
+        // tooltip.
+        foreach (var button in _controlButtons)
+        {
+            button.UiScale = uiScale;
+        }
+
         _hudRoot.PropagateNotification((int)Container.NotificationSortChildren);
         foreach (var line in _legendLines)
         {
