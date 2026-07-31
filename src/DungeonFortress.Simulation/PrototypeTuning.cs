@@ -160,11 +160,22 @@ public static class PrototypeTuning
     // fighting reached. When a fourth arrives the oldest goes: what a creature
     // avoids is what happened to it recently, not the whole party.
     //
-    // Radius two, measured in tiles walked, because one tile is not a place —
-    // "the corner of the larder" is what a player can see being avoided, and a
-    // single tile reads as a coincidence. It is deliberately smaller than a
-    // chamber: the creature refuses the part of the room where it happened, not
-    // the room, so somebody standing three tiles away is visibly still working.
+    // Radius four, measured in tiles walked, and it is a measurement rather than
+    // a taste. Two was tried first, on the argument that a creature should refuse
+    // the part of a room where it happened rather than the room — and at two the
+    // refusal **never fired at all**, over the whole seed matrix and both
+    // fixtures that reach a wave. The reason is geometry the argument did not
+    // know about: the raiders' road runs three to four tiles east of the larder,
+    // so that is where defenders meet them and where memories are written, and
+    // there is no work on it to refuse. Four is the first radius that reaches
+    // back to the larder tiles themselves, and at four the refusal fires 9 to 69
+    // times a party.
+    //
+    // What two was right about is a real cost of four: at four a creature
+    // standing three tiles from a remembered place is inside the refusal, so
+    // "the part of the room" is closer to "the room". That is the price of the
+    // mechanic being observable at all on this map, and it is named rather than
+    // hidden.
     public const int MemoryPlacesMax = 3;
     public const int MemoryAvoidRadius = 4;
 

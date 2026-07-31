@@ -97,7 +97,14 @@ public sealed class PrototypeLayoutTests(ITestOutputHelper output)
         }
 
         Assert.Equal(passable.Count, seen.Count);
-        output.WriteLine($"passable={passable.Count} internal rock={rock.Count - 82}");
+        // Counted rather than subtracted from a remembered border size: the
+        // border is 83 tiles of rock and one gate, and the first version of this
+        // line subtracted 82, so the diagnostic printed 85 internal rock tiles
+        // where there are 84.
+        var internalRock = rock.Count(tile =>
+            tile.X > 0 && tile.Y > 0 &&
+            tile.X < PrototypeTuning.MapWidth - 1 && tile.Y < PrototypeTuning.MapHeight - 1);
+        output.WriteLine($"passable={passable.Count} internal rock={internalRock}");
     }
 
     /// <summary>
