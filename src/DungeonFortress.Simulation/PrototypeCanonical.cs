@@ -188,6 +188,25 @@ public static class PrototypeCanonical
             }
 
             writer.WriteNumber("recoveryTicks", creature.RecoveryTicks);
+
+            // Memory of place (Issue #117). Additive: a new array on an existing
+            // section, no field renamed, removed or re-pointed, so the schema
+            // version does not move — see
+            // docs/engineering/PROTOTYPE_HEADLESS.md, "Версионирование
+            // канонического снапшота". Every frame's checksum does move, because
+            // the array is present on every creature from tick 0, and that is
+            // what a golden regeneration is for here.
+            writer.WriteStartArray("rememberedPlaces");
+            foreach (var place in creature.RememberedPlaces.OrderBy(place => place.Place))
+            {
+                writer.WriteStartObject();
+                WritePoint(writer, "place", place.Place);
+                writer.WriteNumber("tick", place.Tick);
+                writer.WriteString("cause", place.Cause);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
             writer.WriteEndObject();
         }
 

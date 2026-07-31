@@ -1685,6 +1685,10 @@ public sealed class PrototypeWorld
             .OrderBy(job => job.Id)
             .ToList();
         var pairs = new List<MatchPair>();
+        foreach (var creature in candidates)
+        {
+            creature.AvoidedThisTick = null;
+        }
 
         foreach (var creature in candidates)
         {
@@ -1731,6 +1735,17 @@ public sealed class PrototypeWorld
                     continue;
                 }
 
+                // Where a creature broke or was put down, it will not start work
+                // again (Issue #117). Lying down is deliberately exempt: a wound
+                // closes in a bunk and nowhere else, so a creature that refused
+                // the bunk it was carried to would be refusing to heal, which is
+                // not a decision about work at all.
+                if (job.Kind != JobKind.Rest && AvoidedPlace(creature, target) is { } avoided)
+                {
+                    creature.AvoidedThisTick ??= (job.Kind, target, avoided);
+                    continue;
+                }
+
                 var targetOccupant = _creatures.FirstOrDefault(
                     other => other != creature && other.Position == target);
                 if (targetOccupant is not null && targetOccupant.CurrentJob is null)
@@ -1758,6 +1773,29 @@ public sealed class PrototypeWorld
                     pairs.Add(new MatchPair(creature, job, target, score, urgency, affinity, distance.Value));
                 }
             }
+        }
+
+        // The refusal goes into the canonical log before anything is assigned, so
+        // that a creature which then takes other work still tells the domain what
+        // it would not do. `lastDecision` is overwritten a moment later by the job
+        // it did take, which is right: the panel answers "what is it doing", and
+        // the event feed answers "what happened".
+        foreach (var creature in candidates
+                     .Where(item => item.AvoidedThisTick is not null)
+                     .OrderBy(item => item.Id))
+        {
+            var (kind, target, place) = creature.AvoidedThisTick!.Value;
+            RecordDecision(
+                creature,
+                AvoidanceReason(place),
+                new Dictionary<string, int>
+                {
+                    ["placeX"] = place.Place.X,
+                    ["placeY"] = place.Place.Y,
+                    ["sinceTick"] = place.Tick,
+                },
+                kind,
+                target);
         }
 
         while (pairs.Count > 0)
@@ -1864,6 +1902,28 @@ public sealed class PrototypeWorld
 
     private void RecordWaitingReason(CreatureState creature)
     {
+        // A creature standing idle because it will not go back to where it broke
+        // says so, instead of reporting the next-best diagnostic about a job it
+        // was never going to take. This is the only branch where the refusal is
+        // also the creature's last word, and it is the branch the player is
+        // looking at when they ask why somebody is doing nothing.
+        if (creature.AvoidedThisTick is { } avoided)
+        {
+            RecordDecision(
+                creature,
+                AvoidanceReason(avoided.Place),
+                new Dictionary<string, int>
+                {
+                    ["placeX"] = avoided.Place.Place.X,
+                    ["placeY"] = avoided.Place.Place.Y,
+                    ["sinceTick"] = avoided.Place.Tick,
+                },
+                avoided.Kind,
+                avoided.Target);
+            creature.Mode = CreatureMode.Waiting;
+            return;
+        }
+
         var diagnosticKind = Enum.GetValues<JobKind>()
             .Where(kind =>
                 _priorities[kind] > 0 &&
@@ -2319,6 +2379,7 @@ public sealed class PrototypeWorld
                     defender.Injury = InjuryKind.Heavy;
                     defender.Mode = CreatureMode.Downed;
                     CurrentWave()?.CountDefenderDowned();
+                    Remember(defender, "wound");
                     RecordDecision(defender, "combat_downed", new Dictionary<string, int> { ["raiderId"] = raider.Id, ["damage"] = damage });
                 }
                 continue;
@@ -2594,6 +2655,7 @@ public sealed class PrototypeWorld
 
             creature.Mode = CreatureMode.Fled;
             CurrentWave()?.CountDefenderFled();
+            Remember(creature, "panic");
             RecordDecision(
                 creature,
                 "combat_fled_morale",
@@ -2713,6 +2775,64 @@ public sealed class PrototypeWorld
         creature.Mode != CreatureMode.Downed &&
         creature.Injury != InjuryKind.Heavy &&
         creature.Satiety >= PrototypeTuning.CombatMinSatiety;
+
+    /// <summary>
+    /// One creature writes down where it is standing and what happened to it
+    /// there. Called from exactly two places — the tick its nerve failed and the
+    /// tick a raider put it down — because those are the two events Issue #117
+    /// calls "паника или травма".
+    ///
+    /// The memory is written at <see cref="CreatureState.Position"/> and nowhere
+    /// else, which is the whole of what keeps it from becoming a herd: two
+    /// defenders who broke in the same fight broke on different tiles, so they
+    /// avoid different places, and a third who held remembers nothing at all.
+    /// That is the property #101 bought for panic and this must not spend.
+    ///
+    /// A place already remembered for a wound stays a wound even if the creature
+    /// later panics on it. Being put down is the worse of the two and the one
+    /// worth telling the player about; letting the softer cause overwrite it
+    /// would make the reason a function of which event happened last rather than
+    /// of what happened.
+    /// </summary>
+    private void Remember(CreatureState creature, string cause)
+    {
+        var place = creature.Position;
+        if (creature.RememberedPlaces.TryGetValue(place, out var known) && known.Cause == "wound")
+        {
+            cause = "wound";
+        }
+
+        creature.RememberedPlaces[place] = new PrototypeRememberedPlace(place, CurrentTick, cause);
+        while (creature.RememberedPlaces.Count > PrototypeTuning.MemoryPlacesMax)
+        {
+            var oldest = creature.RememberedPlaces.Values
+                .OrderBy(item => item.Tick)
+                .ThenBy(item => item.Place)
+                .First();
+            creature.RememberedPlaces.Remove(oldest.Place);
+        }
+    }
+
+    /// <summary>
+    /// Whether this creature will refuse to start work on this tile, and which
+    /// memory refuses it. The nearest remembered place wins, and ties go to the
+    /// newer memory and then to the tile order, so the answer never depends on
+    /// the order the dictionary happens to enumerate in.
+    /// </summary>
+    private static PrototypeRememberedPlace? AvoidedPlace(CreatureState creature, GridPoint target)
+    {
+        return creature.RememberedPlaces.Count == 0
+            ? null
+            : creature.RememberedPlaces.Values
+                .Where(place => Manhattan(place.Place, target) <= PrototypeTuning.MemoryAvoidRadius)
+                .OrderBy(place => Manhattan(place.Place, target))
+                .ThenByDescending(place => place.Tick)
+                .ThenBy(place => place.Place)
+                .FirstOrDefault();
+    }
+
+    private static string AvoidanceReason(PrototypeRememberedPlace place) =>
+        place.Cause == "wound" ? "refused_place_of_wound" : "refused_place_of_panic";
 
     private int CombatJitter(int amplitude) => _combatRandom.NextInt32(amplitude * 2 + 1) - amplitude;
 
@@ -4383,7 +4503,8 @@ public sealed class PrototypeWorld
             creature.LastDecision,
             ComputeReadiness(creature),
             creature.ReadinessAtRaid,
-            creature.RecoveryTicks);
+            creature.RecoveryTicks,
+            [.. creature.RememberedPlaces.Values]);
     }
 
     private PrototypeDigDesignationSnapshot ToSnapshot(GridPoint tile)
@@ -4678,6 +4799,22 @@ public sealed class PrototypeWorld
         public int YieldCount { get; set; }
         public int LastYieldTick { get; set; } = -1;
         public bool WaitThisTick { get; set; }
+
+        /// <summary>
+        /// Where this creature broke or was put down. Keyed by tile so that the
+        /// same place remembered twice stays one entry, and sorted so that the
+        /// canonical document does not depend on the order the events arrived
+        /// in. Capped at <see cref="PrototypeTuning.MemoryPlacesMax"/>.
+        /// </summary>
+        public SortedDictionary<GridPoint, PrototypeRememberedPlace> RememberedPlaces { get; } = [];
+
+        /// <summary>
+        /// The work this creature turned down this tick because of where it
+        /// would have had to start. Transient — it is recomputed every tick from
+        /// the memory and the job list, exactly like <see cref="WaitThisTick"/>,
+        /// so it is not canonical state.
+        /// </summary>
+        public (JobKind Kind, GridPoint Target, PrototypeRememberedPlace Place)? AvoidedThisTick { get; set; }
 
         public int Affinity(JobKind kind)
         {

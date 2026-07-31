@@ -152,6 +152,22 @@ public static class PrototypeTuning
     public const int MoralePerRaiderNear = 5;
     public const int MoraleWitnessRadius = 6;
     public const int MoralePressRadius = 2;
+    // Memory of place (Issue #117). A creature remembers where its nerve failed
+    // and where a raider put it down, and will not start work there.
+    //
+    // Three places, because a party is four waves long and a creature that
+    // remembered every one of them would end it unable to work anywhere the
+    // fighting reached. When a fourth arrives the oldest goes: what a creature
+    // avoids is what happened to it recently, not the whole party.
+    //
+    // Radius two, measured in tiles walked, because one tile is not a place —
+    // "the corner of the larder" is what a player can see being avoided, and a
+    // single tile reads as a coincidence. It is deliberately smaller than a
+    // chamber: the creature refuses the part of the room where it happened, not
+    // the room, so somebody standing three tiles away is visibly still working.
+    public const int MemoryPlacesMax = 3;
+    public const int MemoryAvoidRadius = 4;
+
     public const ulong DefaultSeed = 20_260_726UL;
 
     public const int MapWidth = 28;
