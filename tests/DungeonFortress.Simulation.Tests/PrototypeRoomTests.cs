@@ -427,9 +427,12 @@ public sealed class PrototypeRoomTests
     [Fact]
     public void The_canonical_document_is_the_same_whatever_order_the_rooms_arrive_in()
     {
+        // Two patches of one purpose and a second purpose besides, so that both
+        // sort keys and both inner orders have something to decide.
         var state = Run(
             3,
             new ZonePaintCommand(1, ZoneKind.Watch, [EmptyFloorA, EmptyFloorB]),
+            new ZonePaintCommand(1, ZoneKind.Watch, [new GridPoint(1, 10), new GridPoint(2, 10)]),
             new ZonePaintCommand(1, ZoneKind.TrainingGround, [LeftPost, RightPost]));
 
         var reversed = state with
