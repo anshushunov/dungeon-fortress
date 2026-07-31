@@ -661,8 +661,9 @@ Merge PR, в обсуждении которого остались неразо
 `src/DungeonFortress.Game/Main.cs` и `scripts/verify.ps1`: перечень из двух
 файлов упразднён правилом 5 раздела «Темп разработки» «Правил движения»
 [`ROADMAP.md`](../product/ROADMAP.md), потому что он не покрывал узлы, в которые
-сходятся gameplay-слайсы — `PrototypeWorld.cs` и контракт
-`docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md`. Ослаблен только перечень файлов;
+сходятся gameplay-слайсы — `src/DungeonFortress.Simulation/PrototypeWorld.cs` и
+контракт `docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md`. Ослаблен только
+перечень файлов;
 **все четыре условия
 [ADR 0017](../decisions/0017-raise-parallel-writing-ceiling.md) §3 сохраняются
 полностью**: обе стороны заданы **перечислением членов**, а не описанием вида
