@@ -38,6 +38,51 @@
         "prepared": {"20260726": 13, "20260727": 21, "20260728": 15}
       },
       "neglectedFallenTick": {"20260726": 649, "20260727": 604, "20260728": 599}
+    },
+    {
+      "stage": "after",
+      "layout": "dungeon",
+      "note": "The shipped dungeon, the CanYield fix, and the prepared plan re-authored for the new map: the drill hall moved next to the hearth, drilling starts when the threat is announced rather than at tick 0, and the watch is set at the same moment as its zone.",
+      "score": {
+        "baseline": {"20260726": 737, "20260727": 762, "20260728": 659},
+        "prepared": {"20260726": 799, "20260727": 867, "20260728": 893},
+        "neglected": {"20260726": 0, "20260727": 0, "20260728": 0}
+      },
+      "planGapPerSeed": {"20260726": 62, "20260727": 105, "20260728": 234},
+      "minimumPlanGap": 62,
+      "livingOverFallenGap": 659,
+      "renown": {
+        "baseline": {"20260726": 125, "20260727": 129, "20260728": 139},
+        "prepared": {"20260726": 153, "20260727": 149, "20260728": 159},
+        "neglected": {"20260726": 4, "20260727": 4, "20260728": 4}
+      },
+      "mealsProduced": {
+        "baseline": {"20260726": 105, "20260727": 93, "20260728": 123},
+        "prepared": {"20260726": 84, "20260727": 81, "20260728": 84}
+      },
+      "mealsStolen": {
+        "baseline": {"20260726": 39, "20260727": 36, "20260728": 57},
+        "prepared": {"20260726": 21, "20260727": 25, "20260728": 23}
+      },
+      "combatFledMorale": {
+        "baseline": {"20260726": 23, "20260727": 24, "20260728": 22},
+        "prepared": {"20260726": 18, "20260727": 13, "20260728": 22}
+      },
+      "combatRefusedStarving": {
+        "prepared": {"20260726": 13, "20260727": 25, "20260728": 0}
+      },
+      "atFirstWave": {
+        "command": "dotnet tests/DungeonFortress.Scenarios/bin/Release/net8.0/DungeonFortress.Scenarios.dll --prototype --commands scenarios/prototype1/<fixture>.commands.v2.json --ticks 1301 --snapshot <file>",
+        "seed": 20260726,
+        "averageReadinessAtRaid": {"baseline": 46, "prepared": 57},
+        "strength": {"baseline": 14, "prepared": 51},
+        "averageMartialForm": {"baseline": 0, "prepared": 49}
+      },
+      "invariantMisses": [
+        "13.4 invariant 4, second clause, on seed 20260728: combat_fled_morale is 22 for both plans, and the invariant asks for strictly fewer. The first clause holds everywhere and by a wider margin than before: 21/25/23 stolen against 39/36/57.",
+        "13.4 invariant 5, third clause, on seed 20260728: prepared records no combat_refused_starving at all, because on that seed it is never short enough of food for anyone to be turned away from the fight."
+      ],
+      "neglectedFallenTick": {"20260726": 614, "20260727": 594, "20260728": 659}
     }
   ]
 }

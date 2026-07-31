@@ -495,6 +495,24 @@ public sealed class PrototypeWorld
         };
     }
 
+    /// <summary>
+    /// The nine, where they stand at tick 0.
+    ///
+    /// Three of the starting tiles moved with the dungeon of Issue #117 and the
+    /// reason is named for each, because "the fixture changed" is not a reason:
+    ///
+    /// - Мотылёк was on <c>(13,9)</c>, which the wall between the kitchen and
+    ///   the larder now runs through. It moved into the larder, which is where a
+    ///   carrier belongs;
+    /// - Прель was on <c>(10,9)</c> and Уголёк on <c>(21,9)</c>. Both tiles
+    ///   survived the change, and both became **doors** — the kitchen's only way
+    ///   to the spine and the quarters' only way down. A creature standing in a
+    ///   doorway on tick 0 blocks the room behind it for as long as it takes to
+    ///   pick a job, which is a start position picking a fight with the traffic
+    ///   arbitration. Both stepped one tile back into their own room.
+    ///
+    /// Everything else — id, name, might, grit, affinities — is untouched.
+    /// </summary>
     private static List<CreatureState> CreateCreatures(ulong seed)
     {
         var random = new DeterministicRandom(seed ^ 0x776F726C645F696EUL);
@@ -502,11 +520,11 @@ public sealed class PrototypeWorld
         {
             new CreatureDefinition(0, "Брусок", 2, 3, Affinities((JobKind.Cook, 2)), new(11, 8)),
             new CreatureDefinition(1, "Кремень", 4, 4, Affinities((JobKind.Watch, 2)), new(24, 12)),
-            new CreatureDefinition(2, "Мотылёк", 1, 2, Affinities((JobKind.Haul, 2)), new(13, 9)),
+            new CreatureDefinition(2, "Мотылёк", 1, 2, Affinities((JobKind.Haul, 2)), new(16, 8)),
             new CreatureDefinition(3, "Смола", 2, 3, Affinities((JobKind.Harvest, 2)), new(4, 3)),
             new CreatureDefinition(4, "Дёготь", 3, 2, Affinities((JobKind.Harvest, 1), (JobKind.Haul, 1)), new(6, 5)),
-            new CreatureDefinition(5, "Уголёк", 3, 3, Affinities((JobKind.Drill, 2)), new(21, 9)),
-            new CreatureDefinition(6, "Прель", 1, 4, Affinities((JobKind.Cook, 1), (JobKind.Harvest, 1)), new(10, 9)),
+            new CreatureDefinition(5, "Уголёк", 3, 3, Affinities((JobKind.Drill, 2)), new(20, 5)),
+            new CreatureDefinition(6, "Прель", 1, 4, Affinities((JobKind.Cook, 1), (JobKind.Harvest, 1)), new(9, 8)),
             new CreatureDefinition(7, "Обух", 5, 2, Affinities((JobKind.Watch, 1)), new(25, 13)),
             new CreatureDefinition(8, "Тишина", 2, 5, Affinities((JobKind.Haul, 1), (JobKind.Drill, 1)), new(17, 10)),
         };
@@ -1606,9 +1624,35 @@ public sealed class PrototypeWorld
         return true;
     }
 
+    /// <summary>
+    /// Whether this creature may be told to step aside.
+    ///
+    /// The order has to go to somebody who will actually take the step, and two
+    /// modes will not (Issue #119). <see cref="ActCreatures"/> hands a
+    /// <see cref="CreatureMode.Fighting"/> creature to
+    /// <see cref="ActCombatant"/> before it ever reads
+    /// <c>TrafficTarget</c>, and it skips a <see cref="CreatureMode.Downed"/>
+    /// one outright. Choosing either as the yielder cost the tick twice: the
+    /// booked tile stayed shut for everybody, including the creature the yield
+    /// was made for, and <c>chosen_traffic_yield</c> went into the canonical log
+    /// for a move that never happened.
+    ///
+    /// Measured on the hall layout of `main`, per party over the seed matrix:
+    /// 21 to 109 such orders to a defender in a fight and 0 to 173 to a creature
+    /// on the floor. The dungeon of Issue #117 is what made the cost visible —
+    /// in a hall the traffic walks around a tile locked for nothing, in a
+    /// doorway there is nothing to walk around — and the traffic measurement
+    /// behind the decision to fix it here is
+    /// <c>evidence/117-traffic.json</c>.
+    ///
+    /// <see cref="CreatureMode.Fled"/> is deliberately not in the list: a runner
+    /// does read the booking and does take the step, which is the half of this
+    /// Issue #101 already closed.
+    /// </summary>
     private bool CanYield(CreatureState creature, bool allowUrgent)
     {
         return creature.TrafficTarget is null &&
+            creature.Mode is not (CreatureMode.Fighting or CreatureMode.Downed) &&
             (allowUrgent ||
              (!creature.MealReserved && !creature.IsMustering)) &&
             PrimaryDestination(creature) != creature.Position;

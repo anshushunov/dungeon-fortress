@@ -16,73 +16,88 @@ internal sealed class PrototypeMap
     private readonly SortedSet<GridPoint> _excavated = [];
     private readonly SortedSet<GridPoint> _builtPosts = [];
 
+    private static readonly GridPoint[] AuthoredBeds = PrototypeLayout.Read('m');
+    private static readonly GridPoint[] AuthoredKitchens = PrototypeLayout.Read('K');
+    private static readonly GridPoint[] AuthoredLarders = PrototypeLayout.Read('L');
+    private static readonly GridPoint[] AuthoredBunks = PrototypeLayout.Read('q');
+    private static readonly GridPoint[] AuthoredPosts = PrototypeLayout.Read('T');
+    private static readonly GridPoint[] AuthoredPocket = PrototypeLayout.Read('d');
+    private static readonly GridPoint[] AuthoredInternalRock =
+    [
+        .. PrototypeLayout.Read('#')
+            .Concat(AuthoredPocket)
+            .Where(point => !IsBoundary(point))
+            .Order(),
+    ];
+
+    private static readonly HashSet<GridPoint> InitiallyDiggable = [.. AuthoredInternalRock];
+    private static readonly GridPoint AuthoredGate = PrototypeLayout.Read('G').Single();
+
+    /// <summary>
+    /// The terrain of tick 0, read straight off <see cref="PrototypeLayout"/>.
+    /// Nothing here decides anything: every question about which tile is what is
+    /// answered by the picture, so the picture is the only thing a reader has to
+    /// check.
+    /// </summary>
     public PrototypeMap()
     {
         for (var y = 0; y < PrototypeTuning.MapHeight; y++)
         {
             for (var x = 0; x < PrototypeTuning.MapWidth; x++)
             {
-                _tiles[x, y] =
-                    x == 0 || y == 0 ||
-                    x == PrototypeTuning.MapWidth - 1 ||
-                    y == PrototypeTuning.MapHeight - 1
-                        ? TileKind.Rock
-                        : TileKind.Floor;
+                _tiles[x, y] = PrototypeLayout.Rows[y][x] switch
+                {
+                    '#' or 'd' => TileKind.Rock,
+                    'm' => TileKind.Bed,
+                    'K' => TileKind.Kitchen,
+                    'L' => TileKind.Larder,
+                    'q' => TileKind.Bunk,
+                    'T' => TileKind.Post,
+                    'G' => TileKind.Gate,
+                    _ => TileKind.Floor,
+                };
             }
         }
-
-        Set(TileKind.Bed, BedTiles);
-        Set(TileKind.Kitchen, KitchenTiles);
-        Set(TileKind.Larder, LarderTiles);
-        Set(TileKind.Bunk, BunkTiles);
-        Set(TileKind.Post, AuthoredPostTiles);
-        Set(TileKind.Rock, InternalRockTiles);
-        _tiles[Gate.X, Gate.Y] = TileKind.Gate;
     }
 
-    public static GridPoint[] BedTiles =>
-    [
-        new(2, 1), new(5, 1), new(2, 3), new(5, 3),
-        new(2, 5), new(5, 5), new(2, 7), new(5, 7),
-    ];
+    public static GridPoint[] BedTiles => [.. AuthoredBeds];
 
-    public static GridPoint[] KitchenTiles => [new(10, 7), new(11, 7)];
+    public static GridPoint[] KitchenTiles => [.. AuthoredKitchens];
 
-    public static GridPoint[] LarderTiles => [new(14, 7), new(15, 7)];
+    public static GridPoint[] LarderTiles => [.. AuthoredLarders];
 
-    public static GridPoint[] BunkTiles => [new(20, 3), new(21, 3), new(21, 4), new(22, 4)];
+    public static GridPoint[] BunkTiles => [.. AuthoredBunks];
 
     /// <summary>
     /// The training posts the map fixture authors. It is the starting gym, not
     /// the set of posts that can exist: <see cref="PostTiles"/> is the runtime
     /// authority once the player starts building.
     /// </summary>
-    public static GridPoint[] AuthoredPostTiles => [new(8, 12), new(9, 12), new(8, 13), new(9, 13)];
-
-    public static GridPoint[] InternalRockTiles =>
-    [
-        new(9, 4), new(9, 5), new(18, 4),
-        new(18, 5), new(9, 10), new(18, 10),
-        .. DigPocketTiles,
-    ];
+    public static GridPoint[] AuthoredPostTiles => [.. AuthoredPosts];
 
     /// <summary>
-    /// The excavation playground of Issue #24, in the top-right corner. It was
-    /// placed away from the tiles the shipped scenarios actually walk: creature
-    /// positions, move counts and economy counters of baseline, prepared and
-    /// neglected are identical over a full session with and without the pocket.
-    /// That is a measured property of those three command logs, not a proof that
-    /// no path anywhere changes — a log that sends a creature between the
-    /// top-right corner tiles can pick a different equal-length route.
+    /// Every rock tile inside the border. Since Issue #117 that is the whole
+    /// masonry of the dungeon rather than six pillars and a pocket, so the
+    /// player can now open a wall between two chambers instead of only quarrying
+    /// a corner. Digging the border is still refused
+    /// (<see cref="IsBoundary"/>): it holds the dungeon in.
     /// </summary>
-    public static GridPoint[] DigPocketTiles =>
-    [
-        new(25, 1), new(26, 1),
-        new(25, 2), new(26, 2),
-        new(25, 3), new(26, 3),
-    ];
+    public static GridPoint[] InternalRockTiles => [.. AuthoredInternalRock];
 
-    public static GridPoint Gate => new(27, 13);
+    /// <summary>
+    /// The excavation playground of Issue #24, in the top-right corner behind
+    /// the quarters. The shipped demo fixtures name these six tiles by
+    /// coordinate, which is why the pocket survived the layout change unmoved
+    /// together with the niche at <c>x = 24</c> that a digger works from.
+    ///
+    /// It is no longer the only diggable rock: see
+    /// <see cref="InternalRockTiles"/>. The measured claim it used to carry —
+    /// that the three shipped scenarios walk identically with and without the
+    /// pocket — was a property of a map made of open floor and is not restated.
+    /// </summary>
+    public static GridPoint[] DigPocketTiles => [.. AuthoredPocket];
+
+    public static GridPoint Gate => AuthoredGate;
 
     public TileKind this[GridPoint point] => _tiles[point.X, point.Y];
 
@@ -124,7 +139,7 @@ internal sealed class PrototypeMap
     public static bool IsDiggableInInitialLayout(GridPoint point)
     {
         return IsInside(point) && !IsBoundary(point) &&
-            InternalRockTiles.Contains(point);
+            InitiallyDiggable.Contains(point);
     }
 
     /// <summary>
@@ -405,14 +420,6 @@ internal sealed class PrototypeMap
                     zone.Add(point);
                 }
             }
-        }
-    }
-
-    private void Set(TileKind kind, IEnumerable<GridPoint> points)
-    {
-        foreach (var point in points)
-        {
-            _tiles[point.X, point.Y] = kind;
         }
     }
 }

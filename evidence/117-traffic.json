@@ -24,6 +24,33 @@
         {"fixture": "prepared", "seed": 20260727, "ticks": 2406, "blockedSteps": 4530, "yields": 351, "unexecutedYields": 77, "ordersToFighting": 73, "ordersToDowned": 0},
         {"fixture": "prepared", "seed": 20260728, "ticks": 2409, "blockedSteps": 5841, "yields": 524, "unexecutedYields": 280, "ordersToFighting": 95, "ordersToDowned": 173}
       ]
+    },
+    {
+      "stage": "dungeon-before-the-119-fix",
+      "layout": "dungeon",
+      "note": "The dungeon on its own, with CanYield untouched. This is the measurement Issue #117 asks for: did the new layout raise how often a step stalls. It did, by half again, which is what authorised fixing #119 inside this task.",
+      "runs": [
+        {"fixture": "baseline", "seed": 20260726, "blockedSteps": 8864, "yields": 1479, "unexecutedYields": 335, "ordersToFighting": 201, "ordersToDowned": 0},
+        {"fixture": "baseline", "seed": 20260727, "blockedSteps": 9872, "yields": 1807, "unexecutedYields": 282, "ordersToFighting": 88, "ordersToDowned": 0},
+        {"fixture": "baseline", "seed": 20260728, "blockedSteps": 9550, "yields": 2109, "unexecutedYields": 433, "ordersToFighting": 82, "ordersToDowned": 14},
+        {"fixture": "prepared", "seed": 20260726, "blockedSteps": 9249, "yields": 739, "unexecutedYields": 186, "ordersToFighting": 86, "ordersToDowned": 20},
+        {"fixture": "prepared", "seed": 20260727, "blockedSteps": 7875, "yields": 1557, "unexecutedYields": 373, "ordersToFighting": 103, "ordersToDowned": 78},
+        {"fixture": "prepared", "seed": 20260728, "blockedSteps": 9577, "yields": 1004, "unexecutedYields": 255, "ordersToFighting": 156, "ordersToDowned": 26}
+      ],
+      "caveat": "Taken on an intermediate layout of this branch, not on the one that shipped: the chambers were the same, the doorways were narrower. It is kept because it is the measurement the decision to fix #119 was made on, and because a later, wider layout cannot be used to justify a fix that was needed by the narrow one."
+    },
+    {
+      "stage": "after",
+      "layout": "dungeon",
+      "note": "The shipped dungeon with the CanYield fix. No yield order goes to a creature that cannot take the step, and stalled steps are back inside the range the hall produced.",
+      "runs": [
+        {"fixture": "baseline", "seed": 20260726, "ticks": 2404, "blockedSteps": 5850, "yields": 547, "unexecutedYields": 21, "ordersToFighting": 0, "ordersToDowned": 0},
+        {"fixture": "baseline", "seed": 20260727, "ticks": 2408, "blockedSteps": 9500, "yields": 1282, "unexecutedYields": 25, "ordersToFighting": 0, "ordersToDowned": 0},
+        {"fixture": "baseline", "seed": 20260728, "ticks": 2430, "blockedSteps": 6032, "yields": 654, "unexecutedYields": 86, "ordersToFighting": 0, "ordersToDowned": 0},
+        {"fixture": "prepared", "seed": 20260726, "ticks": 2406, "blockedSteps": 5791, "yields": 428, "unexecutedYields": 7, "ordersToFighting": 0, "ordersToDowned": 0},
+        {"fixture": "prepared", "seed": 20260727, "ticks": 2406, "blockedSteps": 7891, "yields": 1015, "unexecutedYields": 20, "ordersToFighting": 0, "ordersToDowned": 0},
+        {"fixture": "prepared", "seed": 20260728, "ticks": 2406, "blockedSteps": 5002, "yields": 393, "unexecutedYields": 14, "ordersToFighting": 0, "ordersToDowned": 0}
+      ]
     }
   ]
 }

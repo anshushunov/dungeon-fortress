@@ -123,12 +123,20 @@ public sealed class PrototypeTrafficTests(ITestOutputHelper output)
     public void Report_traffic_over_the_seed_matrix()
     {
         var report = new StringBuilder();
+        var heat = new Dictionary<GridPoint, int>();
         foreach (var fixtureName in Fixtures)
         {
             foreach (var seed in MatrixSeeds)
             {
-                report.AppendLine(CultureInfo.InvariantCulture, $"{Measure(fixtureName, seed)}");
+                report.AppendLine(CultureInfo.InvariantCulture, $"{Measure(fixtureName, seed, heat)}");
             }
+        }
+
+        report.AppendLine("tiles where a step was refused most often, over the whole matrix:");
+        foreach (var tile in heat.OrderByDescending(pair => pair.Value).Take(16))
+        {
+            report.AppendLine(CultureInfo.InvariantCulture,
+                $"  ({tile.Key.X},{tile.Key.Y}) {tile.Value}");
         }
 
         output.WriteLine(report.ToString());
@@ -140,7 +148,10 @@ public sealed class PrototypeTrafficTests(ITestOutputHelper output)
     /// One party, walked tick by tick, counting the four traffic facts the
     /// canonical state already publishes.
     /// </summary>
-    private static TrafficMeasurement Measure(string fixtureName, ulong seed)
+    private static TrafficMeasurement Measure(
+        string fixtureName,
+        ulong seed,
+        Dictionary<GridPoint, int>? heat = null)
     {
         var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
         var previous = world.GetSnapshot();
@@ -166,6 +177,13 @@ public sealed class PrototypeTrafficTests(ITestOutputHelper output)
                 if (@event.ReasonCode == "waiting_blocked_by_other")
                 {
                     blockedSteps++;
+                    if (heat is not null)
+                    {
+                        var standing = current.Creatures
+                            .Single(item => item.Id == @event.CreatureId).Position;
+                        heat[standing] = heat.GetValueOrDefault(standing) + 1;
+                    }
+
                     continue;
                 }
 
