@@ -74,7 +74,12 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
             withMemory >= 5,
             $"{fixtureName}: only {withMemory} creature-parties over the matrix came out with a " +
             "memory at all, which is too few for anything below to have been exercised.");
+        // Both causes, and both asserted. There are two places in the simulation
+        // that write a memory, and without naming the second one here removing it
+        // is a change no check can see: measured by mutation, deleting the write
+        // on `combat_downed` left this whole class green.
         Assert.Contains("panic", causes);
+        Assert.Contains("wound", causes);
     }
 
     /// <summary>

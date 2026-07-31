@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "issue": 117,
+  "what": "Every half of every change of this slice, reverted on its own, against the check that has to notice. The rule the issue states is that a check is not done until it reddens for *each* half rather than for the change as a whole — it was written on #101, where a test covering a traffic fix survived the reversal of one of its two halves.",
+  "howToReproduce": "Apply the mutation to the named file, build, run the named filter, then `git checkout --` the file. The runner used here is .artifacts/mutate.sh, which does exactly that; it is scratch, not shipped.",
+  "mutations": [
+    {
+      "half": "CanYield stops excluding Fighting (Issue #119, half 1)",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "edit": "creature.Mode is not (CreatureMode.Fighting or CreatureMode.Downed) -> creature.Mode is not CreatureMode.Downed",
+      "filter": "PrototypeTrafficTests.A_yield_is_never_ordered",
+      "result": "red: 6 of 6 failed"
+    },
+    {
+      "half": "CanYield stops excluding Downed (Issue #119, half 2)",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "edit": "creature.Mode is not (CreatureMode.Fighting or CreatureMode.Downed) -> creature.Mode is not CreatureMode.Fighting",
+      "filter": "PrototypeTrafficTests.A_yield_is_never_ordered",
+      "result": "red: 5 of 6 failed"
+    },
+    {
+      "half": "memory is never written on panic (writing, half 1)",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "edit": "delete Remember(creature, \"panic\") in ApplyMorale",
+      "filter": "PrototypeMemoryTests",
+      "result": "red: 4 of 8 failed"
+    },
+    {
+      "half": "memory is never written on a wound (writing, half 2)",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "edit": "delete Remember(defender, \"wound\") in ActRaiders",
+      "filter": "PrototypeMemoryTests",
+      "result": "red: 2 of 8 failed",
+      "finding": "Green on the first attempt. No check named the second cause, so deleting the write on combat_downed was invisible; A_party_leaves_its_survivors_with_places_they_remember gained Assert.Contains(\"wound\", causes) and the mutation went red. This is the class of hole the rule exists to find."
+    },
+    {
+      "half": "the avoidance arm of MatchJobs removed (reading)",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "edit": "delete the `if (job.Kind != JobKind.Rest && AvoidedPlace(...))` block",
+      "filter": "PrototypeMemoryTests",
+      "result": "red: 3 of 8 failed, and the writing tests stayed green — the two halves fail apart"
+    },
+    {
+      "half": "the Rest exemption removed",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "edit": "drop `job.Kind != JobKind.Rest &&` from the same condition",
+      "filter": "PrototypeMemoryTests",
+      "result": "red: 2 of 8 failed"
+    },
+    {
+      "half": "the narrator guesses instead of refusing an unknown code",
+      "file": "src/DungeonFortress.Presentation/EventNarration.cs",
+      "edit": "replace the throwing default arm with a catch-all sentence",
+      "filter": "EventNarrationTests",
+      "result": "red: 1 of 5 failed"
+    },
+    {
+      "half": "the feed goes back to printing the raw reason code",
+      "file": "src/DungeonFortress.Presentation/HudText.cs",
+      "edit": "EventNarration.Describe -> CreatureName + event.ReasonCode",
+      "filter": "HudTextTests, GoldenUiTextTests",
+      "result": "red: 4 of 27 failed"
+    }
+  ]
+}
