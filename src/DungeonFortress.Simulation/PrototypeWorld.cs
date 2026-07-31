@@ -2469,6 +2469,13 @@ public sealed class PrototypeWorld
     /// combat trait — the latter is deliberately somebody else's work
     /// (Issue #101 non-goals).
     ///
+    /// Asking every tick rather than once per casualty also raises how often the
+    /// question can be answered "no", and that is a real cost rather than a
+    /// rounding error: at the weights the shape was first written with, the whole
+    /// line left every wave and `defendersDowned` fell to 0..1 a party. The
+    /// weights in <see cref="PrototypeTuning"/> were re-measured against that,
+    /// and what they are worth now is argued there.
+    ///
     /// Distance is Manhattan rather than a path: the question is "what can I see
     /// from here", and a breadth-first search per defender per fallen ally per
     /// tick would buy a corner case at a price the whole party pays.

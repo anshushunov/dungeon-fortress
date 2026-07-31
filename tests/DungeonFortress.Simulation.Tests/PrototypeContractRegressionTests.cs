@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 
 using DungeonFortress.Scenarios;
@@ -321,18 +321,37 @@ public sealed class PrototypeContractRegressionTests
             station => station.Kind == TileKind.Post && station.OccupiedTicks > 0);
     }
 
+    /// <summary>
+    /// One tile a tick, one creature a tile, and nobody walking through anybody.
+    ///
+    /// It reads the whole party rather than the run-up to the first wave, and the
+    /// difference is not thoroughness for its own sake. Everything the domain did
+    /// before tick 1301 was walking to work, and walking to work went through the
+    /// one movement routine of the world, so the invariant could not fail there.
+    /// The one thing in the prototype that assigned a position outright happened
+    /// in combat — a defender broken by morale was placed at the far wall inside
+    /// one tick — and this test ran out exactly one tick after the first wave
+    /// landed, which is before anybody had lost their nerve. It witnessed nothing
+    /// and passed (Issue #101). Reading to the end of the party is what turns it
+    /// into evidence that flight is a walk.
+    /// </summary>
     [Fact]
     public void Traffic_arbitration_preserves_one_move_no_overlap_and_no_swap()
     {
         var world = new PrototypeWorld(LoadFixture("baseline"));
         var previous = world.GetSnapshot();
-        for (var tick = 0; tick < PrototypeTuning.FirstRaidTick + 1; tick++)
+        var flightsWitnessed = 0;
+        while (!world.IsComplete)
         {
             world.Step();
             var current = world.GetSnapshot();
             Assert.Equal(
                 current.Creatures.Count,
                 current.Creatures.Select(creature => creature.Position).Distinct().Count());
+
+            flightsWitnessed += current.Creatures.Count(creature =>
+                creature.Mode == CreatureMode.Fled &&
+                previous.Creatures.Single(item => item.Id == creature.Id).Mode != CreatureMode.Fled);
 
             foreach (var creature in current.Creatures)
             {
@@ -367,13 +386,23 @@ public sealed class PrototypeContractRegressionTests
             @event => @event.ReasonCode == "chosen_traffic_yield" &&
                 @event.Details["dependencyCycle"] == 1);
         Assert.All(previous.Creatures, creature => Assert.True(creature.YieldCount > 0));
-        // A soft fairness bound, not a rule: the corridor was re-measured for the
-        // longer run-up to the first wave that a party of waves gives it.
+        // Reading to the end of the party is only evidence about flight if the
+        // party contained some. It does — 22 on this fixture and seed — and the
+        // floor is set well under that, because how many break is tuning and this
+        // test is not the place that pins it.
+        Assert.True(
+            flightsWitnessed >= 5,
+            $"only {flightsWitnessed} defenders broke in this party, which is too few " +
+            "for the walk out of a fight to have been read at all.");
+        // A soft fairness bound, not a rule: the corridor was re-measured over the
+        // whole party rather than over the run-up to the first wave, and came out
+        // at 30 against the 27 of the shorter window on `origin/main`. The bound
+        // keeps roughly the proportion of slack it had before.
         Assert.InRange(
             previous.Creatures.Max(creature => creature.YieldCount) -
             previous.Creatures.Min(creature => creature.YieldCount),
             0,
-            32);
+            40);
     }
 
     [Fact]

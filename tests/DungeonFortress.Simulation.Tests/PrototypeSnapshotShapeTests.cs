@@ -264,6 +264,52 @@ public sealed class PrototypeSnapshotShapeTests
     }
 
     /// <summary>
+    /// The arguments of a reason code are the one part of the snapshot the
+    /// inventory above deliberately does not walk into: <c>$.events[].details</c>
+    /// is an open map, because the vocabulary of reason codes and what each of
+    /// them carries is tuning by ADR 0010 rather than a field of the schema.
+    ///
+    /// That has a consequence worth writing down rather than rediscovering.
+    /// Issue #101 gave <c>combat_fled_morale</c> two arguments it did not have —
+    /// <c>raidersNear</c> and <c>hpPercent</c>, beside the <c>downedAllies</c> it
+    /// always carried — and the shape above did not move, so the versioning rule
+    /// of <c>docs/engineering/PROTOTYPE_HEADLESS.md</c> has to be applied by hand
+    /// instead of being applied by a red test. It is applied here: the change is
+    /// **additive** — nothing was renamed, removed, retyped or given a new
+    /// meaning under an old name, and <c>downedAllies</c> in particular still
+    /// answers the same question it did, only counted within sight of the
+    /// creature rather than across the domain — so
+    /// <c>PrototypeCanonical.SchemaVersion</c> stays at 3.
+    ///
+    /// This test is what stops the addition from being invisible: it pins the
+    /// arguments of the one reason code the change touched, so removing or
+    /// renaming one of them is a red test and a decision rather than a silent
+    /// edit. It does not pin the vocabulary at large — that is still tuning.
+    /// </summary>
+    [Fact]
+    public void The_reason_code_for_a_broken_defender_carries_the_arguments_recorded_for_it()
+    {
+        var run = PrototypeScenario.Run(LoadFixture("baseline"), PrototypeTuning.SessionTicks);
+        using var document = JsonDocument.Parse(run.CanonicalEventLog);
+
+        var flights = document.RootElement
+            .GetProperty("events")
+            .EnumerateArray()
+            .Where(@event => @event.GetProperty("reasonCode").GetString() == "combat_fled_morale")
+            .ToArray();
+
+        Assert.NotEmpty(flights);
+        Assert.All(flights, flight => Assert.Equal(
+            ["downedAllies", "hpPercent", "raidersNear"],
+            flight.GetProperty("details")
+                .EnumerateObject()
+                .Select(argument => argument.Name)
+                .Order(StringComparer.Ordinal)
+                .ToArray()));
+        Assert.Equal(ShapeRecordedForSchemaVersion, PrototypeCanonical.SchemaVersion);
+    }
+
+    /// <summary>
     /// The event log is the second canonical document and carries the same
     /// version. It is checked here so that a bump cannot leave it behind: state
     /// and event log are read together or not at all.

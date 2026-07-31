@@ -525,43 +525,60 @@ public sealed class PrototypeScenarioTests
 
     /// <summary>
     /// A raider that reaches an empty larder turns round instead of standing
-    /// there. The witness used to be the <c>neglected</c> fixture, whose larder
-    /// was empty before the raid ever started; that domain now falls from hunger
-    /// long before a wave arrives, so the branch is witnessed where it actually
-    /// happens in a party — in a later wave, after an earlier one has carried
-    /// the larder away.
+    /// there. The branch itself is a rule; which party happens to walk a raider
+    /// onto the larder tile on the tick after the last portion left is not, and
+    /// pinning the witness to one fixture has now cost two false failures.
+    ///
+    /// The first: the witness used to be <c>neglected</c>, whose larder was empty
+    /// before the raid ever started, until that domain began falling from hunger
+    /// before a wave arrives. The second: the witness became <c>baseline</c> at
+    /// its default seed, until Issue #101 changed when defenders leave a fight
+    /// and with it who is standing where while the larder empties. Neither change
+    /// touched the branch under test.
+    ///
+    /// So the witness is now hunted over the whole matrix and the test says where
+    /// it found one. What it asserts is unchanged: the branch exists, is reached
+    /// by a party somebody actually plays, and behaves.
     /// </summary>
     [Fact]
     public void Empty_larder_raider_turns_back_to_the_gate_instead_of_waiting()
     {
-        var world = new PrototypeWorld(LoadFixture("baseline"));
-        var observedReturn = false;
-
-        while (!world.IsComplete && !observedReturn)
+        var searched = new List<string>();
+        foreach (var fixtureName in new[] { "baseline", "prepared" })
         {
-            world.Step();
-            var beforeReturn = world.GetSnapshot();
-            var raider = beforeReturn.Raiders.FirstOrDefault(item =>
-                item.Mode == RaiderMode.Raiding &&
-                !item.ReturningToGate &&
-                item.CarryingMeals == 0 &&
-                item.Position == new GridPoint(14, 7) &&
-                beforeReturn.Stocks.Meals == 0);
-            if (raider is null)
+            foreach (var seed in new[] { 20_260_726UL, 20_260_727UL, 20_260_728UL })
             {
-                continue;
-            }
+                var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
+                searched.Add($"{fixtureName}/{seed}");
+                while (!world.IsComplete)
+                {
+                    world.Step();
+                    var beforeReturn = world.GetSnapshot();
+                    var raider = beforeReturn.Raiders.FirstOrDefault(item =>
+                        item.Mode == RaiderMode.Raiding &&
+                        !item.ReturningToGate &&
+                        item.CarryingMeals == 0 &&
+                        item.Position == new GridPoint(14, 7) &&
+                        beforeReturn.Stocks.Meals == 0);
+                    if (raider is null)
+                    {
+                        continue;
+                    }
 
-            world.Step();
-            var afterReturn = world.GetSnapshot();
-            var moved = afterReturn.Raiders.Single(item => item.Id == raider.Id);
-            Assert.Equal(RaiderMode.Raiding, moved.Mode);
-            Assert.True(moved.ReturningToGate);
-            Assert.Equal(0, moved.CarryingMeals);
-            observedReturn = true;
+                    world.Step();
+                    var afterReturn = world.GetSnapshot();
+                    var moved = afterReturn.Raiders.Single(item => item.Id == raider.Id);
+                    Assert.Equal(RaiderMode.Raiding, moved.Mode);
+                    Assert.True(moved.ReturningToGate);
+                    Assert.Equal(0, moved.CarryingMeals);
+                    return;
+                }
+            }
         }
 
-        Assert.True(observedReturn, "Baseline party did not reach the empty-larder return branch.");
+        Assert.Fail(
+            "No party of the matrix reached the empty-larder return branch. Searched " +
+            string.Join(", ", searched) + ".");
     }
 
     private static int AverageReadiness(PrototypeRunResult result)
