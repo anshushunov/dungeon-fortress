@@ -23,8 +23,14 @@ param(
     [switch]$VisibleSmoke,
     [ValidateRange(32, 48)]
     [int]$TileSize = 40,
+    # No default either, and for the same reason as the two below: 0.75 was
+    # chosen for a 1280x720 window, and on the owner's maximized one it left a
+    # 1120x640 map drawn at 1:1 in the middle of a viewport twice its size
+    # (Issue #86). Omitted, the game picks the largest declared level at which
+    # the whole map still fits the world viewport it ended up with; supplied, it
+    # is an override the automatic rule never touches, including after a resize.
     [ValidateScript({ $_ -in @(0.5, 0.75, 1.0, 1.5, 2.0) })]
-    [double]$CameraZoom = 0.75,
+    [Nullable[double]]$CameraZoom,
     [ValidatePattern("^-?\d+(\.\d+)?,-?\d+(\.\d+)?$")]
     [string]$CameraPosition = "560,320",
     # FrameSize and UiScale have no default on purpose. 1280x720 at scale 1 is
@@ -53,6 +59,7 @@ $projectPath = Join-Path $repoRoot "src\DungeonFortress.Game"
 $projectFile = Join-Path $projectPath "DungeonFortress.Game.csproj"
 $hasFrameSize = -not [string]::IsNullOrWhiteSpace($FrameSize)
 $hasUiScale = $null -ne $UiScale
+$hasCameraZoom = $null -ne $CameraZoom
 $minimumLogicalWidth = 1024
 $minimumLogicalHeight = 720
 # Only a declared frame can be judged here. A frame derived from the screen is
@@ -76,6 +83,18 @@ if ($hasFrameSize) {
             "${minimumLogicalHeight} logical pixels. Increase FrameSize or reduce UiScale."
         )
     }
+}
+
+# A capture has to declare every pixel-affecting value; ViewLaunchOptions.Parse
+# refuses one that does not, and that refusal is the rule. This says the same
+# thing before restore and build rather than after them, which is the same trade
+# the frame check above makes.
+if (-not [string]::IsNullOrWhiteSpace($ScreenshotPath) -and -not $hasCameraZoom) {
+    throw (
+        "A screenshot capture has to name -CameraZoom, because a frame nobody " +
+        "declared a zoom for would inherit whichever zoom the automatic rule " +
+        "picked for this window and stop being reproducible."
+    )
 }
 
 $resolvedScreenshotPath = if ([string]::IsNullOrWhiteSpace($ScreenshotPath)) {
@@ -118,11 +137,14 @@ if ($hasFrameSize) {
 $arguments += @(
     "--", "--fixture", $Fixture,
     "--tile-size", $TileSize.ToString([Globalization.CultureInfo]::InvariantCulture),
-    "--camera-zoom", $CameraZoom.ToString([Globalization.CultureInfo]::InvariantCulture),
     "--camera-position", $CameraPosition
 )
 # Absent, not empty: the game distinguishes "no frame declared" from a declared
 # one, and an empty --ui-scale would parse as a value.
+if ($hasCameraZoom) {
+    $arguments += "--camera-zoom", ([double]$CameraZoom).ToString(
+        [Globalization.CultureInfo]::InvariantCulture)
+}
 if ($hasUiScale) {
     $arguments += "--ui-scale", ([double]$UiScale).ToString(
         [Globalization.CultureInfo]::InvariantCulture)
