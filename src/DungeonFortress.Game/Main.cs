@@ -1993,7 +1993,13 @@ public partial class Main : Node2D
                  {
                      ("LEGEND", 9, "#cbd5e1"),
                      ("teal crew / red-ring goblin / bar = HP / white X = downed", 8, "#cbd5e1"),
-                     ("purple QUARTERS: rest at fatigue 50+", 8, "#c4b5fd"),
+                     // Issue #52. It replaces the quarters' rest rule rather than
+                     // joining it: the panel column is under the same overflow
+                     // guard as everything else, and the rest rule now sits on the
+                     // room line of the inspector, where clicking the quarters
+                     // puts it. What could not move anywhere is the amber ring —
+                     // it is the one mark on the map with no words next to it.
+                     ("room = own floor + outline + caption; amber ring = object with no room", 8, "#fcd34d"),
                      ("light warm block = diggable rock / dark = map edge", 8, "#d6d3d1"),
                      ("amber X = dig mark / yellow bar = dig progress", 8, "#fcd34d"),
                      ("red X = unreachable / pale tile = new floor / gray dot = loose stone", 8, "#fca5a5"),
