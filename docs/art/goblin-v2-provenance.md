@@ -53,13 +53,37 @@ Exact prompt:
 3. Cropped each cell to its non-zero alpha bounds and resized with Pillow
    LANCZOS. The common base scale is `168 / 330 = 0.509091`, derived from the
    idle sprite's 330 px source height. Wide poses are capped at 188 px so no
-   ear, weapon, or body part is clipped: combat uses `0.489583`, downed uses
-   `0.478372`; the other four states use the common base scale.
-4. Centered each result horizontally in a transparent 192×192 RGBA canvas and
-   bottom-anchored its alpha bounds at `y = 188`. Final non-transparent bound
-   sizes are: idle 116×168, work 178×151, combat 188×149, windup 186×158,
-   flinch 182×164, downed 188×84.
-5. Saved optimized PNGs. No paint-over, palette replacement, compositing, or
+   ear, weapon, or body part is clipped during this initial size-normalization
+   step: combat uses `0.489583`, downed uses `0.478372`; the other four
+   states use the common base scale.
+4. Review correction F2 removes the baked debris from `work` before placement.
+   The cleanup finds 8-connected components on the full `alpha > 0` mask and
+   retains only the largest component (body plus held tool, 15,500 pixels).
+   It removes 764 alpha pixels across 25 detached components, including their
+   antialiased fringes. On the review's `alpha > 32` measurement the retained
+   body has 14,607 pixels; the meaningful discarded fragments begin with 312,
+   85, 76, and 25 pixels. No pixel is painted or regenerated.
+5. Review correction F1 aligns the body by its support zone instead of
+   centering the full alpha bounds with the weapon. The support zone is
+   `172 <= y <= 187`; its horizontal center is
+   `(min_x + max_x) / 2` over pixels with `alpha > 32`. The target is the
+   192 px canvas center `x = 95.5`. Translation uses the nearest integer with
+   half values rounded away from zero:
+
+   | State | Original support center | After cleanup | Applied `dx` | Final support center | Final alpha bbox |
+   |---|---:|---:|---:|---:|---|
+   | `idle` | 98.5 | 98.5 | -3 | 95.5 | 35,20–151,188 |
+   | `work` | 93.5 | 58.0 | +38 | 96.0 | 45,37–192,188 |
+   | `combat` | 56.5 | 56.5 | +39 | 95.5 | 41,39–192,188 |
+   | `windup` | 109.0 | 109.0 | -14 | 95.0 | 0,30–175,188 |
+   | `flinch` | 111.5 | 111.5 | -16 | 95.5 | 0,24–171,188 |
+   | `downed` | 94.5 | 94.5 | +1 | 95.5 | 3,104–191,188 |
+
+   Translation writes into a fresh transparent 192×192 canvas without vertical
+   movement or wraparound. Content outside the fixed canvas is discarded; it
+   is not rescaled or repainted. The final non-transparent row remains
+   `y = 187` in every state (exclusive alpha-bound bottom `188`).
+6. Saved optimized PNGs. No paint-over, palette replacement, regeneration, or
    other manual correction was applied.
 
 ## Integration boundary
