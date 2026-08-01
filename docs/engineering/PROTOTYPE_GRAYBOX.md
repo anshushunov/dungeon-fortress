@@ -1170,7 +1170,19 @@ are what replaced the inert `--strict-hud-fit` flag removed in Issue #49.
 **The tooltip (Issue #127).** A toolbar button's tooltip is not a descendant of
 `_hudRoot`: Godot 4.7 parents it to a separate `PopupPanel` (a `Window`) next to
 the hovered button, and that `Window` scales its own content by
-`content_scale_factor`, not by `_hudRoot.Scale`. `HudButton.UiScale` carries the
+`content_scale_factor`, not by `_hudRoot.Scale`.
+
+**How firmly this is known, and it is less firmly than the paragraph above
+reads.** The mechanism was established by reading Godot's sources and is
+corroborated by the owner's own playtest — a tooltip inheriting `_hudRoot.Scale`
+would have grown on the maximised window, and there would have been no defect to
+report. It has **not** been confirmed by a live hover-triggered render: that
+needs a windowed run with a mouse, which the headless harness cannot do.
+`evidence/127-tooltip-scale.json` records the same claim at that lower
+confidence, and the two must not drift apart. If the premise is wrong, the fix
+over-corrects rather than under-corrects — the tooltip would scale twice.
+
+`HudButton.UiScale` carries the
 live scale there instead, kept in step by `Main.LayoutHud`. `CreateControlStrips`
 keeps one instance of the tooltip's Control tree, built at UI scale 1
 (`HudButton.MakeAuthoredTooltip`), invisible and permanent under `_hudRoot`, so
