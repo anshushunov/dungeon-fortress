@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using DungeonFortress.Simulation;
 
@@ -117,30 +117,108 @@ public static class HudText
     /// How many of a creature's own decisions the story panel shows at once.
     ///
     /// <para>
-    /// A party leaves a creature with up to 961 entries in the canonical journal
-    /// — measured, by
-    /// <c>CreatureStoryTests.The_story_is_bounded_and_the_bound_is_on_the_panel</c>
-    /// — and the panel holds ten drawn lines at the tightest frame the HUD guard
-    /// checks. The bound is therefore arithmetic and not a preference: a story
-    /// sentence runs to about sixty characters and wraps onto two drawn lines in
-    /// a 287-pixel panel, so four of them plus the header is nine, and text that
-    /// does not fit is dropped or drawn over the panel below. That is what
-    /// <c>Main.AssertLabelsFit</c> refuses, and it refused six.
+    /// <b>The question the bound answers is "how many beats does one creature's
+    /// story have", and only then "how many lines fit".</b> Issue #128 asked the
+    /// second question alone, and a technical limit silently decided a product
+    /// result: four lines of the newest entries is four lines of traffic
+    /// (<c>evidence/140-before.json</c>). Both questions are asked here now, and
+    /// they happen to give the same number.
     /// </para>
     ///
     /// <para>
-    /// What keeps four honest is that the header says how many entries are
-    /// behind them.
+    /// <b>The story.</b> A creature's party reads as four beats: it went to the
+    /// wave, the wave cost it something, it came back, and it now refuses the
+    /// place where that happened. Measured on the shipped <c>baseline</c> party
+    /// at tick 2400, a creature ends with 17 to 21 distinct kinds of decision of
+    /// which 4 to 8 mean anything for its fate, so four lines hold the whole of
+    /// a short story and the latest beats of a long one.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The budget.</b> The panel holds ten drawn lines at the tightest frame
+    /// the HUD guard checks. A story sentence runs to about sixty characters and
+    /// wraps onto two drawn lines in a 287-pixel panel, so four of them plus the
+    /// header is nine, and text that does not fit is dropped or drawn over the
+    /// panel below. That is what <c>Main.AssertLabelsFit</c> refuses, and it
+    /// refused six (Issue #128) and it refuses five (Issue #140,
+    /// <c>evidence/140-mutations.json</c>).
+    /// </para>
+    ///
+    /// <para>
+    /// <b>What stays off the panel</b>, therefore, and is named rather than
+    /// hidden: the older beats of a story with more than four, and every routine
+    /// decision — waiting for stock, being blocked in a corridor, stepping aside
+    /// — which is 89 % of what a creature does. The header carries both counts,
+    /// and the inspector next to it carries every place the creature avoids.
     /// </para>
     /// </summary>
     public const int CreatureStoryLines = 4;
 
     /// <summary>
+    /// How much one decision means for the creature that took it. The story panel
+    /// spends its four lines from the top of this scale down, so routine never
+    /// displaces a turning point (Issue #140).
+    ///
+    /// <para>
+    /// Four levels, and each answers a different question a player asks about a
+    /// creature:
+    /// </para>
+    ///
+    /// <list type="number">
+    /// <item><b>3 — how what happened changed what it does.</b> A refusal by
+    /// memory of place is the only decision in the journal that is caused by the
+    /// creature's own history, and it is the sentence the whole slice exists for
+    /// ("…и как это изменило его следующее решение"). Nothing outranks it;</item>
+    /// <item><b>2 — what the wave cost it.</b> Its nerve, its footing, its
+    /// health: broke and ran, was put down, was carried off, is mending, is
+    /// whole again. This is the "что с ним произошло" half of the same
+    /// question, and it outranks level 1 because being put down happens to a
+    /// creature while joining a wave is only where it was standing;</item>
+    /// <item><b>1 — how it met the wave.</b> Joined, came back after it, put a
+    /// raider down, or one of the three ways of not fighting — too hungry, too
+    /// hurt, too far to reach it;</item>
+    /// <item><b>0 — everything else.</b> Choosing work, waiting on stock, being
+    /// blocked, stepping aside, and the blow-by-blow of a fight. Not noise —
+    /// this is what the creature spends its life doing, 89 % of the journal —
+    /// but not a turning point either, and the inspector beside the panel
+    /// already says what it is doing now.</item>
+    /// </list>
+    ///
+    /// <para>
+    /// The scale is presentation and not contract: reason codes and their meaning
+    /// stay canonical under
+    /// <see href="../../docs/decisions/0010-contract-invariants-and-tuning.md">
+    /// ADR 0010</see>, and what a panel does with four lines is this layer's
+    /// business. A code this method has never heard of is <b>routine</b> rather
+    /// than refused, which is the opposite of what
+    /// <see cref="EventNarration.Sentence"/> does with one, and deliberately so:
+    /// an unknown code has no sentence at all and must be refused, but an unknown
+    /// code that does have one is merely something nobody has ranked yet, and
+    /// promoting it to a turning point by accident would be the louder mistake.
+    /// <c>CreatureStoryTests.Every_reason_code_the_matrix_produces_is_ranked_on_purpose</c>
+    /// is what stops "routine by default" from becoming "routine by neglect".
+    /// </para>
+    /// </summary>
+    public static int StoryWeight(string reasonCode) => reasonCode switch
+    {
+        "refused_place_of_panic" or "refused_place_of_wound" => 3,
+
+        "combat_fled_morale" or "combat_downed" or "injury_tended" or "injury_mending"
+            or "injury_healed" => 2,
+
+        "combat_joined" or "combat_returned" or "combat_raider_downed"
+            or "combat_refused_starving" or "combat_refused_injured"
+            or "combat_absent_unreachable" => 1,
+
+        _ => 0,
+    };
+
+    /// <summary>
     /// The event panel. With nothing selected it is the domain's feed: the last
     /// three autonomous choices, newest first, plus the diagnostics count. With a
-    /// creature selected it becomes <b>that creature's story</b> — the last
-    /// <see cref="CreatureStoryLines"/> decisions it took this party, newest
-    /// first (Issue #128).
+    /// creature selected it becomes <b>that creature's story</b> — up to
+    /// <see cref="CreatureStoryLines"/> of the decisions that meant something for
+    /// its fate, newest first (Issue #128, reordered by Issue #140).
     ///
     /// <para>
     /// The owner played the first slice of memory of place and said: "Метки вижу,
@@ -205,15 +283,46 @@ public static class HudText
     }
 
     /// <summary>
-    /// One creature's decisions this party, newest first and bounded by
-    /// <see cref="CreatureStoryLines"/>.
+    /// One creature's party in at most <see cref="CreatureStoryLines"/> lines:
+    /// the decisions that <b>meant something for its fate</b>, newest first.
     ///
     /// <para>
-    /// The header carries the name and the bound together — "last 6 of 43" —
-    /// because a panel that silently shows six of forty-three is a panel that
-    /// lies about how much there is. The name is on the header and not on every
-    /// line: the whole panel is about one creature, and repeating the name six
-    /// times would spend the width the sentences need.
+    /// It used to be the newest four entries of the journal, and that made the
+    /// panel unreadable for the reason the numbers say: a creature's journal is
+    /// 89 % waiting for stock, being blocked in a corridor and stepping aside,
+    /// so the newest four almost always are. Measured on the shipped
+    /// <c>baseline</c> party at tick 2400 — 4425 entries, 27 refusals by memory,
+    /// three creatures that ever refused that way, and <b>none</b> of the three
+    /// with the refusal on its panel (<c>evidence/140-before.json</c>). The
+    /// slice's own question, "как это изменило его следующее решение", was
+    /// answered by a sentence a player could not reach.
+    /// </para>
+    ///
+    /// <para>
+    /// So the four lines are spent from <see cref="StoryWeight"/> down and by
+    /// recency inside a level, and <b>at most one line per kind of decision</b>.
+    /// The second rule is what makes the first one worth anything: creature #0
+    /// refused by memory fourteen times, and four lines of the same refusal is
+    /// as poor a story as four lines of traffic. One line per kind turns four
+    /// slots into four beats — it went to the wave, the wave cost it something,
+    /// it came back, it will not go there again — which is what a story is.
+    /// The line shown for a kind is that kind's newest entry.
+    /// </para>
+    ///
+    /// <para>
+    /// Routine still fills whatever the beats leave over, so a creature at tick
+    /// 40 that nothing has happened to yet has a panel rather than a blank, and
+    /// so the panel keeps saying what the creature has been doing lately.
+    /// </para>
+    ///
+    /// <para>
+    /// The header carries the name and three counts — "4 of 654 · 19 mattered" —
+    /// because a panel that silently shows four of six hundred is a panel that
+    /// lies about how much there is, and because <b>what is off the panel</b>
+    /// has to be readable off the panel: 650 entries are not here, 15 of them
+    /// mattered and the rest is routine. The word "last" is gone from the header
+    /// on purpose; these are no longer the last four, and a header that still
+    /// said so would be the same lie in the other direction.
     /// </para>
     ///
     /// <para>
@@ -222,6 +331,15 @@ public static class HudText
     /// "it refused this for thirty-six ticks" and "it refused this once" are
     /// different stories, and the deduplication rule of contract 11.1 is the
     /// reason the difference is a count rather than thirty-six lines.
+    /// </para>
+    ///
+    /// <para>
+    /// Nothing here runs a tick. Every input is a field of the snapshot that has
+    /// already been published — the journal, its reason codes, its details — and
+    /// the ranking is a function of the reason code alone. This is the same
+    /// "projection against world" line <c>MapAccents</c> is written along:
+    /// the projection answers what folds out of published facts, the world
+    /// answers what needs a tick.
     /// </para>
     /// </summary>
     public static string CreatureStory(PrototypeSnapshot state, int creatureId)
@@ -236,13 +354,48 @@ public static class HudText
                 "Nothing decided yet. Step or unpause, and what it chooses shows up here.";
         }
 
-        var shown = Math.Min(CreatureStoryLines, story.Length);
-        var head = story.Length > shown
-            ? string.Create(CultureInfo.InvariantCulture, $"STORY · {name} · last {shown} of {story.Length}")
+        var shown = StorySelection(story);
+        var mattered = story.Count(@event => StoryWeight(@event.ReasonCode) > 0);
+        var head = shown.Count < story.Length
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $"STORY · {name} · {shown.Count} of {story.Length} · {mattered} mattered")
             : string.Create(CultureInfo.InvariantCulture, $"STORY · {name} · {story.Length} in all");
-        return head + "\n" + string.Join(
-            "\n",
-            story.TakeLast(shown).Reverse().Select(StoryLine));
+        return head + "\n" + string.Join("\n", shown.Select(StoryLine));
+    }
+
+    /// <summary>
+    /// Which of a creature's entries the panel spends its lines on, newest first.
+    /// Public because the test that says "the panel never disagrees with the
+    /// journal" has to be able to state the rule rather than restate the code.
+    ///
+    /// <para>
+    /// Three steps, and each one is a decision: <b>one entry per reason code</b>,
+    /// the newest of that kind, so the same beat cannot fill the panel;
+    /// <b>ordered by <see cref="StoryWeight"/> and then by recency</b>, so a
+    /// turning point cannot be pushed off by traffic; <b>cut to
+    /// <see cref="CreatureStoryLines"/></b>, because more than that does not fit
+    /// the panel. What comes back out is put back in time order, newest first,
+    /// so the panel is read bottom to top as the party happened.
+    /// </para>
+    ///
+    /// <para>
+    /// Ties are broken by the order the journal is in, which is the order the
+    /// world wrote it in, so the same snapshot always produces the same panel.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<PrototypeEvent> StorySelection(IEnumerable<PrototypeEvent> story)
+    {
+        ArgumentNullException.ThrowIfNull(story);
+        return story
+            .GroupBy(@event => @event.ReasonCode, StringComparer.Ordinal)
+            .Select(kind => kind.MaxBy(@event => @event.LastTick)!)
+            .OrderByDescending(@event => StoryWeight(@event.ReasonCode))
+            .ThenByDescending(@event => @event.LastTick)
+            .Take(CreatureStoryLines)
+            .OrderByDescending(@event => @event.LastTick)
+            .ThenByDescending(@event => @event.FirstTick)
+            .ToArray();
     }
 
     /// <summary>

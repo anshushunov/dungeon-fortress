@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "issue": 140,
+  "when": "2026-08-01, after the edit",
+  "what": "The same baseline party, read off the same panel, once the four lines are spent on what mattered to the creature instead of on what happened last.",
+  "theRule": {
+    "where": "HudText.StorySelection and HudText.StoryWeight",
+    "step1": "one entry per reason code, the newest of that kind — so fourteen refusals cannot become four lines of the same refusal",
+    "step2": "ordered by StoryWeight (3 refusal by memory, 2 what the wave cost it, 1 how it met the wave, 0 routine) and then by recency",
+    "step3": "cut to HudText.CreatureStoryLines = 4, then put back in time order, newest first",
+    "fill": "routine fills whatever the beats leave over, so a creature nothing has happened to yet still has a full panel",
+    "noTickNeeded": "every input is a published field of the snapshot; the ranking is a function of the reason code alone. CreatureStoryTests.Reading_a_creature_s_story_needs_no_tick_to_run answers for all nine creatures out of one snapshot object."
+  },
+  "criterionOne": {
+    "claim": "For the baseline party at tick 2400, every creature that refused work by memory of a place at any point shows that refusal on its panel.",
+    "test": "CreatureStoryTests.Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter \"FullyQualifiedName~Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel\" --logger \"console;verbosity=detailed\"",
+    "before": "red — 3 of 3 creatures hid it",
+    "after": "green — 3 of 3 show it",
+    "creatures": [
+      { "name": "Брусок", "refusalsByMemory": 14, "entries": 419, "onThePanel": true },
+      { "name": "Мотылёк", "refusalsByMemory": 7, "entries": 654, "onThePanel": true },
+      { "name": "Обух", "refusalsByMemory": 6, "entries": 264, "onThePanel": true }
+    ]
+  },
+  "everyPanelOfTheParty": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release (a throwaway TempDump fact over PresentationFixtures.RunFixture(\"baseline\", 2400), removed after the run; the same nine panels are what HudText.CreatureStory returns for that snapshot)",
+    "panels": {
+      "Брусок": [
+        "STORY · Брусок · 4 of 419 · 31 mattered",
+        "t2390 · joined the fight for wave ?.",
+        "t2384 · will not take cooking at (14,7): nerve broke at (18,7) t1703.",
+        "t2271 · is whole again.",
+        "t2011 · broke and ran: 35% health, 4 raiders close, 0 ally down."
+      ],
+      "Кремень": [
+        "STORY · Кремень · 4 of 486 · 9 mattered",
+        "t2379 · broke and ran: 22% health, 6 raiders close, 0 ally down.",
+        "t2350 · joined the fight for wave ?.",
+        "t2062 · is whole again.",
+        "t2000-2060 · was too far to reach the fight. (x4)"
+      ],
+      "Мотылёк": [
+        "STORY · Мотылёк · 4 of 654 · 19 mattered",
+        "t2374 · broke and ran: 54% health, 3 raiders close, 0 ally down.",
+        "t2350 · joined the fight for wave ?.",
+        "t2281-2282 · will not take carrying at (15,7): nerve broke at (19,7) t2018. (x2)",
+        "t2069 · came back to work after the wave."
+      ],
+      "Смола": [
+        "STORY · Смола · 4 of 357 · 13 mattered",
+        "t2350-2390 · was too far to reach the fight. (x3)",
+        "t2069 · came back to work after the wave.",
+        "t2022 · broke and ran: 35% health, 4 raiders close, 0 ally down.",
+        "t1689 · is whole again."
+      ],
+      "Дёготь": [
+        "STORY · Дёготь · 4 of 335 · 15 mattered",
+        "t2368 · broke and ran: 34% health, 2 raiders close, 0 ally down.",
+        "t2350 · joined the fight for wave ?.",
+        "t2069 · came back to work after the wave.",
+        "t1324 · put raider 0 down."
+      ],
+      "Уголёк": [
+        "STORY · Уголёк · 4 of 820 · 14 mattered",
+        "t2373 · broke and ran: 31% health, 4 raiders close, 0 ally down.",
+        "t2350 · joined the fight for wave ?.",
+        "t2069 · came back to work after the wave.",
+        "t1995 · is whole again."
+      ],
+      "Прель": [
+        "STORY · Прель · 4 of 453 · 16 mattered",
+        "t2027 · broke and ran: 25% health, 7 raiders close, 0 ally down.",
+        "t1682 · is whole again.",
+        "t1423 · is mending: the wound is no longer bad.",
+        "t1365 · was carried off the floor, badly hurt."
+      ],
+      "Обух": [
+        "STORY · Обух · 4 of 264 · 21 mattered",
+        "t2390 · joined the fight for wave ?.",
+        "t2379 · will not take cooking at (15,7): nerve broke at (17,7) t2024.",
+        "t2060 · was too far to reach the fight.",
+        "t2024 · broke and ran: 52% health, 5 raiders close, 0 ally down."
+      ],
+      "Тишина": [
+        "STORY · Тишина · 4 of 637 · 17 mattered",
+        "t2390 · was too hurt for the fight.",
+        "t2069 · was carried off the floor, badly hurt.",
+        "t2011 · was put down by raider 12.",
+        "t1778 · is mending: the wound is no longer bad."
+      ]
+    },
+    "reading": "Уголёк is creature #5, the one the brief measured: 820 entries of which 726 were 'your ration reserve holds', 'enough already', 'somebody in the way' and 'stepped aside'. Its panel used to be four of those. Read bottom to top it is now: it was made whole again at t1995, it came back to work after the wave at t2069, it went to the fourth wave at t2350, and it broke and ran at t2373 on 31% health with four raiders close. Брусок is the one that answers the slice's own question: it broke and ran at t2011, it was whole again at t2271, and at t2384 it would not take the cooking at (14,7) because its nerve had gone at (18,7) at t1703.",
+    "beside": "The inspector on the same frame reads 'AVOIDS (25,8) t2011 panic · (18,7) t1703 panic · (24,7) t1316 panic'. The panel and the inspector are two views of the same journal, and neither invents anything."
+  },
+  "onTheRealFrame": {
+    "command": "C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe --headless --path src/DungeonFortress.Game -- --smoke --fixture baseline --screenshot .artifacts/140-probe.png --screenshot-ticks 2390 --select-creature 0 --tile-size 40 --camera-zoom 0.75 --camera-position 560,320 --ui-scale 1 --frame-size 1280x720",
+    "result": "godot_headless_smoke status ok",
+    "panel": [
+      "STORY · Брусок · 4 of 397 · 29 mattered",
+      "t2384 · will not take cooking at (14,7): nerve broke at (18,7) t1703.",
+      "t2350 · joined the fight for wave ?.",
+      "t2271 · is whole again.",
+      "t2011 · broke and ran: 35% health, 4 raiders close, 0 ally down."
+    ],
+    "labelFitFeedback": {
+      "neededLines": 6,
+      "visibleLines": 6,
+      "hardLines": 5,
+      "width": 367,
+      "height": 206,
+      "note": "Five hard lines wrap onto six drawn lines at 1280x720 and six fit. Main.AssertLabelsFit measured every creature's panel plus the padded worst case at all seven frames it checks, including the tightest — viewport 2048x1440 at UI scale 2, a logical 1024x720 — and every one fits."
+    },
+    "stages": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -Stage godot,ui -GodotPath <godot> -TemporaryRoot C:/Users/User/AppData/Local/Temp",
+      "result": "verification_result status ok, scope partial, stagesExecuted [godot, ui]"
+    }
+  },
+  "theBound": {
+    "question": "Not \"how many lines does the panel allow\" but \"how many beats does one creature's story have\".",
+    "answerFromTheQuestion": "Four. A creature's party reads as: it went to the wave, the wave cost it something, it came back, and it now refuses the place where that happened. Every one of the nine panels above is exactly that shape.",
+    "answerFromTheBudget": "Four. Ten drawn lines at the tightest frame the guard checks; a story sentence runs to about sixty characters and wraps onto two; four sentences plus a header is nine, and Main.AssertLabelsFit refuses five (see evidence/140-mutations.json) and refused six in Issue #128.",
+    "whatStaysOffThePanel": [
+      "the older beats of a story that has more than four kinds — measured 4 to 8 kinds that matter per creature at the end of a baseline party, so between none and four are cut; the newest of each kind is the one kept",
+      "every routine decision: waiting on stock, being blocked in a corridor, stepping aside, choosing the next job, and the blow-by-blow of a fight. That is 89 % of a creature's journal — 388 of Брусок's 419 entries",
+      "repetitions: a kind a creature took fourteen times shows once, as its newest occurrence. The count is not on the line; the header's third number says how many entries mattered in all"
+    ],
+    "howItIsSaid": "The header carries three numbers — 'STORY · Брусок · 4 of 419 · 31 mattered' — so the panel never claims to be the whole journal. The word 'last' is gone: it was true while the panel was the tail of the journal and would be a lie now, and CreatureStoryTests.The_story_is_bounded_and_the_header_says_what_is_off_the_panel asserts it absent.",
+    "whatWasNotDoneAboutIt": "The panel is not made taller and the sentences are not shortened to fit more in. Both would be worth measuring, and both change either the frame guard's arithmetic (Main.cs, held by another task this block) or the wording every other panel shares (EventNarration)."
+  },
+  "checks": {
+    "criterionOne": "CreatureStoryTests.Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel",
+    "theRuleAgainstTheJournal": "CreatureStoryTests.The_story_a_creature_shows_is_the_journal_ranked_by_what_it_meant — over baseline and prepared on three seeds each, 27 creature-parties per fixture: every line is an entry of that creature's journal, no two lines are the same kind, nothing left off the panel outranks anything on it, and the lines are newest first",
+    "everyCodeRanked": "CreatureStoryTests.Every_reason_code_the_matrix_produces_is_ranked_on_purpose — a code the shipped fixtures produce that nobody ranked and nobody named routine fails the run",
+    "oneLinePerKind": "CreatureStoryTests.A_decision_a_creature_took_again_and_again_takes_one_line_of_its_story",
+    "theFullPanelBeforeAnythingHappens": "CreatureStoryTests.Before_anything_has_happened_the_panel_is_still_what_it_has_been_doing — at tick 600 nothing has mattered yet and every panel is still four lines",
+    "noTickNeeded": "CreatureStoryTests.Reading_a_creature_s_story_needs_no_tick_to_run",
+    "theHeader": "CreatureStoryTests.The_story_is_bounded_and_the_header_says_what_is_off_the_panel",
+    "theFrame": "Main.AssertLabelsFit, on every entry point and every frame in HudFitFrames",
+    "wholeProject": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release — 422 of 422 green"
+  },
+  "whatThisFoundAndDidNotFix": {
+    "what": "combat_joined is emitted twice with different arguments. 34 of the 48 on this party carry a wave number; the other 14 carry a jobKind and a jobId instead and no wave, so EventNarration prints 'joined the fight for wave ?.'",
+    "whereItShows": "That sentence is now often the newest line of a panel, so the gap that used to be buried in a 400-entry journal is on screen.",
+    "whyItIsNotFixedHere": "The missing argument is written by the simulation and the sentence lives in EventNarration.cs; this task owns neither and its non-goals name the simulation explicitly. It is a defect the selection surfaced, not one it introduced."
+  }
+}

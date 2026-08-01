@@ -47,21 +47,95 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     private static readonly string[] Fixtures = ["baseline", "prepared"];
 
     /// <summary>
-    /// The panel is the canonical journal and nothing else: its lines are that
-    /// creature's own entries, the last <see cref="HudText.CreatureStoryLines"/>
-    /// of them, newest first, each rendered from its own entry.
+    /// The tick the measurements of Issue #140 were taken at: the whole shipped
+    /// <c>baseline</c> party, four waves, the same run the evidence files record.
+    /// </summary>
+    private const int MeasuredTicks = 2_400;
+
+    private static bool IsRefusalByMemory(PrototypeEvent @event) =>
+        @event.ReasonCode is "refused_place_of_panic" or "refused_place_of_wound";
+
+    /// <summary>
+    /// The decisions a story panel is allowed to leave out — named one by one, so
+    /// that "routine" is a judgement somebody made and not the default an
+    /// unranked code falls into. Choosing work, waiting on something, refusing on
+    /// a rule the player set, and every step of digging, hauling and building are
+    /// what a creature spends its life doing; the inspector beside the panel
+    /// already says which of them it is doing now.
+    ///
+    /// <para>
+    /// Two entries are worth their own line. <c>combat_attack</c> is inside the
+    /// fight rather than about it — a creature strikes many times per wave, and
+    /// "it joined, it broke, it came back" is the shape of the story. And
+    /// <c>refused_too_exhausted</c>/<c>refused_injured</c> are a state repeating
+    /// itself rather than something happening: what happened is
+    /// <c>injury_tended</c>, and that is ranked.
+    /// </para>
+    /// </summary>
+    private static readonly HashSet<string> DeliberatelyRoutine = new(StringComparer.Ordinal)
+    {
+        "chosen_highest_priority", "chosen_bottleneck", "chosen_affinity_match", "chosen_nearest",
+        "chosen_only_option", "chosen_tie_break", "chosen_need_hunger", "chosen_need_fatigue",
+        "chosen_muster", "chosen_ration", "chosen_traffic_yield",
+        "waiting_no_job_available", "waiting_input_missing", "waiting_storage_full",
+        "waiting_stock_sufficient", "waiting_crop_not_ripe", "waiting_blocked_by_other",
+        "waiting_no_designation", "waiting_no_blueprint", "waiting_no_stockpile",
+        "waiting_stockpile_full",
+        "refused_zone_not_designated", "refused_zone_unreachable", "refused_priority_zero",
+        "refused_rule_reserve", "refused_rule_min_satiety", "refused_too_exhausted",
+        "refused_injured",
+        "combat_attack",
+        "dig_started", "dig_completed", "dig_cancelled", "dig_unreachable",
+        "stone_picked_up", "stone_stored", "stone_spilled", "stone_target_replanned",
+        "stone_haul_cancelled", "stone_unreachable", "stone_delivered",
+        "build_started", "build_completed", "build_cancelled", "build_no_stone",
+        "build_waiting_material", "build_unreachable",
+    };
+
+    /// <summary>
+    /// What the panel orders by, stated in the test rather than borrowed from the
+    /// code: what a decision means to the creature first, when it happened second.
+    /// </summary>
+    private static (int Weight, int Tick) Rank(PrototypeEvent @event) =>
+        (HudText.StoryWeight(@event.ReasonCode), @event.LastTick);
+
+    /// <summary>Whether this line of the panel is this entry of the journal.</summary>
+    private static bool Renders(PrototypeEvent @event, string line) =>
+        line.StartsWith(
+            string.Create(CultureInfo.InvariantCulture, $"t{@event.FirstTick}"),
+            StringComparison.Ordinal) &&
+        line.Contains(
+            EventNarration.Sentence(
+                @event.ReasonCode,
+                @event.Details,
+                @event.JobKind,
+                @event.Target),
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// The panel is the canonical journal and nothing else, and the rule by which
+    /// it picks four of six hundred entries is stated here rather than restated
+    /// from the code: <b>one entry per kind of decision, the newest of that kind,
+    /// and the kinds that matter most</b>.
+    ///
+    /// <para>
+    /// Four claims, each of which a different mistake would break:
+    /// every line is an entry of this creature's journal, rendered from that
+    /// entry alone; no two lines are the same kind of decision; nothing left off
+    /// the panel outranks anything on it, in the order "what it means, then when
+    /// it happened"; and the lines are in time order, newest first.
+    /// </para>
     ///
     /// <para>
     /// Asserted over the whole matrix and over every creature in it, because the
     /// claim "the show never disagrees with the journal" is worth nothing if it is
-    /// only tried on one party. Criterion 2 of the issue asks for exactly this and
-    /// asks for it executably.
+    /// only tried on one party.
     /// </para>
     /// </summary>
     [Theory]
     [InlineData("baseline")]
     [InlineData("prepared")]
-    public void The_story_a_creature_shows_is_its_own_tail_of_the_canonical_journal(string fixtureName)
+    public void The_story_a_creature_shows_is_the_journal_ranked_by_what_it_meant(string fixtureName)
     {
         var creaturesSeen = 0;
         foreach (var seed in MatrixSeeds)
@@ -71,26 +145,44 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
             {
                 creaturesSeen++;
                 var mine = state.Events.Where(@event => @event.CreatureId == creature.Id).ToArray();
+                var newestOfEachKind = mine
+                    .GroupBy(@event => @event.ReasonCode, StringComparer.Ordinal)
+                    .Select(kind => kind.MaxBy(@event => @event.LastTick)!)
+                    .ToArray();
                 var lines = Body(HudText.CreatureStory(state, creature.Id));
-                var expected = mine.TakeLast(HudText.CreatureStoryLines).Reverse().ToArray();
+                var where = $"{fixtureName}/{seed}/{creature.Name}";
 
-                Assert.Equal(expected.Length, lines.Length);
-                for (var index = 0; index < expected.Length; index++)
+                // One line per kind, and never the same kind twice: four lines of
+                // one refusal is as poor a story as four lines of traffic.
+                Assert.Equal(
+                    Math.Min(HudText.CreatureStoryLines, newestOfEachKind.Length),
+                    lines.Length);
+                var shown = lines
+                    .Select(line => Assert.Single(
+                        newestOfEachKind.Where(@event => Renders(@event, line))))
+                    .ToArray();
+                Assert.Equal(
+                    shown.Length,
+                    shown.Select(@event => @event.ReasonCode).Distinct(StringComparer.Ordinal).Count());
+
+                // Nothing off the panel outranks anything on it.
+                var floor = shown.Min(Rank);
+                foreach (var missing in newestOfEachKind.Except(shown))
                 {
-                    var @event = expected[index];
-                    Assert.Contains(
-                        EventNarration.Sentence(
-                            @event.ReasonCode,
-                            @event.Details,
-                            @event.JobKind,
-                            @event.Target),
-                        lines[index],
-                        StringComparison.Ordinal);
-                    Assert.StartsWith(
-                        string.Create(CultureInfo.InvariantCulture, $"t{@event.FirstTick}"),
-                        lines[index],
-                        StringComparison.Ordinal);
+                    // Not strictly below: two kinds can end on the same tick with
+                    // the same weight, and which of them the panel took is then an
+                    // arbitrary tie the journal's own order settles. What must
+                    // never happen is something that outranks the panel's floor
+                    // being left off it.
+                    Assert.True(
+                        Comparer<(int Weight, int Tick)>.Default.Compare(Rank(missing), floor) <= 0,
+                        $"{where}: '{missing.ReasonCode}' at t{missing.LastTick} was left off the " +
+                        $"panel while something that means less to this creature is on it. The " +
+                        "panel spends its lines from the top of HudText.StoryWeight down.");
                 }
+
+                // Newest first, so the panel is read bottom to top as it happened.
+                Assert.Equal(shown.OrderByDescending(@event => @event.LastTick).ToArray(), shown);
             }
         }
 
@@ -101,21 +193,79 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// The bound, and the fact that the panel says what it is hiding.
+    /// Every reason code the shipped matrix produces has been ranked <b>on
+    /// purpose</b> — either as something that matters to a creature or as one of
+    /// the routine decisions this file names.
     ///
     /// <para>
-    /// A party leaves a creature with hundreds of journal entries and the panel is
-    /// worth about nine lines at the frame the HUD is authored for. Showing six of
-    /// four hundred is the only thing that fits; showing six of four hundred
-    /// <em>without saying so</em> would make a player believe a creature decided
-    /// six things all party. So the header carries both numbers.
+    /// <see cref="HudText.StoryWeight"/> answers "routine" for a code it has
+    /// never heard of, and that default is the right one — an unranked code must
+    /// not be promoted to a turning point by accident. But a default is also how
+    /// a new kind of turning point would arrive silently and never reach a panel,
+    /// so the list of things deliberately called routine is written out here and
+    /// a code on neither list fails. This is the same guard
+    /// <c>EventNarrationTests.Every_reason_code_the_matrix_produces_has_a_sentence</c>
+    /// keeps over the wording.
     /// </para>
     /// </summary>
     [Fact]
-    public void The_story_is_bounded_and_the_bound_is_on_the_panel()
+    public void Every_reason_code_the_matrix_produces_is_ranked_on_purpose()
+    {
+        var seen = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var fixtureName in new[] { "baseline", "prepared", "neglected" })
+        {
+            var state = PresentationFixtures.RunFixture(fixtureName, PrototypeTuning.SessionTicks);
+            foreach (var @event in state.Events)
+            {
+                seen.Add(@event.ReasonCode);
+            }
+        }
+
+        var unranked = seen
+            .Where(code => HudText.StoryWeight(code) == 0 && !DeliberatelyRoutine.Contains(code))
+            .ToArray();
+        output.WriteLine(string.Join(
+            "\n",
+            seen.Select(code => $"{HudText.StoryWeight(code)}  {code}")));
+        Assert.True(
+            unranked.Length == 0,
+            $"{unranked.Length} reason code(s) the shipped fixtures produce are routine only because " +
+            $"nobody said otherwise: {string.Join(", ", unranked)}. Rank them in HudText.StoryWeight " +
+            "or name them in DeliberatelyRoutine, but do not let a story panel decide it by default.");
+        Assert.True(
+            seen.Count >= 20,
+            $"only {seen.Count} distinct reason codes were exercised, which is too few for this to " +
+            "be a guard at all.");
+    }
+
+    /// <summary>
+    /// The bound, and the fact that the panel says what it is hiding — <b>both
+    /// how much and of what kind</b>.
+    ///
+    /// <para>
+    /// A party leaves a creature with hundreds of journal entries and the panel is
+    /// worth about nine drawn lines at the frame the HUD is authored for. Showing
+    /// four of six hundred is the only thing that fits; showing four of six
+    /// hundred <em>without saying so</em> would make a player believe a creature
+    /// decided four things all party. So the header carries three numbers — shown,
+    /// in all, and how many of them meant anything — and the two that are not
+    /// shown are the difference between them: the older beats of the story, and
+    /// the routine.
+    /// </para>
+    ///
+    /// <para>
+    /// The word "last" is asserted <em>absent</em>. It was true while the panel
+    /// was the tail of the journal and became a lie the moment the panel started
+    /// choosing (Issue #140); a header that kept it would be the same defect this
+    /// issue is about, told from the other end.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_story_is_bounded_and_the_header_says_what_is_off_the_panel()
     {
         var report = new StringBuilder();
         var longest = 0;
+        var truncated = 0;
         foreach (var fixtureName in Fixtures)
         {
             foreach (var seed in MatrixSeeds)
@@ -123,24 +273,38 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
                 var state = EndOfParty(fixtureName, seed);
                 foreach (var creature in state.Creatures)
                 {
-                    var total = state.Events.Count(@event => @event.CreatureId == creature.Id);
-                    longest = Math.Max(longest, total);
+                    var mine = state.Events
+                        .Where(@event => @event.CreatureId == creature.Id)
+                        .ToArray();
+                    longest = Math.Max(longest, mine.Length);
                     var panel = HudText.CreatureStory(state, creature.Id);
                     var lines = Body(panel);
+                    var head = Head(panel);
 
                     Assert.True(
                         lines.Length <= HudText.CreatureStoryLines,
                         $"{fixtureName}/{seed}: {creature.Name} shows {lines.Length} lines of story, " +
                         $"over the {HudText.CreatureStoryLines} the panel is worth. Text that does " +
                         "not fit its label is dropped or drawn over the panel below it.");
-                    Assert.Contains(creature.Name, Head(panel), StringComparison.Ordinal);
+                    Assert.Contains(creature.Name, head, StringComparison.Ordinal);
+                    Assert.DoesNotContain("last", head, StringComparison.Ordinal);
+
+                    if (lines.Length == mine.Length)
+                    {
+                        Assert.Contains(
+                            string.Create(CultureInfo.InvariantCulture, $"{mine.Length} in all"),
+                            head,
+                            StringComparison.Ordinal);
+                        continue;
+                    }
+
+                    truncated++;
+                    var mattered = mine.Count(@event => HudText.StoryWeight(@event.ReasonCode) > 0);
                     Assert.Contains(
-                        total > HudText.CreatureStoryLines
-                            ? string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"last {HudText.CreatureStoryLines} of {total}")
-                            : string.Create(CultureInfo.InvariantCulture, $"{total} in all"),
-                        Head(panel),
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{lines.Length} of {mine.Length} · {mattered} mattered"),
+                        head,
                         StringComparison.Ordinal);
                 }
 
@@ -154,6 +318,10 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
             longest > HudText.CreatureStoryLines,
             $"no creature on the matrix ended a party with more than {HudText.CreatureStoryLines} " +
             "journal entries, so the bound was never reached and this test proved nothing about it.");
+        Assert.True(
+            truncated > 0,
+            "no panel on the matrix was truncated, so the header arm that says what is off the " +
+            "panel was never read.");
     }
 
     /// <summary>
@@ -250,6 +418,138 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// Criterion 1 of Issue #140, as a run rather than as an eye: on the shipped
+    /// <c>baseline</c> party at tick 2400, <b>every</b> creature that refused work
+    /// by memory of a place at any point that party reads that refusal on its own
+    /// panel.
+    ///
+    /// <para>
+    /// Before the selection of #140 this failed for every creature it applies to.
+    /// A party leaves creature #0 with 419 journal entries of which 14 are
+    /// refusals by memory; the four newest entries are "somebody in the way" and
+    /// "nothing to work with", so the sentence the whole slice exists for was
+    /// measured to be unreachable on the panel — 0 of 3 creatures showed it.
+    /// The numbers are in <c>evidence/140-before.json</c>.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel()
+    {
+        var state = PresentationFixtures.RunFixture("baseline", MeasuredTicks);
+        var report = new StringBuilder();
+        var missing = new List<string>();
+        var applies = 0;
+        foreach (var creature in state.Creatures)
+        {
+            var mine = state.Events.Where(@event => @event.CreatureId == creature.Id).ToArray();
+            var refusals = mine.Where(IsRefusalByMemory).ToArray();
+            if (refusals.Length == 0)
+            {
+                continue;
+            }
+
+            applies++;
+            var panel = HudText.CreatureStory(state, creature.Id);
+            var read = refusals.Any(refusal => panel.Contains(
+                EventNarration.Sentence(
+                    refusal.ReasonCode,
+                    refusal.Details,
+                    refusal.JobKind,
+                    refusal.Target),
+                StringComparison.Ordinal));
+            report.AppendLine(CultureInfo.InvariantCulture,
+                $"{creature.Name}: {refusals.Length} refusals by memory among {mine.Length} " +
+                $"entries — {(read ? "on the panel" : "NOT on the panel")}");
+            report.AppendLine(panel);
+            if (!read)
+            {
+                missing.Add(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{creature.Name} refused by memory {refusals.Length} time(s) and its panel says none of it"));
+            }
+        }
+
+        output.WriteLine(report.ToString());
+        Assert.True(
+            applies >= 3,
+            $"only {applies} creatures of the baseline party at tick {MeasuredTicks} ever refused by " +
+            "memory, so this criterion was checked against almost nothing. Either the memory of place " +
+            "stopped firing or this is no longer the party to measure it on.");
+        Assert.True(
+            missing.Count == 0,
+            $"{missing.Count} of {applies} creatures hide the one decision that explains their next " +
+            $"one: {string.Join("; ", missing)}. A story panel that drops the refusal by memory answers " +
+            "\"what is it doing\" and not \"what happened to it\".");
+    }
+
+    /// <summary>
+    /// A creature that did the same thing fourteen times does not get fourteen
+    /// lines of it. One line per kind of decision is what turns four slots into
+    /// four beats of a story.
+    ///
+    /// <para>
+    /// Ranking without this rule would be the defect it was written to fix, moved
+    /// rather than removed: creature #0 of the baseline party refused work by
+    /// memory fourteen times, and a panel of four identical refusals says as
+    /// little as a panel of four "somebody in the way". The check is aimed at a
+    /// creature that actually repeats itself, and it says how much it repeated,
+    /// so a party where nothing repeats cannot make it pass by default.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_decision_a_creature_took_again_and_again_takes_one_line_of_its_story()
+    {
+        var state = PresentationFixtures.RunFixture("baseline", MeasuredTicks);
+        var repeated = 0;
+        foreach (var creature in state.Creatures)
+        {
+            var mine = state.Events.Where(@event => @event.CreatureId == creature.Id).ToArray();
+            var lines = Body(HudText.CreatureStory(state, creature.Id));
+            var kinds = lines
+                .SelectMany(line => mine.Where(@event => Renders(@event, line)))
+                .Select(@event => @event.ReasonCode)
+                .ToArray();
+
+            Assert.Equal(kinds.Length, kinds.Distinct(StringComparer.Ordinal).Count());
+            var worst = mine
+                .GroupBy(@event => @event.ReasonCode, StringComparer.Ordinal)
+                .Max(kind => kind.Count());
+            repeated = Math.Max(repeated, worst);
+        }
+
+        Assert.True(
+            repeated >= HudText.CreatureStoryLines * 2,
+            $"the busiest kind of decision on this party was taken {repeated} times, which is too " +
+            "few for a panel to have been at risk of filling with it.");
+    }
+
+    /// <summary>
+    /// Before anything has happened to a creature, the panel is still full of
+    /// what it has been doing. Ranking decides the <em>order</em> of the four
+    /// lines and not whether there are four: a party spends its first thousand
+    /// ticks with nothing dramatic in it, and a panel that went blank until the
+    /// first wave would answer "what happened to it" with silence for the whole
+    /// of that time.
+    /// </summary>
+    [Fact]
+    public void Before_anything_has_happened_the_panel_is_still_what_it_has_been_doing()
+    {
+        var state = PresentationFixtures.RunFixture("baseline", 600);
+        Assert.DoesNotContain(
+            state.Events,
+            @event => HudText.StoryWeight(@event.ReasonCode) > 0);
+
+        foreach (var creature in state.Creatures)
+        {
+            var mine = state.Events.Count(@event => @event.CreatureId == creature.Id);
+            var lines = Body(HudText.CreatureStory(state, creature.Id));
+            Assert.Equal(HudText.CreatureStoryLines, lines.Length);
+            Assert.True(mine > HudText.CreatureStoryLines);
+            Assert.Contains("0 mattered", Head(HudText.CreatureStory(state, creature.Id)), StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// The question the slice exists for, asked of the panel: a creature that
     /// refused work because of a place it remembers says so <b>in its own story</b>,
     /// with the place and the tick it has remembered it since.
@@ -322,9 +622,8 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
             .Select(creature => new
             {
                 creature.Id,
-                Event = state.Events
-                    .Where(@event => @event.CreatureId == creature.Id)
-                    .TakeLast(HudText.CreatureStoryLines)
+                Event = HudText
+                    .StorySelection(state.Events.Where(@event => @event.CreatureId == creature.Id))
                     .FirstOrDefault(@event => @event.Repeats > 1 && @event.FirstTick != @event.LastTick),
             })
             .FirstOrDefault(item => item.Event is not null);
