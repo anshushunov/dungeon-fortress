@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "issue": 139,
+  "checkpoint": "3 — every half of the fix mutated on its own, per AGENTS.md / the task brief",
+  "rule": "A check does not count as done until it is shown to fail when the specific part of the fix it is meant to catch is reverted, not the change as a whole.",
+  "halves": {
+    "a_pureGeometry": {
+      "description": "src/DungeonFortress.Presentation/RoomGeometry.cs — the new API itself: BordersWallToNorth (the predicate) and WallAdjacentBorderInset/WallClearance (the deeper ladder). Engine-free, covered directly by RoomGeometryTests.",
+      "mutants": [
+        {
+          "name": "a-i: BordersWallToNorth never reports a wall",
+          "file": "src/DungeonFortress.Presentation/RoomGeometry.cs",
+          "edit": "return tiles.Any(cell => wallTiles.Contains(new GridPoint(cell.X, cell.Y - 1))); -> return false;",
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --filter \"FullyQualifiedName~BordersWallToNorth_reads_only_the_north_neighbour|FullyQualifiedName~The_border_of_every_room_clears_a_neighbouring_walls_facade\"",
+          "result": "FAILED: 2 of 2 (BordersWallToNorth_reads_only_the_north_neighbour's true-case assertion, and The_border_of_every_room_clears_a_neighbouring_walls_facade — with the predicate hardwired false, Main.DrawRoomBorder's ternary would always fall back to the plain BorderInset ladder and Issue #139 reopens verbatim)",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "a-ii: WallAdjacentBorderInset stops climbing past the facade",
+          "file": "src/DungeonFortress.Presentation/RoomGeometry.cs",
+          "edit": "public const double WallClearance = WallRenderGeometry.FacadeReferenceOverhang + BorderStrokeHalfWidth + WallVisibleGap; -> public const double WallClearance = 0.0;",
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --filter \"FullyQualifiedName~Wall_adjacent_insets_are_still_distinct_and_bounded|FullyQualifiedName~The_border_of_every_room_clears_a_neighbouring_walls_facade\"",
+          "result": "FAILED: 2 of 2 (Wall_adjacent_insets_are_still_distinct_and_bounded's \"always the deeper ladder\" assertion — with WallClearance at 0, WallAdjacentBorderInset(Farm) = 0.0 < BorderInset(Farm) = 2.0 — and The_border_of_every_room_clears_a_neighbouring_walls_facade, which shows the overlap moving from farm/kitchen onto every wall-adjacent room including larder, since nothing is left to push any of them past the facade)",
+          "revertedAndReverifiedGreen": true
+        }
+      ]
+    },
+    "b_adapterWiring": {
+      "description": "src/DungeonFortress.Game/Main.cs — the two points that connect the pure fix to the drawn frame. Neither is reachable from a pure test (ADR 0011 keeps the engine assembly out of Presentation.Tests), so both are proven through AdapterSource reading Main.cs as text, the same technique HudReadabilityTests already uses for LayoutHud and MakeCustomTooltip (evidence/127-mutations.json, halves c-i/c-ii).",
+      "mutants": [
+        {
+          "name": "b-i: DrawMap stops handing DrawRoomBorders the real rock set",
+          "file": "src/DungeonFortress.Game/Main.cs",
+          "edit": "DrawRoomBorders(rockTiles); -> DrawRoomBorders(new HashSet<GridPoint>());",
+          "command": "dotnet build DungeonFortress.sln -c Release && dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --no-build --filter \"FullyQualifiedName~Main_DrawMap_passes_the_real_rock_tiles_into_DrawRoomBorders\"",
+          "result": "FAILED: 1 of 1 (Assert.Equal([\"rockTiles\"], call.Arguments) — actual argument text is \"new HashSet<GridPoint>()\". Builds and compiles fine, so without this test the mutation would be invisible to dotnet test entirely: nothing else in the engine-free suite reads Main.cs's call sites, and this specific mistake — RoomGeometry.cs correct, but fed an empty wall set at the one place that matters — is exactly the shape of gap independent review found in Issue #127's c_scaleApplication.)",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "b-ii: DrawRoomBorder stops branching on BordersWallToNorth",
+          "file": "src/DungeonFortress.Game/Main.cs",
+          "edit": "RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles) -> RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles) && false",
+          "command": "dotnet build DungeonFortress.sln -c Release && dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --no-build --filter \"FullyQualifiedName~Main_DrawRoomBorder_branches_on_BordersWallToNorth\"",
+          "result": "FAILED: 1 of 1 (Assert.Contains — the exact ternary substring no longer appears verbatim in DrawRoomBorder's body once \" && false\" is inserted after the condition. Builds fine, no CS0162: the dead branch is an expression, not an unreachable statement, so the compiler does not flag it — which is exactly why a text-level check is needed here rather than relying on a build warning.)",
+          "revertedAndReverifiedGreen": true
+        }
+      ]
+    }
+  },
+  "note": "Each mutant was applied with Edit, run in isolation with the command shown, then reverted with `git checkout -- <file>` and re-verified green (dotnet build + the same filtered dotnet test, plus a full dotnet test tests/DungeonFortress.Presentation.Tests -c Release --no-build after the last one: 423/423 passed) before moving to the next. No mutant was left in place at any point between runs.",
+  "fullSuiteAfterAllReverts": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --no-build",
+    "result": "Пройден!: не пройдено 0, пройдено 423, пропущено 0, всего 423"
+  }
+}
