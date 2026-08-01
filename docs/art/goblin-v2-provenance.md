@@ -8,7 +8,11 @@ Runtime candidates live in
 `goblin_idle_v2.png`, `goblin_work_v2.png`, `goblin_combat_v2.png`,
 `goblin_downed_v2.png`, `goblin_windup_v2.png`, and
 `goblin_flinch_v2.png`. They are transparent 272×192 PNGs with a 17:12 canvas
-prepared for a 61.8 px creature body height. Crew and raiders share the same
+prepared for a **61.8 px canvas height** — that is the draw size
+`CameraView.GoblinDrawSize` produces at tile 40 under the owner-selected 170 %,
+and it is the height of the *canvas*, not of the body: the body fills 168 of the
+192 rows, so it renders at about 54.1 px. See «Integration boundary» below for the
+87.55 px width that follows. Crew and raiders share the same
 generated pack; the runtime distinguishes factions with the existing teal/red
 outline, so no second raider set was generated.
 
