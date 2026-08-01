@@ -416,7 +416,7 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
     public void Report_whether_a_refusal_names_work_the_creature_would_have_taken()
     {
         var report = new StringBuilder();
-        var totals = (Refusals: 0, Named: 0, Other: 0, Nothing: 0);
+        var totals = (Refusals: 0, Named: 0, Other: 0, Nothing: 0, IdleEitherWay: 0);
 
         foreach (var fixtureName in new[] { "baseline", "prepared" })
         {
@@ -427,17 +427,20 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
                     totals.Refusals + counts.Refusals,
                     totals.Named + counts.Named,
                     totals.Other + counts.Other,
-                    totals.Nothing + counts.Nothing);
+                    totals.Nothing + counts.Nothing,
+                    totals.IdleEitherWay + counts.IdleEitherWay);
                 report.AppendLine(CultureInfo.InvariantCulture,
                     $"{fixtureName}/{seed}: refusals {counts.Refusals}, named {counts.Named}, " +
-                    $"other {counts.Other}, nothing {counts.Nothing}");
+                    $"other {counts.Other}, nothing {counts.Nothing}, " +
+                    $"idleEitherWay {counts.IdleEitherWay}");
             }
         }
 
         report.AppendLine(CultureInfo.InvariantCulture,
             $"matrix: refusals {totals.Refusals}, named {totals.Named}, " +
             $"other {totals.Other}, nothing {totals.Nothing}, " +
-            $"false {totals.Other + totals.Nothing}");
+            $"false {totals.Other + totals.Nothing}, " +
+            $"idleEitherWay {totals.IdleEitherWay}");
         output.WriteLine(report.ToString());
     }
 
@@ -484,7 +487,7 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
         var refusals = 0;
         foreach (var seed in MatrixSeeds)
         {
-            var world = RunProbed(fixtureName, seed, (tick, probe) =>
+            var world = RunProbed(fixtureName, seed, (tick, probe, _) =>
             {
                 if (probe.RefusedJobId is not { } refused)
                 {
@@ -540,7 +543,7 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
         var contested = 0;
         foreach (var seed in MatrixSeeds)
         {
-            RunProbed(fixtureName, seed, (tick, probe) =>
+            RunProbed(fixtureName, seed, (tick, probe, _) =>
             {
                 if (probe.RefusedJobId is not { } refused || probe.MemoryFreeJobId == refused)
                 {
@@ -625,7 +628,7 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
     private static PrototypeWorld RunProbed(
         string fixtureName,
         ulong seed,
-        Action<int, PrototypeWorld.MemoryProbe> inspect)
+        Action<int, PrototypeWorld.MemoryProbe, PrototypeWorld> inspect)
     {
         var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed })
         {
@@ -637,14 +640,14 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
             world.Step();
             foreach (var probe in world.MemoryProbes)
             {
-                inspect(tick, probe);
+                inspect(tick, probe, world);
             }
         }
 
         return world;
     }
 
-    private static (int Refusals, int Named, int Other, int Nothing) CountRefusals(
+    private static (int Refusals, int Named, int Other, int Nothing, int IdleEitherWay) CountRefusals(
         string fixtureName,
         ulong seed,
         StringBuilder report)
@@ -653,7 +656,8 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
         var named = 0;
         var other = 0;
         var nothing = 0;
-        RunProbed(fixtureName, seed, (tick, probe) =>
+        var idleEitherWay = 0;
+        RunProbed(fixtureName, seed, (tick, probe, world) =>
         {
             if (probe.RefusedJobId is not { } refused)
             {
@@ -667,9 +671,22 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
                 return;
             }
 
+            // Whether the creature also ended the *real* tick with nothing to do.
+            // Without this the residue can only be described from one side — "the
+            // tick without memory gives it no work" — and the sentence a player
+            // would care about is the other one: did memory change what this
+            // creature actually did? The snapshot is taken only on the eleven
+            // ticks that need it.
+            var stillIdle = world.GetSnapshot().Creatures
+                .Single(item => item.Id == probe.CreatureId)
+                .CurrentJobId is null;
             if (probe.MemoryFreeJobId is null)
             {
                 nothing++;
+                if (stillIdle)
+                {
+                    idleEitherWay++;
+                }
             }
             else
             {
@@ -684,15 +701,16 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
                     CultureInfo.InvariantCulture,
                     $"job {free} ({probe.MemoryFreeKind} at {Format(probe.MemoryFreeTarget)})")
                 : "no work";
+            var reallyDid = stillIdle ? "idle too" : "with work";
             report.AppendLine(string.Create(
                 CultureInfo.InvariantCulture,
                 $"  {fixtureName}/{seed} t{tick} #{probe.CreatureId}: refused job {refused} " +
                 $"({probe.RefusedKind} at {Format(probe.RefusedTarget)}), own best " +
                 $"{probe.MemoryFreeBestJobId}, memory-free would give {instead}; " +
                 $"job won by {probe.MemoryFreeWinnerOfRefusedJob}, tile won by " +
-                $"{probe.MemoryFreeWinnerOfRefusedTile}"));
+                $"{probe.MemoryFreeWinnerOfRefusedTile}; with memory it ended the tick {reallyDid}"));
         });
-        return (refusals, named, other, nothing);
+        return (refusals, named, other, nothing, idleEitherWay);
     }
 
     private static PrototypeSnapshot RunAtSeed(string fixtureName, ulong seed) =>
