@@ -3059,7 +3059,7 @@ public partial class Main : Node2D
         DrawElevatedWorld(rockTiles, diggableTiles);
         // Flat informational marks are projected above elevated geometry. A wall
         // must not erase one side of a room or the destination of an active job.
-        DrawRoomBorders();
+        DrawRoomBorders(rockTiles);
         DrawZoneOutlines();
         DrawJobRoutes();
         // A dig mark is a player-intent overlay on the wall, not wall material.
@@ -3207,18 +3207,27 @@ public partial class Main : Node2D
     /// each of its cells. ADR 0013 makes this mandatory — a room whose boundary is
     /// never shown is the Dwarf Fortress failure the variant was chosen against.
     /// </summary>
-    private void DrawRoomBorders()
+    private void DrawRoomBorders(IReadOnlySet<GridPoint> rockTiles)
     {
         foreach (var room in _state!.Rooms)
         {
-            DrawRoomBorder(room);
+            DrawRoomBorder(room, rockTiles);
         }
     }
 
-    private void DrawRoomBorder(PrototypeRoomSnapshot room)
+    /// <summary>
+    /// A room whose border would otherwise sit under a wall's facade
+    /// (Issue #139) is drawn with <see cref="RoomGeometry.WallAdjacentBorderInset"/>
+    /// instead of the plain <see cref="RoomGeometry.BorderInset"/>, so the line
+    /// clears the wall rather than lying on it.
+    /// </summary>
+    private void DrawRoomBorder(PrototypeRoomSnapshot room, IReadOnlySet<GridPoint> rockTiles)
     {
         var accent = RoomColor(MapAccents.Room(_projection!, room), room.Purpose);
-        var inset = ScaleWorld((float)RoomGeometry.BorderInset(room.Purpose));
+        var purposeInset = RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles)
+            ? RoomGeometry.WallAdjacentBorderInset(room.Purpose)
+            : RoomGeometry.BorderInset(room.Purpose);
+        var inset = ScaleWorld((float)purposeInset);
         foreach (var segment in RoomGeometry.Border(room.Perimeter, _tileSize, inset))
         {
             DrawLine(

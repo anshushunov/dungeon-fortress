@@ -244,21 +244,23 @@ public sealed class RoomGeometryTests
     }
 
     /// <summary>
-    /// Issue #139, checkpoint 1: measures whether the hypothesis is real before
-    /// touching any drawing code. A room's border must not sit inside the band a
-    /// neighbouring wall's front facade occupies. The wall is drawn as a volume —
-    /// a top plus a facade that overhangs downward past the wall's own footprint,
-    /// per <see cref="WallRenderGeometry"/> — and when a room cell's north
-    /// neighbour is rock, that facade hangs over part of the room's own cell.
+    /// Issue #139: a room's border must not sit inside the band a neighbouring
+    /// wall's front facade occupies. The wall is drawn as a volume — a top plus a
+    /// facade that overhangs downward past the wall's own footprint, per
+    /// <see cref="WallRenderGeometry"/> — and when a room cell's north neighbour is
+    /// rock, that facade hangs over part of the room's own cell. If the room's
+    /// north border line is drawn inside that overhang, the border reads as
+    /// sitting on the wall rather than around the room.
     ///
     /// This walks every room of the shipped starting map — not one screenshot of
-    /// two rooms — using the border inset exactly as <c>Main.DrawRoomBorder</c>
-    /// computes it today (<see cref="RoomGeometry.BorderInset"/>, the only inset
-    /// that exists before this issue's fix), and measures the signed gap between
-    /// the drawn line's near edge (since <c>DrawLine</c> gives the stroke width
-    /// and the eye reads the whole stroke) and the facade's bottom edge, in scaled
-    /// screen pixels at the same tile size <see cref="RoomGeometryTests"/> uses
-    /// everywhere else. A positive overlap means the two are not apart.
+    /// two rooms — and measures the signed gap between the drawn line (its near
+    /// edge, since <c>DrawLine</c> gives the stroke width and the eye reads the
+    /// whole stroke) and the facade's bottom edge, in scaled screen pixels at the
+    /// same tile size <see cref="RoomGeometryTests"/> uses everywhere else. It
+    /// picks the inset the same way <c>Main.DrawRoomBorder</c> does — plain
+    /// <see cref="RoomGeometry.BorderInset"/> unless <see cref="RoomGeometry.BordersWallToNorth"/>
+    /// says otherwise — so the test exercises the real decision and not a second
+    /// copy of it. A positive overlap means the two are not yet apart.
     /// </summary>
     [Fact]
     public void The_border_of_every_room_clears_a_neighbouring_walls_facade()
@@ -273,7 +275,10 @@ public sealed class RoomGeometryTests
         var overlaps = new List<object>();
         foreach (var room in state.Rooms)
         {
-            var insetScaled = RoomGeometry.BorderInset(room.Purpose) * scale;
+            var purposeInset = RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles)
+                ? RoomGeometry.WallAdjacentBorderInset(room.Purpose)
+                : RoomGeometry.BorderInset(room.Purpose);
+            var insetScaled = purposeInset * scale;
             foreach (var cell in room.Perimeter)
             {
                 var north = new GridPoint(cell.X, cell.Y - 1);
@@ -314,5 +319,52 @@ public sealed class RoomGeometryTests
             new JsonSerializerOptions { WriteIndented = true });
 
         Assert.True(overlaps.Count == 0, payload);
+    }
+
+    /// <summary>
+    /// The wall-adjacent ladder keeps the same property <see cref="Two_purposes_next_to_each_other_do_not_share_a_border_line"/>
+    /// proves for the plain one: every purpose still gets a distinct depth, and
+    /// none of them eats a whole one-tile room even at the smallest tile size
+    /// ADR 0008 allows.
+    /// </summary>
+    [Fact]
+    public void Wall_adjacent_insets_are_still_distinct_and_bounded()
+    {
+        var purposes = Enum.GetValues<ZoneKind>();
+        for (var index = 1; index < purposes.Length; index++)
+        {
+            Assert.NotEqual(
+                RoomGeometry.WallAdjacentBorderInset(purposes[index - 1]),
+                RoomGeometry.WallAdjacentBorderInset(purposes[index]));
+        }
+
+        foreach (var purpose in purposes)
+        {
+            Assert.InRange(RoomGeometry.WallAdjacentBorderInset(purpose), 1.0, 32 / 4.0);
+
+            // And it is always the deeper of the two ladders: a room pushed by a
+            // wall never ends up drawn shallower than one that is not.
+            Assert.True(
+                RoomGeometry.WallAdjacentBorderInset(purpose) > RoomGeometry.BorderInset(purpose));
+        }
+    }
+
+    /// <summary>
+    /// The predicate that switches ladders: true only when a cell of the room
+    /// really does have rock to its north, false for a room with no such
+    /// neighbour and false for a room whose only rock neighbour is on another
+    /// side (Issue #139 is specifically about the north-facing facade overhang,
+    /// per <see cref="WallTopology.HasFrontFacade"/>).
+    /// </summary>
+    [Fact]
+    public void BordersWallToNorth_reads_only_the_north_neighbour()
+    {
+        var wallToNorth = new HashSet<GridPoint> { new(0, -1) };
+        Assert.True(RoomGeometry.BordersWallToNorth([new GridPoint(0, 0)], wallToNorth));
+
+        var wallToSouth = new HashSet<GridPoint> { new(0, 1) };
+        Assert.False(RoomGeometry.BordersWallToNorth([new GridPoint(0, 0)], wallToSouth));
+
+        Assert.False(RoomGeometry.BordersWallToNorth([new GridPoint(0, 0)], new HashSet<GridPoint>()));
     }
 }

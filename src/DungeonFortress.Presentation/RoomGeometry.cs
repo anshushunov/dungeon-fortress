@@ -39,7 +39,73 @@ public static class RoomGeometry
     /// telling apart. Widening the ladder would push the innermost border a third
     /// of the way into a one-tile room at the smallest tile size ADR 0008 allows.
     /// </summary>
-    public static double BorderInset(ZoneKind purpose) => 2.0 + ((int)purpose % 3) * 1.5;
+    public static double BorderInset(ZoneKind purpose) => 2.0 + PurposeLadderStep(purpose);
+
+    /// <summary>
+    /// <see cref="BorderInset"/> for a room whose border sits under a wall — one
+    /// of its cells has rock directly to the north (<see cref="BordersWallToNorth"/>).
+    ///
+    /// <see cref="WallRenderGeometry"/> draws a wall as a volume: its front facade
+    /// overhangs <see cref="WallClearance"/>-worth of ground past the wall's own
+    /// footprint, into whichever cell sits right below it. The plain
+    /// <see cref="BorderInset"/> ladder knows nothing about a neighbour and was
+    /// tuned only so two overlapping purposes stay apart from each other
+    /// (Issue #52) — nothing in it keeps a purpose apart from a wall, so at the
+    /// low end of the ladder the border was drawn inside the facade's own
+    /// overhang (Issue #139). This uses the same per-purpose step, so two
+    /// overlapping purposes pushed by the same wall are exactly as apart from
+    /// each other as they were before the push, just both moved past the facade.
+    /// </summary>
+    public static double WallAdjacentBorderInset(ZoneKind purpose) =>
+        WallClearance + PurposeLadderStep(purpose);
+
+    /// <summary>
+    /// Whether any cell of the room has a wall directly to its north — the one
+    /// direction a wall's facade can hang over a room's own footprint, since
+    /// <see cref="WallRenderGeometry"/> only ever draws a facade on a wall's
+    /// south-facing (observer-facing) side.
+    /// </summary>
+    public static bool BordersWallToNorth(
+        IReadOnlyCollection<GridPoint> tiles,
+        IReadOnlySet<GridPoint> wallTiles)
+    {
+        ArgumentNullException.ThrowIfNull(tiles);
+        ArgumentNullException.ThrowIfNull(wallTiles);
+        return tiles.Any(cell => wallTiles.Contains(new GridPoint(cell.X, cell.Y - 1)));
+    }
+
+    /// <summary>
+    /// Half the width <c>Main.DrawRoomBorder</c> strokes a border line with: a
+    /// line "at" some coordinate actually covers a band a half-stroke to either
+    /// side of it, and it is the near edge of that band — not the coordinate
+    /// itself — that must clear the facade.
+    /// </summary>
+    private const double BorderStrokeHalfWidth = 1.0;
+
+    /// <summary>
+    /// A further reference pixel kept clear once the overhang and the stroke's
+    /// own half-width are both accounted for, so the border reads as apart from
+    /// the wall rather than merely not touching it.
+    /// </summary>
+    private const double WallVisibleGap = 1.0;
+
+    /// <summary>
+    /// The reference-pixel depth a wall-adjacent border needs before its own
+    /// per-purpose step: the facade's downward overhang past the wall's own
+    /// footprint, the half-width of the stroke that draws the border, and a
+    /// visible gap. Derived from <see cref="WallRenderGeometry.FacadeReferenceOverhang"/>
+    /// rather than restated, so a change to the wall's geometry cannot silently
+    /// leave this stale.
+    /// </summary>
+    public const double WallClearance =
+        WallRenderGeometry.FacadeReferenceOverhang + BorderStrokeHalfWidth + WallVisibleGap;
+
+    /// <summary>
+    /// The step <see cref="BorderInset"/> and <see cref="WallAdjacentBorderInset"/>
+    /// both climb by purpose, so that whichever base either starts from, two
+    /// overlapping purposes stay exactly as far apart from each other.
+    /// </summary>
+    private static double PurposeLadderStep(ZoneKind purpose) => ((int)purpose % 3) * 1.5;
 
     /// <summary>
     /// The closed outline of a room, as the boundary edges of its patch — one
