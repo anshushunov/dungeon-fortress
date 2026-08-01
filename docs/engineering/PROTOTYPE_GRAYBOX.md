@@ -786,7 +786,9 @@ such wall is a creature with a line through it. `The_border_used_to_be_drawn_ove
 every_body_that_stood_on_it` runs the same measurement against the arrangement
 that shipped before, so the "before" column of `evidence/156-before.json` stays
 reproducible and the check is known to be able to fail: 226 crossings, in all four
-rooms of the map, at every tile size.
+rooms of the map, at every tile size. `evidence/156-mutations.json` records each
+mutant against a committed green state, with what stayed green as well as what
+went red — the two halves fail apart, which is what makes them two halves.
 
 **The price, in two cells.** On the shipped map four segments end up above the
 depth pass — `kitchen@9,6` south at 9,8 and 12,8, `quarters@19,2` south at 19,5
