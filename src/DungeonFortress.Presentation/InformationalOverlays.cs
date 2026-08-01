@@ -247,8 +247,16 @@ public static class InformationalOverlays
             1.0,
             1.0,
             "A room is where creatures work, so a body inside it is the point. " +
-            "The border is a line on the inside edge of the patch and never " +
-            "fills, so nothing standing in the room is hidden by it."),
+            "Since Issue #156 the mark is not the whole border: the border is a " +
+            "line on the floor a body stands on, so it is drawn under the depth " +
+            "pass and the body walks over it. What is left above the depth pass " +
+            "is the segment a wall standing directly in front of the room paints " +
+            "over completely, which no inset can clear (Issues #139, #147) and " +
+            "which therefore cannot hide anybody the wall is not hiding already. " +
+            "The mark never fills either way. The owner's playtest is what " +
+            "retired the old reason — «наверно существо должно быть над границей " +
+            "комнаты, а не под ней»: a stroke does not have to fill a cell to " +
+            "strike a creature through."),
         new(
             OverlayMark.RoomLabel,
             OverlayMarkSubject.Cell,

@@ -3056,10 +3056,14 @@ public partial class Main : Node2D
         DrawStockpileCells();
         DrawBeds();
         DrawLooseItems();
+        // A room's border is a line on the floor, so it is drawn on the floor and
+        // whoever stands on it is drawn afterwards (Issue #156).
+        DrawRoomBorders(rockTiles);
         DrawElevatedWorld(rockTiles, diggableTiles);
         // Flat informational marks are projected above elevated geometry. A wall
-        // must not erase one side of a room or the destination of an active job.
-        DrawRoomBorders(rockTiles);
+        // must not erase the destination of an active job — nor the one part of a
+        // room's border that a wall standing in front of it would swallow whole.
+        DrawRoomBordersOverWalls(rockTiles);
         DrawZoneOutlines();
         DrawJobRoutes();
         // A dig mark is a player-intent overlay on the wall, not wall material.
@@ -3206,6 +3210,11 @@ public partial class Main : Node2D
     /// The border of every room: one line around the whole patch, not a box round
     /// each of its cells. ADR 0013 makes this mandatory — a room whose boundary is
     /// never shown is the Dwarf Fortress failure the variant was chosen against.
+    ///
+    /// This is the part of it drawn <em>below</em> the depth pass, which since
+    /// Issue #156 is all of it except the segments
+    /// <see cref="DrawRoomBordersOverWalls"/> takes. A body standing on the line
+    /// is drawn after it and reads whole.
     /// </summary>
     private void DrawRoomBorders(IReadOnlySet<GridPoint> rockTiles)
     {
@@ -3229,7 +3238,66 @@ public partial class Main : Node2D
         var purposeInset =
             RoomGeometry.BorderInsetFor(room.Purpose, room.Perimeter, rockTiles);
         var inset = ScaleWorld((float)purposeInset);
-        foreach (var segment in RoomGeometry.Border(room.Perimeter, _tileSize, inset))
+        foreach (var segment in RoomGeometry.Border(
+                     room.Perimeter,
+                     _tileSize,
+                     inset,
+                     rockTiles,
+                     RoomBorderLayer.UnderBodies))
+        {
+            DrawLine(
+                new Vector2((float)segment.From.X, (float)segment.From.Y),
+                new Vector2((float)segment.To.X, (float)segment.To.Y),
+                accent,
+                ScaleWorld((float)RoomGeometry.BorderStrokeWidth));
+        }
+    }
+
+    /// <summary>
+    /// The other half of the same outline, drawn after the depth pass: the
+    /// segments a wall standing directly in front of the room paints over
+    /// completely.
+    ///
+    /// A wall to the south is drawn in front of the cell behind it and covers the
+    /// bottom of that cell outright — clearing it would cost more than
+    /// <c>RoomGeometry.MaximumBorderInset</c>, so no inset is an answer and the
+    /// answer is this pass (Issues #139, #147). What Issue #156 changed is how
+    /// much of the border pays that price: only the segments the wall really does
+    /// swallow, which is a measurement
+    /// <see cref="RoomGeometry.IsHiddenByWallInFront"/> makes rather than a side of
+    /// a cell somebody named. Because such a segment is inside the wall's own
+    /// drawn band, it cannot cover a body the wall is not covering already.
+    ///
+    /// The loop below repeats <see cref="DrawRoomBorder"/>'s four lines instead of
+    /// sharing them: a routine may only call routines of its own pass
+    /// (<c>WorldDrawPassGuardTests.A_routine_only_calls_routines_of_its_own_pass</c>),
+    /// and a shared drawing helper would be a routine in two passes at once.
+    /// Everything that could actually drift — the colour, the inset, which
+    /// segments belong here — comes from the same pure calls both bodies make.
+    /// </summary>
+    private void DrawRoomBordersOverWalls(IReadOnlySet<GridPoint> rockTiles)
+    {
+        foreach (var room in _state!.Rooms)
+        {
+            DrawRoomBorderOverWall(room, rockTiles);
+        }
+    }
+
+    /// <inheritdoc cref="DrawRoomBordersOverWalls"/>
+    private void DrawRoomBorderOverWall(
+        PrototypeRoomSnapshot room,
+        IReadOnlySet<GridPoint> rockTiles)
+    {
+        var accent = RoomColor(MapAccents.Room(_projection!, room), room.Purpose);
+        var purposeInset =
+            RoomGeometry.BorderInsetFor(room.Purpose, room.Perimeter, rockTiles);
+        var inset = ScaleWorld((float)purposeInset);
+        foreach (var segment in RoomGeometry.Border(
+                     room.Perimeter,
+                     _tileSize,
+                     inset,
+                     rockTiles,
+                     RoomBorderLayer.OverWallInFront))
         {
             DrawLine(
                 new Vector2((float)segment.From.X, (float)segment.From.Y),

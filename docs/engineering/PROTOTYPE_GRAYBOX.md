@@ -462,10 +462,12 @@ involved.
 The world draws in four passes:
 
 1. floor and base material that belongs below elevated world geometry, including
-   blueprint and stockpile silhouettes but not their countable pips;
+   blueprint and stockpile silhouettes but not their countable pips, and — last of
+   the four, after the things standing on the floor — a room's border;
 2. walls, training posts, creatures and raiders in stable back-to-front Y-order;
 3. zone outlines, translucent routes and work goals, dig intent, material pips,
-   body information and zone labels above world depth;
+   body information, zone labels and the one part of a room's border a wall in
+   front would swallow, above world depth;
 4. legal-target and selection outlines, followed by the active brush preview,
    above the informational marks.
 
@@ -481,8 +483,10 @@ change a frame.
 HP bars, state dots, downed marks and the selected-creature ring are information,
 not opaque world material. They use the same interpolated centre as the body but
 are drawn after the depth pass, so a wall can hide the lower body without also
-hiding its readable state. Zone borders, haul routes and work goals likewise
-remain complete instead of losing their south edge under a wall.
+hiding its readable state. Haul routes and work goals likewise remain complete
+instead of losing their south edge under a wall. A room's border used to be in
+that list and no longer is: see
+[A room's border is under the body standing on it](#a-rooms-border-is-under-the-body-standing-on-it-issue-156).
 
 **One rule governs every mark in this pass: a mark that can share a cell with a
 body must not hide it.** Its fill is translucent; an outline may stay opaque,
@@ -694,8 +698,9 @@ behind it outright. Clearing that would need a base inset of 10.625 — past
 bands** of the two opposite sides of a one-cell room meet, the sides themselves
 meeting at 11.0 — and that is before a single purpose step is added. So no inset
 is the answer, and the answer the project already gave is the one above: the
-border is an informational mark drawn after the depth pass, so a room keeps its
-south edge instead of losing it under the wall.
+segment such a wall would swallow is drawn after the depth pass, so a room keeps
+its south edge instead of losing it under the wall. Since Issue #156 that is only
+that segment and not the whole border — the next section is why.
 
 **A wall is its rectangles plus its seams, and the seams are bands.** That
 sentence is the whole issue in one line, and it is stated separately because
@@ -725,6 +730,78 @@ The same file also measures the ladder that shipped before Issue #147, so the
 policy is gone. Under it `quarters@19,2` cleared the wall beside it by 0.375
 reference pixels — 0.55 screen pixels at the smallest tile — and `farm@1,1`
 cleared the facade above it by the same 0.375, for the reason above.
+
+### A room's border is under the body standing on it (Issue #156)
+
+The owner reported the consequence of the paragraph above from playtest: «наверно
+существо должно быть над границей комнаты, а не под ней». Every goblin on the
+bottom row of the kitchen and the larder had its own room's outline drawn across
+it. The border was an informational mark, informational marks are drawn after the
+depth pass, and the whole border paid the price of the one segment that needed it.
+
+The rule of that pass — *a mark that can share a cell with a body must not hide
+it* — did not catch this, and the reason is worth keeping: the border is declared
+`StrokeOnly`, and the recorded reason was that a line with no fill hides nothing.
+A stroke two reference pixels wide across the middle of a twenty-two pixel cell
+does. Fill was never the point; **covering** was.
+
+So the border is drawn in **two layers**, `RoomGeometry.RoomBorderLayer`, and the
+split is a measurement rather than a named side:
+
+| Layer | Pass | What is in it |
+|---|---|---|
+| `UnderBodies` | below depth, last of that pass | every segment a wall in front does not paint over whole |
+| `OverWallInFront` | above depth | a segment whose entire stroke band is inside the union of the drawn bands of the walls in the row below it |
+
+`RoomGeometry.IsHiddenByWallInFront` is the whole of the decision. Three things
+about it are load bearing:
+
+- it asks about the **union** of the wall's bands, not about any one of them. The
+  first version asked for a single band and answered "no" for the kitchen, whose
+  south stroke straddles the boundary between the wall's lifted top mass and the
+  bright seam along it, with both of them painting over it;
+- it asks only about the row directly south, because that is the only direction
+  from which a wall is drawn *after* a body standing on the cell. A wall to the
+  north hangs its facade into the cell as well and the body walks over that, so
+  its band is no shelter;
+- answering "no" wrongly costs a segment a wall clips; answering "yes" wrongly
+  costs the whole issue. It is built to fail towards "no".
+
+`RoomBorderDepthTests` holds both halves, and each half has its own mutant on the
+same one-line predicate:
+
+| Mutation | What fails |
+|---|---|
+| `IsHiddenByWallInFront` hardwired `true` — the whole border back above the depth pass | `No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible` |
+| `IsHiddenByWallInFront` hardwired `false` — the whole border below it | `A_wall_in_front_keeps_the_segment_it_swallows_above_the_depth_pass` |
+| either routine moved between passes in `WorldDrawOrder` | `The_two_halves_of_the_border_are_declared_in_the_two_passes`, and `DrawMap_runs_the_declared_steps_in_the_declared_order` |
+| the adapter drawing both layers from one routine | `The_adapter_draws_each_layer_in_the_pass_it_is_declared_in` |
+
+The first check is the owner's complaint as a measurement: for every room, every
+segment drawn above the depth pass, and every cell of the map a body can stand on
+(plus the midpoint of every step between two of them, because a render centre is
+interpolated), an overlap between a stroke and a body's drawn rectangle has to be
+painted over by walls this frame draws *in front of* that body. An overlap with no
+such wall is a creature with a line through it. `The_border_used_to_be_drawn_over_
+every_body_that_stood_on_it` runs the same measurement against the arrangement
+that shipped before, so the "before" column of `evidence/156-before.json` stays
+reproducible and the check is known to be able to fail: 226 crossings, in all four
+rooms of the map, at every tile size.
+
+**The price, in two cells.** On the shipped map four segments end up above the
+depth pass — `kitchen@9,6` south at 9,8 and 12,8, `quarters@19,2` south at 19,5
+and 20,5. The larder's two front-wall cells do not, because its ladder reaches
+8.625 reference pixels and one of the two pixels of its stroke is drawn above
+everything the wall paints. Above the depth pass that pixel lands on the goblin
+standing there; below it the wall clips the other pixel, and the larder keeps a
+line half as thick along those two cells. That is the trade, it is taken
+deliberately, and `The_shipped_map_pays_for_the_exception_in_two_cells_of_the_larder`
+pins both halves of it by name so neither can drift unnoticed.
+
+The other visible change is a correction rather than a price: the east and west
+edges of a cell with a wall in front used to be drawn over that wall's face for
+their whole height. They now stop where the wall begins, which is what a wall in
+front is supposed to do.
 
 ## Memory of place (Issue #117)
 
