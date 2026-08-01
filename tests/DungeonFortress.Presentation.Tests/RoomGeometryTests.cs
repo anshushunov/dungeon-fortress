@@ -367,4 +367,48 @@ public sealed class RoomGeometryTests
 
         Assert.False(RoomGeometry.BordersWallToNorth([new GridPoint(0, 0)], new HashSet<GridPoint>()));
     }
+
+    // -------------------------------------------------- the adapter's wiring
+    //
+    // RoomGeometry is pure and covered above; nothing in this project can build
+    // Main.cs, which needs the engine (ADR 0011). AdapterSource reads it as text
+    // instead — the same technique HudReadabilityTests uses for LayoutHud and
+    // MakeCustomTooltip — so the two ends of the wiring that connect the pure
+    // fix to the drawn frame have their own checked, mutable failure mode rather
+    // than depending on the geometry tests above by accident.
+
+    /// <summary>
+    /// The first half of the wiring: <c>Main.DrawMap</c> must hand
+    /// <c>DrawRoomBorders</c> the real rock set it already computed for the
+    /// wall/floor passes, not a stand-in. Without this, <see cref="RoomGeometry.BordersWallToNorth"/>
+    /// would always see an empty wall set and the fix in RoomGeometry.cs would
+    /// never fire, however correct it is on its own.
+    /// </summary>
+    [Fact]
+    public void Main_DrawMap_passes_the_real_rock_tiles_into_DrawRoomBorders()
+    {
+        var body = AdapterSource.Body("DrawMap");
+        var calls = AdapterSource.CallsTo(body, "DrawRoomBorders");
+        var call = Assert.Single(calls);
+        Assert.Equal(["rockTiles"], call.Arguments);
+    }
+
+    /// <summary>
+    /// The second half: <c>Main.DrawRoomBorder</c> must actually pick
+    /// <see cref="RoomGeometry.WallAdjacentBorderInset"/> when
+    /// <see cref="RoomGeometry.BordersWallToNorth"/> says a wall is north, and
+    /// the plain <see cref="RoomGeometry.BorderInset"/> otherwise — not always
+    /// one or the other regardless of what the predicate says.
+    /// </summary>
+    [Fact]
+    public void Main_DrawRoomBorder_branches_on_BordersWallToNorth()
+    {
+        var body = AdapterSource.Body("DrawRoomBorder").Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.Contains(
+            "RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles)\n" +
+            "            ? RoomGeometry.WallAdjacentBorderInset(room.Purpose)\n" +
+            "            : RoomGeometry.BorderInset(room.Purpose);",
+            body,
+            StringComparison.Ordinal);
+    }
 }
