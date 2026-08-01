@@ -668,7 +668,7 @@ figure here is stated in reference pixels and every constant lives in
 |---|---|---|
 | north | facade overhanging 3.0, plus the lower half of the seam that closes it (0.625) | inset 5.625 + purpose step |
 | east or west, or diagonally so | half the dark side seam, which is centred on the shared cell boundary (0.625) | inset 2.625 + purpose step |
-| south | the whole lifted top mass, 8.0 | nothing — see below |
+| south | the whole lifted top mass, 8.0, plus the upper half of the bright seam along it (0.625) | nothing — see below |
 | nothing | — | inset 2.0 + purpose step, the ladder Issue #52 bought |
 
 The base is the deepest any of the room's own walled sides demands; the
@@ -689,30 +689,42 @@ neighbours.
 **South is an exception, and it is the projection's, not the border's.** A wall
 standing directly south of a room is drawn *in front of* it: its top rises eight
 reference pixels above its own footprint and covers the bottom of the cell
-behind it outright. Clearing that would need a base inset of 10.0 — exactly the
-depth at which the two opposite sides of a one-cell room meet — before a single
-purpose step is added. So no inset is the answer, and the answer the project
-already gave is the one above: the border is an informational mark drawn after
-the depth pass, so a room keeps its south edge instead of losing it under the
-wall.
+behind it outright. Clearing that would need a base inset of 10.625 — past
+`RoomGeometry.MaximumBorderInset` of 10.0, the depth at which the **stroke
+bands** of the two opposite sides of a one-cell room meet, the sides themselves
+meeting at 11.0 — and that is before a single purpose step is added. So no inset
+is the answer, and the answer the project already gave is the one above: the
+border is an informational mark drawn after the depth pass, so a room keeps its
+south edge instead of losing it under the wall.
 
-What checks this is `RoomWallClearanceTests`, and it is deliberately not written
-per mechanism. It takes every rectangle a wall actually paints
-(`WallRenderGeometry.DrawnBands` — top mass, facade, and every seam widened into
-the band `DrawLine` paints it as) against every border segment a room actually
-draws (`RoomGeometry.BorderEdges`, which keeps the cell and side each segment
-came from), for every room of the shipped map, at 32, 40 and 48 px. A mechanism
-nobody has thought of fails it the same way a named one does. The gap it
-requires is `RoomGeometry.WallVisibleGap`, one reference pixel, and the shipped
-map's tightest sides — `farm@1,1` north, `quarters@19,2` west and east — sit
-exactly there by construction.
+**A wall is its rectangles plus its seams, and the seams are bands.** That
+sentence is the whole issue in one line, and it is stated separately because
+getting it wrong is what left a defect behind twice: Issue #139 cleared the
+facade *rectangle* and not the seam drawn along its lower edge, so it bought
+0.625 fewer reference pixels than it meant to; independent review of Issue #147
+then found the same omission in the south arithmetic above, where the seam is on
+top of the mass rather than under the facade. Three measurements pin it now, one
+per direction a seam reaches out of the footprint — `A_walls_side_seam…`,
+`A_walls_facade_seam…`, `A_walls_top_seam…` — and each has its own mutant,
+because a coarse one that zeroes every seam at once cannot show which direction
+is covered.
+
+What checks the borders themselves is `RoomWallClearanceTests`, and it is
+deliberately not written per mechanism. It takes every rectangle a wall actually
+paints (`WallRenderGeometry.DrawnBands` — top mass, facade, and every seam
+widened into the band `DrawLine` paints it as) against every border segment a
+room actually draws (`RoomGeometry.BorderEdges`, which keeps the cell and side
+each segment came from), for every room of the shipped map, at 32, 40 and 48 px.
+A mechanism nobody has thought of fails it the same way a named one does. The
+gap it requires is `RoomGeometry.WallVisibleGap`, one reference pixel, and the
+shipped map's tightest sides — `farm@1,1` north, `quarters@19,2` west and east —
+sit exactly there by construction.
 
 The same file also measures the ladder that shipped before Issue #147, so the
 "before" column of `evidence/147-gaps-before.json` stays reproducible after the
 policy is gone. Under it `quarters@19,2` cleared the wall beside it by 0.375
 reference pixels — 0.55 screen pixels at the smallest tile — and `farm@1,1`
-cleared the facade above it by the same 0.375, because Issue #139 cleared the
-facade *rectangle* and not the seam drawn along its lower edge.
+cleared the facade above it by the same 0.375, for the reason above.
 
 ## Memory of place (Issue #117)
 

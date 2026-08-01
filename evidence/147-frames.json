@@ -41,7 +41,8 @@
         "imageSha256": "7597a5837655137dcba90e07520648e738393a021db013c890b79969d2ac413c",
         "byteForByteRepeat": true,
         "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '1032,192' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/147-after/147-quarters-walls.png",
-        "reading": "The whole outline has moved inward by 0.625 reference px: a strip of the room's own floor now separates the purple stroke from the wall's seam on both the west and the east side. The caption and icon are intact — QUARTERS sits at the plain LabelDefaultTop, because 2.625 + 1.0 + 1.0 is still under it."
+        "reading": "The whole outline has moved inward by 0.625 reference px: a strip of the room's own floor now separates the purple stroke from the wall's seam on both the west and the east side. The caption and icon moved down with it — LabelTop(2.625) = max(2.0, 2.625 + 1.0 + 1.0) = 4.625, so QUARTERS sits 0.625 reference px lower than in the 'before' frame and is no longer at the plain LabelDefaultTop. Both are intact: the block reaches 12.625 of a 22.0 reference-px cell.",
+        "correctionRound1": "This reading first said QUARTERS still sat at the plain LabelDefaultTop 'because 2.625 + 1.0 + 1.0 is still under it', which is arithmetically false — that sum is 4.625, above the default of 2.0 — and independent review saw the caption move on its own re-captures. Corrected above."
       },
       {
         "name": "147-quarters-smallest-tile",

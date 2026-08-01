@@ -99,10 +99,11 @@ public static class RoomGeometry
     /// a room is drawn in front of it: its top mass is lifted
     /// <see cref="WallRenderGeometry.FacadeReferenceHeight"/> reference pixels
     /// above its own footprint and therefore covers the bottom of the room's cell
-    /// outright, whatever the border does. Clearing it would cost
-    /// <see cref="MaximumBorderInset"/> before a single purpose step is added —
-    /// half a cell — so no inset is an answer to it. The accepted answer is draw
-    /// order, decided in Issue #83 and declared in <see cref="WorldDrawOrder"/>:
+    /// outright, whatever the border does — and the bright seam along the top of
+    /// that mass reaches half its own width higher still. Clearing it would cost
+    /// more than <see cref="MaximumBorderInset"/> before a single purpose step is
+    /// added — over half a cell — so no inset is an answer to it. The accepted
+    /// answer is draw order, decided in Issue #83 and declared in <see cref="WorldDrawOrder"/>:
     /// the border is an informational mark drawn after the depth pass, so the
     /// room keeps its south edge instead of losing it under the wall.
     /// </summary>
