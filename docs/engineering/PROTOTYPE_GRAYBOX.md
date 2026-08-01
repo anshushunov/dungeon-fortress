@@ -652,6 +652,68 @@ current job, carried item, last reason and its structured numeric details. Cell
 inspection shows its zones and relevant jobs. Colored lines/dots are jobs;
 colored circle/square pairs and name labels distinguish all nine creatures.
 
+### Where a room's border stands next to a wall (Issues #139 and #147)
+
+A room's outline is drawn inset from its own cells. How far in is not a taste:
+rock has volume, and the volume reaches out of the wall's own footprint in three
+different directions, each with a different answer.
+
+The numbers below are **reference pixels** — the pre-scale units of a 22 px cell
+that `CameraView.WorldVisualScale` turns into screen pixels. Mixing them up with
+screen pixels is a mistake this corner of the code has made twice, so every
+figure here is stated in reference pixels and every constant lives in
+`DungeonFortress.Presentation` rather than in the adapter.
+
+| Rock is | What it paints inside the room's cell | What the border does |
+|---|---|---|
+| north | facade overhanging 3.0, plus the lower half of the seam that closes it (0.625) | inset 5.625 + purpose step |
+| east or west, or diagonally so | half the dark side seam, which is centred on the shared cell boundary (0.625) | inset 2.625 + purpose step |
+| south | the whole lifted top mass, 8.0 | nothing — see below |
+| nothing | — | inset 2.0 + purpose step, the ladder Issue #52 bought |
+
+The base is the deepest any of the room's own walled sides demands; the
+per-purpose step (0, 1.5 or 3.0) is added on top, so two rooms painted over each
+other still draw two lines. `RoomGeometry.BorderInsetFor` is the single place
+this is decided, and both `DrawRoomBorder` and `DrawRoomLabel` read it — the
+caption moves down with the border it would otherwise sit on.
+
+Two things are worth naming rather than leaving to be rediscovered.
+
+**East and west read the diagonal too.** A wall's side seam runs the height of a
+mass that is lifted above the wall's own row and hangs below it, so a wall one
+row up and one column across paints inside the cell at exactly the same depth as
+a wall straight beside it. `quarters@19,2` has both; a room whose only wall is
+diagonal would have neither, under a predicate that only read straight
+neighbours.
+
+**South is an exception, and it is the projection's, not the border's.** A wall
+standing directly south of a room is drawn *in front of* it: its top rises eight
+reference pixels above its own footprint and covers the bottom of the cell
+behind it outright. Clearing that would need a base inset of 10.0 — exactly the
+depth at which the two opposite sides of a one-cell room meet — before a single
+purpose step is added. So no inset is the answer, and the answer the project
+already gave is the one above: the border is an informational mark drawn after
+the depth pass, so a room keeps its south edge instead of losing it under the
+wall.
+
+What checks this is `RoomWallClearanceTests`, and it is deliberately not written
+per mechanism. It takes every rectangle a wall actually paints
+(`WallRenderGeometry.DrawnBands` — top mass, facade, and every seam widened into
+the band `DrawLine` paints it as) against every border segment a room actually
+draws (`RoomGeometry.BorderEdges`, which keeps the cell and side each segment
+came from), for every room of the shipped map, at 32, 40 and 48 px. A mechanism
+nobody has thought of fails it the same way a named one does. The gap it
+requires is `RoomGeometry.WallVisibleGap`, one reference pixel, and the shipped
+map's tightest sides — `farm@1,1` north, `quarters@19,2` west and east — sit
+exactly there by construction.
+
+The same file also measures the ladder that shipped before Issue #147, so the
+"before" column of `evidence/147-gaps-before.json` stays reproducible after the
+policy is gone. Under it `quarters@19,2` cleared the wall beside it by 0.375
+reference pixels — 0.55 screen pixels at the smallest tile — and `farm@1,1`
+cleared the facade above it by the same 0.375, because Issue #139 cleared the
+facade *rectangle* and not the seam drawn along its lower edge.
+
 ## Memory of place (Issue #117)
 
 A creature that broke or was put down remembers the tile it was standing on and
