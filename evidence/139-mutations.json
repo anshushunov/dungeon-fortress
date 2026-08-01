@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "issue": 139,
-  "checkpoint": "3 — every half of the fix mutated on its own, per AGENTS.md / the task brief",
+  "checkpoint": "3 — every half of the fix mutated on its own, per AGENTS.md / the task brief. Extended after independent review round 2 (F1, F2, F3): review reproduced a live gap by hand (round2ReviewFoundGap.e-i below) and found a whole class of the same gap unguarded for the F1 fix (round2LabelFix below), so this round adds one mutant that reproduces review's own finding verbatim, plus a matching pair for the new label wiring.",
   "rule": "A check does not count as done until it is shown to fail when the specific part of the fix it is meant to catch is reverted, not the change as a whole.",
   "halves": {
     "a_pureGeometry": {
@@ -26,7 +26,7 @@
       ]
     },
     "b_adapterWiring": {
-      "description": "src/DungeonFortress.Game/Main.cs — the two points that connect the pure fix to the drawn frame. Neither is reachable from a pure test (ADR 0011 keeps the engine assembly out of Presentation.Tests), so both are proven through AdapterSource reading Main.cs as text, the same technique HudReadabilityTests already uses for LayoutHud and MakeCustomTooltip (evidence/127-mutations.json, halves c-i/c-ii).",
+      "description": "src/DungeonFortress.Game/Main.cs — the two points that connect the pure border fix to the drawn frame. Neither is reachable from a pure test (ADR 0011 keeps the engine assembly out of Presentation.Tests), so both are proven through AdapterSource reading Main.cs as text, the same technique HudReadabilityTests already uses for LayoutHud and MakeCustomTooltip (evidence/127-mutations.json, halves c-i/c-ii).",
       "mutants": [
         {
           "name": "b-i: DrawMap stops handing DrawRoomBorders the real rock set",
@@ -41,15 +41,71 @@
           "file": "src/DungeonFortress.Game/Main.cs",
           "edit": "RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles) -> RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles) && false",
           "command": "dotnet build DungeonFortress.sln -c Release && dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --no-build --filter \"FullyQualifiedName~Main_DrawRoomBorder_branches_on_BordersWallToNorth\"",
-          "result": "FAILED: 1 of 1 (Assert.Contains — the exact ternary substring no longer appears verbatim in DrawRoomBorder's body once \" && false\" is inserted after the condition. Builds fine, no CS0162: the dead branch is an expression, not an unreachable statement, so the compiler does not flag it — which is exactly why a text-level check is needed here rather than relying on a build warning.)",
+          "result": "FAILED (round 1): the raw multi-line literal comparison then in use failed to match once the condition changed. Review round 2's F3 found this exact test fragile to reformatting rather than to behaviour — rewritten in round 2 to compare whitespace-normalised text; re-run below (b-ii-round2) against the rewritten test.",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "b-ii-round2: same mutant, rewritten (F3) test",
+          "file": "src/DungeonFortress.Game/Main.cs",
+          "edit": "same as b-ii",
+          "command": "dotnet build DungeonFortress.sln -c Release && dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --no-build --filter \"FullyQualifiedName~Main_DrawRoomBorder_branches_on_BordersWallToNorth\"",
+          "result": "FAILED: 1 of 1 (Assert.Contains against Whitespace-normalised body text — the compacted ternary substring no longer appears once \" && false\" is inserted after the condition. Builds fine, no CS0162: the dead branch is an expression, not an unreachable statement.)",
+          "revertedAndReverifiedGreen": true
+        }
+      ]
+    },
+    "round2ReviewFoundGap": {
+      "description": "Independent review round 2, F2 (blocking): b-i and b-ii above prove DrawRoomBorders receives the real rock set and that the ternary's condition is intact, but neither proves purposeInset — the ternary's own result — ever reaches the drawn line. Review reproduced this by hand in an isolated copy and reported it verbatim; reproduced again here against this branch's actual code.",
+      "mutants": [
+        {
+          "name": "e-i: purposeInset computed and then discarded",
+          "file": "src/DungeonFortress.Game/Main.cs",
+          "edit": "var inset = ScaleWorld((float)purposeInset); -> var inset = ScaleWorld((float)RoomGeometry.BorderInset(room.Purpose));",
+          "command": "dotnet build DungeonFortress.sln -c Release && dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --no-build --filter \"FullyQualifiedName~Main_DrawMap_passes_the_real_rock_tiles_into_DrawRoomBorders|FullyQualifiedName~Main_DrawRoomBorder_branches_on_BordersWallToNorth|FullyQualifiedName~Main_DrawRoomBorder_scales_the_picked_inset_it_computed\"",
+          "result": "Builds with 0 warnings, 0 errors — confirms review's own finding that this mutant is silent at compile time. Of the three filtered tests: не пройдено 1, пройдено 2, всего 3. The two pre-existing structural tests (b-i, b-ii) both stayed GREEN, exactly as review reported; only the new Main_DrawRoomBorder_scales_the_picked_inset_it_computed (added this round to close F2) went red — Assert.Contains found ScaleWorld called with (float)RoomGeometry.BorderInset(room.Purpose) and ScaleWorld(2.0f), neither argument mentioning purposeInset.",
+          "revertedAndReverifiedGreen": true
+        }
+      ]
+    },
+    "round2LabelFix": {
+      "description": "Independent review round 2, F1 (blocking): src/DungeonFortress.Presentation/RoomGeometry.cs's new LabelTop, and the src/DungeonFortress.Game/Main.cs wiring that has to carry its result into DrawRoomIcon and DrawString. Same two-layer shape as halves a/b above, so the same review-found gap (round2ReviewFoundGap) cannot reopen unnoticed for this fix either — proactively covered rather than waiting for a third round to find it.",
+      "mutants": [
+        {
+          "name": "c-i: LabelClearanceGap reversed, collapsing LabelTop back to the fixed default",
+          "file": "src/DungeonFortress.Presentation/RoomGeometry.cs",
+          "edit": "private const double LabelClearanceGap = 1.0; -> private const double LabelClearanceGap = -10.0;",
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --filter \"FullyQualifiedName~The_border_of_every_room_clears_its_own_caption_and_icon\"",
+          "result": "FAILED: 1 of 1. LabelTop(purposeInset) = Math.Max(2.0, purposeInset + 1.0 - 10.0) collapses to 2.0 for every purposeInset under 11, i.e. every room on the shipped map — the payload lists 4 overlaps (farm@1,1, kitchen@9,6, larder@13,6, and — new information — quarters@19,2 at the plain, non-wall-adjacent ladder: borderFarEdge 3 > labelTop 2, a smaller, pre-existing near-conflict the plain ladder alone already carried and F1's fix incidentally also closes).",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "d-i: DrawMap stops handing DrawRoomLabels the real rock set",
+          "file": "src/DungeonFortress.Game/Main.cs",
+          "edit": "DrawRoomLabels(rockTiles); -> DrawRoomLabels(new HashSet<GridPoint>());",
+          "command": "dotnet build DungeonFortress.sln -c Release && dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --no-build --filter \"FullyQualifiedName~Main_DrawMap_passes_the_real_rock_tiles_into_DrawRoomLabels\"",
+          "result": "FAILED: 1 of 1 (Assert.Equal([\"rockTiles\"], call.Arguments) — actual argument text is \"new HashSet<GridPoint>()\")",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "d-ii: DrawRoomLabel reverts to the fixed pre-#139-F1 position, discarding labelTop",
+          "file": "src/DungeonFortress.Game/Main.cs",
+          "edit": "DrawRoomIcon(room.Purpose, origin + new Vector2(ScaleWorld(2), labelTop), icon, accent); ... origin + new Vector2(ScaleWorld(3) + icon, labelTop + icon) -> DrawRoomIcon(room.Purpose, origin + ScaleWorld(2, 2), icon, accent); ... origin + new Vector2(ScaleWorld(3) + icon, ScaleWorld(10))",
+          "command": "dotnet build DungeonFortress.sln -c Release && dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --no-build --filter \"FullyQualifiedName~Main_DrawRoomLabel_draws_the_icon_and_caption_at_the_computed_label_top\"",
+          "result": "FAILED: 1 of 1 (Assert.Contains — neither the DrawRoomIcon nor the DrawString argument list mentions labelTop any more; Builds with 0 warnings despite the now-unused labelTop local, because it is still read by neither call and C# only warns on a completely unread variable in narrower cases than this one triggers — confirmed by inspecting the build log, not assumed).",
           "revertedAndReverifiedGreen": true
         }
       ]
     }
   },
-  "note": "Each mutant was applied with Edit, run in isolation with the command shown, then reverted with `git checkout -- <file>` and re-verified green (dotnet build + the same filtered dotnet test, plus a full dotnet test tests/DungeonFortress.Presentation.Tests -c Release --no-build after the last one: 423/423 passed) before moving to the next. No mutant was left in place at any point between runs.",
+  "note": "Each mutant was applied with Edit, built and run in isolation with the command shown, then reverted with `git checkout -- <file>` and re-verified green (dotnet build + the same filtered dotnet test) before moving to the next. No mutant was left in place at any point between runs. The full suite was re-run green after the last mutant of each round.",
   "fullSuiteAfterAllReverts": {
-    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --no-build",
-    "result": "Пройден!: не пройдено 0, пройдено 423, пропущено 0, всего 423"
+    "round1": {
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --no-build",
+      "result": "Пройден!: не пройдено 0, пройдено 423, пропущено 0, всего 423"
+    },
+    "round2": {
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --no-build",
+      "result": "Пройден!: не пройдено 0, пройдено 428, пропущено 0, всего 428"
+    }
   }
 }
