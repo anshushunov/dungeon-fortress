@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "captures": [
+    {"name": "139-farm-north-border", "fixture": "baseline", "screenshotTicks": 1, "tileSize": 48, "cameraZoom": 2.0, "cameraPosition": "168,48", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "139-kitchen-north-border", "fixture": "baseline", "screenshotTicks": 1, "tileSize": 48, "cameraZoom": 2.0, "cameraPosition": "504,288", "uiScale": 1.0, "frameSize": "1280x720"}
+  ]
+}
