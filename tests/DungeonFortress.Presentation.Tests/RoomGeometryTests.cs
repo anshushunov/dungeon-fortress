@@ -322,6 +322,80 @@ public sealed class RoomGeometryTests
     }
 
     /// <summary>
+    /// Issue #139 F1 (independent review, round 2): the border must not sit
+    /// inside the band a room's own caption and icon occupy either. Checkpoint
+    /// 2 fixed the border-vs-facade overlap above and, in doing so, pushed
+    /// some rooms' border deep enough to cut through the caption and icon
+    /// <c>Main.DrawRoomLabel</c> draws on the same anchor cell — review found
+    /// it on the very frames checkpoint 2's own evidence captured, for
+    /// farm@1,1, kitchen@9,6 and larder@13,6, the three rooms whose border
+    /// this issue actually deepens on the shipped map.
+    ///
+    /// The anchor cell always has a drawn north border edge at the room's
+    /// picked inset: it is the topmost cell of the room by construction
+    /// (<see cref="RoomGeometry.LabelAnchor"/>), so no room cell can sit north
+    /// of it. The border and the label therefore always compete for the same
+    /// row, on every room, whether or not that room borders a wall.
+    ///
+    /// The check is written so it can fail: it first shows that the label's
+    /// old, unconditional position — <see cref="RoomGeometry.LabelDefaultTop"/>,
+    /// what <c>Main.DrawRoomLabel</c> drew at before this round — really would
+    /// still overlap the border's stroke band for the rooms review named, and
+    /// only then checks that <see cref="RoomGeometry.LabelTop"/> — the
+    /// position it draws at now, per the wiring tests below — does not, for
+    /// every room of the map.
+    /// </summary>
+    [Fact]
+    public void The_border_of_every_room_clears_its_own_caption_and_icon()
+    {
+        var state = PresentationFixtures.Baseline(1);
+        var rockTiles = state.Map.RockTiles.ToHashSet();
+        // RoomGeometry's own (private) BorderStrokeHalfWidth: the reference
+        // pixel half-width Main.DrawRoomBorder actually strokes its line with.
+        const double halfStrokeWidth = 1.0;
+
+        var oldPositionStillConflicts = new List<string>();
+        var newPositionOverlaps = new List<object>();
+        foreach (var room in state.Rooms)
+        {
+            var purposeInset = RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles)
+                ? RoomGeometry.WallAdjacentBorderInset(room.Purpose)
+                : RoomGeometry.BorderInset(room.Purpose);
+            var borderFarEdge = purposeInset + halfStrokeWidth;
+
+            if (RoomGeometry.LabelDefaultTop < borderFarEdge)
+            {
+                oldPositionStillConflicts.Add(room.Id);
+            }
+
+            var labelTop = RoomGeometry.LabelTop(purposeInset);
+            if (labelTop < borderFarEdge)
+            {
+                newPositionOverlaps.Add(new
+                {
+                    room = room.Id,
+                    purpose = room.Purpose.ToString(),
+                    purposeInset,
+                    borderFarEdge,
+                    labelTop,
+                });
+            }
+        }
+
+        Assert.True(
+            oldPositionStillConflicts.Count >= 3 &&
+            new[] { "farm@1,1", "kitchen@9,6", "larder@13,6" }.All(oldPositionStillConflicts.Contains),
+            "expected the pre-round-2 fixed label position to still conflict on at least " +
+            "farm@1,1, kitchen@9,6 and larder@13,6 (the rooms review named) — got: " +
+            string.Join(", ", oldPositionStillConflicts));
+
+        var payload = JsonSerializer.Serialize(
+            new { overlapCount = newPositionOverlaps.Count, overlaps = newPositionOverlaps },
+            new JsonSerializerOptions { WriteIndented = true });
+        Assert.True(newPositionOverlaps.Count == 0, payload);
+    }
+
+    /// <summary>
     /// The wall-adjacent ladder keeps the same property <see cref="Two_purposes_next_to_each_other_do_not_share_a_border_line"/>
     /// proves for the plain one: every purpose still gets a distinct depth, and
     /// none of them eats a whole one-tile room even at the smallest tile size
@@ -346,6 +420,38 @@ public sealed class RoomGeometryTests
             // wall never ends up drawn shallower than one that is not.
             Assert.True(
                 RoomGeometry.WallAdjacentBorderInset(purpose) > RoomGeometry.BorderInset(purpose));
+        }
+    }
+
+    /// <summary>
+    /// Review round 2's F7: the bound above passes with zero margin at its own
+    /// ceiling (8.0 against 32 / 4.0). This is the number that matters more
+    /// directly — whether the caption/icon block <see cref="RoomGeometry.LabelTop"/>
+    /// pushes down, plus its own <see cref="RoomGeometry.LabelIconSize"/>,
+    /// still fits inside one cell at the deepest the wall-adjacent ladder ever
+    /// reaches.
+    ///
+    /// Not parametrised over 32 and 48, the real tile sizes ADR 0008 allows,
+    /// and that is not a shortcut: every quantity involved is reference-pixel
+    /// and pre-scale, and the real tile size and the scale it produces cancel
+    /// in this comparison exactly the way they do in
+    /// <see cref="Wall_adjacent_insets_are_still_distinct_and_bounded"/> above
+    /// — one reference-domain assertion already covers every tile size the
+    /// engine can be asked to run at, not only the two ends of the range.
+    /// </summary>
+    [Fact]
+    public void The_label_block_still_fits_one_cell_at_the_deepest_wall_adjacent_inset()
+    {
+        foreach (var purpose in Enum.GetValues<ZoneKind>())
+        {
+            var labelBottom =
+                RoomGeometry.LabelTop(RoomGeometry.WallAdjacentBorderInset(purpose)) +
+                RoomGeometry.LabelIconSize;
+
+            Assert.True(
+                labelBottom < 32,
+                $"{purpose}: label block reaches {labelBottom} reference px of a " +
+                "32 px minimum tile — no longer inside one cell");
         }
     }
 
@@ -399,16 +505,101 @@ public sealed class RoomGeometryTests
     /// <see cref="RoomGeometry.BordersWallToNorth"/> says a wall is north, and
     /// the plain <see cref="RoomGeometry.BorderInset"/> otherwise — not always
     /// one or the other regardless of what the predicate says.
+    ///
+    /// Compares against <see cref="Whitespace"/>-normalised text rather than
+    /// the raw multi-line literal <c>AdapterSource.Body</c> returns.
+    /// <c>AdapterSource</c>'s own contract (its header comment) promises that
+    /// what it lets a test check "survives reformatting"; a test that pins
+    /// twelve columns of indentation is the one place in this file that would
+    /// not have, and review round 2's F3 is exactly that finding.
     /// </summary>
     [Fact]
     public void Main_DrawRoomBorder_branches_on_BordersWallToNorth()
     {
-        var body = AdapterSource.Body("DrawRoomBorder").Replace("\r\n", "\n", StringComparison.Ordinal);
+        var body = Whitespace(AdapterSource.Body("DrawRoomBorder"));
         Assert.Contains(
-            "RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles)\n" +
-            "            ? RoomGeometry.WallAdjacentBorderInset(room.Purpose)\n" +
-            "            : RoomGeometry.BorderInset(room.Purpose);",
+            "RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles) " +
+            "? RoomGeometry.WallAdjacentBorderInset(room.Purpose) " +
+            ": RoomGeometry.BorderInset(room.Purpose);",
             body,
             StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The third link, missing until review round 2's F2: neither of the two
+    /// tests above can tell whether <c>purposeInset</c> — the ternary's own
+    /// result — ever reaches the line actually drawn. Review reproduced the
+    /// gap with a real mutant: <c>var inset = ScaleWorld((float)purposeInset);</c>
+    /// rewritten to <c>var inset = ScaleWorld((float)RoomGeometry.BorderInset(room.Purpose));</c>
+    /// leaves both structural tests above green — the ternary's text is
+    /// untouched, it is just computed and thrown away — while every room's
+    /// border silently goes back to the plain, pre-#139 ladder. This closes
+    /// that: some call the method makes to <c>ScaleWorld</c> must be handed
+    /// <c>purposeInset</c> by name, not a value that merely happens to equal
+    /// it once.
+    /// </summary>
+    [Fact]
+    public void Main_DrawRoomBorder_scales_the_picked_inset_it_computed()
+    {
+        var body = AdapterSource.Body("DrawRoomBorder");
+        var scaleWorldCalls = AdapterSource.CallsTo(body, "ScaleWorld");
+        Assert.Contains(
+            scaleWorldCalls,
+            call => call.Arguments.Any(argument =>
+                argument.Contains("purposeInset", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// F1's own wiring, guarded the same three ways as the border's above so
+    /// the exact gap F1 and F2 each found cannot reopen here unnoticed: first,
+    /// that <c>DrawMap</c> hands <c>DrawRoomLabels</c> the real rock set.
+    /// </summary>
+    [Fact]
+    public void Main_DrawMap_passes_the_real_rock_tiles_into_DrawRoomLabels()
+    {
+        var body = AdapterSource.Body("DrawMap");
+        var calls = AdapterSource.CallsTo(body, "DrawRoomLabels");
+        var call = Assert.Single(calls);
+        Assert.Equal(["rockTiles"], call.Arguments);
+    }
+
+    /// <summary>
+    /// Second and third: that the icon and the caption are each actually drawn
+    /// at a point built from <c>labelTop</c> — the computed, wall-aware
+    /// position — rather than at a value that merely happens to equal it once
+    /// or a position that quietly reverts to the pre-#139-F1 constant. Checked
+    /// through <c>CallsTo</c>'s own argument split, the same technique
+    /// <see cref="Main_DrawRoomBorder_scales_the_picked_inset_it_computed"/>
+    /// uses for the border, so this survives reformatting the same way that
+    /// one does and the raw multi-line literal F3 replaced does not.
+    /// </summary>
+    [Fact]
+    public void Main_DrawRoomLabel_draws_the_icon_and_caption_at_the_computed_label_top()
+    {
+        var body = AdapterSource.Body("DrawRoomLabel");
+
+        var iconCalls = AdapterSource.CallsTo(body, "DrawRoomIcon");
+        var iconCall = Assert.Single(iconCalls);
+        Assert.Contains(
+            iconCall.Arguments,
+            argument => argument.Contains("labelTop", StringComparison.Ordinal));
+
+        var captionCalls = AdapterSource.CallsTo(body, "DrawString");
+        var captionCall = Assert.Single(captionCalls);
+        Assert.Contains(
+            captionCall.Arguments,
+            argument => argument.Contains("labelTop", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Collapses every run of whitespace — spaces, tabs, line breaks, any
+    /// indentation a formatter chooses — to a single space, the same
+    /// normalisation <c>AdapterSource</c> already applies internally to a
+    /// call's own argument text (its private <c>Compact</c>), so a check
+    /// against <c>Body</c>'s raw, un-compacted text can have the same
+    /// property without adding a public method to a shared test helper for
+    /// one caller.
+    /// </summary>
+    private static string Whitespace(string text) =>
+        string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 }
