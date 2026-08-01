@@ -1,0 +1,532 @@
+{
+  "schemaVersion": 1,
+  "issue": 147,
+  "checkpoint": "3 — the same measurement under the inset policy this issue ships",
+  "policyMeasured": "RoomGeometry.BorderInsetFor: the base is the deepest clearance the room's own walled sides demand — PlainBorderBase 2.0 with nothing against it, SideWallClearance 2.625 with rock in the column beside any cell, NorthWallClearance 5.625 with rock directly north — plus the same per-purpose step Issue #52 bought.",
+  "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --filter \"FullyQualifiedName~The_border_of_every_room_clears_every_wall_band_on_every_side\"",
+  "howTheNumbersWereRead": "Same as evidence/147-gaps-before.json: the assertion passes and therefore prints nothing, so one comparison was widened for a single run (violations.Length == 0 -> violations.Length == -1) to make the payload print, then reverted. The committed test is green.",
+  "method": "Identical to evidence/147-gaps-before.json — same rooms, same sweep, same separation measure, same excused walls. Only the inset function differs.",
+  "verdict": "Every side of every room on the shipped map now clears every wall band by at least RoomGeometry.WallVisibleGap = 1.0 reference px, at all three tile sizes. The tightest rows in the map are farm@1,1 North, quarters@19,2 West and quarters@19,2 East, all at exactly 1.0 reference px — which is the gap by construction, not by luck: the clearance constants are derived to land there.",
+  "changesOnTheShippedMap": [
+    "quarters@19,2: 2.0 -> 2.625 reference px, West and East gaps 0.375 -> 1.0 (0.55 -> 1.45 screen px at tileSize 32; 0.68 -> 1.82 at 40).",
+    "farm@1,1: 5.0 -> 5.625, North gap 0.375 -> 1.0.",
+    "kitchen@9,6: 6.5 -> 7.125, North gap 1.875 -> 2.5.",
+    "larder@13,6: 8.0 -> 8.625, North gap 3.375 -> 4.0.",
+    "Every room's caption and icon move down with its border (RoomGeometry.LabelTop), so the deepest label block on the map now reaches 18.625 of a 22.0 reference-px cell, up from 18.0. Checked by The_label_block_still_fits_one_cell_at_the_deepest_wall_aware_inset over all sixteen side profiles, not only the ones the shipped map happens to use."
+  ],
+  "southIsNotInThisTable": "A wall standing directly south of a room cell is drawn in front of it: WallRenderGeometry lifts a wall's top mass FacadeReferenceHeight = 8.0 reference px above its own footprint, so it covers the bottom of the cell to its north outright, and the bright seam along the top of that mass reaches half of EdgeReferenceWidth (0.625) higher still. Clearing that needs a base inset of 8.0 + 0.625 + 1.0 + 1.0 = 10.625, which is past RoomGeometry.MaximumBorderInset = 10.0 — the depth at which the STROKE BANDS of the two opposite sides of a one-cell room meet, the sides themselves meeting at 11.0 — and the ladder built on that base would reach 13.625 of a 22.0 cell. So no inset is an answer. The answer the project already gave is draw order (Issue #83, WorldDrawOrder: the border is an informational mark drawn after the depth pass, so «zone borders remain complete instead of losing their south edge under a wall»), and RoomWallClearanceTests.A_wall_in_front_of_a_room_cannot_be_cleared_by_any_inset asserts both halves of that rather than assuming them. kitchen@9,6, larder@13,6 and quarters@19,2 all have a wall in front of them on the shipped map, so the exception is excusing something real.",
+  "correctionRound1": "This file first stated the cost as 8.0 + 1.0 + 1.0 = 10.0 and called it 'exactly MaximumBorderInset'. Independent review refined it to 10.625: the same missing half-seam this whole issue is about, applied to the seam on top of the lifted mass instead of the one under the facade. The impossibility is therefore strict rather than a boundary case, and RoomWallClearanceTests now derives the number from WallRenderGeometry.EdgeReferenceWidth and asserts `>` rather than `>=`. The same file also called 10.0 the depth at which the two opposite SIDES of a one-cell room meet; it is where their stroke bands meet.",
+  "labelsMoved": "Every room whose base changed also moved its caption and icon, which the first version of this evidence did not say. quarters@19,2 goes from LabelTop(2.0) = 2.0 — the plain LabelDefaultTop — to LabelTop(2.625) = 4.625, i.e. 0.625 reference px lower; farm, kitchen and larder each move by the same 0.625 from their #139 positions. Nothing overflows: the deepest label block on the map now reaches 18.625 of a 22.0 reference-px cell, checked over all sixteen side profiles by The_label_block_still_fits_one_cell_at_the_deepest_wall_aware_inset.",
+  "resultRaw": [
+    {
+      "tileSize": 32,
+      "scale": 1.4545454545454546,
+      "requiredScreenPx": 1.4545454545454546,
+      "requiredReferencePx": 1,
+      "violationCount": 0,
+      "violations": [],
+      "closestPerRoomAndSide": [
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "East",
+          "Inset": 5.625,
+          "Cell": "6,1",
+          "Wall": "6,0",
+          "ScreenPx": 2.9090909090909065,
+          "ReferencePx": 1.9999999999999982
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "North",
+          "Inset": 5.625,
+          "Cell": "1,1",
+          "Wall": "1,0",
+          "ScreenPx": 1.4545454545454533,
+          "ReferencePx": 0.9999999999999991
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "South",
+          "Inset": 5.625,
+          "Cell": "1,7",
+          "Wall": "0,7",
+          "ScreenPx": 7.272727272727273,
+          "ReferencePx": 5
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "West",
+          "Inset": 5.625,
+          "Cell": "1,1",
+          "Wall": "1,0",
+          "ScreenPx": 2.9090909090909065,
+          "ReferencePx": 1.9999999999999982
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "East",
+          "Inset": 7.125,
+          "Cell": "12,6",
+          "Wall": "12,5",
+          "ScreenPx": 5.0909090909090935,
+          "ReferencePx": 3.5000000000000018
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "North",
+          "Inset": 7.125,
+          "Cell": "9,6",
+          "Wall": "9,5",
+          "ScreenPx": 3.636363636363626,
+          "ReferencePx": 2.499999999999993
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "South",
+          "Inset": 7.125,
+          "Cell": "9,8",
+          "Wall": "8,9",
+          "ScreenPx": 10.363636363636374,
+          "ReferencePx": 7.125000000000007
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "West",
+          "Inset": 7.125,
+          "Cell": "9,6",
+          "Wall": "9,5",
+          "ScreenPx": 5.0909090909090935,
+          "ReferencePx": 3.5000000000000018
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "East",
+          "Inset": 8.625,
+          "Cell": "16,6",
+          "Wall": "16,5",
+          "ScreenPx": 7.272727272727252,
+          "ReferencePx": 4.999999999999986
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "North",
+          "Inset": 8.625,
+          "Cell": "13,6",
+          "Wall": "13,5",
+          "ScreenPx": 5.818181818181785,
+          "ReferencePx": 3.999999999999977
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "South",
+          "Inset": 8.625,
+          "Cell": "16,8",
+          "Wall": "17,9",
+          "ScreenPx": 11.636363636363626,
+          "ReferencePx": 7.999999999999993
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "West",
+          "Inset": 8.625,
+          "Cell": "13,6",
+          "Wall": "13,5",
+          "ScreenPx": 7.272727272727252,
+          "ReferencePx": 4.999999999999986
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "East",
+          "Inset": 2.625,
+          "Cell": "23,3",
+          "Wall": "24,4",
+          "ScreenPx": 1.4545454545456096,
+          "ReferencePx": 1.0000000000001066
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "North",
+          "Inset": 2.625,
+          "Cell": "19,2",
+          "Wall": "18,1",
+          "ScreenPx": 2.909090909090878,
+          "ReferencePx": 1.9999999999999787
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "South",
+          "Inset": 2.625,
+          "Cell": "19,5",
+          "Wall": "18,6",
+          "ScreenPx": 3.81818181818187,
+          "ReferencePx": 2.6250000000000355
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "West",
+          "Inset": 2.625,
+          "Cell": "19,2",
+          "Wall": "18,1",
+          "ScreenPx": 1.4545454545453822,
+          "ReferencePx": 0.9999999999999503
+        }
+      ]
+    },
+    {
+      "tileSize": 40,
+      "scale": 1.8181818181818181,
+      "requiredScreenPx": 1.8181818181818181,
+      "requiredReferencePx": 1,
+      "violationCount": 0,
+      "violations": [],
+      "closestPerRoomAndSide": [
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "East",
+          "Inset": 5.625,
+          "Cell": "6,1",
+          "Wall": "6,0",
+          "ScreenPx": 3.636363636363633,
+          "ReferencePx": 1.9999999999999982
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "North",
+          "Inset": 5.625,
+          "Cell": "1,1",
+          "Wall": "1,0",
+          "ScreenPx": 1.818181818181813,
+          "ReferencePx": 0.9999999999999972
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "South",
+          "Inset": 5.625,
+          "Cell": "1,7",
+          "Wall": "0,7",
+          "ScreenPx": 9.090909090909086,
+          "ReferencePx": 4.999999999999997
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "West",
+          "Inset": 5.625,
+          "Cell": "1,1",
+          "Wall": "1,0",
+          "ScreenPx": 3.636363636363633,
+          "ReferencePx": 1.9999999999999982
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "East",
+          "Inset": 7.125,
+          "Cell": "12,6",
+          "Wall": "12,5",
+          "ScreenPx": 6.363636363636317,
+          "ReferencePx": 3.4999999999999747
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "North",
+          "Inset": 7.125,
+          "Cell": "9,6",
+          "Wall": "9,5",
+          "ScreenPx": 4.545454545454504,
+          "ReferencePx": 2.4999999999999774
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "South",
+          "Inset": 7.125,
+          "Cell": "9,8",
+          "Wall": "8,9",
+          "ScreenPx": 12.954545454545439,
+          "ReferencePx": 7.124999999999992
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "West",
+          "Inset": 7.125,
+          "Cell": "9,6",
+          "Wall": "9,5",
+          "ScreenPx": 6.363636363636317,
+          "ReferencePx": 3.4999999999999747
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "East",
+          "Inset": 8.625,
+          "Cell": "16,6",
+          "Wall": "16,5",
+          "ScreenPx": 9.090909090909065,
+          "ReferencePx": 4.999999999999986
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "North",
+          "Inset": 8.625,
+          "Cell": "13,6",
+          "Wall": "13,5",
+          "ScreenPx": 7.272727272727252,
+          "ReferencePx": 3.999999999999989
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "South",
+          "Inset": 8.625,
+          "Cell": "16,8",
+          "Wall": "17,9",
+          "ScreenPx": 14.545454545454504,
+          "ReferencePx": 7.999999999999978
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "West",
+          "Inset": 8.625,
+          "Cell": "13,6",
+          "Wall": "13,5",
+          "ScreenPx": 9.090909090909065,
+          "ReferencePx": 4.999999999999986
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "East",
+          "Inset": 2.625,
+          "Cell": "23,3",
+          "Wall": "24,4",
+          "ScreenPx": 1.8181818181818699,
+          "ReferencePx": 1.0000000000000284
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "North",
+          "Inset": 2.625,
+          "Cell": "19,2",
+          "Wall": "18,1",
+          "ScreenPx": 3.636363636363626,
+          "ReferencePx": 1.9999999999999944
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "South",
+          "Inset": 2.625,
+          "Cell": "19,5",
+          "Wall": "18,6",
+          "ScreenPx": 4.772727272727252,
+          "ReferencePx": 2.624999999999989
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "West",
+          "Inset": 2.625,
+          "Cell": "19,2",
+          "Wall": "18,1",
+          "ScreenPx": 1.8181818181817562,
+          "ReferencePx": 0.9999999999999659
+        }
+      ]
+    },
+    {
+      "tileSize": 48,
+      "scale": 2.1818181818181817,
+      "requiredScreenPx": 2.1818181818181817,
+      "requiredReferencePx": 1,
+      "violationCount": 0,
+      "violations": [],
+      "closestPerRoomAndSide": [
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "East",
+          "Inset": 5.625,
+          "Cell": "6,1",
+          "Wall": "6,0",
+          "ScreenPx": 4.363636363636367,
+          "ReferencePx": 2.0000000000000018
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "North",
+          "Inset": 5.625,
+          "Cell": "1,1",
+          "Wall": "1,0",
+          "ScreenPx": 2.181818181818187,
+          "ReferencePx": 1.0000000000000024
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "South",
+          "Inset": 5.625,
+          "Cell": "1,7",
+          "Wall": "0,7",
+          "ScreenPx": 10.909090909090914,
+          "ReferencePx": 5.000000000000003
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "West",
+          "Inset": 5.625,
+          "Cell": "1,1",
+          "Wall": "1,0",
+          "ScreenPx": 4.363636363636367,
+          "ReferencePx": 2.0000000000000018
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "East",
+          "Inset": 7.125,
+          "Cell": "12,6",
+          "Wall": "12,5",
+          "ScreenPx": 7.636363636363626,
+          "ReferencePx": 3.4999999999999956
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "North",
+          "Inset": 7.125,
+          "Cell": "9,6",
+          "Wall": "9,5",
+          "ScreenPx": 5.454545454545439,
+          "ReferencePx": 2.499999999999993
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "South",
+          "Inset": 7.125,
+          "Cell": "12,8",
+          "Wall": "13,9",
+          "ScreenPx": 15.545454545454504,
+          "ReferencePx": 7.124999999999981
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "West",
+          "Inset": 7.125,
+          "Cell": "9,6",
+          "Wall": "9,5",
+          "ScreenPx": 7.636363636363626,
+          "ReferencePx": 3.4999999999999956
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "East",
+          "Inset": 8.625,
+          "Cell": "16,6",
+          "Wall": "16,5",
+          "ScreenPx": 10.909090909090878,
+          "ReferencePx": 4.999999999999986
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "North",
+          "Inset": 8.625,
+          "Cell": "13,6",
+          "Wall": "13,5",
+          "ScreenPx": 8.727272727272691,
+          "ReferencePx": 3.9999999999999836
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "South",
+          "Inset": 8.625,
+          "Cell": "16,8",
+          "Wall": "17,9",
+          "ScreenPx": 17.454545454545496,
+          "ReferencePx": 8.00000000000002
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "West",
+          "Inset": 8.625,
+          "Cell": "13,6",
+          "Wall": "13,5",
+          "ScreenPx": 10.909090909090878,
+          "ReferencePx": 4.999999999999986
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "East",
+          "Inset": 2.625,
+          "Cell": "23,3",
+          "Wall": "24,4",
+          "ScreenPx": 2.181818181818471,
+          "ReferencePx": 1.0000000000001328
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "North",
+          "Inset": 2.625,
+          "Cell": "19,2",
+          "Wall": "18,1",
+          "ScreenPx": 4.363636363636374,
+          "ReferencePx": 2.000000000000005
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "South",
+          "Inset": 2.625,
+          "Cell": "19,5",
+          "Wall": "18,6",
+          "ScreenPx": 5.727272727272748,
+          "ReferencePx": 2.6250000000000098
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "West",
+          "Inset": 2.625,
+          "Cell": "19,2",
+          "Wall": "18,1",
+          "ScreenPx": 2.181818181818244,
+          "ReferencePx": 1.0000000000000284
+        }
+      ]
+    }
+  ]
+}

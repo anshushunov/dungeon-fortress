@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "captures": [
+    {"name": "147-quarters-walls", "fixture": "baseline", "screenshotTicks": 1, "tileSize": 48, "cameraZoom": 2.0, "cameraPosition": "1032,192", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "147-quarters-smallest-tile", "fixture": "baseline", "screenshotTicks": 1, "tileSize": 32, "cameraZoom": 2.0, "cameraPosition": "688,128", "uiScale": 1.0, "frameSize": "1280x720"}
+  ]
+}

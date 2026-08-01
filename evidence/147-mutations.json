@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 2,
+  "issue": 147,
+  "checkpoint": "3, re-run after review round 1 — every half of the change mutated on its own",
+  "rule": "A check does not count as done until it is shown to fail when the specific part of the change it is meant to catch is reverted, not the change as a whole.",
+  "mutantCount": 12,
+  "schemaVersion2Note": "Version 1 of this file recorded ten mutants against a 451-test suite and the PR body called them nine — a miscount, corrected here. Review round 1 then found a genuine gap the ten did not cover (b-ii below), which added two tests and two mutants. Rather than mix baselines, every mutant in this file was re-run from scratch against the branch at 0d0b16f, where the suite is 453. Every number below comes from one suite state.",
+  "procedure": "Each mutant was applied with Edit against the committed branch, built with `dotnet build DungeonFortress.sln -c Release` where the adapter was touched, run with the command shown, then reverted with `git checkout -- <file>` and the suite re-run green before the next one. No mutant was left in place between runs. Committing the state under test BEFORE mutating is not optional: an earlier round of this task lost a whole uncommitted file to `git checkout -- <file>`.",
+  "baseline": {
+    "commit": "0d0b16f",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release",
+    "result": "Пройден!: не пройдено 0, пройдено 453, пропущено 0, всего 453"
+  },
+  "halves": {
+    "a_theLadder": {
+      "description": "src/DungeonFortress.Presentation/RoomGeometry.cs — the three bases and the predicate that picks between them. This is the change itself: what a room's border is inset by, and on what evidence.",
+      "mutants": [
+        {
+          "name": "a-i: the side-wall base buys nothing",
+          "edit": "public const double SideWallClearance = (WallRenderGeometry.EdgeReferenceWidth / 2.0) + BorderStrokeHalfWidth + WallVisibleGap; -> = PlainBorderBase;",
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release",
+          "result": "FAILED: 4 of 453 — The_border_of_every_room_clears_every_wall_band_on_every_side at all three tile sizes (quarters@19,2 goes straight back to 0.375 reference px on West and East, the defect the issue was opened on) plus Overlapping_rooms_with_different_wall_profiles_collide_no_more_than_before, because with the side base collapsed onto the plain one the collision moves back to the plain-against-north pair the debt ledger named.",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "a-ii: the north base loses the half-seam #139 missed",
+          "edit": "NorthWallClearance drops the (WallRenderGeometry.EdgeReferenceWidth / 2.0) term, i.e. reverts to Issue #139's 5.0",
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release",
+          "result": "FAILED: 8 of 453 — The_border_of_every_room_clears_every_wall_band_on_every_side at all three sizes (farm@1,1 North falls to 0.375 reference px, #139's residual reproduced), A_wall_in_front_of_a_room_cannot_be_cleared_by_any_inset at all three (its un-excused sweep now reports a North row, which a wall in front cannot produce), A_walls_facade_seam_paints_half_its_width_below_the_facade (added in review round 1; it pins the constant against the measured reach) and Overlapping_rooms_with_different_wall_profiles_collide_no_more_than_before.",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "a-iii: WallSides stops reading the column beside the cell",
+          "edit": "for (var row = cell.Y - 1; row <= cell.Y + 1; row++) -> for (var row = cell.Y; row <= cell.Y; row++), i.e. straight neighbours only, no diagonals",
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release",
+          "result": "FAILED: 1 of 453 — WallSides_reads_straight_neighbours_north_and_south_and_columns_beside. Deliberately recorded as a one-test kill: the shipped map does NOT catch this, because quarters@19,2 has orthogonal west and east neighbours as well as the north-west diagonal at (18,1), so its inset is unchanged and the whole-map sweep stays green. The unit test is the only thing standing between this branch and a first player-painted room whose only wall is a diagonal.",
+          "revertedAndReverifiedGreen": true
+        }
+      ]
+    },
+    "b_theWallAsDrawn": {
+      "description": "src/DungeonFortress.Presentation/WorldRenderGeometry.cs — the other half of the arithmetic. Every clearance above is measured against what the wall actually paints, and the difference between the wall's lines and the wall's pixels is the whole mechanism of this issue. One mutant per axis, because a coarse one that zeroes every seam at once cannot show which axis is covered.",
+      "mutants": [
+        {
+          "name": "b-i: DrawnBands stops widening any seam into the band it is painted as",
+          "edit": "var half = ReferenceStrokeWidth(stroke.Kind) * scale / 2.0; -> var half = 0.0 * ReferenceStrokeWidth(stroke.Kind) * scale / 2.0;",
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release",
+          "result": "FAILED: 6 of 453 — all three seam measurements (side, facade, top) and The_pre_147_ladder_really_did_draw_the_border_inside_the_wall at all three tile sizes. The second group is the important one: with seams treated as zero-width lines the pre-#147 ladder stops violating anything.",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "b-ii: the FacadeBottom seam alone stops being widened — the gap independent review found",
+          "edit": "ReferenceStrokeWidth: WallStrokeKind.BrightEdge or DarkEdge or FacadeBottom => EdgeReferenceWidth; -> BrightEdge or DarkEdge => EdgeReferenceWidth, FacadeBottom => 0.0",
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release",
+          "result": "FAILED: 1 of 453 — A_walls_facade_seam_paints_half_its_width_below_the_facade. Against version 1 of this branch the SAME mutant left all 451 green: the sub-mechanism Issue #147 exists for — the lower half of the seam that closes the facade, the 0.625 reference px #139 did not account for — was pinned by nothing. b-i above zeroes every seam at once and so could not localise it, and the lateral measurement is on the other axis. Review round 1 found this by running exactly this edit; the test it now reddens was added in response.",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "b-iii: the BrightEdge seam alone stops being widened",
+          "edit": "ReferenceStrokeWidth: ... BrightEdge => 0.0, DarkEdge or FacadeBottom => EdgeReferenceWidth",
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release",
+          "result": "FAILED: 1 of 453 — A_walls_top_seam_paints_half_its_width_above_the_lifted_mass. The upward half of the same question, and the term that makes a wall standing in front of a room strictly impossible to clear (10.625 against a 10.0 ceiling) rather than a boundary case.",
+          "revertedAndReverifiedGreen": true
+        }
+      ]
+    },
+    "c_adapterWiring": {
+      "description": "src/DungeonFortress.Game/Main.cs — the four points that connect the pure change to the drawn frame. None is reachable from a pure test (ADR 0011 keeps the engine assembly out of Presentation.Tests), so all four are proven through AdapterSource reading Main.cs as text, the technique HudReadabilityTests and Issue #139 already use.",
+      "mutants": [
+        {
+          "name": "c-i: DrawRoomBorder goes back to the purpose-only ladder",
+          "edit": "var purposeInset = RoomGeometry.BorderInsetFor(room.Purpose, room.Perimeter, rockTiles); -> var purposeInset = RoomGeometry.BorderInset(room.Purpose);",
+          "command": "dotnet build DungeonFortress.sln -c Release && dotnet test ... -c Release --no-build",
+          "result": "Builds with 0 warnings, 0 errors. FAILED: 1 of 453 — Main_DrawRoomBorder_takes_its_inset_from_BorderInsetFor. Nothing else in the suite notices, which is the point: RoomGeometry stays correct and every geometry test stays green while no drawn frame uses it.",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "c-ii: DrawRoomLabel goes back to the purpose-only ladder",
+          "edit": "same substitution inside DrawRoomLabel only",
+          "command": "dotnet build DungeonFortress.sln -c Release && dotnet test ... -c Release --no-build",
+          "result": "Builds with 0 warnings. FAILED: 1 of 453 — Main_DrawRoomLabel_takes_its_inset_from_BorderInsetFor. This is Issue #139 F1 reopened: the border moves and the caption does not.",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "c-iii: DrawWall strokes its seams at a literal again",
+          "edit": "ScaleWorld((float)WallRenderGeometry.ReferenceStrokeWidth(stroke.Kind)) -> ScaleWorld(1.25f)",
+          "command": "dotnet build DungeonFortress.sln -c Release && dotnet test ... -c Release --no-build",
+          "result": "Builds with 0 warnings. FAILED: 1 of 453 — Main_DrawWall_strokes_the_width_WallRenderGeometry_declares. Today the literal and the constant agree, so no frame changes; the mutant is the shape of the debt, not a visible defect — a later change to one number leaving the other behind, which is the ledger entry this issue closes.",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "c-iv: DrawRoomBorder strokes its line at a literal again",
+          "edit": "ScaleWorld((float)RoomGeometry.BorderStrokeWidth) -> ScaleWorld(2.0f)",
+          "command": "dotnet build DungeonFortress.sln -c Release && dotnet test ... -c Release --no-build",
+          "result": "Builds with 0 warnings. FAILED: 1 of 453 — Main_DrawRoomBorder_strokes_the_width_RoomGeometry_declares. This is the debt ledger's second Issue #139 entry verbatim: BorderStrokeHalfWidth was a silent copy of half this literal, and every clearance in RoomGeometry is measured from it.",
+          "revertedAndReverifiedGreen": true
+        }
+      ]
+    },
+    "d_theCeilingAndTheUnits": {
+      "description": "The supporting decision the change forced: what the ladder is bounded against, now that the deepest rung is 8.625 and no longer fits the '32 / 4.0' the tests carried. Both constants are reference-pixel, and the mistake they replace was comparing reference pixels against screen ones.",
+      "mutants": [
+        {
+          "name": "d-i: the ceiling goes back to a quarter of a cell",
+          "edit": "public const double MaximumBorderInset = (ReferenceCell / 2.0) - BorderStrokeHalfWidth; -> = ReferenceCell / 4.0;",
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release",
+          "result": "FAILED: 1 of 453 — Wall_aware_insets_are_still_distinct_and_bounded. At 5.5 the bound rejects every wall-aware rung, which is the honest answer to why '32 / 4.0' could not simply have its units corrected in place: at the correct units it was already false before this issue, at 8.0.",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "d-ii: ReferenceCell stops being CameraView's",
+          "edit": "public const double ReferenceCell = 22.0; -> = 24.0;",
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release",
+          "result": "FAILED: 4 of 453 — ReferenceCell_is_the_one_CameraView_scales_by (the executable pin through CameraView.WorldVisualScale(44), which replaces the comment that used to say 'restated from CameraView.cs:108') and A_wall_in_front_of_a_room_cannot_be_cleared_by_any_inset at all three tile sizes, because a wider cell raises MaximumBorderInset to 11.0, above the 10.625 a wall in front costs, and the declared exception stops being justified.",
+          "revertedAndReverifiedGreen": true
+        }
+      ]
+    }
+  },
+  "notCovered": [
+    "No mutant targets RoomGeometry.BorderEdges' cell/side attribution on its own: every existing outline test (A_single_cell_is_a_closed_inset_square, A_room_is_one_outline_and_not_a_box_per_cell, An_inner_corner_closes_instead_of_leaving_a_gap, A_room_with_a_hole_draws_the_hole_as_well, No_segment_leaves_the_bounding_box_of_the_room, The_default_rooms_of_the_shipped_map_all_close) runs through it, because Border now delegates to it. Breaking it breaks them.",
+    "The excuse for a wall standing in front of a room is asserted, not mutated: A_wall_in_front_of_a_room_cannot_be_cleared_by_any_inset checks the arithmetic that makes it necessary and the WorldDrawOrder declaration that stands in for it. b-iii and d-ii each show one half of that arithmetic is live; the WorldDrawOrder half is separately guarded by WorldDrawPassGuardTests, which compares the declaration with Main.cs itself."
+  ],
+  "fullSuiteAfterAllReverts": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release",
+    "result": "Пройден!: не пройдено 0, пройдено 453, пропущено 0, всего 453",
+    "workingTreeClean": true
+  }
+}

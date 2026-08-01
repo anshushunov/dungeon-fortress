@@ -3216,17 +3216,18 @@ public partial class Main : Node2D
     }
 
     /// <summary>
-    /// A room whose border would otherwise sit under a wall's facade
-    /// (Issue #139) is drawn with <see cref="RoomGeometry.WallAdjacentBorderInset"/>
-    /// instead of the plain <see cref="RoomGeometry.BorderInset"/>, so the line
-    /// clears the wall rather than lying on it.
+    /// A room whose border would otherwise sit inside a wall's own drawn band —
+    /// the facade hanging over it from the north (Issue #139), or the dark side
+    /// seam centred on the boundary it shares with a wall to the east or west
+    /// (Issue #147) — is inset further, so the line clears the wall rather than
+    /// lying on it. <see cref="RoomGeometry.BorderInsetFor"/> owns that decision
+    /// for both this and <see cref="DrawRoomLabel"/>.
     /// </summary>
     private void DrawRoomBorder(PrototypeRoomSnapshot room, IReadOnlySet<GridPoint> rockTiles)
     {
         var accent = RoomColor(MapAccents.Room(_projection!, room), room.Purpose);
-        var purposeInset = RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles)
-            ? RoomGeometry.WallAdjacentBorderInset(room.Purpose)
-            : RoomGeometry.BorderInset(room.Purpose);
+        var purposeInset =
+            RoomGeometry.BorderInsetFor(room.Purpose, room.Perimeter, rockTiles);
         var inset = ScaleWorld((float)purposeInset);
         foreach (var segment in RoomGeometry.Border(room.Perimeter, _tileSize, inset))
         {
@@ -3234,7 +3235,7 @@ public partial class Main : Node2D
                 new Vector2((float)segment.From.X, (float)segment.From.Y),
                 new Vector2((float)segment.To.X, (float)segment.To.Y),
                 accent,
-                ScaleWorld(2.0f));
+                ScaleWorld((float)RoomGeometry.BorderStrokeWidth));
         }
     }
 
@@ -3414,7 +3415,6 @@ public partial class Main : Node2D
         var geometry = WallRenderGeometry.ForCell(cell, variant, _tileSize);
         DrawRect(ToRect2(geometry.Top), WallTopColor(isDiggable));
 
-        var edgeWidth = ScaleWorld(1.25f);
         if (geometry.Facade is { } facade)
         {
             DrawRect(ToRect2(facade), WallFacadeColor(isDiggable));
@@ -3422,22 +3422,26 @@ public partial class Main : Node2D
 
         foreach (var stroke in geometry.Strokes)
         {
-            var (color, width) = stroke.Kind switch
+            var color = stroke.Kind switch
             {
-                WallStrokeKind.BrightEdge => (WallEdgeColor(isDiggable), edgeWidth),
-                WallStrokeKind.DarkEdge => (WallFacadeColor(isDiggable), edgeWidth),
-                WallStrokeKind.FacadeLip => (WallLipColor(isDiggable), ScaleWorld(2)),
-                WallStrokeKind.FacadeBottom => (new Color("#100d0c"), edgeWidth),
+                WallStrokeKind.BrightEdge => WallEdgeColor(isDiggable),
+                WallStrokeKind.DarkEdge => WallFacadeColor(isDiggable),
+                WallStrokeKind.FacadeLip => WallLipColor(isDiggable),
+                WallStrokeKind.FacadeBottom => new Color("#100d0c"),
                 _ => throw new ArgumentOutOfRangeException(
                     nameof(stroke.Kind),
                     stroke.Kind,
                     null),
             };
+
+            // The width comes from the pure side (Issue #147): a seam centred on
+            // a cell boundary paints half of itself into the neighbouring cell,
+            // and the room border drawn there has to know how far.
             DrawLine(
                 ToVector2(stroke.From),
                 ToVector2(stroke.To),
                 color,
-                width);
+                ScaleWorld((float)WallRenderGeometry.ReferenceStrokeWidth(stroke.Kind)));
         }
     }
 
@@ -5349,10 +5353,12 @@ public partial class Main : Node2D
 
     /// <summary>
     /// A room whose border is drawn deep because it borders a wall
-    /// (<see cref="RoomGeometry.WallAdjacentBorderInset"/>, Issue #139) pushes
+    /// (<see cref="RoomGeometry.BorderInsetFor"/>, Issues #139 and #147) pushes
     /// its caption and icon down with it via <see cref="RoomGeometry.LabelTop"/>,
     /// so the border does not cut through either — the regression independent
-    /// review found in F1 of the same issue's second round.
+    /// review found in F1 of #139's second round. Both this and
+    /// <see cref="DrawRoomBorder"/> read the inset from the same method, so
+    /// neither can pick one the other did not.
     /// </summary>
     private void DrawRoomLabel(PrototypeRoomSnapshot room, IReadOnlySet<GridPoint> rockTiles)
     {
@@ -5361,9 +5367,8 @@ public partial class Main : Node2D
         var origin = new Vector2((float)anchor.X, (float)anchor.Y);
         var icon = ScaleWorld((float)RoomGeometry.LabelIconSize);
 
-        var purposeInset = RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles)
-            ? RoomGeometry.WallAdjacentBorderInset(room.Purpose)
-            : RoomGeometry.BorderInset(room.Purpose);
+        var purposeInset =
+            RoomGeometry.BorderInsetFor(room.Purpose, room.Perimeter, rockTiles);
         var labelTop = ScaleWorld((float)RoomGeometry.LabelTop(purposeInset));
 
         DrawRoomIcon(room.Purpose, origin + new Vector2(ScaleWorld(2), labelTop), icon, accent);

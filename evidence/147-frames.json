@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "issue": 147,
+  "checkpoint": "4 — before/after frames over QUARTERS, the room the owner named and the one Issue #139 could not reach",
+  "note": "PNGs land under .artifacts/evidence/147-* per Resolve-EvidenceOutputRoot and are not committed, per AGENTS.md's rule against committing large derived files. This file records the reproduction commands, the image hashes that prove each pair differs, and which commit each capture was actually taken against — copied from the manifest capture-evidence.ps1 itself wrote (.artifacts/evidence/147-{before,after}/manifest.json), not retyped.",
+  "spec": "evidence/147-quarters-frames.json",
+  "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\capture-evidence.ps1 -SpecPath evidence/147-quarters-frames.json -OutputRoot \"evidence/147-<before|after>\" -GodotPath \"<godot console>\"",
+  "whyTwoTileSizes": "48 is the largest tile ADR 0008 allows and shows the geometry; 32 is the smallest, where the gap is physically narrowest — 0.55 screen px before the fix — and where two antialiased strokes close it on their own. Issue #147's acceptance criterion 2 asks for the ends of the range and not only the default.",
+  "before": {
+    "commit": "36ecea8c9784113f89dfc36c38de0cf8071816f2",
+    "commitSubject": "Evidence: capture spec for #147 before/after frames (quarters, west and east walls)",
+    "sourceDirty": false,
+    "commitNoLongerExists": "That commit lived on a throwaway branch, created so the capture would have a clean source state to record, and deleted after the capture. It is f03f41f (the merge base of this branch, i.e. main before Issue #147) plus evidence/147-quarters-frames.json and nothing else. Recreate it with: git checkout -b <name> f03f41f && git checkout agent/147-room-border-vs-wall-edge -- evidence/147-quarters-frames.json && git commit. The recreated commit will hash differently — committer date — and will contain the same tree, which is what the capture depends on. Said plainly rather than left to be discovered, because independent review of Issue #139 found exactly this: a recorded 'before' commit at which the named -SpecPath did not resolve.",
+    "captures": [
+      {
+        "name": "147-quarters-walls",
+        "imagePath": ".artifacts/evidence/147-before/147-quarters-walls.png",
+        "imageSha256": "12d88483f5ed686884509a56ad1090726460ac1e481be1d93af682c7f9d0070a",
+        "byteForByteRepeat": true,
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '1032,192' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/147-before/147-quarters-walls.png",
+        "reading": "QUARTERS' purple outline runs down the left of the frame directly against the tan rock column at x=18: the wall's dark side seam and the border stroke read as one edge, with no floor colour between them. Same on the right, against the rock at (24,4). This is the 0.375 reference px of evidence/147-gaps-before.json seen rather than measured."
+      },
+      {
+        "name": "147-quarters-smallest-tile",
+        "imagePath": ".artifacts/evidence/147-before/147-quarters-smallest-tile.png",
+        "imageSha256": "9cb2f4a955d5e3c2c7ae47b773c89da339ed69dc2cccd5be057e1e64ae2085b5",
+        "byteForByteRepeat": true,
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 32 -CameraZoom 2 -CameraPosition '688,128' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/147-before/147-quarters-smallest-tile.png",
+        "reading": "The same at the smallest tile ADR 0008 allows, where the gap is 0.55 screen px: the west border and the wall beside it are a single thick edge. This is the frame the complaint «граница наезжает на стену» describes."
+      }
+    ]
+  },
+  "after": {
+    "commit": "3808c42c10ec7cc17e817666072d5c6541fa0f5d",
+    "commitSubject": "Graybox: где стоит граница комнаты рядом со стеной, и почему юг — исключение",
+    "sourceDirty": false,
+    "captures": [
+      {
+        "name": "147-quarters-walls",
+        "imagePath": ".artifacts/evidence/147-after/147-quarters-walls.png",
+        "imageSha256": "7597a5837655137dcba90e07520648e738393a021db013c890b79969d2ac413c",
+        "byteForByteRepeat": true,
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '1032,192' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/147-after/147-quarters-walls.png",
+        "reading": "The whole outline has moved inward by 0.625 reference px: a strip of the room's own floor now separates the purple stroke from the wall's seam on both the west and the east side. The caption and icon moved down with it — LabelTop(2.625) = max(2.0, 2.625 + 1.0 + 1.0) = 4.625, so QUARTERS sits 0.625 reference px lower than in the 'before' frame and is no longer at the plain LabelDefaultTop. Both are intact: the block reaches 12.625 of a 22.0 reference-px cell.",
+        "correctionRound1": "This reading first said QUARTERS still sat at the plain LabelDefaultTop 'because 2.625 + 1.0 + 1.0 is still under it', which is arithmetically false — that sum is 4.625, above the default of 2.0 — and independent review saw the caption move on its own re-captures. Corrected above."
+      },
+      {
+        "name": "147-quarters-smallest-tile",
+        "imagePath": ".artifacts/evidence/147-after/147-quarters-smallest-tile.png",
+        "imageSha256": "99e41d5d200cc1b4a8a9c28f619de5a03fccc8135845604af3128bd910bd45fa",
+        "byteForByteRepeat": true,
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 32 -CameraZoom 2 -CameraPosition '688,128' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/147-after/147-quarters-smallest-tile.png",
+        "reading": "Where the gap was narrowest it is now widest in relative terms: 0.55 -> 1.45 screen px, and the two edges read as two."
+      }
+    ]
+  },
+  "whatTheFramesAlsoShow": "The bottom edge of QUARTERS runs across the raised top of the rock at (19,6) and (20,6) in every one of the four frames, before and after alike. That is the wall standing in front of the room, and it is the declared exception: the border is drawn after the depth pass so the room keeps its south edge, and no inset can clear a mass lifted eight reference pixels above its own footprint. See docs/engineering/PROTOTYPE_GRAYBOX.md and RoomWallClearanceTests.A_wall_in_front_of_a_room_cannot_be_cleared_by_any_inset.",
+  "canonicalStateUnchanged": {
+    "note": "All four runs report the same canonical checksum 9df8c18004b95aa4a6acd45ec338acc63ffd453e669314183e4959bfc6c3bfc9 — this is a presentation-only change, the simulation state at tick 1 is identical before and after.",
+    "imageHashesDiffer": true,
+    "everyCaptureRepeatedByteForByte": true
+  }
+}
