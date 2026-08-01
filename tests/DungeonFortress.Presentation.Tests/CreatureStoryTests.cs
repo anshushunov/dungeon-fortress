@@ -119,11 +119,27 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     /// and the kinds that matter most</b>.
     ///
     /// <para>
-    /// Four claims, each of which a different mistake would break:
+    /// Five claims, each of which a different mistake would break:
     /// every line is an entry of this creature's journal, rendered from that
-    /// entry alone; no two lines are the same kind of decision; nothing left off
-    /// the panel outranks anything on it, in the order "what it means, then when
-    /// it happened"; and the lines are in time order, newest first.
+    /// entry alone; the entry shown for a kind is the <b>last</b> one of that
+    /// kind the world wrote, so two entries of one kind on one tick are told
+    /// apart by write order and not by an accident of the search; no two lines
+    /// are the same kind of decision; nothing left off the panel outranks
+    /// anything on it, in the order "what it means, then when it happened"; and
+    /// the lines are in time order, newest first.
+    /// </para>
+    ///
+    /// <para>
+    /// The tie-break is stated here as the desired behaviour and computed from
+    /// the journal — the last entry among those at the kind's highest tick —
+    /// rather than borrowed from the code. It used to be written as
+    /// <c>kind.MaxBy(LastTick)</c>, which is a restatement of what
+    /// <see cref="HudText.StorySelection"/> did, and it therefore pinned a wrong
+    /// answer: <c>MaxBy</c> returns the <em>first</em> element at the highest key,
+    /// so on <c>baseline</c> the panel showed the job-cancelling
+    /// <c>combat_joined</c> written a line before the real one and printed
+    /// "joined the fight for wave ?.". A check that copies the implementation
+    /// cannot disagree with it.
     /// </para>
     ///
     /// <para>
@@ -138,6 +154,7 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     public void The_story_a_creature_shows_is_the_journal_ranked_by_what_it_meant(string fixtureName)
     {
         var creaturesSeen = 0;
+        var kindsWhoseNewestIsATie = 0;
         foreach (var seed in MatrixSeeds)
         {
             var state = EndOfParty(fixtureName, seed);
@@ -147,7 +164,16 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
                 var mine = state.Events.Where(@event => @event.CreatureId == creature.Id).ToArray();
                 var newestOfEachKind = mine
                     .GroupBy(@event => @event.ReasonCode, StringComparer.Ordinal)
-                    .Select(kind => kind.MaxBy(@event => @event.LastTick)!)
+                    .Select(kind =>
+                    {
+                        var latest = kind.Max(@event => @event.LastTick);
+                        if (kind.Count(@event => @event.LastTick == latest) > 1)
+                        {
+                            kindsWhoseNewestIsATie++;
+                        }
+
+                        return kind.Last(@event => @event.LastTick == latest);
+                    })
                     .ToArray();
                 var lines = Body(HudText.CreatureStory(state, creature.Id));
                 var where = $"{fixtureName}/{seed}/{creature.Name}";
@@ -190,6 +216,12 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
             creaturesSeen >= 3 * 3,
             $"{fixtureName}: only {creaturesSeen} creature-parties were read, which is too few for " +
             "the comparison above to have been made against anything.");
+        Assert.True(
+            kindsWhoseNewestIsATie > 0,
+            $"{fixtureName}: no kind of decision on this matrix ended with two entries on the same " +
+            "tick, so the tie-break above was never exercised and the claim about it proves nothing. " +
+            "Either the world stopped writing two entries of one kind in one tick, or this is no " +
+            "longer the matrix to read that on.");
     }
 
     /// <summary>
@@ -483,6 +515,58 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// The number every document of this issue leans on: <b>how much of what a
+    /// creature decides is routine</b>. It is why the newest four entries were
+    /// almost never a story, and it is quoted in contract §11.1, in
+    /// <c>PROTOTYPE_GRAYBOX.md</c>, in <see cref="HudText"/> and in
+    /// <c>evidence/140-after.json</c>.
+    ///
+    /// <para>
+    /// It lives here as a run rather than in a document as a number, because a
+    /// measured number in four documents and nowhere executable is a number that
+    /// drifts: the first version of this issue said "89 %", which was in fact
+    /// four particular codes of one particular creature (726 of Уголёк's 820)
+    /// generalised to the journal. The run below is the command those documents
+    /// name, and the assertion is deliberately a floor rather than the figure —
+    /// the figure is what the run prints, and a floor is the part of it a
+    /// document is entitled to rely on.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Most_of_what_a_creature_decides_is_routine()
+    {
+        var state = PresentationFixtures.RunFixture("baseline", MeasuredTicks);
+        var report = new StringBuilder();
+        var routine = state.Events.Count(@event => HudText.StoryWeight(@event.ReasonCode) == 0);
+        var share = 100.0 * routine / state.Events.Count;
+        report.AppendLine(CultureInfo.InvariantCulture,
+            $"baseline t{MeasuredTicks}: {routine} of {state.Events.Count} entries are routine " +
+            $"({share:0.0}%)");
+
+        var lowest = 100.0;
+        foreach (var creature in state.Creatures)
+        {
+            var mine = state.Events.Where(@event => @event.CreatureId == creature.Id).ToArray();
+            var mineRoutine = mine.Count(@event => HudText.StoryWeight(@event.ReasonCode) == 0);
+            var mineShare = 100.0 * mineRoutine / mine.Length;
+            lowest = Math.Min(lowest, mineShare);
+            report.AppendLine(CultureInfo.InvariantCulture,
+                $"  {creature.Name}: {mineRoutine} of {mine.Length} ({mineShare:0.0}%)");
+        }
+
+        output.WriteLine(report.ToString());
+        Assert.True(
+            share >= 90.0,
+            $"routine is {share:0.0}% of the journal on this party, under the 90% the documents of " +
+            "Issue #140 rely on. The number in contract §11.1, PROTOTYPE_GRAYBOX.md, HudText and " +
+            "evidence/140-after.json is now wrong and has to be re-measured with this run.");
+        Assert.True(
+            lowest >= 90.0,
+            $"the least routine creature of this party is at {lowest:0.0}%, under the 90% the same " +
+            "documents claim holds for every creature.");
+    }
+
+    /// <summary>
     /// A creature that did the same thing fourteen times does not get fourteen
     /// lines of it. One line per kind of decision is what turns four slots into
     /// four beats of a story.
@@ -547,6 +631,78 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
             Assert.True(mine > HudText.CreatureStoryLines);
             Assert.Contains("0 mattered", Head(HudText.CreatureStory(state, creature.Id)), StringComparison.Ordinal);
         }
+    }
+
+    /// <summary>
+    /// The first minutes of a party, where the panel is genuinely shorter than
+    /// four lines — and where the whole claim above is untrue and a different
+    /// one holds instead.
+    ///
+    /// <para>
+    /// One line per kind means the panel is as tall as the creature has
+    /// <b>kinds</b> of decision. At tick 20 a creature has usually taken one
+    /// kind and the panel is one line; the old panel showed four lines there,
+    /// all of them the same sentence. This is the cost of the rule, it is real,
+    /// and the check stands where it is real rather than at tick 600 where it
+    /// has already gone away: it says how many creatures are short at each of
+    /// the three ticks, so a party that stopped being short here fails instead
+    /// of passing quietly.
+    /// </para>
+    ///
+    /// <para>
+    /// What must hold everywhere is the other half: the panel is never empty
+    /// while the creature has decided anything, it is exactly one line per kind
+    /// up to the bound, and the header keeps saying how many entries are behind
+    /// it — so a one-line panel reads as "41 decisions, three kinds, nothing has
+    /// happened to it" and not as "it has done one thing".
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Early_in_a_party_the_panel_is_shorter_than_four_lines_and_says_so()
+    {
+        var report = new StringBuilder();
+        var shortPanels = new Dictionary<int, int>();
+        foreach (var tick in new[] { 20, 40, 600 })
+        {
+            var state = PresentationFixtures.RunFixture("baseline", tick);
+            shortPanels[tick] = 0;
+            foreach (var creature in state.Creatures)
+            {
+                var mine = state.Events
+                    .Where(@event => @event.CreatureId == creature.Id)
+                    .ToArray();
+                var kinds = mine.Select(@event => @event.ReasonCode).Distinct(StringComparer.Ordinal).Count();
+                var panel = HudText.CreatureStory(state, creature.Id);
+                var lines = Body(panel);
+
+                Assert.Equal(Math.Min(HudText.CreatureStoryLines, kinds), lines.Length);
+                Assert.NotEmpty(lines);
+                Assert.Contains(
+                    lines.Length == mine.Length
+                        ? string.Create(CultureInfo.InvariantCulture, $"{mine.Length} in all")
+                        : string.Create(CultureInfo.InvariantCulture, $"{lines.Length} of {mine.Length}"),
+                    Head(panel),
+                    StringComparison.Ordinal);
+                if (lines.Length < HudText.CreatureStoryLines)
+                {
+                    shortPanels[tick]++;
+                }
+
+                report.AppendLine(CultureInfo.InvariantCulture,
+                    $"t{tick} {creature.Name}: {mine.Length} entries, {kinds} kinds, {lines.Length} lines");
+            }
+        }
+
+        output.WriteLine(report.ToString());
+        Assert.True(
+            shortPanels[20] >= 8,
+            $"only {shortPanels[20]} creatures of nine had a panel under {HudText.CreatureStoryLines} " +
+            "lines at tick 20, so the shrink this check exists to pin was not there to see.");
+        Assert.True(
+            shortPanels[40] >= 1,
+            $"{shortPanels[40]} creatures were short at tick 40; the shrink is supposed to still be " +
+            "visible there and to be gone by tick 600.");
+        Assert.Equal(0, shortPanels[600]);
     }
 
     /// <summary>

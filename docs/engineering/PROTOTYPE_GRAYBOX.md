@@ -688,17 +688,28 @@ that to the player, and none of them needs the log:
   already publishes.
 
   **The lines are the decisions that mattered, not the newest ones.** A creature's
-  journal is 89 % waiting for stock, being blocked in a corridor and stepping
-  aside, so the newest four almost always were: on `baseline` at tick 2400 none of
-  the three creatures that ever refused work by memory of a place had that refusal
-  on its panel (`evidence/140-before.json`). The panel now takes one entry per
-  reason code — the newest of that kind, so fourteen refusals cannot become four
-  lines of the same refusal — orders them by `HudText.StoryWeight` and then by
-  recency, cuts to four and puts them back in time order. Routine fills whatever
-  is left over, so a panel is never blank before the first wave. Read bottom to
-  top, creature #0 now says: it broke and ran at t2011, it was whole again at
-  t2271, and at t2384 it would not take the cooking at (14,7) because its nerve
-  had gone at (18,7) at t1703. Run one:
+  journal is 96.5 % waiting for stock, being blocked in a corridor and stepping
+  aside — never under 92 % for any one creature — so the newest four almost always
+  were: on `baseline` at tick 2400 none of the three creatures that ever refused
+  work by memory of a place had that refusal on its panel
+  (`evidence/140-before.json`). That share is a run rather than a remembered
+  number, and it is the run this document quotes:
+
+  ```powershell
+  dotnet test .\tests\DungeonFortress.Presentation.Tests -c Release `
+    --filter "FullyQualifiedName~Most_of_what_a_creature_decides_is_routine" `
+    --logger "console;verbosity=detailed"
+  ```
+
+  The panel takes one entry per reason code — the **last** one of that kind, so
+  fourteen refusals cannot become four lines of the same refusal — orders them by
+  `HudText.StoryWeight` and then by recency, cuts to four and puts them back in
+  time order. Routine fills whatever is left over, so a panel is never blank
+  before the first wave. It is as tall as the creature has *kinds* of decision,
+  so early in a party it is genuinely shorter: at tick 20 eight creatures of nine
+  show one line, and by tick 600 all nine are back to four.
+
+  Run the frame the reading below comes from:
 
   ```powershell
   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
@@ -707,6 +718,23 @@ that to the player, and none of them needs the log:
     -ScreenshotPath .artifacts\story.png `
     -TileSize 40 -CameraZoom 0.75 -CameraPosition 560,320 -UiScale 1 -FrameSize 1280x720
   ```
+
+  `ui.feedback` of that run, every line of it:
+
+  ```text
+  STORY · Брусок · 4 of 397 · 29 mattered
+  t2384 · will not take cooking at (14,7): nerve broke at (18,7) t1703.
+  t2350 · joined the fight for wave 4.
+  t2271 · is whole again.
+  t2011 · broke and ran: 35% health, 4 raiders close, 0 ally down.
+  ```
+
+  Read bottom to top that is the exit criterion of the slice in four lines: it
+  broke and ran at t2011 on 35 % health, it was whole again at t2271, it went
+  back to the fourth wave at t2350, and at t2384 it would not take the cooking at
+  (14,7) because its nerve had gone at (18,7) at t1703. The inspector on the same
+  frame reads `AVOIDS (25,8) t2011 panic · (18,7) t1703 panic · (24,7) t1316
+  panic`, so the panel and the inspector are two views of the same journal.
 
 **The code did not go anywhere.** It is still what `lastDecision` and every
 entry of the canonical event log carry, which is an invariant of

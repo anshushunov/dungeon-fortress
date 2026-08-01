@@ -5,7 +5,7 @@
   "what": "The same baseline party, read off the same panel, once the four lines are spent on what mattered to the creature instead of on what happened last.",
   "theRule": {
     "where": "HudText.StorySelection and HudText.StoryWeight",
-    "step1": "one entry per reason code, the newest of that kind — so fourteen refusals cannot become four lines of the same refusal",
+    "step1": "one entry per reason code, the LAST one of that kind — and when two entries of a kind share the highest tick, the one the world wrote later. So fourteen refusals cannot become four lines of the same refusal, and a kind written twice in one tick is read as the second of them.",
     "step2": "ordered by StoryWeight (3 refusal by memory, 2 what the wave cost it, 1 how it met the wave, 0 routine) and then by recency",
     "step3": "cut to HudText.CreatureStoryLines = 4, then put back in time order, newest first",
     "fill": "routine fills whatever the beats leave over, so a creature nothing has happened to yet still has a full panel",
@@ -18,9 +18,24 @@
     "before": "red — 3 of 3 creatures hid it",
     "after": "green — 3 of 3 show it",
     "creatures": [
-      { "name": "Брусок", "refusalsByMemory": 14, "entries": 419, "onThePanel": true },
-      { "name": "Мотылёк", "refusalsByMemory": 7, "entries": 654, "onThePanel": true },
-      { "name": "Обух", "refusalsByMemory": 6, "entries": 264, "onThePanel": true }
+      {
+        "name": "Брусок",
+        "refusalsByMemory": 14,
+        "entries": 419,
+        "onThePanel": true
+      },
+      {
+        "name": "Мотылёк",
+        "refusalsByMemory": 7,
+        "entries": 654,
+        "onThePanel": true
+      },
+      {
+        "name": "Обух",
+        "refusalsByMemory": 6,
+        "entries": 264,
+        "onThePanel": true
+      }
     ]
   },
   "everyPanelOfTheParty": {
@@ -28,7 +43,7 @@
     "panels": {
       "Брусок": [
         "STORY · Брусок · 4 of 419 · 31 mattered",
-        "t2390 · joined the fight for wave ?.",
+        "t2390 · joined the fight for wave 4.",
         "t2384 · will not take cooking at (14,7): nerve broke at (18,7) t1703.",
         "t2271 · is whole again.",
         "t2011 · broke and ran: 35% health, 4 raiders close, 0 ally down."
@@ -36,14 +51,14 @@
       "Кремень": [
         "STORY · Кремень · 4 of 486 · 9 mattered",
         "t2379 · broke and ran: 22% health, 6 raiders close, 0 ally down.",
-        "t2350 · joined the fight for wave ?.",
+        "t2350 · joined the fight for wave 4.",
         "t2062 · is whole again.",
         "t2000-2060 · was too far to reach the fight. (x4)"
       ],
       "Мотылёк": [
         "STORY · Мотылёк · 4 of 654 · 19 mattered",
         "t2374 · broke and ran: 54% health, 3 raiders close, 0 ally down.",
-        "t2350 · joined the fight for wave ?.",
+        "t2350 · joined the fight for wave 4.",
         "t2281-2282 · will not take carrying at (15,7): nerve broke at (19,7) t2018. (x2)",
         "t2069 · came back to work after the wave."
       ],
@@ -57,14 +72,14 @@
       "Дёготь": [
         "STORY · Дёготь · 4 of 335 · 15 mattered",
         "t2368 · broke and ran: 34% health, 2 raiders close, 0 ally down.",
-        "t2350 · joined the fight for wave ?.",
+        "t2350 · joined the fight for wave 4.",
         "t2069 · came back to work after the wave.",
         "t1324 · put raider 0 down."
       ],
       "Уголёк": [
         "STORY · Уголёк · 4 of 820 · 14 mattered",
         "t2373 · broke and ran: 31% health, 4 raiders close, 0 ally down.",
-        "t2350 · joined the fight for wave ?.",
+        "t2350 · joined the fight for wave 4.",
         "t2069 · came back to work after the wave.",
         "t1995 · is whole again."
       ],
@@ -77,7 +92,7 @@
       ],
       "Обух": [
         "STORY · Обух · 4 of 264 · 21 mattered",
-        "t2390 · joined the fight for wave ?.",
+        "t2390 · joined the fight for wave 4.",
         "t2379 · will not take cooking at (15,7): nerve broke at (17,7) t2024.",
         "t2060 · was too far to reach the fight.",
         "t2024 · broke and ran: 52% health, 5 raiders close, 0 ally down."
@@ -99,7 +114,7 @@
     "panel": [
       "STORY · Брусок · 4 of 397 · 29 mattered",
       "t2384 · will not take cooking at (14,7): nerve broke at (18,7) t1703.",
-      "t2350 · joined the fight for wave ?.",
+      "t2350 · joined the fight for wave 4.",
       "t2271 · is whole again.",
       "t2011 · broke and ran: 35% health, 4 raiders close, 0 ally down."
     ],
@@ -122,8 +137,9 @@
     "answerFromTheBudget": "Four. Ten drawn lines at the tightest frame the guard checks; a story sentence runs to about sixty characters and wraps onto two; four sentences plus a header is nine, and Main.AssertLabelsFit refuses five (see evidence/140-mutations.json) and refused six in Issue #128.",
     "whatStaysOffThePanel": [
       "the older beats of a story that has more than four kinds — measured 4 to 8 kinds that matter per creature at the end of a baseline party, so between none and four are cut; the newest of each kind is the one kept",
-      "every routine decision: waiting on stock, being blocked in a corridor, stepping aside, choosing the next job, and the blow-by-blow of a fight. That is 89 % of a creature's journal — 388 of Брусок's 419 entries",
-      "repetitions: a kind a creature took fourteen times shows once, as its newest occurrence. The count is not on the line; the header's third number says how many entries mattered in all"
+      "every routine decision: waiting on stock, being blocked in a corridor, stepping aside, choosing the next job, and the blow-by-blow of a fight. Measured 96.5 % of the journal on this party — 4270 of 4425 entries — and never under 92.0 % for any one creature (lowest Обух 243 of 264, highest Уголёк 806 of 820). Command: dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter \"FullyQualifiedName~Most_of_what_a_creature_decides_is_routine\" --logger \"console;verbosity=detailed\"",
+      "repetitions: a kind a creature took fourteen times shows once, as its newest occurrence. The count is not on the line; the header's third number says how many entries mattered in all",
+      "the fourth line itself, early in a party: the panel is one line per KIND of decision, so at tick 20 eight creatures of nine show a single line and by tick 600 all nine are back to four. Named in the HudText.CreatureStory docstring and pinned by CreatureStoryTests.Early_in_a_party_the_panel_is_shorter_than_four_lines_and_says_so."
     ],
     "howItIsSaid": "The header carries three numbers — 'STORY · Брусок · 4 of 419 · 31 mattered' — so the panel never claims to be the whole journal. The word 'last' is gone: it was true while the panel was the tail of the journal and would be a lie now, and CreatureStoryTests.The_story_is_bounded_and_the_header_says_what_is_off_the_panel asserts it absent.",
     "whatWasNotDoneAboutIt": "The panel is not made taller and the sentences are not shortened to fit more in. Both would be worth measuring, and both change either the frame guard's arithmetic (Main.cs, held by another task this block) or the wording every other panel shares (EventNarration)."
@@ -137,11 +153,28 @@
     "noTickNeeded": "CreatureStoryTests.Reading_a_creature_s_story_needs_no_tick_to_run",
     "theHeader": "CreatureStoryTests.The_story_is_bounded_and_the_header_says_what_is_off_the_panel",
     "theFrame": "Main.AssertLabelsFit, on every entry point and every frame in HudFitFrames",
-    "wholeProject": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release — 422 of 422 green"
+    "wholeProject": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release — 424 of 424 green",
+    "theRoutineShare": "CreatureStoryTests.Most_of_what_a_creature_decides_is_routine — prints the share per party and per creature and fails under 90 %, which is the floor contract §11.1, PROTOTYPE_GRAYBOX.md and HudText rely on",
+    "theEarlyPanel": "CreatureStoryTests.Early_in_a_party_the_panel_is_shorter_than_four_lines_and_says_so — ticks 20, 40 and 600, asserting the shrink is there at 20, still visible at 40 and gone at 600"
   },
   "whatThisFoundAndDidNotFix": {
-    "what": "combat_joined is emitted twice with different arguments. 34 of the 48 on this party carry a wave number; the other 14 carry a jobKind and a jobId instead and no wave, so EventNarration prints 'joined the fight for wave ?.'",
-    "whereItShows": "That sentence is now often the newest line of a panel, so the gap that used to be buried in a 400-entry journal is on screen.",
-    "whyItIsNotFixedHere": "The missing argument is written by the simulation and the sentence lives in EventNarration.cs; this task owns neither and its non-goals name the simulation explicitly. It is a defect the selection surfaced, not one it introduced."
+    "what": "combat_joined is emitted twice with different arguments. 34 of the 48 on this party carry a wave number; the other 14 are the cancellation of the job the creature was doing, carry a jobKind and a jobId instead, and are written one line before the real entry on the same tick.",
+    "whatWasFixedHere": "The panel's own tie-break. Selecting the newest entry of a kind with MaxBy returned the FIRST at the highest tick, which is systematically the cancellation, so the top line of two of the three flagship panels read 'joined the fight for wave ?.'. Taking the last entry among those at the highest tick — the one the world wrote later — is both the right meaning of 'newest' and the fix; no simulation and no EventNarration change was needed, and all three now read 'joined the fight for wave 4.'.",
+    "whatIsStillOpen": "That one reason code carries two different facts is a defect of the journal and has an Issue of its own, opened by the coordinator. This task owns neither the simulation that writes it nor the sentence that renders it.",
+    "howItWasCaught": "Independent review. The first handoff recorded the symptom and filed it outside the task boundary; the boundary was right about the cause and wrong about the cure."
+  },
+  "reviewRound": {
+    "when": "2026-08-01, second and final round",
+    "fixed": [
+      "F1 tie-break: MaxBy(LastTick) -> last among the entries at the highest tick; the rule test no longer restates MaxBy and now asserts the desired tie-break, with a guard that the matrix actually contains ties",
+      "F2 the 89 % figure: replaced by a measured 96.5 % (never under 92.0 % per creature) in all five places and backed by a named run",
+      "F3 the early panel shrinks to one line per kind: named in the HudText docstring and pinned by a test at ticks 20, 40 and 600",
+      "F6 the reading in PROTOTYPE_GRAYBOX.md now quotes every line the documented command prints"
+    ],
+    "notMine": [
+      "the order of the significance levels (review measured that demoting a refusal by memory leaves 422/422 green) — a debt-ledger entry",
+      "the zero slack in the panel budget — a debt-ledger entry",
+      "one reason code carrying two facts — a separate Issue"
+    ]
   }
 }

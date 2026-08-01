@@ -148,8 +148,19 @@ public static class HudText
     /// <b>What stays off the panel</b>, therefore, and is named rather than
     /// hidden: the older beats of a story with more than four, and every routine
     /// decision — waiting for stock, being blocked in a corridor, stepping aside
-    /// — which is 89 % of what a creature does. The header carries both counts,
-    /// and the inspector next to it carries every place the creature avoids.
+    /// — which is <b>96.5 %</b> of the journal, and never under 92 % for any one
+    /// creature. The header carries both counts, and the inspector next to it
+    /// carries every place the creature avoids.
+    /// </para>
+    ///
+    /// <para>
+    /// That share is a run and not a remembered number:
+    /// <c>CreatureStoryTests.Most_of_what_a_creature_decides_is_routine</c>
+    /// prints it per party and per creature and fails if it drops under the 90 %
+    /// this file and the two documents rely on. It is quoted here, in contract
+    /// §11.1 and in <c>PROTOTYPE_GRAYBOX.md</c>; an earlier draft of all three
+    /// said 89 %, which was four particular codes of one particular creature
+    /// generalised to the journal, and nothing could have caught that but a run.
     /// </para>
     /// </summary>
     public const int CreatureStoryLines = 4;
@@ -179,7 +190,7 @@ public static class HudText
     /// hurt, too far to reach it;</item>
     /// <item><b>0 — everything else.</b> Choosing work, waiting on stock, being
     /// blocked, stepping aside, and the blow-by-blow of a fight. Not noise —
-    /// this is what the creature spends its life doing, 89 % of the journal —
+    /// this is what the creature spends its life doing, 96.5 % of the journal —
     /// but not a turning point either, and the inspector beside the panel
     /// already says what it is doing now.</item>
     /// </list>
@@ -289,7 +300,7 @@ public static class HudText
     /// <para>
     /// It used to be the newest four entries of the journal, and that made the
     /// panel unreadable for the reason the numbers say: a creature's journal is
-    /// 89 % waiting for stock, being blocked in a corridor and stepping aside,
+    /// 96.5 % waiting for stock, being blocked in a corridor and stepping aside,
     /// so the newest four almost always are. Measured on the shipped
     /// <c>baseline</c> party at tick 2400 — 4425 entries, 27 refusals by memory,
     /// three creatures that ever refused that way, and <b>none</b> of the three
@@ -310,9 +321,22 @@ public static class HudText
     /// </para>
     ///
     /// <para>
-    /// Routine still fills whatever the beats leave over, so a creature at tick
-    /// 40 that nothing has happened to yet has a panel rather than a blank, and
-    /// so the panel keeps saying what the creature has been doing lately.
+    /// Routine still fills whatever the beats leave over, so a creature that
+    /// nothing has happened to yet has a panel rather than a blank, and so the
+    /// panel keeps saying what the creature has been doing lately.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Early in a party the panel is shorter than four lines, and that is the
+    /// price of one line per kind.</b> The panel is as tall as the creature has
+    /// <em>kinds</em> of decision, not entries: measured on <c>baseline</c>, at
+    /// tick 20 eight creatures of nine have made one kind of decision and show
+    /// one line, at tick 40 three of nine still do, and by tick 600 every one of
+    /// them is back to four. Before Issue #140 all nine showed four lines from
+    /// the first ticks — four lines that were the same sentence repeated, which
+    /// is the shorter panel wearing a costume. The header still says what is
+    /// behind it: "3 of 41 · 0 mattered" is a creature that has taken 41
+    /// decisions of three kinds and had nothing happen to it yet.
     /// </para>
     ///
     /// <para>
@@ -380,8 +404,29 @@ public static class HudText
     /// </para>
     ///
     /// <para>
-    /// Ties are broken by the order the journal is in, which is the order the
-    /// world wrote it in, so the same snapshot always produces the same panel.
+    /// <b>"The newest of that kind" means the last one written, not the first
+    /// one found at the highest tick.</b> A creature can leave two entries of the
+    /// same kind on the same tick, and then the tick cannot tell them apart —
+    /// only the order the world wrote them in can, and the later one is the one
+    /// that happened later. Taking the first would be picking by an accident of
+    /// how the search runs.
+    /// </para>
+    ///
+    /// <para>
+    /// It is not hypothetical. On the shipped <c>baseline</c> party 14 of the 48
+    /// <c>combat_joined</c> entries are written one line before a second
+    /// <c>combat_joined</c> at the same tick, and only the second carries the
+    /// wave number; <c>MaxBy</c> took the first and the panel read "joined the
+    /// fight for wave ?." at the top of two of the three flagship stories. That
+    /// one code carries two different facts is a defect of its own and has an
+    /// Issue of its own; what belongs here is that the panel must show the last
+    /// thing a creature did, and this is what "last" means.
+    /// </para>
+    ///
+    /// <para>
+    /// Ties that survive that — two kinds ending on the same tick — are broken by
+    /// the order the journal is in, which is again the order the world wrote it
+    /// in, so the same snapshot always produces the same panel.
     /// </para>
     /// </summary>
     public static IReadOnlyList<PrototypeEvent> StorySelection(IEnumerable<PrototypeEvent> story)
@@ -389,7 +434,8 @@ public static class HudText
         ArgumentNullException.ThrowIfNull(story);
         return story
             .GroupBy(@event => @event.ReasonCode, StringComparer.Ordinal)
-            .Select(kind => kind.MaxBy(@event => @event.LastTick)!)
+            .Select(kind => kind.Aggregate(
+                (newest, next) => next.LastTick >= newest.LastTick ? next : newest))
             .OrderByDescending(@event => StoryWeight(@event.ReasonCode))
             .ThenByDescending(@event => @event.LastTick)
             .Take(CreatureStoryLines)
