@@ -22,10 +22,23 @@ namespace DungeonFortress.Presentation.Tests;
 /// </para>
 ///
 /// <para>
-/// Everything here is a function of a snapshot. That is the claim being made as
-/// much as it is the way the tests are written: selecting a creature answers the
-/// question out of facts the world has already published, so it needs no tick to
-/// run. Nothing in this file steps a world in order to read a panel.
+/// Every panel here is a function of a snapshot, and that is the claim being made
+/// as much as it is the way the tests are written: selecting a creature answers
+/// the question out of facts the world has already published, so it needs no tick
+/// to run.
+/// </para>
+///
+/// <para>
+/// Stepping a world is how most of these tests <b>reach</b> a snapshot worth
+/// asking about — a party has to be played before anybody has a story — and
+/// <see cref="A_refusal_by_memory_reads_in_the_creature_s_own_story"/> steps one
+/// tick at a time because it is hunting for the tick a refusal lands on. What
+/// none of them does is step a world <b>between</b> asking for a panel and
+/// reading it. The claim is carried by
+/// <see cref="Reading_a_creature_s_story_needs_no_tick_to_run"/>, which takes one
+/// snapshot before its loop and answers for all nine creatures out of that one
+/// object; the rest are ordinary tests that happen to need a played party as
+/// their input.
 /// </para>
 /// </summary>
 public sealed class CreatureStoryTests(ITestOutputHelper output)
