@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "captures": [
+    {"name": "story-t1720-motylek-after-the-wave", "fixture": "baseline", "screenshotTicks": 1720, "selectCreature": 2, "tileSize": 40, "cameraZoom": 1.0, "cameraPosition": "600,320", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "story-t1669-motylek-breaks", "fixture": "baseline", "screenshotTicks": 1669, "selectCreature": 2, "tileSize": 40, "cameraZoom": 1.0, "cameraPosition": "760,320", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "feed-t1720-nobody-selected", "fixture": "baseline", "screenshotTicks": 1720, "tileSize": 40, "cameraZoom": 0.75, "cameraPosition": "560,320", "uiScale": 1.0, "frameSize": "1280x720"}
+  ]
+}

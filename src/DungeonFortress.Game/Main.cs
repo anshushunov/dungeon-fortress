@@ -2396,6 +2396,80 @@ public partial class Main : Node2D
     }
 
     /// <summary>
+    /// The event panel as it reads when a creature is selected: one entry per
+    /// creature in the session, plus a padded worst case (Issue #128).
+    ///
+    /// <para>
+    /// The panel is the domain feed until somebody is selected, and no entry
+    /// point selects anybody unless it is told to, so without this the story a
+    /// player actually reads would be the one shape of the panel nothing
+    /// measured — the same hole <see cref="TerminalSummaries"/> was written to
+    /// close for the end-of-party summary. The story is also the taller of the
+    /// two shapes: the domain feed is three lines and the story is
+    /// <see cref="HudText.CreatureStoryLines"/>.
+    /// </para>
+    ///
+    /// <para>
+    /// The padded case exists because a smoke run stands at tick 1, where a
+    /// creature has one journal entry and the panel is one line high. It repeats
+    /// the widest line this session's journal can produce until the panel is at
+    /// its full height, so every entry point measures a full-height panel rather
+    /// than only the runs that happen to stop late. It is a floor under the
+    /// check and not the whole of it: the widest line at tick 1 is a narrower
+    /// sentence than a refusal by memory of place carrying a tile and a tick, so
+    /// a run captured after a wave measures more than this can. One such run is
+    /// recorded in <c>evidence/128-history.json</c>.
+    /// </para>
+    /// </summary>
+    private (string Who, string Text)[] CreatureStoryPanels()
+    {
+        if (_state is null)
+        {
+            return [];
+        }
+
+        var view = CurrentHudView();
+        var panels = _state.Creatures
+            .Select(creature => (
+                Who: creature.Name,
+                Text: HudText.Feedback(view with { SelectedCreatureId = creature.Id })))
+            .ToArray();
+        if (panels.Length == 0)
+        {
+            return panels;
+        }
+
+        var widest = panels
+            .SelectMany(panel => panel.Text.Split('\n'))
+            .OrderByDescending(line => line.Length)
+            .First();
+        var padded = string.Join(
+            "\n",
+            Enumerable.Repeat(widest, HudText.CreatureStoryLines + 1));
+        return [.. panels, ("widest padded story", padded)];
+    }
+
+    /// <summary>
+    /// Puts a candidate event panel into the real label and measures it, the way
+    /// <see cref="MeasureSummary"/> does for the summary. Put back by
+    /// <see cref="RestoreFeedback"/>.
+    /// </summary>
+    private (int Needed, int Shown) MeasureFeedback(string text, HudFitFrame frame)
+    {
+        _feedback!.Text = text;
+        LayoutHud(frame.Viewport, frame.UiScale);
+        return (_feedback.GetLineCount(), _feedback.GetVisibleLineCount());
+    }
+
+    private void RestoreFeedback()
+    {
+        if (_state is not null)
+        {
+            _feedback!.Text = HudText.Feedback(CurrentHudView());
+        }
+    }
+
+    /// <summary>
     /// Every piece of HUD text the overflow guard measures. The four panels the
     /// golden UI state records come first; the header and the legend rows are
     /// here too, because a Control layout can squeeze them just as easily and
@@ -2583,6 +2657,7 @@ public partial class Main : Node2D
         var live = GetViewportRect().Size;
         var failures = new List<string>();
         var terminal = TerminalSummaries();
+        var stories = CreatureStoryPanels();
         foreach (var frame in HudFitFrames())
         {
             LayoutHud(frame.Viewport, frame.UiScale);
@@ -2615,9 +2690,31 @@ public partial class Main : Node2D
                         $"UI scale {FormatNumber(frame.UiScale)}");
                 }
             }
+
+            // The event panel as a selected creature's story (Issue #128). It is
+            // taller than the domain feed the label normally carries, so the
+            // shape a player reads is measured rather than assumed.
+            foreach (var (who, text) in stories)
+            {
+                var (needed, shown) = MeasureFeedback(text, frame);
+                if (needed > shown)
+                {
+                    failures.Add(
+                        $"the story of '{who}' needs {needed} lines but only {shown} fit at " +
+                        $"viewport {FormatVector(frame.Viewport)}, UI scale " +
+                        $"{FormatNumber(frame.UiScale)}");
+                }
+            }
+
+            // Put the panel back before the next frame measures the live labels,
+            // or the loop above reports the candidate left in the label rather
+            // than what the HUD actually says. Measured: without this the
+            // 'feedback' label failed alongside every story it had been lent.
+            RestoreFeedback();
         }
 
         RestoreSummary();
+        RestoreFeedback();
         LayoutHud(live, _uiScale);
 
         if (failures.Count > 0)

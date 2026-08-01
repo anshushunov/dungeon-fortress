@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "issue": 125,
+  "what": "How many refusals by memory of place name work the creature would not have taken anyway. Issue #125 states its criterion as a counterfactual — 'the same tick, run with memory switched off, gives this creature the job the refusal names' — so the measurement is that counterfactual, resolved inside the tick it belongs to.",
+  "howItIsMeasured": "PrototypeWorld.TrackMemoryFreeMatching (diagnostic, off by default) makes every tick resolve the same matching a second time with the memory arm skipped, and publishes through PrototypeWorld.MemoryProbes both the job each refusal names and the job the memory-free matching would have given that creature. Refusals are counted per tick, not per event: one event folded over eight ticks is eight refusals, which is the number a player reads.",
+  "whyNotTwoRuns": "A counterfactual cannot be measured by playing the party twice with memory on and off. The second party diverges on the first tick where memory changed anything, and from there the two runs are different worlds, so 'the same tick' has nothing to compare. Resolved inside the tick it is exact. That the probe changes nothing is itself checked: PrototypeMemoryTests.The_counterfactual_probe_changes_nothing_the_party_does compares the canonical checksum and the canonical event log of a probed party against an unprobed one over the whole matrix.",
+  "matrix": "fixtures baseline and prepared, seeds 20260726, 20260727, 20260728 — the same six parties PrototypeMemoryTests runs on.",
+  "columns": {
+    "refusals": "refusals by memory of place, counted per tick",
+    "named": "the memory-free matching gives the creature exactly the job the refusal names — the refusal is true",
+    "other": "the memory-free matching gives the creature a different job — the refusal names work it was not going to do",
+    "nothing": "the memory-free matching gives the creature no work at all — memory explains an idleness it did not cause",
+    "false": "other + nothing"
+  },
+  "command": [
+    "dotnet build tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj -c Release",
+    "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --no-build --no-restore --filter \"FullyQualifiedName~PrototypeMemoryTests.Report_whether_a_refusal_names_work_the_creature_would_have_taken\" --logger \"console;verbosity=detailed\""
+  ],
+  "measurements": [
+    {
+      "stage": "before",
+      "takenOn": "this branch at the checkpoint that adds the probe and nothing else: the memory arm still sits before the occupancy check, before reachability and before scoring, and still keeps the first job by id it hits.",
+      "refactorIsBehaviourNeutral": {
+        "claim": "Extracting CollectPairs/ResolveMatching out of MatchJobs moved no decision. The whole 15-run evaluation matrix is byte-identical before and after the extraction.",
+        "command": [
+          "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\evaluate-prototype.ps1 -OutputPath <out-of-repo>\\matrix-before.json   # with the branch changes stashed",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\evaluate-prototype.ps1 -OutputPath <out-of-repo>\\matrix-refactor.json  # with them restored",
+          "diff <out-of-repo>\\matrix-before.json <out-of-repo>\\matrix-refactor.json"
+        ],
+        "result": "no difference"
+      },
+      "perParty": {
+        "baseline/20260726": {"refusals": 41, "named": 24, "other": 6, "nothing": 11},
+        "baseline/20260727": {"refusals": 9, "named": 2, "other": 7, "nothing": 0},
+        "baseline/20260728": {"refusals": 17, "named": 8, "other": 3, "nothing": 6},
+        "prepared/20260726": {"refusals": 20, "named": 0, "other": 20, "nothing": 0},
+        "prepared/20260727": {"refusals": 69, "named": 30, "other": 38, "nothing": 1},
+        "prepared/20260728": {"refusals": 13, "named": 4, "other": 9, "nothing": 0}
+      },
+      "matrix": {"refusals": 169, "named": 68, "other": 83, "nothing": 18, "false": 101},
+      "reading": "Three refusals in five name work the creature would not have taken. On prepared/20260726 not one of the twenty refusals is true. The refusal count itself agrees with the one PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next already prints from the canonical event log (41/9/17 and 20/69/13), so the probe is counting the same refusals the player reads and not a second population."
+    },
+    {
+      "stage": "after the position was moved and the best-scoring pair was named, and nothing else",
+      "note": "Kept because it is the number the two halves the issue names buy on their own, and it is not the whole of the criterion. Taken on the same command, on the tree with the third rule below not yet written.",
+      "matrix": {"refusals": 159, "named": 72, "other": 78, "nothing": 9, "false": 87}
+    },
+    {
+      "stage": "after",
+      "takenOn": "the head of this branch: the memory arm sits last among the conditions on a pair, names the highest-scoring pair it takes away, and only records a refusal when that pair outscores everything the creature was still free to take.",
+      "perParty": {
+        "baseline/20260726": {"refusals": 28, "named": 26, "other": 0, "nothing": 2},
+        "baseline/20260727": {"refusals": 6, "named": 4, "other": 2, "nothing": 0},
+        "baseline/20260728": {"refusals": 14, "named": 8, "other": 0, "nothing": 6},
+        "prepared/20260726": {"refusals": 0, "named": 0, "other": 0, "nothing": 0},
+        "prepared/20260727": {"refusals": 28, "named": 27, "other": 0, "nothing": 1},
+        "prepared/20260728": {"refusals": 4, "named": 4, "other": 0, "nothing": 0}
+      },
+      "matrix": {"refusals": 80, "named": 69, "other": 2, "nothing": 9, "false": 11, "idleEitherWay": 9},
+      "eightyOfEightyIsNotAMeasurement": {
+        "claim": "'The refusal names the work the creature would have put first without memory' is an invariant of the third rule, not a number this matrix produced.",
+        "why": "Let M be the pairs memory took away and K the pairs it left. The refusal is recorded only when max(M) > max(K), so argmax(M ∪ K) is identically the recorded pair. The quantity is 80 of 80 on any party for as long as the rule holds, and it cannot redden.",
+        "soWhatIsTheTestFor": "PrototypeMemoryTests.A_refusal_by_memory_names_the_work_the_creature_would_have_taken stays a regression on the rule itself — it reddens when any of the three parts of the fix is reverted (mutants 1, 3 and 4 of 125-mutations.json). It is a guard, not a measurement, and it is not evidence about this matrix.",
+        "theMeasuredQuantityIs": "agreement with the assignment in the memory-free tick: 69 of 80."
+      },
+      "theResidue": {
+        "count": 11,
+        "twoKinds": {
+          "nothing": {
+            "count": 9,
+            "what": "the memory-free tick leaves the creature with no work at all",
+            "andInTheRealTick": "all nine also ended the real tick with no job (idleEitherWay = 9 of 9, measured, not inferred). The creature stands about in both worlds, so memory changed nothing it did. The refusal is true about what it put first and does not explain its idleness.",
+            "howItWasMeasured": "the report command reads creatures[].currentJobId out of the snapshot of that same tick, on the eleven ticks that need it, and prints 'with memory it ended the tick idle too' or 'with work' per case."
+          },
+          "other": {
+            "count": 2,
+            "what": "the creature would have taken something else",
+            "case_t1793": "baseline/20260727, creature 2: with memory it stood idle; without memory it would have taken a different Cook job (196) on the same larder tile. Here memory did change what it did.",
+            "case_t2062": "baseline/20260727, creature 7: it had work either way, but without memory it would have taken the Harvest at (2,7) instead of the cooking."
+          },
+          "whyTheSplitMatters": "The two are different sentences to a player and different answers to the fork. Nine of eleven are 'memory changed nothing this creature did'; two of eleven are 'memory changed which work it did'. Describing all eleven as 'it would have taken the work but a colleague won it' would be true of two."
+        },
+        "whatTheyAre": "ten Cook jobs starting on the two contested larder tiles (14,7) and (15,7), where the matching gives the tile to whoever scores highest and removes every other pair that starts there; and one Watch on (22,12), which is a tile of the Watch zone the prepared fixture paints at tick 320 in the corridor by the gate — not a larder tile. The authored training posts are at (10,2), (11,2), (10,3) and (11,3), so (22,12) is not one of those either.",
+        "eachIsPrinted": "by the report command above, one line per exception, with the creature that wins the job, the creature that wins the tile, and whether the refuser ended the real tick idle.",
+        "checked": "PrototypeMemoryTests.A_refusal_the_memory_free_tick_does_not_honour_lost_the_work_to_somebody asserts that a refusal the memory-free tick does not honour always lost the job or its starting tile to another creature. The forbidden case — a refusal nothing at all stands in the way of — cannot occur silently.",
+        "whatThisMeansForCriterion1": "Criterion 1 of Issue #125 as worded — the memory-free tick assigns that creature that job — holds in 69 of 80. The remaining 11 are contention for a starting tile, not memory. Closing them would mean deciding a creature's own message from what its colleagues would have done. That is a design fork; it is named for the owner and deliberately not taken here."
+      },
+      "whatMovedInTheJournal": {
+        "command": [
+          "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\evaluate-prototype.ps1 -OutputPath <out-of-repo>\\matrix-after-125.json",
+          "compare Runs[].Metrics of the before and after files, field by field"
+        ],
+        "nonExplainabilityMetrics": "identical on all 15 runs — Economy, Labor, Creatures and Session, including every score and every outcome. The fix moves no creature and changes no party; it changes what the party says about itself.",
+        "reasonCodeOccurrences": {
+          "refused_place_of_panic": [298, 138],
+          "refused_place_of_wound": [25, 4],
+          "refused_rule_min_satiety": [4204, 4206],
+          "waiting_input_missing": [8095, 8104]
+        },
+        "reading": "Summed over the 15 runs. The two memory codes lose the refusals they should never have claimed; the two that grow are the real reasons those creatures were waiting for, which RecordWaitingReason had been suppressing in favour of the memory code."
+      },
+      "whatItCostTheContract": {
+        "whichNumber": "T.memory_avoid_radius = 4 is justified in contract 15.5 by how often the refusal fires per party, and that measurement was taken while three refusals in five were false. Both halves of the comparison were re-measured rather than adjusted.",
+        "command": [
+          "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\evaluate-prototype.ps1",
+          "sum ReasonCodeOccurrences.refused_place_of_panic + refused_place_of_wound per run of docs/playtests/data/prototype-01-agent-batch.json",
+          "for the radius-2 half: set PrototypeTuning.MemoryAvoidRadius to 2, run the same evaluation to an out-of-repo path, count the same way, restore the constant"
+        ],
+        "denominator": "Both halves are counted over the SAME six parties — baseline and prepared on the three matrix seeds. The three neglected parties are excluded from both: they never reach a wave, never write a memory, and give zero at any radius, so counting them in one half and not the other compares two different things. The first version of this block did exactly that — 6 parties at radius 4 against 9 at radius 2 — and independent review returned it.",
+        "atRadius4": {
+          "baseline": {"20260726": 28, "20260727": 6, "20260728": 14},
+          "prepared": {"20260726": 0, "20260727": 28, "20260728": 4},
+          "neglected": {"20260726": 0, "20260727": 0, "20260728": 0},
+          "range": "0-28 over the six parties",
+          "partiesWithZero": "1 of 6",
+          "wasPublishedAs": "9-69"
+        },
+        "atRadius2": {
+          "baseline": {"20260726": 0, "20260727": 0, "20260728": 0},
+          "prepared": {"20260726": 0, "20260727": 0, "20260728": 3},
+          "neglected": {"20260726": 0, "20260727": 0, "20260728": 0},
+          "range": "0-3 over the six parties",
+          "partiesWithZero": "5 of 6",
+          "wasPublishedAs": "never once in a party"
+        },
+        "onOneDenominator": "radius 2 — range 0-3, zero on 5 of 6 parties; radius 4 — range 0-28, zero on 1 of 6. The discriminator survives being counted honestly.",
+        "theZero": "prepared/20260726 now refuses nothing all party. It is the party whose twenty refusals were all false — see the before block. The rule did not stop working there; it never was working there, and the panel said otherwise.",
+        "decision": "The radius stays 4. At 2 the rule still barely exists; at 4 it produces twenty-eight real changes of decision in the richest party. The tuning is unchanged and only the numbers under it moved, so this is a re-measurement of an existing decision and not a new one."
+      }
+    }
+  ]
+}
