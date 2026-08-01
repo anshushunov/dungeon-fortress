@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "issue": 129,
+  "when": "2026-08-01, run on the committed tree and re-run after the last check was tightened",
+  "what": "One mutant per half of the edit, not one for the edit as a whole. A check that only reddens when the whole change is reverted proves one half is covered and says nothing about the other.",
+  "howToReproduce": {
+    "runner": ".artifacts/mutate-129.py — applies each replacement to src/DungeonFortress.Simulation/PrototypeWorld.cs, runs the checks, records the counts and puts the file back. It restores the file in a finally block and re-runs the checks afterwards, so the last line of its output is the shipped tree.",
+    "command": "python .artifacts/mutate-129.py",
+    "checks": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeCombatApproachTests\"",
+    "baseline": "4 of 4 green on the shipped tree, run last, after every mutation was put back.",
+    "whyOnlyThisSuite": "The whole simulation project is not green on this branch, and for reasons that belong to the balance fork rather than to the approach rule (evidence/129-matrix.json). A mutation pass over a suite with standing failures would say nothing, so the pass runs the four checks that state the rule."
+  },
+  "mutants": [
+    {
+      "half": "the destination is a tile beside the enemy, not the enemy's own tile",
+      "edit": "ActCombatant goes back to `var destination = target.Position;` and ApproachTile is never called",
+      "result": "red: 2 of 4 failed",
+      "failing": [
+        "PrototypeCombatApproachTests.The_places_beside_a_raider_are_taken_rather_than_queued_for",
+        "PrototypeCombatApproachTests.Three_defenders_can_reach_and_strike_one_raider_in_the_same_tick"
+      ],
+      "reading": "This is the whole of the issue, and it is also how the 'before' column of evidence/129-matrix.json was taken: the same harness against the same tree with this one line reverted. surroundShare falls from 0.512 to 0.418 and the ceiling on defenders adjacent to one raider goes back to two."
+    },
+    {
+      "half": "free means nobody is standing there",
+      "edit": "IsFreeApproachTile drops both occupancy clauses and asks only whether the tile is passable and outside Forbidden",
+      "result": "red: 2 of 4 failed",
+      "failing": [
+        "PrototypeCombatApproachTests.The_places_beside_a_raider_are_taken_rather_than_queued_for",
+        "PrototypeCombatApproachTests.Three_defenders_can_reach_and_strike_one_raider_in_the_same_tick"
+      ],
+      "reading": "Without it the destination moves one tile from the enemy and nothing else changes: everybody with the same nearest enemy still picks the same neighbour of it, so the column re-forms one tile short of where it was. This is the half that makes 'beside the enemy' mean 'a place of my own'."
+    },
+    {
+      "half": "free, sub-clause: no other creature of the domain",
+      "edit": "only the `_creatures` clause is dropped; the `_raiders` clause stays",
+      "result": "red: 2 of 4 failed",
+      "failing": [
+        "PrototypeCombatApproachTests.The_places_beside_a_raider_are_taken_rather_than_queued_for",
+        "PrototypeCombatApproachTests.Three_defenders_can_reach_and_strike_one_raider_in_the_same_tick"
+      ],
+      "reading": "The clause that carries the whole of the freeness rule."
+    },
+    {
+      "half": "free, sub-clause: no raider",
+      "edit": "only the `_raiders` clause is dropped; the `_creatures` clause stays",
+      "result": "GREEN — this sub-clause survives, and it is reported rather than papered over",
+      "failing": [],
+      "reading": "Measured directly rather than guessed at: with the clause, a fighter shares a tile with a raider on 8 fighter-ticks over the matrix; without it, on 12. Four samples is not something a check can stand on. The reason it is so small is that the overlap is mostly not the fighter's doing — ActRaiders assigns raider.Position with no occupancy check at all, so a raider walks onto a defender whatever the defender chose, and 7 of the 8 are one such run on baseline/20260727.",
+      "whyTheClauseIsKeptAnyway": "It is the occupancy rule of contract 4.1 — a tile holds one creature or one raider — applied where this edit gets to apply it, and it makes the picture the owner complained about strictly better rather than worse (8 overlaps against 12). What it cannot be is separately verified, and the honest place for that is here: the freeness rule above is covered as a rule, and this sub-clause of it is not covered on its own. Making a raider hold a tile everywhere is Issue #76 and changes the morale rule of 10.3, which counts bodies and not tiles."
+    },
+    {
+      "half": "the free tile taken is the one nearest to the fighter itself",
+      "edit": "the distance comparison `steps >= shortest` becomes `chosen is not null`, so the first reachable free neighbour in the (north, east, south, west) order wins regardless of how far it is",
+      "result": "red: 1 of 4 failed",
+      "failing": ["PrototypeCombatApproachTests.The_places_beside_a_raider_are_taken_rather_than_queued_for"],
+      "reading": "A fixed corner does not spread anybody out: it moves the column to the north side of the enemy. Only the surround check reddens, and that is the point of having it — the ceiling of three is still reached, so a check that only counted the best tick of the party would have passed this mutant."
+    },
+    {
+      "half": "with no free tile the fighter still closes on the enemy",
+      "edit": "the fallback becomes `chosen ?? creature.Position`, so a fighter with every tile beside its enemy taken stands where it is",
+      "result": "red: 1 of 4 failed",
+      "failing": ["PrototypeCombatApproachTests.A_fighter_with_nowhere_to_stand_beside_its_enemy_still_closes_on_it"],
+      "reading": "The share of crowded fighter-ticks on which the fighter moved anyway falls from 172 of 721 (24 %) to 21 of 583 (4 %), against a floor of a tenth. It does not fall to zero because 'every tile taken' is read off the end of the tick while the fighter decided at the start of it, which is why the check is a share and not a count.",
+      "wasNotCoveredAtFirst": "The first pass of this runner had this mutant green: the check then asked for 20 such ticks and the mutant left 21. The check now asks for a share, and the number that made it pass is named above rather than quietly raised."
+    }
+  ],
+  "summary": {
+    "halves": 4,
+    "red": 4,
+    "subClausesReported": 2,
+    "subClausesGreen": 1
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "issue": 129,
+  "when": "2026-08-01, after the edit",
+  "what": "The seed matrix re-measured after the destination of a combat move became a free tile beside the enemy, next to the same six-party geometry measurement taken before it. Two things are read down: whether the fight looks different, and what the party paid for it.",
+  "tree": {
+    "branch": "agent/129-combat-approach-free-tile",
+    "baseCommit": "74af087",
+    "note": "Named commit is on `main` and survives squash; the branch head is described in prose instead (Issue #106)."
+  },
+  "theRule": {
+    "where": "PrototypeWorld.ApproachTile, called from PrototypeWorld.ActCombatant",
+    "statement": "A fighter further from its target than T.melee_attack_range walks to a free tile beside the target rather than to the target's own tile. Candidates are the four neighbours of the target in the map's own order (north, east, south, west). A candidate is free when it is passable, is not in the Forbidden zone, carries no other creature of the domain (a body on the floor counts, as it does in Move) and carries no raider. Of the free candidates the fighter takes the one nearest to itself by the map, and the first in that order when two are equally near. With no neighbour both free and reachable the destination stays the target's own tile, which is what it always was.",
+    "whatDidNotChange": [
+      "target selection (contract 10.2): still the nearest raiding raider by Manhattan distance, lowest id on a tie",
+      "PrototypeMap.NextStep: still blind to bodies; walking around an occupied tile remains Issue #76",
+      "movement outside combat",
+      "the resolution of combat: nobody counts attackers, nobody reserves a target",
+      "the snapshot: no section, field or schema version moved; PrototypeSnapshotShapeTests is green",
+      "the command vocabulary (ADR 0005): this is a rule of behaviour, not an order"
+    ]
+  },
+  "geometry": {
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeCombatApproachTests\" --logger \"console;verbosity=detailed\"",
+    "harness": "tests/DungeonFortress.Simulation.Tests/PrototypeCombatApproachTests.cs",
+    "howBeforeWasTaken": "By applying the first mutant of evidence/129-mutations.json — the destination goes back to target.Position — to the shipped tree and running the same report. The harness is therefore identical on both sides.",
+    "headline": {
+      "metric": "surroundShare — of the places around a raider that the fighters present for it could have filled, the share they did fill",
+      "before": {"places": 1762, "taken": 737, "share": 0.418, "perRun": [0.390, 0.354, 0.428, 0.442, 0.471, 0.411]},
+      "after": {"places": 1659, "taken": 849, "share": 0.512, "perRun": [0.555, 0.535, 0.525, 0.518, 0.486, 0.475]},
+      "reading": "Every one of the six runs improves and the two ranges do not overlap: the worst run after (0.475) is above the best run before (0.471). The bound asserted in the test is the matrix-wide share and its floor is 0.48."
+    },
+    "perRun": [
+      {"fixture": "baseline", "seed": 20260726, "before": {"ticks": 2404, "contactShare": 0.146, "meanTouching": 1.166, "maxTouching": 2, "meanAttackers": 1.146, "maxAttackers": 2, "surroundShare": 0.390, "blockedWhileFighting": 504}, "after": {"ticks": 2406, "contactShare": 0.181, "meanTouching": 1.292, "maxTouching": 3, "meanAttackers": 1.530, "maxAttackers": 3, "surroundShare": 0.555, "blockedWhileFighting": 287}},
+      {"fixture": "baseline", "seed": 20260727, "before": {"ticks": 2404, "contactShare": 0.116, "meanTouching": 1.000, "maxTouching": 1, "meanAttackers": 1.000, "maxAttackers": 1, "surroundShare": 0.354, "blockedWhileFighting": 430}, "after": {"ticks": 2422, "contactShare": 0.209, "meanTouching": 1.594, "maxTouching": 3, "meanAttackers": 1.588, "maxAttackers": 3, "surroundShare": 0.535, "blockedWhileFighting": 346}},
+      {"fixture": "baseline", "seed": 20260728, "before": {"ticks": 2424, "contactShare": 0.151, "meanTouching": 1.076, "maxTouching": 2, "meanAttackers": 1.145, "maxAttackers": 2, "surroundShare": 0.428, "blockedWhileFighting": 408}, "after": {"ticks": 2300, "contactShare": 0.186, "meanTouching": 1.151, "maxTouching": 2, "meanAttackers": 1.224, "maxAttackers": 2, "surroundShare": 0.525, "blockedWhileFighting": 271}},
+      {"fixture": "prepared", "seed": 20260726, "before": {"ticks": 2406, "contactShare": 0.219, "meanTouching": 1.114, "maxTouching": 2, "meanAttackers": 1.099, "maxAttackers": 2, "surroundShare": 0.442, "blockedWhileFighting": 399}, "after": {"ticks": 2424, "contactShare": 0.235, "meanTouching": 1.361, "maxTouching": 2, "meanAttackers": 1.293, "maxAttackers": 2, "surroundShare": 0.518, "blockedWhileFighting": 393}},
+      {"fixture": "prepared", "seed": 20260727, "before": {"ticks": 2406, "contactShare": 0.228, "meanTouching": 1.280, "maxTouching": 2, "meanAttackers": 1.198, "maxAttackers": 2, "surroundShare": 0.471, "blockedWhileFighting": 452}, "after": {"ticks": 2410, "contactShare": 0.221, "meanTouching": 1.259, "maxTouching": 2, "meanAttackers": 1.184, "maxAttackers": 2, "surroundShare": 0.486, "blockedWhileFighting": 476}},
+      {"fixture": "prepared", "seed": 20260728, "before": {"ticks": 2409, "contactShare": 0.183, "meanTouching": 1.259, "maxTouching": 2, "meanAttackers": 1.148, "maxAttackers": 2, "surroundShare": 0.411, "blockedWhileFighting": 570}, "after": {"ticks": 2409, "contactShare": 0.189, "meanTouching": 1.443, "maxTouching": 2, "meanAttackers": 1.275, "maxAttackers": 2, "surroundShare": 0.475, "blockedWhileFighting": 614}}
+    ],
+    "theOwnersSecondSentence": {
+      "before": "Three defenders were never once simultaneously adjacent to one raider over six whole parties, and never once struck it in the same tick. The ceiling was two.",
+      "after": "Three both stand and strike: 14 and 27 (tick, raider) pairs with three adjacent on baseline/20260726 and baseline/20260727, and 8 and 9 with three striking.",
+      "ceilingThatRemains": "Four is still never reached, and the reason is on the raiders' side: they stack 7 to 11 to a tile, so most fights happen around one tile of a crowd rather than around a body."
+    }
+  },
+  "party": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\evaluate-prototype.ps1 -OutputPath .\\.artifacts\\129-after-batch.json",
+    "before": "docs/playtests/data/prototype-01-agent-batch.json as committed on 74af087, left untouched by this branch",
+    "runs": [
+      {"fixture": "baseline", "seed": 20260726, "score": [727, 758], "outcome": ["raided", "raided"], "renown": [125, 140], "wavesRepelled": [1, 1], "raidersDowned": [5, 8], "mealsStolen": [43, 40], "fledMorale": [23, 21], "mealsProduced": [102, 99], "refusedPlaceOfPanic": [28, 187]},
+      {"fixture": "baseline", "seed": 20260727, "score": [806, 831], "outcome": ["raided", "raided"], "renown": [124, 169], "wavesRepelled": [1, 2], "raidersDowned": [5, 14], "mealsStolen": [26, 45], "fledMorale": [21, 16], "mealsProduced": [78, 108], "refusedPlaceOfPanic": [6, 0]},
+      {"fixture": "baseline", "seed": 20260728, "score": [660, -223], "outcome": ["raided", "fallen"], "renown": [138, 112], "wavesRepelled": [1, 1], "raidersDowned": [8, 7], "mealsStolen": [56, 31], "fledMorale": [23, 15], "mealsProduced": [117, 75], "refusedPlaceOfPanic": [12, 412]},
+      {"fixture": "prepared", "seed": 20260726, "score": [799, 796], "outcome": ["raided", "raided"], "renown": [153, 184], "wavesRepelled": [1, 2], "raidersDowned": [11, 17], "mealsStolen": [21, 38], "fledMorale": [18, 18], "mealsProduced": [84, 99], "refusedPlaceOfPanic": [0, 2]},
+      {"fixture": "prepared", "seed": 20260727, "score": [868, 803], "outcome": ["raided", "raided"], "renown": [154, 164], "wavesRepelled": [2, 2], "raidersDowned": [11, 13], "mealsStolen": [22, 33], "fledMorale": [16, 21], "mealsProduced": [84, 84], "refusedPlaceOfPanic": [27, 31]},
+      {"fixture": "prepared", "seed": 20260728, "score": [858, 927], "outcome": ["raided", "raided"], "renown": [164, 179], "wavesRepelled": [2, 2], "raidersDowned": [13, 16], "mealsStolen": [30, 19], "fledMorale": [22, 17], "mealsProduced": [93, 93], "refusedPlaceOfPanic": [4, 1]},
+      {"fixture": "neglected", "seed": 20260726, "score": [0, 0], "outcome": ["fallen", "fallen"], "note": "unchanged on all three seeds: it falls at the same tick, before the first wave, and no combat rule touches it"},
+      {"fixture": "neglected", "seed": 20260727, "score": [0, 0], "outcome": ["fallen", "fallen"]},
+      {"fixture": "neglected", "seed": 20260728, "score": [0, 0], "outcome": ["fallen", "fallen"]}
+    ],
+    "invariants": {
+      "held": ["9 (same seed, same log, identical state and checksum, whole or in pieces)", "10 (a different seed changes the checksum)", "3 (renown of a living domain over a dead one)", "5, 6, 7, 8 (unchanged by this edit)"],
+      "broken": [
+        {"invariant": 11, "seed": 20260727, "reading": "score(prepared) 803 is below score(baseline) 831"},
+        {"invariant": 11, "seed": 20260728, "reading": "score(baseline) is -223, below score(neglected) 0: the living party no longer ranks above the dead one, because it is no longer living"},
+        {"invariant": 4, "seed": 20260727, "reading": "mealsStolen(prepared) 33 below baseline 45 holds; combat_fled_morale(prepared) 21 is above baseline 16"},
+        {"invariant": 4, "seed": 20260728, "reading": "both halves read against a baseline party that fell early, so the comparison is between a finished party and an unfinished one"}
+      ],
+      "whatTheContractSaysAboutThat": "13.4, last rule: «Если реализация не может удовлетворить инварианты 1–5 и 11 без скрытого сценарного флага исхода, это escalation trigger, а не повод подкрутить сценарий». No corridor of 13.4 was rewritten by this branch; the measurement is recorded next to the table as an open question instead."
+    },
+    "cause": {
+      "notTheFight": "Combat itself got strictly better: raiders downed rose on five of six runs (5→8, 5→14, 11→17, 11→13, 13→16), waves repelled rose on three.",
+      "theChain": "Fighters now stand around the raider instead of behind one another. A raider stands at the larder, so its neighbours are larder and kitchen tiles — and that is where the defenders now break. Memory of place (5.1, Issue #117) then refuses work at a tile where a creature's nerve failed, so the tiles the food chain runs through are the tiles that get forbidden.",
+      "theNumber": "baseline/20260728: refused_place_of_panic 12 → 412, meals produced 117 → 75, average satiety 45 → 1, the domain falls at tick 2299 of hunger rather than of the raid. baseline/20260726 shows the same channel without the fall: 28 → 187.",
+      "theSecondWeakerChannel": "More raiders downed means more renown, and wave composition is derived from renown (10.1). Late waves on the matrix grew from 8–10 to 9–11 raiders."
+    }
+  },
+  "otherChecksThatWentRed": {
+    "note": "Named rather than fixed. Two are soft traffic bounds in the simulation tests, three are presentation tests held by Issue #156 and untouched by this branch.",
+    "simulation": [
+      "PrototypeContractRegressionTests.Traffic_arbitration_preserves_one_move_no_overlap_and_no_swap — the soft fairness bound on the spread of YieldCount: 74 against a bound of 40. The rule half of the test (one move, no overlap, no swap, no teleport) still holds on every tick of the party.",
+      "PrototypeMoraleTests.Most_broken_defenders_actually_leave_the_tile_they_broke_on — 76 of 108 flights moved the creature against a matrix bound of 80 %. A fighter that now stands beside the enemy rather than behind an ally breaks in a tighter place and has fewer ways out of it.",
+      "PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix — seeds 20260727 and 20260728, invariant 11, above."
+    ],
+    "presentation": [
+      "MemoryInspectorTests.The_panel_of_a_creature_that_remembers_places_lists_them_newest_first",
+      "CreatureStoryTests.Most_of_what_a_creature_decides_is_routine",
+      "CreatureStoryTests.Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel"
+    ],
+    "green": [
+      "determinism, replay and checksum: 27 tests including Same_seed_commands_and_tick_produce_identical_state_log_and_checksum and Replay_from_loaded_command_log_is_byte_identical",
+      "PrototypeSnapshotShapeTests: the snapshot did not move, so the schema version did not either"
+    ]
+  }
+}
