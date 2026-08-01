@@ -29,7 +29,8 @@
       {"room": "kitchen@9,6", "creature": "9,8"},
       {"room": "larder@13,6", "creature": "16,8"}
     ],
-    "afterTheFix": {"tileSize32": 0, "tileSize40": 0, "tileSize48": 0}
+    "afterTheFix": {"tileSize32": 0, "tileSize40": 0, "tileSize48": 0},
+    "pinning": "226 and the list of four rooms are asserted, not merely quoted: the test carries Assert.Equal(226, crossings.Count) and Assert.Equal on the room list at each of the three tile sizes. Independent review found the first version of it asserting only crossings.Count > 0, which left the headline number of the issue held up by prose — the pattern it was modelled on, RoomWallClearanceTests.The_pre_147_ladder…, pins its own figure with Assert.Equal([0.375], quarters)."
   },
 
   "before": {
