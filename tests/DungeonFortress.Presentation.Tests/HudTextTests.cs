@@ -283,8 +283,17 @@ public sealed class HudTextTests
     }
 
     /// <summary>
-    /// The empty panel repeats its own header. That is what the shipped HUD does,
-    /// so it is what this asserts; changing it is a product decision, not a tidy-up.
+    /// The empty panel carries the header once, the invitation and the diagnostics
+    /// count.
+    ///
+    /// <para>
+    /// It used to print the header twice — the panel concatenated "EVENT FEEDBACK"
+    /// in front of a body that already opened with it — and this test asserted the
+    /// doubling as "what the shipped HUD does". Issue #145 gave the header facts to
+    /// carry ("· 3 of 9 crew · 155 of 4425 mattered"), and a line that carries
+    /// counts cannot be printed twice without lying about them. That is the product
+    /// decision the old wording of this test asked for, made and written down.
+    /// </para>
     /// </summary>
     [Fact]
     public void An_empty_event_buffer_still_carries_the_header_and_the_diagnostics_count()
@@ -292,35 +301,55 @@ public sealed class HudTextTests
         var state = PresentationFixtures.Baseline(1) with { Events = [] };
 
         Assert.Equal(
-            "EVENT FEEDBACK\nEVENT FEEDBACK\n" +
+            "EVENT FEEDBACK\n" +
             "No events yet. Step or unpause to watch autonomous choices." +
             "\n\nDiagnostics: 0 (structured JSON is emitted by smoke/capture).",
             HudText.Feedback(View(state)));
     }
 
+    /// <summary>
+    /// The shape of the domain feed: a header that says what is off the panel, at
+    /// most <see cref="HudText.DomainFeedLines"/> event lines, a blank line and the
+    /// diagnostics counter.
+    ///
+    /// <para>
+    /// It used to assert that the first line was the newest entry of the journal.
+    /// That is the defect Issue #145 was opened about — 96.5 % of the journal is
+    /// waiting and stepping aside, so the newest three entries almost never mean
+    /// anything — and what the panel shows now is one line per creature, the most
+    /// significant thing each has decided. The rule itself is checked in
+    /// <c>DomainFeedTests</c>; what is checked here is that the shape of the panel
+    /// around it did not move.
+    /// </para>
+    /// </summary>
     [Fact]
-    public void The_event_panel_shows_the_last_three_choices_newest_first()
+    public void The_event_panel_is_a_header_three_lines_and_the_diagnostics_count()
     {
         var state = PresentationFixtures.Baseline(400);
         Assert.True(state.Events.Count >= 4);
-        var newest = state.Events[^1];
 
         var feedback = HudText.Feedback(View(state, diagnosticCount: 2));
 
         var lines = feedback.Split('\n');
-        Assert.Equal("EVENT FEEDBACK", lines[0]);
+        Assert.StartsWith("EVENT FEEDBACK · ", lines[0], StringComparison.Ordinal);
         // One line per event since Issue #117, and it is a sentence rather than a
         // code: the name in front, then what the creature decided. The code is
         // still in the canonical state — the feed reads it through
         // <see cref="EventNarration"/> — and it is deliberately not on screen.
-        Assert.Equal($"t{newest.LastTick} · {EventNarration.Describe(state, newest)}", lines[1]);
+        var shown = HudText.DomainSelection(state.Events);
+        Assert.Equal(HudText.DomainFeedLines, shown.Count);
+        Assert.Equal($"t{shown[0].LastTick} · {EventNarration.Describe(state, shown[0])}", lines[1]);
         Assert.Contains(
-            HudText.CreatureName(state, newest.CreatureId),
+            HudText.CreatureName(state, shown[0].CreatureId),
             lines[1],
             StringComparison.Ordinal);
-        Assert.DoesNotContain(newest.ReasonCode, feedback, StringComparison.Ordinal);
+        foreach (var code in state.Events.Select(@event => @event.ReasonCode).Distinct())
+        {
+            Assert.DoesNotContain(code, feedback, StringComparison.Ordinal);
+        }
+
         // Header, three event lines, a blank line, the diagnostics line.
-        Assert.Equal(6, lines.Length);
+        Assert.Equal(3 + HudText.DomainFeedLines, lines.Length);
         Assert.EndsWith(
             "Diagnostics: 2 (structured JSON is emitted by smoke/capture).",
             feedback,

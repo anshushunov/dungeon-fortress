@@ -401,19 +401,26 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// With nothing selected the panel is what it always was. The domain feed is
-    /// not replaced, it is scoped: click a creature and the feed is about that
-    /// creature, click away and it is about the domain again.
+    /// With nothing selected the panel is the domain's feed. The feed is not
+    /// replaced by a story, it is scoped: click a creature and the panel is about
+    /// that creature, click away and it is about the domain again.
+    ///
+    /// <para>
+    /// The domain feed has a rule of its own since Issue #145 and
+    /// <c>DomainFeedTests</c> is where it is checked. What this asserts is only the
+    /// boundary between the two panels, which is what Issue #128 built and what a
+    /// change to either of them could break.
+    /// </para>
     /// </summary>
     [Fact]
-    public void Nothing_selected_leaves_the_domain_feed_exactly_as_it_was()
+    public void Nothing_selected_leaves_the_domain_feed_and_not_a_story()
     {
         var state = PresentationFixtures.Baseline(400);
         var feedback = HudText.Feedback(View(state, diagnosticCount: 2));
         var lines = feedback.Split('\n');
 
-        Assert.Equal("EVENT FEEDBACK", lines[0]);
-        Assert.Equal(6, lines.Length);
+        Assert.StartsWith("EVENT FEEDBACK", lines[0], StringComparison.Ordinal);
+        Assert.Equal(3 + HudText.DomainFeedLines, lines.Length);
         Assert.EndsWith(
             "Diagnostics: 2 (structured JSON is emitted by smoke/capture).",
             feedback,

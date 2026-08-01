@@ -15,7 +15,7 @@
     "ui":  {
                "summary":  "BASELINE  •  t336  •  PAUSED  •  jobs 11  •  4864e76a  •  renown 21  •  strength 19  •  crew 9\nWAVE 1/4 IN 964t ×5  •  food 17+3  •  raw 9+9  •  stone 0L 1C 3/4S  •  dug 4  •  marks 0",
                "inspector":  "CELL (25, 1)\n\ntile floor (excavated)\njobs none\n\nDIG\nnot diggable: already excavated.",
-               "feedback":  "EVENT FEEDBACK\nt334 · Обух stepped aside at (16,7) for #2.\nt333 · Обух stopped at (5,3): somebody in the way.\nt333 · Обух took harvesting at (5,3): the nearest job on offer.\n\nDiagnostics: 0 (structured JSON is emitted by smoke/capture).",
+               "feedback":  "EVENT FEEDBACK · 3 of 9 crew · 0 of 858 mattered\nt334 · Обух stepped aside at (16,7) for #2.\nt334 · Мотылёк stopped at (15,7): somebody in the way. (x2)\nt332 · Кремень took carrying at (11,7): the tightest link right now.\n\nDiagnostics: 0 (structured JSON is emitted by smoke/capture).",
                "roster":  "CREW  Брусок WORK  •  Кремень MOVE  •  Мотылёк MOVE  •  Смола MOVE  •  Дёготь READY  •  Уголёк WORK  •  Прель WORK  •  Обух MOVE  •  Тишина MOVE\nDemo: DIG marked (25,1) (25,2) (25,3) (26,1); [M] paints the material stockpile (22,1) (23,1) at tick 200. Nobody was ordered to carry anything.\nLOG t1 dig_designate (1) | t200 paint MaterialStockpile (2)",
                "controlFeedback":  "Demo: DIG marked (25,1) (25,2) (25,3) (26,1); [M] paints the material stockpile (22,1) (23,1) at tick 200. Nobody was ordered to carry anything.",
                "editMode":  "Paint",

@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "issue": 145,
+  "when": "2026-08-01, after the edit",
+  "what": "The same baseline party, read off the same panel, once the feed's three lines are spent on what mattered to the domain instead of on what happened last.",
+  "theRule": {
+    "where": "HudText.DomainFeed, HudText.DomainSelection and the shared HudText.MostSignificant",
+    "reuseNotReinvention": "StorySelection (Issue #140) and DomainSelection (Issue #145) are the same function with one argument changed. MostSignificant takes what counts as one beat; the story passes the reason code, the feed passes the creature id. A copy of the ranking is how the two panels would come to disagree about what matters after the next change to StoryWeight — which is this issue, told forwards: #140 fixed the story panel and left the feed beside it showing the newest three entries.",
+    "step1": "one entry per creature — its best by (StoryWeight, LastTick), and the later-written of two that tie",
+    "step2": "the crew ordered by the same (StoryWeight, LastTick)",
+    "step3": "cut to HudText.DomainFeedLines = 3, then put back in time order, newest first",
+    "fill": "routine fills whatever the turning points leave over, so the feed is never blank and the first ~1300 ticks of a party still read as what the crew is doing",
+    "noTickNeeded": "every input is a published field of the snapshot and the ranking is a function of the reason code alone. DomainFeedTests.Reading_the_domain_feed_needs_no_tick_to_run builds the panel from a snapshot taken once, steps the world 200 ticks further, and gets the same panel out of the same object."
+  },
+  "theScale": {
+    "question": "Issue #145 asks whether the domain's scale of significance differs from one creature's, and to name the difference if it does.",
+    "answer": "It does not, and that is a decision rather than an economy. There is no fact in the canonical journal that means something to a domain and nothing to any of its creatures: a domain has no body to be put down and no memory of its own, and every entry it could be told about happened to somebody. HudText.StoryWeight is therefore shared unchanged.",
+    "whatDoesDiffer": "What counts as ONE BEAT. For one creature the beat is the kind of decision — the same refusal fourteen times is one line. For the domain the beat is the creature — a creature's whole party is one line, because the domain has nine of them and the question the panel answers is WHO. This is the difference that fixes the measured defect: three lines about one creature stopped in one corridor.",
+    "consequence": "The same kind of decision from a second creature is news about a domain; from the same creature it is not. At tick 2400 the feed is three different creatures refusing three different places, where the story panel of any one of them is four different kinds of thing that happened to it."
+  },
+  "criterionOne": {
+    "claim": "On the baseline party at tick 2400, sampled every 50 ticks, the share of feed windows carrying at least one entry that mattered is not below the 40% Issue #145 names.",
+    "test": "DomainFeedTests.The_domain_feed_shows_what_mattered_and_not_only_what_happened_last",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter \"FullyQualifiedName~DomainFeedTests\" --logger \"console;verbosity=detailed\"",
+    "before": "3 of 48 windows — 6.3% (evidence/145-feed-before.json)",
+    "after": "22 of 48 windows — 45.8%",
+    "reading": "22 of 48 is the ceiling on this party and not merely a pass: 22 is exactly the number of sampled windows taken at a moment when the party had produced anything that mattered at all. The other 26 windows fall in the first ~1300 ticks, where the journal holds nothing but routine and the feed honestly has nothing to promote."
+  },
+  "criterionOneWithNoSlack": {
+    "claim": "At every sampled moment the party has a turning point, the feed carries one.",
+    "test": "DomainFeedTests.The_feed_carries_something_that_mattered_whenever_the_party_has_one",
+    "before": "red — 19 of 22 windows showed nothing that mattered",
+    "after": "green — 0 of 22"
+  },
+  "whatThePanelSaysNow": {
+    "command": "a throwaway TempProbe fact over PresentationFixtures.RunFixture(\"baseline\", tick), removed after the run; the same panels are what HudText.Feedback returns with nothing selected",
+    "t190": [
+      "EVENT FEEDBACK · 3 of 9 crew · 0 of 296 mattered",
+      "t189 · Кремень stopped at (14,7): somebody in the way.",
+      "t189 · Мотылёк stopped at (15,7): somebody in the way.",
+      "t189 · Смола stepped aside at (8,4) for #1."
+    ],
+    "t600": [
+      "EVENT FEEDBACK · 3 of 9 crew · 0 of 1319 mattered",
+      "t599 · Мотылёк cannot reach: walled off or forbidden. (x12)",
+      "t599 · Брусок waits on cooking: enough already. (x44)",
+      "t599 · Кремень waits on harvesting: enough already. (x54)"
+    ],
+    "t1400": [
+      "EVENT FEEDBACK · 3 of 9 crew · 27 of 2044 mattered",
+      "t1365 · Прель was carried off the floor, badly hurt.",
+      "t1365 · Тишина was carried off the floor, badly hurt.",
+      "t1363 · Мотылёк broke and ran: 95% health, 1 raiders close, 2 ally down."
+    ],
+    "t1800": [
+      "EVENT FEEDBACK · 3 of 9 crew · 75 of 3381 mattered",
+      "t1778 · Тишина is mending: the wound is no longer bad.",
+      "t1763 · Брусок will not take cooking at (15,7): nerve broke at (18,7) t1703.",
+      "t1719 · Мотылёк will not take cooking at (15,7): nerve broke at (19,7) t1363."
+    ],
+    "t2200": [
+      "EVENT FEEDBACK · 3 of 9 crew · 116 of 4188 mattered",
+      "t2114 · Обух will not take cooking at (14,7): nerve broke at (17,7) t2024.",
+      "t1918 · Брусок will not take cooking at (14,7): nerve broke at (18,7) t1703.",
+      "t1819 · Мотылёк will not take cooking at (15,7): nerve broke at (19,7) t1363."
+    ],
+    "t2400": [
+      "EVENT FEEDBACK · 3 of 9 crew · 155 of 4425 mattered",
+      "t2384 · Брусок will not take cooking at (14,7): nerve broke at (18,7) t1703.",
+      "t2379 · Обух will not take cooking at (15,7): nerve broke at (17,7) t2024.",
+      "t2282 · Мотылёк will not take carrying at (15,7): nerve broke at (19,7) t2018. (x2)"
+    ],
+    "whatThePanelSaidAtT2400BeforeTheEdit": [
+      "EVENT FEEDBACK",
+      "t2399 · Брусок stopped at (14,7): somebody in the way.",
+      "t2399 · Брусок waits on cooking: nothing to work with.",
+      "t2398 · Брусок stopped at (14,7): somebody in the way."
+    ],
+    "reading": "Without clicking anything, the player is now told that three of the nine crew will not take work at the places where their nerve went, and where and when each of them broke. That is the sentence the whole slice exists for — 'и как это изменило его следующее решение' — on the screen the game opens on. At t1400 the same panel is what the first wave cost: two carried off the floor and one that broke and ran. Before the edit all of it was one creature stopped in one corridor."
+  },
+  "theGoldenFrames": {
+    "what": "The three committed --demo-stone frames, regenerated with scripts/update-golden-ui.ps1 and reviewed rather than accepted.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/update-golden-ui.ps1 -GodotPath C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe",
+    "t190": "was three lines of which two were Кремень; is now Кремень, Мотылёк and Смола",
+    "t336": "was three lines of Обух; is now Обух, Мотылёк and Кремень",
+    "t950": "was Обух, Смола and Кремень all stopped in a corridor; is now Уголёк too far gone to work, and two others",
+    "note": "None of these frames has a turning point in it — 0 mattered on all three — so what changed is only the second half of the rule, one line per creature. That the routine frames improve at all is the part of the fix that has nothing to do with waves."
+  },
+  "checks": {
+    "criterionOne": "DomainFeedTests.The_domain_feed_shows_what_mattered_and_not_only_what_happened_last",
+    "criterionOneWithNoSlack": "DomainFeedTests.The_feed_carries_something_that_mattered_whenever_the_party_has_one",
+    "theRuleAgainstTheJournal": "DomainFeedTests.The_feed_a_domain_shows_is_the_journal_ranked_by_what_it_meant — over baseline and prepared on three seeds each, at ticks 600, 1400, 2000 and 2400: every line is an entry of the journal, no two lines are the same creature, nothing left off the feed outranks anything on it, and the lines are newest first",
+    "theRepresentative": "DomainFeedTests.The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it — and it asserts that all three lines really are something other than that creature's newest entry, so the claim is exercised rather than trivially true",
+    "oneLinePerCreature": "DomainFeedTests.One_creature_takes_one_line_of_the_feed_however_much_it_decided",
+    "theBoundAndTheHeader": "DomainFeedTests.The_feed_is_bounded_and_the_header_says_what_is_off_the_panel",
+    "theRoutineFill": "DomainFeedTests.Before_anything_has_mattered_the_feed_is_still_the_crew_at_work",
+    "noTickNeeded": "DomainFeedTests.Reading_the_domain_feed_needs_no_tick_to_run",
+    "theBoundaryBetweenThePanels": "CreatureStoryTests.Nothing_selected_leaves_the_domain_feed_and_not_a_story",
+    "theShapeOfThePanel": "HudTextTests.The_event_panel_is_a_header_three_lines_and_the_diagnostics_count",
+    "theStoryPanelIsUnchanged": "the whole of CreatureStoryTests stayed green through the refactor of StorySelection onto MostSignificant, which is the evidence that the shared function did not change what #140 shipped",
+    "wholeProject": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release — 445 of 445 green"
+  },
+  "whatStaysOffTheFeed": [
+    "six of the nine crew. Measured on this party at tick 2400 all nine have had something that mattered, and three lines is what the frame can draw (evidence/145-bound.json). The header says so: '3 of 9 crew'.",
+    "every earlier beat of the three creatures that are shown. A creature's line is its worst moment, not its story; its four beats are one click away on the same panel.",
+    "all of the routine while anything else is available — 96.5% of the journal, the number Issue #140 measured and CreatureStoryTests.Most_of_what_a_creature_decides_is_routine keeps honest.",
+    "late in a party, everything below a refusal by memory of place. At ticks 2200 and 2400 all three lines are refusals, because three creatures hold the top weight and the panel is three lines long. That is the right three sentences for the hypothesis this slice is testing and it does hide what the fourth wave cost — which a click, or the summary line's crew count, answers.",
+    "movement. The feed is a digest and no longer a ticker: ranking by what a decision meant means the top can stand still for hundreds of ticks while the crew works. The summary line above it carries the tick, the wave and the stocks, and the routine fill still moves whenever nothing has mattered yet."
+  ]
+}
