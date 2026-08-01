@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "issue": 156,
+  "checkpoint": "1 — the frame before, and the place in the draw order the defect lives at",
+  "note": "PNGs land under .artifacts/evidence/156-* per Resolve-EvidenceOutputRoot and are not committed, per AGENTS.md's rule against committing large derived files. This file records the reproduction commands, the image hashes, the commit each capture was taken against — copied from the manifest capture-evidence.ps1 itself wrote (.artifacts/evidence/156-before/manifest.json), not retyped — and the measurement that says the same thing in numbers.",
+  "complaint": "Owner, playtest 2026-08-01: «наверно существо должно быть над границей комнаты, а не под ней». On the frame the goblins on the bottom row of the kitchen and the larder each have their own room's outline drawn across them.",
+
+  "whereTheDefectLives": {
+    "claim": "Not in the border's coordinates. In which pass it is drawn in.",
+    "manifest": "src/DungeonFortress.Presentation/WorldDrawOrder.cs",
+    "beforeThisIssue": {
+      "DrawRoomBorders": "WorldDrawPass.Informational, OverlayMark.RoomBorder",
+      "DrawRoomBorder": "WorldDrawPass.Informational, OverlayMark.RoomBorder",
+      "stepsAround": ["DrawLooseItems", "DrawElevatedWorld", "DrawRoomBorders", "DrawZoneOutlines"],
+      "reading": "DrawElevatedWorld is the whole depth pass — walls, posts, creatures and raiders in Y-order. DrawRoomBorders runs after it, so every stroke of every room's outline is painted over every body standing on it."
+    },
+    "whyTheRuleOfThatPassDidNotCatchIt": "OverlayMark.RoomBorder is declared StrokeOnly in InformationalOverlays, and the reason recorded next to it was «the border is a line on the inside edge of the patch and never fills, so nothing standing in the room is hidden by it». Fill was never the point; covering was. A 2.0 reference-pixel stroke drawn across a 22 reference-pixel cell covers a body whether or not it fills.",
+    "whyItCannotSimplyMoveDown": "A wall standing directly south of a room cell is drawn in front of that cell and covers the bottom of it outright. Clearing that would cost a base inset of 10.625 reference px against a MaximumBorderInset of 10.0, so no inset is an answer — see RoomWallClearanceTests.A_wall_in_front_of_a_room_cannot_be_cleared_by_any_inset and docs/engineering/PROTOTYPE_GRAYBOX.md. Moving the whole border below the depth pass therefore trades this defect for Issue #139's and #147's."
+  },
+
+  "measurement": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~RoomBorderDepthTests.The_border_used_to_be_drawn_over_every_body_that_stood_on_it\"",
+    "committedWith": "checkpoint 2 — the test restates the pre-#156 arrangement (PreIssue156Layer: every segment above the depth pass) so this column stays reproducible after the arrangement is gone, the same way RoomWallClearanceTests.PreIssue147Inset does",
+    "method": "For every room PresentationFixtures.Baseline(1) publishes, every segment RoomGeometry.BorderEdges draws, and every cell of the map a body can stand on — plus the midpoint of every orthogonal step between two such cells, because a render centre is interpolated — the border's stroke band (RoomGeometry.StrokeBand: the line widened by BorderStrokeHalfWidth, which is what Main draws) is intersected with the body's drawn rectangle (CameraView.GoblinDrawSize square, which is what Main.DrawGoblin draws the sprite into and is wider than the disc under it). An overlap counts as a crossing unless walls this frame draws in front of that body — rock tiles whose depth anchor is behind the body's — paint over the whole of it together, measured against WallRenderGeometry.DrawnBands.",
+    "crossings": {"tileSize32": 226, "tileSize40": 226, "tileSize48": 226},
+    "roomsAffected": ["farm@1,1", "kitchen@9,6", "larder@13,6", "quarters@19,2"],
+    "namedInTheOwnersFrame": [
+      {"room": "kitchen@9,6", "creature": "11,8"},
+      {"room": "kitchen@9,6", "creature": "9,8"},
+      {"room": "larder@13,6", "creature": "16,8"}
+    ],
+    "afterTheFix": {"tileSize32": 0, "tileSize40": 0, "tileSize48": 0}
+  },
+
+  "before": {
+    "commit": "9b22e71a2921174052f0649ba05f18fdd75bc212",
+    "commitSubject": "Evidence: capture spec for #156 before/after frames (kitchen, larder, quarters)",
+    "sourceDirty": false,
+    "note": "That commit is main at 74af087 plus evidence/156-border-frames.json and nothing else. It stays on branch agent/156-room-border-under-creature, so the capture's recorded source state is a commit that still exists — independent review of Issue #139 found the opposite once.",
+    "spec": "evidence/156-border-frames.json",
+    "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\capture-evidence.ps1 -SpecPath evidence/156-border-frames.json -OutputRoot \"evidence/156-before\" -GodotPath \"<godot console>\"",
+    "captures": [
+      {
+        "name": "156-kitchen-larder-bottom-row",
+        "imagePath": ".artifacts/evidence/156-before/156-kitchen-larder-bottom-row.png",
+        "imageSha256": "b3508af0fb1e93251ece414cb839f0586747baf304e7ef2562128520665c10c4",
+        "canonicalChecksum": "9df8c18004b95aa4a6acd45ec338acc63ffd453e669314183e4959bfc6c3bfc9",
+        "byteForByteRepeat": true,
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '600,384' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/156-before/156-kitchen-larder-bottom-row.png",
+        "reading": "The owner's frame. Three goblins stand on the bottom row: two in KITCHEN and one in LARDER. The orange kitchen outline is drawn straight across the heads of both of its own, and the yellow larder outline across the head of the third. The line is on top of the sprite, not behind it."
+      },
+      {
+        "name": "156-quarters-wall-in-front",
+        "imagePath": ".artifacts/evidence/156-before/156-quarters-wall-in-front.png",
+        "imageSha256": "5fc1e845418602f871427f0706c4201a39f9efcab759211d062f992ae839c6b2",
+        "canonicalChecksum": "9df8c18004b95aa4a6acd45ec338acc63ffd453e669314183e4959bfc6c3bfc9",
+        "byteForByteRepeat": true,
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '1008,264' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/156-before/156-quarters-wall-in-front.png",
+        "reading": "The half that must not be lost, captured before it is touched. QUARTERS' purple south edge runs along the top of the wall standing in front of its bottom row, at cells 19,5 and 20,5 — visible only because it is drawn after the wall. The goblin at 20,5 stands on that row with the purple line under its feet and the wall covering its legs. This is the frame the after column has to still show."
+      }
+    ]
+  }
+}
