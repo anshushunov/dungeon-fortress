@@ -1,0 +1,34 @@
+; Issue #142 scale spike — NOT production.
+;
+; This is a standalone Godot project, separate from src/DungeonFortress.Game,
+; so that resolving Issue #142 (pick a visual body scale for creatures) never
+; touches production code. It has no C# and does not build against
+; DungeonFortress.sln. Its only shared state with the real game is read-only:
+; it loads the existing goblin sprite pack from
+; src/DungeonFortress.Game/assets/generated/goblins by absolute filesystem
+; path (see scale_spike.gd) instead of duplicating those PNGs.
+;
+; See spikes/142-scale-spike/capture-scale-spike.ps1 to capture the three
+; evidence frames non-interactively (it needs -GodotPath in the agent
+; shell — see docs/engineering/ENVIRONMENT_SETUP.md), or run it
+; interactively with Godot 4.7.1 .NET console:
+;   <godot-console> --path spikes/142-scale-spike -- --scale 150
+;
+; Neither mode is --headless: a screenshot capture reads pixels back with
+; get_viewport().get_texture().get_image(), which needs a real render
+; target the way scripts/run-game.ps1's own screenshot mode does.
+
+config_version=5
+
+[application]
+
+config/name="Dungeon Fortress — Issue #142 scale spike (spike, not production)"
+run/main_scene="res://ScaleSpike.tscn"
+config/features=PackedStringArray("4.7")
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"

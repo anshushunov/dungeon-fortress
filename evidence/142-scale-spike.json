@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "issue": 142,
+  "what": "Provenance for the three scale-spike frames (100% / 150% / 200% of CameraView.GoblinDrawSize) captured by spikes/142-scale-spike/capture-scale-spike.ps1. The PNGs themselves are not committed — docs/engineering/EVIDENCE_WORKFLOW.md routes captures to .artifacts/ and AGENTS.md forbids large derived files in Git — so this file is the tracked record of how they were made.",
+  "parentCommit": "bb64cf22daf312b1183d9f1948e041a941f4350a",
+  "parentCommitNote": "Last commit before this file's own round-2 fix commit (findings 1-3 of the independent review: hidden 1.5x magnification, evidence/ committed against the .artifacts boundary, false 'headless' claim). The commit that adds this manifest is the authoritative source tree; re-running the command below against it reproduces byte-identical PNGs, which is how the review verified round 1's captures.",
+  "godotVersion": "4.7.1.stable.mono.official.a13da4feb",
+  "note": "-GodotPath is a machine-local override for finding the executable and is not part of the reproducible command, same convention as capture-evidence.ps1 (see EVIDENCE_WORKFLOW.md, 'Явный -GodotPath используется только для поиска исполняемого файла').",
+  "captures": [
+    {
+      "name": "142-scale-spike-100",
+      "scalePercent": 100,
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File spikes/142-scale-spike/capture-scale-spike.ps1 -Scales 100",
+      "outputPath": ".artifacts/142-scale-spike/142-scale-spike-100.png",
+      "tileSizePx": 40.0,
+      "baseDrawSizePx": 36.36363636363636,
+      "drawSizePx": 36.36363636363636,
+      "creatureCount": 26,
+      "sha256": "f31d83ea9fe753ea67d5777411088f56c38b6f210694fa27c0fba20a20565a92"
+    },
+    {
+      "name": "142-scale-spike-150",
+      "scalePercent": 150,
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File spikes/142-scale-spike/capture-scale-spike.ps1 -Scales 150",
+      "outputPath": ".artifacts/142-scale-spike/142-scale-spike-150.png",
+      "tileSizePx": 40.0,
+      "baseDrawSizePx": 36.36363636363636,
+      "drawSizePx": 54.54545454545454,
+      "creatureCount": 26,
+      "sha256": "62af8edd8aa2dd30b16728775aff77144cbcf3e6abd7a936abe7f0c1b9af4cfd"
+    },
+    {
+      "name": "142-scale-spike-200",
+      "scalePercent": 200,
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File spikes/142-scale-spike/capture-scale-spike.ps1 -Scales 200",
+      "outputPath": ".artifacts/142-scale-spike/142-scale-spike-200.png",
+      "tileSizePx": 40.0,
+      "baseDrawSizePx": 36.36363636363636,
+      "drawSizePx": 72.72727272727273,
+      "creatureCount": 26,
+      "sha256": "2bb688689d408d258e0d457a9abbd5d98e8ee52320f740b363dbe46ffd405643"
+    }
+  ],
+  "allThreeAtOnce": "powershell -NoProfile -ExecutionPolicy Bypass -File spikes/142-scale-spike/capture-scale-spike.ps1",
+  "worldMagnification": 1.0,
+  "worldMagnificationNote": "Round 1 applied a hidden 1.5x scale to the whole world layer: the legend printed the logical numbers (tile 40px, body 36.4/54.5/72.7px at 100/150/200%) but the screen actually showed 1.5x that (tile 60px, body 54.5/81.8/109.1px) — exactly CameraView's 'Detail' zoom level, not the default zoom of 1.0. An owner judging the '100%' frame at face value would have picked a size one CameraView zoom step larger than the default camera renders. Fixed to 1.0: the frame is now WYSIWYG against the legend's own numbers."
+}
