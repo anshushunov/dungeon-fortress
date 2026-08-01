@@ -457,10 +457,9 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// Criterion 1 of Issue #140, as a run rather than as an eye: on the shipped
-    /// <c>baseline</c> party at tick 2400, <b>every</b> creature that refused work
-    /// by memory of a place at any point that party reads that refusal on its own
-    /// panel.
+    /// Criterion 1 of Issue #140, as a run rather than as an eye: <b>every</b>
+    /// creature that refused work by memory of a place at any point of a party
+    /// reads that refusal on its own panel.
     ///
     /// <para>
     /// Before the selection of #140 this failed for every creature it applies to.
@@ -470,50 +469,105 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     /// measured to be unreachable on the panel — 0 of 3 creatures showed it.
     /// The numbers are in <c>evidence/140-before.json</c>.
     /// </para>
+    ///
+    /// <para>
+    /// <b>The criterion is the same; the sample is the matrix now, and that is a
+    /// correction rather than a widening.</b> It used to read one cell — the
+    /// <c>baseline</c> journal on its own seed at tick 2400 — and guard itself
+    /// with "at least three creatures refused by memory here". Counted over the
+    /// six runs of the matrix on <c>main</c>, that number is 3, 2, 2, 0, 4, 2:
+    /// the guard passes on exactly one cell and does so with no slack at all, and
+    /// on a second cell there would have been nothing to check at all. A
+    /// criterion about every creature that refused was being read on whichever
+    /// creatures one seed happened to produce.
+    /// </para>
+    ///
+    /// <para>
+    /// Reading the whole matrix removes the seed from the answer: on <c>main</c>
+    /// it collects 13 creature-parties and on this branch 15, so Issue #129 gives
+    /// the criterion <b>more</b> subjects rather than fewer, and the old form
+    /// reddened only because it was looking at one cell. The sample floor is now
+    /// a rule instead of a figure — as many subjects as a party has creatures,
+    /// counted off the party rather than written down — plus the requirement that
+    /// they come from more than one run, so no single party can carry the
+    /// criterion on its own again.
+    /// </para>
+    ///
+    /// <para>
+    /// Command: <c>dotnet test tests/DungeonFortress.Presentation.Tests -c Release
+    /// --filter "FullyQualifiedName~Every_creature_that_refused_by_memory" --logger
+    /// "console;verbosity=detailed"</c>. The per-cell counts are in
+    /// <c>evidence/129-presentation.json</c>.
+    /// </para>
     /// </summary>
     [Fact]
     public void Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel()
     {
-        var state = PresentationFixtures.RunFixture("baseline", MeasuredTicks);
         var report = new StringBuilder();
         var missing = new List<string>();
         var applies = 0;
-        foreach (var creature in state.Creatures)
+        var runsWithASubject = 0;
+        var creaturesInAParty = 0;
+        foreach (var fixtureName in Fixtures)
         {
-            var mine = state.Events.Where(@event => @event.CreatureId == creature.Id).ToArray();
-            var refusals = mine.Where(IsRefusalByMemory).ToArray();
-            if (refusals.Length == 0)
+            foreach (var seed in MatrixSeeds)
             {
-                continue;
-            }
+                var state = EndOfParty(fixtureName, seed);
+                creaturesInAParty = state.Creatures.Count;
+                var here = 0;
+                foreach (var creature in state.Creatures)
+                {
+                    var mine = state.Events
+                        .Where(@event => @event.CreatureId == creature.Id)
+                        .ToArray();
+                    var refusals = mine.Where(IsRefusalByMemory).ToArray();
+                    if (refusals.Length == 0)
+                    {
+                        continue;
+                    }
 
-            applies++;
-            var panel = HudText.CreatureStory(state, creature.Id);
-            var read = refusals.Any(refusal => panel.Contains(
-                EventNarration.Sentence(
-                    refusal.ReasonCode,
-                    refusal.Details,
-                    refusal.JobKind,
-                    refusal.Target),
-                StringComparison.Ordinal));
-            report.AppendLine(CultureInfo.InvariantCulture,
-                $"{creature.Name}: {refusals.Length} refusals by memory among {mine.Length} " +
-                $"entries — {(read ? "on the panel" : "NOT on the panel")}");
-            report.AppendLine(panel);
-            if (!read)
-            {
-                missing.Add(string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{creature.Name} refused by memory {refusals.Length} time(s) and its panel says none of it"));
+                    applies++;
+                    here++;
+                    var panel = HudText.CreatureStory(state, creature.Id);
+                    var read = refusals.Any(refusal => panel.Contains(
+                        EventNarration.Sentence(
+                            refusal.ReasonCode,
+                            refusal.Details,
+                            refusal.JobKind,
+                            refusal.Target),
+                        StringComparison.Ordinal));
+                    report.AppendLine(CultureInfo.InvariantCulture,
+                        $"{fixtureName}/{seed} {creature.Name}: {refusals.Length} refusals by " +
+                        $"memory among {mine.Length} entries — " +
+                        $"{(read ? "on the panel" : "NOT on the panel")}");
+                    if (!read)
+                    {
+                        report.AppendLine(panel);
+                        missing.Add(string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{fixtureName}/{seed} {creature.Name} refused by memory " +
+                            $"{refusals.Length} time(s) and its panel says none of it"));
+                    }
+                }
+
+                if (here > 0)
+                {
+                    runsWithASubject++;
+                }
             }
         }
 
         output.WriteLine(report.ToString());
         Assert.True(
-            applies >= 3,
-            $"only {applies} creatures of the baseline party at tick {MeasuredTicks} ever refused by " +
-            "memory, so this criterion was checked against almost nothing. Either the memory of place " +
-            "stopped firing or this is no longer the party to measure it on.");
+            applies >= creaturesInAParty,
+            $"only {applies} creature-parties over the whole matrix ever refused by memory, fewer " +
+            $"than the {creaturesInAParty} creatures of a single party, so this criterion was " +
+            "checked against almost nothing. Either the memory of place stopped firing or the " +
+            "matrix stopped reaching a fight.");
+        Assert.True(
+            runsWithASubject >= 2,
+            $"all {applies} subjects came from {runsWithASubject} run(s) of the matrix. A criterion " +
+            "carried by one party is a criterion about that party.");
         Assert.True(
             missing.Count == 0,
             $"{missing.Count} of {applies} creatures hide the one decision that explains their next " +

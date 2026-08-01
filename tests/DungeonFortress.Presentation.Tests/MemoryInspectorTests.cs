@@ -23,23 +23,51 @@ public sealed class MemoryInspectorTests(ITestOutputHelper output)
     /// A creature that remembers places says so on its own panel, newest first,
     /// naming the tile, the tick and which of the two things happened there.
     ///
-    /// The snapshot is a real one taken past the first wave rather than a
-    /// hand-built creature: what is under test is the panel, and the panel is
-    /// only worth testing against state the simulation actually produces.
+    /// The snapshot is a real one rather than a hand-built creature: what is
+    /// under test is the panel, and the panel is only worth testing against state
+    /// the simulation actually produces.
+    ///
+    /// <para>
+    /// <b>Which real one is decided by a rule and not by a tick.</b> This test
+    /// used to run <c>baseline</c> to <c>FirstRaidTick + 500</c> and take
+    /// whoever carried two memories there. That number was fitted to one cell of
+    /// the matrix, and the fit was already broken on <c>main</c> before Issue
+    /// #129 touched anything: at that tick the count of creatures carrying two
+    /// memories is 4, <b>0</b>, 2, <b>0</b>, 1, 2 over the six runs of the matrix
+    /// (baseline and prepared, seeds 20260726–20260728). Two of six cells had no
+    /// subject; the test survived only because it looked at the one cell where
+    /// there were four. After #129 the same cell has none, and the tick was the
+    /// thing that was wrong.
+    /// </para>
+    ///
+    /// <para>
+    /// What replaces it is the question the panel is actually about: <b>the first
+    /// moment in the party at which the panel has anything to show.</b> The
+    /// search starts at <see cref="PrototypeTuning.FirstRaidTick"/> because no
+    /// creature can carry a memory before the first wave has landed, and runs to
+    /// the end of the party, so it cannot be tuned by a tick and cannot pass by
+    /// accident: a party that never produces a subject fails, which is the same
+    /// alarm the old assertion raised. On <c>main</c> it lands on t1664 and on
+    /// this branch on t2011; the test does not care which, and prints it.
+    /// </para>
+    ///
+    /// <para>
+    /// Command: <c>dotnet test tests/DungeonFortress.Presentation.Tests -c Release
+    /// --filter "FullyQualifiedName~MemoryInspectorTests" --logger
+    /// "console;verbosity=detailed"</c>. The six-cell count above is
+    /// <c>evidence/129-presentation.json</c>.
+    /// </para>
     /// </summary>
     [Fact]
     public void The_panel_of_a_creature_that_remembers_places_lists_them_newest_first()
     {
-        var state = PresentationFixtures.RunFixture("baseline", PrototypeTuning.FirstRaidTick + 500);
-        var creature = state.Creatures
-            .Where(item => item.RememberedPlaces.Count >= 2)
-            .OrderBy(item => item.Id)
-            .FirstOrDefault();
+        var (state, creature) = FirstMomentWithASubject("baseline");
         Assert.True(
             creature is not null,
-            "no creature carried two remembered places 500 ticks after the first wave, so the " +
+            "no creature carried two remembered places at any tick of the whole party, so the " +
             "panel under test has no subject. Either memory stopped being written or the " +
             "fixture stopped reaching a fight.");
+        output.WriteLine($"subject found at tick {state.Tick}: {creature!.Name}");
 
         var line = InspectorText.DescribeMemory(creature!);
         var panel = InspectorText.Build(state.Shown(), creature!.Id, null);
@@ -118,5 +146,37 @@ public sealed class MemoryInspectorTests(ITestOutputHelper output)
                 refusing.LastDecision.Target),
             panel,
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The first tick of the party at which some creature carries two remembered
+    /// places, and that creature. Lowest id breaks a tie, so the subject is a
+    /// function of the party and not of the order anything enumerates in.
+    ///
+    /// The walk starts at <see cref="PrototypeTuning.FirstRaidTick"/> — nothing
+    /// can be remembered before the first wave — and stops at the first hit, so
+    /// the common case costs a fraction of a party.
+    /// </summary>
+    private static (PrototypeSnapshot State, PrototypeCreatureSnapshot? Creature)
+        FirstMomentWithASubject(string fixtureName)
+    {
+        var world = new PrototypeWorld(PresentationFixtures.LogOf(fixtureName));
+        world.RunTicks(PrototypeTuning.FirstRaidTick);
+        var state = world.GetSnapshot();
+        while (!world.IsComplete)
+        {
+            world.Step();
+            state = world.GetSnapshot();
+            var subject = state.Creatures
+                .Where(item => item.RememberedPlaces.Count >= 2)
+                .OrderBy(item => item.Id)
+                .FirstOrDefault();
+            if (subject is not null)
+            {
+                return (state, subject);
+            }
+        }
+
+        return (state, null);
     }
 }
