@@ -32,7 +32,17 @@ const REFERENCE_TILE_SIZE := 22.0 # CameraView.ReferenceTileSize
 const REFERENCE_GOBLIN_DRAW_SIZE := 20.0 # CameraView.ReferenceGoblinDrawSize
 const SPRITE_STATES := ["idle", "work", "combat", "downed"]
 
-const WORLD_MAGNIFICATION := 1.5
+# Review round 2, finding #1 (was #2 in the review's numbering): this used
+# to be 1.5, applied silently to the whole WorldLayer. The legend printed
+# "Tile grid: 40 px" / "Body draw size: 36.4 px" while the screen actually
+# showed a 60px tile and a 54.5px body — exactly the pixel size the game
+# draws at CameraView zoom level "Detail" (1.5x), not at its default zoom
+# (1.0). An owner judging the "100%" frame at face value would have picked a
+# size one full zoom step larger than what the default camera actually
+# renders. Fixed at 1.0 so the frame is WYSIWYG against the legend's own
+# numbers — the honest fix the review offered, over disclosing the
+# magnification on-frame instead.
+const WORLD_MAGNIFICATION := 1.0
 const WORLD_OFFSET := Vector2(440, 150)
 const LEGEND_WIDTH := 360.0
 const FRAME_HEIGHT := 900.0

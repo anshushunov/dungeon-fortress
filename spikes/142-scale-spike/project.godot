@@ -8,10 +8,15 @@
 ; src/DungeonFortress.Game/assets/generated/goblins by absolute filesystem
 ; path (see scale_spike.gd) instead of duplicating those PNGs.
 ;
-; See spikes/142-scale-spike/capture-scale-spike.ps1 to run it headlessly and
-; capture the three evidence frames, or run it interactively with Godot
-; 4.7.1 .NET console:
+; See spikes/142-scale-spike/capture-scale-spike.ps1 to capture the three
+; evidence frames non-interactively (it needs -GodotPath in the agent
+; shell — see docs/engineering/ENVIRONMENT_SETUP.md), or run it
+; interactively with Godot 4.7.1 .NET console:
 ;   <godot-console> --path spikes/142-scale-spike -- --scale 150
+;
+; Neither mode is --headless: a screenshot capture reads pixels back with
+; get_viewport().get_texture().get_image(), which needs a real render
+; target the way scripts/run-game.ps1's own screenshot mode does.
 
 config_version=5
 
