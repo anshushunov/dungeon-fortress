@@ -89,11 +89,17 @@ public enum OverlayMark
     BuildSiteProgress,
     StockpileOccupancy,
     BodyState,
-    ZoneLabel,
     CellInteraction,
     BrushPreview,
     SelectionCount,
     RememberedPlace,
+
+    // Issue #52 / ADR 0013. RoomLabel replaces the ZoneLabel that used to live
+    // here: the caption is no longer a word pinned to a hard-coded tile of a hard
+    // coded zone, it is one room saying what it is and how it is doing.
+    RoomBorder,
+    RoomLabel,
+    UnroomedObject,
 }
 
 /// <param name="Mark">The reading this rule governs.</param>
@@ -182,7 +188,10 @@ public static class InformationalOverlays
             1.0,
             1.0,
             "A zone is where creatures work, so a body on the cell is the point. " +
-            "The outline never fills, so nothing is hidden by it."),
+            "The outline never fills, so nothing is hidden by it. Since Issue #52 " +
+            "it is drawn only for a paint accepted on this tick and not applied " +
+            "yet: a settled zone is a room and gets a border round the whole " +
+            "patch instead of a box round each of its cells."),
         new(
             OverlayMark.JobRoute,
             OverlayMarkSubject.Cell,
@@ -231,14 +240,36 @@ public static class InformationalOverlays
             "readout. They are drawn above the depth pass precisely so a raised " +
             "wall top cannot erase them, and they must stay legible."),
         new(
-            OverlayMark.ZoneLabel,
+            OverlayMark.RoomBorder,
             OverlayMarkSubject.Cell,
             CellCanHoldBody: true,
             OverlayMarkPolicy.StrokeOnly,
             1.0,
             1.0,
-            "A zone caption is glyphs on the zone's anchor cell. It never fills " +
-            "the cell, so it reads over a body rather than instead of it."),
+            "A room is where creatures work, so a body inside it is the point. " +
+            "The border is a line on the inside edge of the patch and never " +
+            "fills, so nothing standing in the room is hidden by it."),
+        new(
+            OverlayMark.RoomLabel,
+            OverlayMarkSubject.Cell,
+            CellCanHoldBody: true,
+            OverlayMarkPolicy.StrokeOnly,
+            1.0,
+            1.0,
+            "A room caption is a stroke glyph and a word on the room's anchor " +
+            "cell, and creatures stand on that cell like any other. Neither the " +
+            "icon nor the text fills, so the caption reads over a body rather " +
+            "than instead of it."),
+        new(
+            OverlayMark.UnroomedObject,
+            OverlayMarkSubject.Cell,
+            CellCanHoldBody: true,
+            OverlayMarkPolicy.StrokeOnly,
+            1.0,
+            1.0,
+            "The mark on a post nobody has zoned lands on the very cell a " +
+            "creature would be drilling at if the zone existed, which is the " +
+            "whole point of it. A ring and a bar, no fill."),
         new(
             OverlayMark.CellInteraction,
             OverlayMarkSubject.Cell,

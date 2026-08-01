@@ -310,8 +310,20 @@ public sealed class MapProjection
 
     public bool IsPendingBuildMark(GridPoint tile) => _buildMarks.Contains(tile);
 
-    public bool IsPendingStockpileCell(GridPoint tile) =>
-        Painted(ZoneKind.MaterialStockpile).Contains(tile);
+    public bool IsPendingStockpileCell(GridPoint tile) => IsPendingZonePaint(ZoneKind.MaterialStockpile, tile);
+
+    /// <summary>
+    /// Whether this tile's zone paint is still waiting for its tick.
+    ///
+    /// Since Issue #52 a settled zone is drawn as a room — one border round the
+    /// whole patch — and a room is created by the world, because which patch a
+    /// tile joins and whether the patch is complete are questions connectivity and
+    /// contents answer. A paint the player has just made therefore has no room
+    /// yet, and this is what lets the adapter keep drawing it the way it always
+    /// did until the tick that turns it into one.
+    /// </summary>
+    public bool IsPendingZonePaint(ZoneKind zone, GridPoint tile) =>
+        Painted(zone).Contains(tile);
 
     /// <summary>
     /// Marking, folded the way the world folds it. Marking a tile that already

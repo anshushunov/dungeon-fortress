@@ -1,0 +1,228 @@
+{
+  "schemaVersion": 1,
+  "issue": 52,
+  "what": "Every half of every change of this slice, reverted on its own, against the check that has to notice. The rule the project states is that a check is not done until it reddens for *each* half rather than for the change as a whole.",
+  "howToReproduce": "Apply the literal replacement to the named file, build, run the named filter, then `git checkout --` the file. The runner used here is .artifacts/mutate.ps1 driven by .artifacts/run-mutations-sim.sh and .artifacts/run-mutations-pres.sh; all three are scratch under .artifacts and are not shipped. `result` is the summary line dotnet test printed.",
+  "note": "A removed rung is spelled `&& false` rather than `if (false)`: the repository treats warnings as errors and CS0162 (unreachable code) would fail the build instead of the test.",
+  "mutations": [
+    {
+      "half": "connectivity: neighbours are never joined",
+      "file": "src/DungeonFortress.Simulation/PrototypeRooms.cs",
+      "edit": "if (remaining.Remove(next)) -> if (remaining.Remove(next) && false)",
+      "filter": "PrototypeRoomTests.Touching_tiles_of_one_zone_are_one_room",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "connectivity: every tile of a zone is joined regardless of adjacency",
+      "file": "src/DungeonFortress.Simulation/PrototypeRooms.cs",
+      "edit": "foreach (var next in PrototypeMap.Neighbors(current)) -> foreach (var next in remaining.ToArray())",
+      "filter": "PrototypeRoomTests.Two_separated_patches_of_one_zone_are_two_rooms",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "complete: the required feature is never looked for",
+      "file": "src/DungeonFortress.Simulation/PrototypeRooms.cs",
+      "edit": "contents.Any(item => item.Kind == feature) -> true",
+      "filter": "PrototypeRoomTests.A_gym_with_no_post_in_it_is_incomplete_and_says_so",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "complete: a purpose with no required feature is never complete",
+      "file": "src/DungeonFortress.Simulation/PrototypeRooms.cs",
+      "edit": "required is not { } feature || -> required is { } feature &&",
+      "filter": "PrototypeRoomTests.The_forbidden_paint_is_a_room_that_is_working",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "status: the forbidden rung reads All as Any",
+      "file": "src/DungeonFortress.Simulation/PrototypeRooms.cs",
+      "edit": "patch.All(forbidden.Contains) -> patch.Any(forbidden.Contains)",
+      "filter": "PrototypeRoomTests.A_partly_forbidden_room_still_works",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "status: the forbidden rung is removed",
+      "file": "src/DungeonFortress.Simulation/PrototypeRooms.cs",
+      "edit": "if (purpose != ZoneKind.Forbidden && patch.All(forbidden.Contains)) -> ... && false)",
+      "filter": "PrototypeRoomTests.A_room_covered_entirely_by_forbidden_reads_as_forbidden",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "status: the Forbidden purpose loses its exemption from its own rung",
+      "file": "src/DungeonFortress.Simulation/PrototypeRooms.cs",
+      "edit": "purpose != ZoneKind.Forbidden && patch.All -> patch.All",
+      "filter": "PrototypeRoomTests.The_forbidden_paint_is_a_room_that_is_working",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "status: the missing-feature rung is removed",
+      "file": "src/DungeonFortress.Simulation/PrototypeRooms.cs",
+      "edit": "if (!complete) -> if (!complete && false)",
+      "filter": "PrototypeRoomTests.A_gym_with_no_post_in_it_is_incomplete_and_says_so",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "status: the ladder order, seen from the test that pins it",
+      "file": "src/DungeonFortress.Simulation/PrototypeRooms.cs",
+      "edit": "if (!complete) -> if (!complete && false)",
+      "filter": "PrototypeRoomTests.A_missing_object_outranks_a_switched_off_priority",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "status: the blocked-priority rung is removed",
+      "file": "src/DungeonFortress.Simulation/PrototypeRooms.cs",
+      "edit": "if (EnabledWork(purpose) is { } work && priorities[work] == 0) -> ... && false)",
+      "filter": "PrototypeRoomTests.A_finished_room_whose_work_is_switched_off_says_that_instead",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "contents: plain floor counts as an object",
+      "file": "src/DungeonFortress.Simulation/PrototypeRooms.cs",
+      "edit": "Where(tile => Furniture.Contains(map[tile])) -> Where(tile => true)",
+      "filter": "PrototypeRoomTests.The_floor_of_a_room_is_not_its_contents",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "id: the anchor is dropped",
+      "file": "src/DungeonFortress.Simulation/PrototypeRooms.cs",
+      "edit": "@{anchor.X},{anchor.Y} -> @",
+      "filter": "PrototypeRoomTests.Two_separated_patches_of_one_zone_are_two_rooms",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "canonical: the section is not written under its name",
+      "file": "src/DungeonFortress.Simulation/PrototypeCanonical.cs",
+      "edit": "writer.WriteStartArray(\"rooms\") -> writer.WriteStartArray(\"roomsUnwritten\")",
+      "filter": "PrototypeRoomTests.The_room_reaches_the_canonical_json",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "canonical: rooms are not ordered by purpose",
+      "file": "src/DungeonFortress.Simulation/PrototypeCanonical.cs",
+      "edit": ".OrderBy(room => room.Purpose) -> .OrderBy(room => 0)",
+      "filter": "PrototypeRoomTests.The_canonical_document_is_the_same_whatever_order_the_rooms_arrive_in",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "canonical: rooms are not ordered by anchor",
+      "file": "src/DungeonFortress.Simulation/PrototypeCanonical.cs",
+      "edit": ".ThenBy(room => room.Perimeter[0]) -> .ThenBy(room => 0)",
+      "filter": "PrototypeRoomTests.The_canonical_document_is_the_same_whatever_order_the_rooms_arrive_in",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "canonical: the perimeter is written in arrival order",
+      "file": "src/DungeonFortress.Simulation/PrototypeCanonical.cs",
+      "edit": "foreach (var tile in room.Perimeter.Order()) -> foreach (var tile in room.Perimeter)",
+      "filter": "PrototypeRoomTests.The_canonical_document_is_the_same_whatever_order_the_rooms_arrive_in",
+      "result": "red: 1 of 1 failed",
+      "finding": "The producer already hands the rooms over sorted, so all four canonical-order halves would have been unreachable by any test that ran the world. The test serialises one state twice with the lists turned inside out, which is what turns the sort from a line nobody can redden into a rule."
+    },
+    {
+      "half": "canonical: the contents are written in arrival order",
+      "file": "src/DungeonFortress.Simulation/PrototypeCanonical.cs",
+      "edit": "room.Contents.OrderBy(item => item.Position) -> room.Contents",
+      "filter": "PrototypeRoomTests.The_canonical_document_is_the_same_whatever_order_the_rooms_arrive_in",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "border: the wall two cells share is drawn after all",
+      "file": "src/DungeonFortress.Presentation/RoomGeometry.cs",
+      "edit": "if (room.Contains(Step(cell, side.Normal))) -> ... && false)",
+      "filter": "RoomGeometryTests.A_room_is_one_outline_and_not_a_box_per_cell",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "border: an outer corner is not pulled back",
+      "file": "src/DungeonFortress.Presentation/RoomGeometry.cs",
+      "edit": "return -inset; -> return 0;",
+      "filter": "RoomGeometryTests.A_single_cell_is_a_closed_inset_square",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "border: an inner corner is not pushed out",
+      "file": "src/DungeonFortress.Presentation/RoomGeometry.cs",
+      "edit": "return room.Contains(Step(along, side.Normal)) ? inset : 0; -> return 0;",
+      "filter": "RoomGeometryTests.An_inner_corner_closes_instead_of_leaving_a_gap",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "border: every purpose is drawn at the same depth",
+      "file": "src/DungeonFortress.Presentation/RoomGeometry.cs",
+      "edit": "2.0 + ((int)purpose % 3) * 1.5 -> 2.0",
+      "filter": "RoomGeometryTests.Two_purposes_next_to_each_other_do_not_share_a_border_line",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "caption: anchored on the first cell given rather than the first in reading order",
+      "file": "src/DungeonFortress.Presentation/RoomGeometry.cs",
+      "edit": "CameraView.CellTopLeft(perimeter.Min(), tileSize) -> CameraView.CellTopLeft(perimeter[0], tileSize)",
+      "filter": "RoomGeometryTests.The_caption_is_anchored_on_the_tile_the_room_is_named_after",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "bounds: the far edge of the last cell is dropped",
+      "file": "src/DungeonFortress.Presentation/RoomGeometry.cs",
+      "edit": "(tiles.Max(cell => cell.X) + 1) -> (tiles.Max(cell => cell.X))",
+      "filter": "RoomGeometryTests.The_bounds_cover_every_cell_of_the_room",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "reading: the forbidden rung is removed",
+      "file": "src/DungeonFortress.Presentation/MapAccents.cs",
+      "edit": "if (room.Purpose != ZoneKind.Forbidden && -> if (false && room.Purpose != ZoneKind.Forbidden &&",
+      "filter": "RoomAccentTests",
+      "result": "red: 3 of 5 failed (before the partial-forbid case was added)"
+    },
+    {
+      "half": "reading: the forbidden rung reads All as Any",
+      "file": "src/DungeonFortress.Presentation/MapAccents.cs",
+      "edit": "room.Perimeter.All(tile => view.IsInZone(ZoneKind.Forbidden, tile)) -> ...Any(...)",
+      "filter": "RoomAccentTests.The_predicted_room_readings_match_the_world_at_every_tick_of_a_session",
+      "result": "red: 1 of 1 failed",
+      "finding": "Green on the first attempt. The swept session only ever painted Forbidden over a whole room, where All and Any agree, so the mutation was invisible. RoomAccentTests.A_partly_forbidden_room_still_reads_as_working was added and the sweep now forbids one cell before both; the mutation then went red. This is the class of hole the rule exists to find, and it is the second time in this repository that the forbidden rung is where it hid — PrototypeRoomTests.A_partly_forbidden_room_still_works had to exist for the same reason on the simulation side."
+    },
+    {
+      "half": "reading: the Forbidden purpose loses its exemption",
+      "file": "src/DungeonFortress.Presentation/MapAccents.cs",
+      "edit": "room.Purpose != ZoneKind.Forbidden && -> true &&",
+      "filter": "RoomAccentTests.The_predicted_room_readings_match_the_world_at_every_tick_of_a_session",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "reading: the unfinished rung is removed",
+      "file": "src/DungeonFortress.Presentation/MapAccents.cs",
+      "edit": "if (!room.Complete) -> if (!room.Complete && false)",
+      "filter": "RoomAccentTests",
+      "result": "red: 2 of 5 failed (before the partial-forbid case was added)"
+    },
+    {
+      "half": "reading: the priority rung is removed",
+      "file": "src/DungeonFortress.Presentation/MapAccents.cs",
+      "edit": "if (PrototypeRooms.EnabledWork(room.Purpose) is { } work && view.Priority(work) == 0) -> ... && false)",
+      "filter": "RoomAccentTests.A_room_reads_a_priority_the_same_moment_it_is_accepted",
+      "result": "red: 1 of 2 failed"
+    },
+    {
+      "half": "reading: the canonical priority is read instead of the folded one",
+      "file": "src/DungeonFortress.Presentation/MapAccents.cs",
+      "edit": "view.Priority(work) == 0 -> view.State.Priorities[work] == 0",
+      "filter": "RoomAccentTests.A_room_reads_a_priority_the_same_moment_it_is_accepted",
+      "result": "red: 2 of 2 failed"
+    },
+    {
+      "half": "reading: the canonical zone is read instead of the folded one",
+      "file": "src/DungeonFortress.Presentation/MapAccents.cs",
+      "edit": "view.IsInZone(ZoneKind.Forbidden, tile) -> view.State.Zones[ZoneKind.Forbidden].Contains(tile)",
+      "filter": "RoomAccentTests.A_room_reads_a_forbidden_paint_the_same_moment_it_is_accepted",
+      "result": "red: 1 of 1 failed"
+    },
+    {
+      "half": "reading: the world's own word maps the missing feature to the wrong answer",
+      "file": "src/DungeonFortress.Presentation/MapAccents.cs",
+      "edit": "\"room_missing_feature\" => RoomAccent.Unfinished, -> \"room_missing_feature\" => RoomAccent.Ready,",
+      "filter": "RoomAccentTests.The_predicted_room_readings_match_the_world_at_every_tick_of_a_session",
+      "result": "red: 1 of 1 failed"
+    }
+  ]
+}

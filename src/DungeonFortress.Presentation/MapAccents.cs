@@ -24,6 +24,26 @@ public enum BlueprintAccent
     Unreachable,
 }
 
+/// <summary>
+/// How a room reads on the map: the four states of
+/// <see href="../../docs/decisions/0013-what-is-a-room.md">ADR 0013</see>, in the
+/// same shape as the three ladders above it.
+/// </summary>
+public enum RoomAccent
+{
+    /// <summary>It has what it needs and its work is switched on.</summary>
+    Ready,
+
+    /// <summary>The zone is painted and the object it needs is not inside it.</summary>
+    Unfinished,
+
+    /// <summary>Complete, and the priority of the work it enables is 0.</summary>
+    BlockedByPriority,
+
+    /// <summary>Every one of its tiles is Forbidden, so nobody may set foot in it.</summary>
+    Unreachable,
+}
+
 /// <summary>How a material stockpile cell reads on the map.</summary>
 public enum StockpileCellAccent
 {
@@ -414,6 +434,67 @@ public static class MapAccents
             incomingReserved: 0,
             capacity: PrototypeTuning.StockpileCellCapacity);
     }
+
+    /// <summary>
+    /// How a room the world already holds reads.
+    ///
+    /// Like <see cref="Blueprint"/> it always walks the ladder rather than taking
+    /// the world's <c>statusCode</c>, and for the same reason: both facts the
+    /// world's first two rungs ask about are folded by the projection, so a
+    /// <c>Forbidden</c> paint or a priority accepted in this same paused moment
+    /// decides the reading. Deciding *when* to correct was itself a source of
+    /// defects on Issue #58; walking the ladder unconditionally cannot fall out of
+    /// step, and <c>MapAccentTests</c> sweeps a whole session comparing it against
+    /// the world's own word.
+    ///
+    /// The two rungs it cannot walk are the two it does not need to: whether the
+    /// room exists at all and whether it is complete. Both need connectivity and
+    /// contents to be recomputed, which is the simulation's rule and not a fold of
+    /// published facts — so <see cref="PrototypeRoomSnapshot.Complete"/> is read
+    /// from the room, and a zone painted in a paused moment has no room yet. That
+    /// is why the adapter still draws a per-cell outline for a pending paint: the
+    /// immediate feedback Issue #58 asked for is kept, and the room appears when
+    /// the tick that creates it runs.
+    /// </summary>
+    public static RoomAccent Room(MapProjection view, PrototypeRoomSnapshot room)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        ArgumentNullException.ThrowIfNull(room);
+
+        // Not the world's `room_forbidden`: that was computed under the zones the
+        // world holds, and a Forbidden paint or erase accepted in this same paused
+        // moment has not reached them yet.
+        if (room.Purpose != ZoneKind.Forbidden &&
+            room.Perimeter.All(tile => view.IsInZone(ZoneKind.Forbidden, tile)))
+        {
+            return RoomAccent.Unreachable;
+        }
+
+        if (!room.Complete)
+        {
+            return RoomAccent.Unfinished;
+        }
+
+        if (PrototypeRooms.EnabledWork(room.Purpose) is { } work && view.Priority(work) == 0)
+        {
+            return RoomAccent.BlockedByPriority;
+        }
+
+        return RoomAccent.Ready;
+    }
+
+    /// <summary>
+    /// The world's own word about a room, as an accent. Nothing draws with it: it
+    /// exists so that <c>MapAccentTests</c> can hold <see cref="Room"/> against the
+    /// simulation, in the same way as <see cref="BlueprintReadingOfStatus"/>.
+    /// </summary>
+    public static RoomAccent RoomReadingOfStatus(string statusCode) => statusCode switch
+    {
+        "room_forbidden" => RoomAccent.Unreachable,
+        "room_missing_feature" => RoomAccent.Unfinished,
+        "room_blocked_priority" => RoomAccent.BlockedByPriority,
+        _ => RoomAccent.Ready,
+    };
 
     /// <summary>
     /// Stone a construction site could still be given: loose piles and stockpiled

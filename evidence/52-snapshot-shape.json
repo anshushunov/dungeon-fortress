@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "issue": 52,
+  "what": "Whether the room entity of ADR 0013 is an additive or a breaking change to the canonical snapshot, decided by the rule in docs/engineering/PROTOTYPE_HEADLESS.md, section «Что аддитивно, а что ломающе», and not by preference. Every number below is the output of the command next to it.",
+  "decision": {
+    "kind": "additive",
+    "schemaVersionBefore": 3,
+    "schemaVersionAfter": 3,
+    "why": "One new top-level section, `rooms`, plus the composition of its elements. No existing field was renamed, removed, retyped, or kept its name while answering a different question, and no array's sort rule moved. The rule says an additive change keeps the version, and the four earlier commits that each added a whole top-level section (`map`, `digDesignations`, `materialStockpile`, `buildSites`) kept it too.",
+    "whyNotRaised": "Raising it would move the checksum of every frame ever recorded while telling a consumer 'read this differently' — and there is nothing to read differently. The section explains itself; nothing before it changed meaning."
+  },
+  "shapeCheck": {
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Debug --filter \"FullyQualifiedName~PrototypeSnapshotShapeTests.The_canonical_snapshot_carries_exactly_the_recorded_composition\"",
+    "recordedFor": "tests/DungeonFortress.Simulation.Tests/PrototypeSnapshotShapeTests.cs",
+    "linesRemoved": [],
+    "linesAdded": [
+      "$.rooms[] -> complete, contents, id, perimeter, purpose, statusCode",
+      "$.rooms[].contents[] -> kind, position"
+    ],
+    "lineChanged": {
+      "path": "$",
+      "change": "`rooms` inserted between `raiders` and `rules`; nothing else on the line moved"
+    },
+    "conditionalPresence": "unchanged: `$.sessionResult.score` is still the only field of the snapshot whose presence is conditional (ADR 0016). No room field comes and goes — an unfinished room carries `complete: false`, not an absent field."
+  },
+  "sixPropertiesOfAdr0013": {
+    "идентификатор": "id",
+    "назначение": "purpose",
+    "периметр": "perimeter",
+    "состав объектов": "contents",
+    "состояние": "statusCode",
+    "признак завершённости": "complete"
+  },
+  "observed": {
+    "command": "dotnet run --project tests/DungeonFortress.Scenarios -c Debug -- --prototype --commands scenarios/prototype1/baseline.commands.v2.json --ticks 190 --snapshot .artifacts/52-baseline-t190.json && jq -c '.rooms[] | {id, purpose, statusCode, complete, tiles: (.perimeter|length), objects: (.contents|length)}' .artifacts/52-baseline-t190.json",
+    "fixture": "baseline",
+    "tick": 190,
+    "rooms": [
+      {"id": "farm@1,1", "purpose": "farm", "statusCode": "room_ready", "complete": true, "tiles": 42, "objects": 8},
+      {"id": "kitchen@9,6", "purpose": "kitchen", "statusCode": "room_ready", "complete": true, "tiles": 12, "objects": 2},
+      {"id": "larder@13,6", "purpose": "larder", "statusCode": "room_ready", "complete": true, "tiles": 12, "objects": 2},
+      {"id": "quarters@19,2", "purpose": "quarters", "statusCode": "room_ready", "complete": true, "tiles": 20, "objects": 4}
+    ],
+    "finding": "The shipped baseline has no TrainingGround zone, so the four authored training posts at (10,2), (11,2), (10,3) and (11,3) belong to no room at all. That is the second half of the complaint ADR 0013 names — an object with no zone — present in the default fixture rather than only reachable by a mistake the player has to make first."
+  },
+  "checksumMoved": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update-golden-ui.ps1 -GodotPath <local Godot 4.7.1 .NET console>",
+    "why": "The four default zones make four rooms from tick 0, so the section is present in every frame and every checksum moves. That is the ordinary price of an always-present additive field — it is not an argument for raising the version, because raising it would move exactly the same frames and say nothing extra.",
+    "frames": [
+      {"file": "tests/golden/ui/stone-t190-loose-no-stockpile.json", "before": "ee6db5a6", "after": "7e9fffa7"},
+      {"file": "tests/golden/ui/stone-t336-in-transit.json", "before": "d3bb8a3a", "after": "4864e76a"},
+      {"file": "tests/golden/ui/stone-t950-stockpile-full.json", "before": "b423fe6d", "after": "aa16b043"}
+    ],
+    "note": "The prefixes above are the eight characters the HUD summary prints. At the commit that added the section the whole diff of the three files was those three strings and nothing else — `git diff --stat tests/golden/ui` said 3 files, 3 insertions, 3 deletions. The frames moved a second time later in the same branch, for a reason that is not the snapshot: the inspector's `zones` line became a `room` line, which is text and does not touch the canonical document. The checksums above are still the ones the frames carry; `verification_result.viewInvariantChecksum` is 7e9fffa7... for the same reason."
+  }
+}

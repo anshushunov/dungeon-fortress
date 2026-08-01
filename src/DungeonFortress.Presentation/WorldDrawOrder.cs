@@ -83,6 +83,13 @@ public static class WorldDrawOrder
         // Pass 1 — below depth.
         new("DrawMapBackground", WorldDrawPass.BelowDepth, null),
         new("DrawFloorTiles", WorldDrawPass.BelowDepth, null),
+        // A room's floor is floor and not a mark: it is material laid under the
+        // depth pass, so a body walks over it and no "must not hide a body" rule
+        // has to reach it. That is the Dungeon Keeper answer ADR 0013 takes —
+        // «читаемость решена не контуром, а полом» — and it is why the covering
+        // replaced the translucent film rather than joining it.
+        new("DrawRoomFloors", WorldDrawPass.BelowDepth, null),
+        new("DrawRoomFloor", WorldDrawPass.BelowDepth, null),
         new("DrawBeds", WorldDrawPass.BelowDepth, null),
         new("DrawLooseItems", WorldDrawPass.BelowDepth, null),
         new("DrawBuildSites", WorldDrawPass.BelowDepth, null),
@@ -99,6 +106,8 @@ public static class WorldDrawOrder
         new("DrawGoblin", WorldDrawPass.Depth, null),
 
         // Pass 3 — informational marks.
+        new("DrawRoomBorders", WorldDrawPass.Informational, OverlayMark.RoomBorder),
+        new("DrawRoomBorder", WorldDrawPass.Informational, OverlayMark.RoomBorder),
         new("DrawZoneOutlines", WorldDrawPass.Informational, OverlayMark.ZoneOutline),
         new("DrawJobRoutes", WorldDrawPass.Informational, OverlayMark.JobRoute),
         new("DrawDigDesignations", WorldDrawPass.Informational, OverlayMark.DigDesignation),
@@ -118,8 +127,13 @@ public static class WorldDrawOrder
         new("DrawRaiderInformation", WorldDrawPass.Informational, OverlayMark.BodyState),
         new("DrawDownedMark", WorldDrawPass.Informational, OverlayMark.BodyState),
         new("DrawHpBar", WorldDrawPass.Informational, OverlayMark.BodyState),
-        new("DrawZoneLabels", WorldDrawPass.Informational, OverlayMark.ZoneLabel),
-        new("DrawZoneLabel", WorldDrawPass.Informational, OverlayMark.ZoneLabel),
+        new("DrawRoomLabels", WorldDrawPass.Informational, OverlayMark.RoomLabel),
+        new("DrawRoomLabel", WorldDrawPass.Informational, OverlayMark.RoomLabel),
+        new("DrawRoomIcon", WorldDrawPass.Informational, OverlayMark.RoomLabel),
+        new(
+            "DrawUnroomedObjects",
+            WorldDrawPass.Informational,
+            OverlayMark.UnroomedObject),
         new(
             "DrawRememberedPlaces",
             WorldDrawPass.Informational,
@@ -145,18 +159,21 @@ public static class WorldDrawOrder
     [
         "DrawMapBackground",
         "DrawFloorTiles",
+        "DrawRoomFloors",
         "DrawBuildSites",
         "DrawStockpileCells",
         "DrawBeds",
         "DrawLooseItems",
         "DrawElevatedWorld",
+        "DrawRoomBorders",
         "DrawZoneOutlines",
         "DrawJobRoutes",
         "DrawDigDesignations",
         "DrawBuildSiteInformationOverlays",
         "DrawStockpileInformationOverlays",
         "DrawBodyInformationOverlays",
-        "DrawZoneLabels",
+        "DrawRoomLabels",
+        "DrawUnroomedObjects",
         "DrawRememberedPlaces",
         "DrawCellInteractionOverlays",
         "DrawBrushPreview",

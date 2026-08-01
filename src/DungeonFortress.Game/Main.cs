@@ -2044,7 +2044,13 @@ public partial class Main : Node2D
                  {
                      ("LEGEND", 9, "#cbd5e1"),
                      ("teal crew / red-ring goblin / bar = HP / white X = downed", 8, "#cbd5e1"),
-                     ("purple QUARTERS: rest at fatigue 50+", 8, "#c4b5fd"),
+                     // Issue #52. It replaces the quarters' rest rule rather than
+                     // joining it: the panel column is under the same overflow
+                     // guard as everything else, and the rest rule now sits on the
+                     // room line of the inspector, where clicking the quarters
+                     // puts it. What could not move anywhere is the amber ring —
+                     // it is the one mark on the map with no words next to it.
+                     ("room = own floor + outline + caption; amber ring = object with no room", 8, "#fcd34d"),
                      ("light warm block = diggable rock / dark = map edge", 8, "#d6d3d1"),
                      ("amber X = dig mark / yellow bar = dig progress", 8, "#fcd34d"),
                      ("red X = unreachable / pale tile = new floor / gray dot = loose stone", 8, "#fca5a5"),
@@ -2943,13 +2949,20 @@ public partial class Main : Node2D
         var diggableTiles = _state.Map.DiggableTiles.ToHashSet();
         DrawMapBackground();
         DrawFloorTiles(rockTiles);
+        // A room's floor is laid straight over the plain floor and under
+        // everything else on the ground: the Dungeon Keeper answer of ADR 0013,
+        // where a purpose has its own covering instead of a film over a shared
+        // one. Sites, cells, beds and piles are drawn on top of it, because they
+        // are things standing on the floor rather than the floor.
+        DrawRoomFloors();
         DrawBuildSites();
         DrawStockpileCells();
         DrawBeds();
         DrawLooseItems();
         DrawElevatedWorld(rockTiles, diggableTiles);
         // Flat informational marks are projected above elevated geometry. A wall
-        // must not erase one side of a zone or the destination of an active job.
+        // must not erase one side of a room or the destination of an active job.
+        DrawRoomBorders();
         DrawZoneOutlines();
         DrawJobRoutes();
         // A dig mark is a player-intent overlay on the wall, not wall material.
@@ -2958,7 +2971,8 @@ public partial class Main : Node2D
         DrawBuildSiteInformationOverlays();
         DrawStockpileInformationOverlays();
         DrawBodyInformationOverlays();
-        DrawZoneLabels();
+        DrawRoomLabels();
+        DrawUnroomedObjects();
         DrawRememberedPlaces(rockTiles);
         DrawCellInteractionOverlays(rockTiles);
         DrawBrushPreview(rockTiles);
@@ -3058,20 +3072,90 @@ public partial class Main : Node2D
         }
     }
 
+    /// <summary>
+    /// The floor of every room, by purpose. This is the half of Issue #52 that
+    /// ADR 0013 says carries most of the complaint: «читаемость в Dungeon Keeper
+    /// решена не контуром, а полом. У каждой комнаты собственное покрытие, а не
+    /// полупрозрачная плёнка поверх общего пола.»
+    ///
+    /// It is drawn below the depth pass, so it is floor rather than an
+    /// informational mark, and the "a mark must not hide a body" rule does not
+    /// have to reach it: whoever is standing on the tile is drawn afterwards.
+    /// </summary>
+    private void DrawRoomFloors()
+    {
+        foreach (var room in _state!.Rooms)
+        {
+            var accent = RoomColor(MapAccents.Room(_projection!, room), room.Purpose);
+            foreach (var cell in room.Perimeter)
+            {
+                DrawRoomFloor(cell, accent);
+            }
+        }
+    }
+
+    /// <summary>
+    /// One tile of a room's covering: the purpose colour mixed into the dark floor
+    /// rather than laid over it, so a room reads as a different floor and not as a
+    /// stain on the same one.
+    /// </summary>
+    private void DrawRoomFloor(GridPoint cell, Color accent)
+    {
+        var rect = new Rect2(CellTopLeft(cell), new Vector2(_tileSize - 1, _tileSize - 1));
+        DrawRect(rect, FloorTileColor(cell).Lerp(accent, 0.30f));
+    }
+
+    /// <summary>
+    /// The border of every room: one line around the whole patch, not a box round
+    /// each of its cells. ADR 0013 makes this mandatory — a room whose boundary is
+    /// never shown is the Dwarf Fortress failure the variant was chosen against.
+    /// </summary>
+    private void DrawRoomBorders()
+    {
+        foreach (var room in _state!.Rooms)
+        {
+            DrawRoomBorder(room);
+        }
+    }
+
+    private void DrawRoomBorder(PrototypeRoomSnapshot room)
+    {
+        var accent = RoomColor(MapAccents.Room(_projection!, room), room.Purpose);
+        var inset = ScaleWorld((float)RoomGeometry.BorderInset(room.Purpose));
+        foreach (var segment in RoomGeometry.Border(room.Perimeter, _tileSize, inset))
+        {
+            DrawLine(
+                new Vector2((float)segment.From.X, (float)segment.From.Y),
+                new Vector2((float)segment.To.X, (float)segment.To.Y),
+                accent,
+                ScaleWorld(2.0f));
+        }
+    }
+
+    /// <summary>
+    /// A paint accepted on this tick and not applied yet.
+    ///
+    /// The room it is about to join does not exist yet — which patch it lands in
+    /// and whether it completes a room are questions that need the tick to run
+    /// (see <c>MapAccents.Room</c>) — so the per-cell outline that used to draw
+    /// every zone stays here for exactly the case Issue #58 opened: the player
+    /// marks while paused and the map has to answer immediately.
+    /// </summary>
     private void DrawZoneOutlines()
     {
-        for (var y = 0; y < PrototypeTuning.MapHeight; y++)
+        foreach (var zone in Enum.GetValues<ZoneKind>())
         {
-            for (var x = 0; x < PrototypeTuning.MapWidth; x++)
+            foreach (var cell in _projection!.Zone(zone))
             {
-                var cell = new GridPoint(x, y);
+                if (!_projection.IsPendingZonePaint(zone, cell))
+                {
+                    continue;
+                }
+
                 var rect = new Rect2(
                     CellTopLeft(cell),
                     new Vector2(_tileSize - 1, _tileSize - 1));
-                foreach (var zone in _projection!.ZonesAt(cell))
-                {
-                    DrawRect(rect.Grow(-3), ZoneColor(zone), false, 1.5f);
-                }
+                DrawRect(rect.Grow(-3), ZoneColor(zone), false, 1.5f);
             }
         }
     }
@@ -5005,6 +5089,26 @@ public partial class Main : Node2D
         return new Color("#243244");
     }
 
+    /// <summary>
+    /// The palette of a room, and nothing else. Which reading a room has is
+    /// decided in <c>DungeonFortress.Presentation.MapAccents</c>, where a unit test
+    /// can compare it against the world's own status code; this file is not built
+    /// by the "Pure .NET" CI job, so a decision made here is a decision nothing
+    /// checks.
+    ///
+    /// A working room wears its purpose colour, so the floor covering says what
+    /// the room is for. The three ways of not working are deliberately *not*
+    /// purpose colours: "this one is not doing anything" has to read the same
+    /// wherever it happens, or the player learns eight of them instead of one.
+    /// </summary>
+    private static Color RoomColor(RoomAccent accent, ZoneKind purpose) => accent switch
+    {
+        RoomAccent.Unfinished => new Color("#fbbf24"),
+        RoomAccent.BlockedByPriority => new Color("#94a3b8"),
+        RoomAccent.Unreachable => new Color("#f87171"),
+        _ => ZoneColor(purpose),
+    };
+
     private static Color ZoneColor(ZoneKind zone) => zone switch
     {
         ZoneKind.Farm => new Color("#84cc16"),
@@ -5120,33 +5224,88 @@ public partial class Main : Node2D
             color);
     }
 
-    private void DrawZoneLabels()
+    /// <summary>
+    /// Every room says what it is for and how it is doing, on the tile it is named
+    /// after.
+    ///
+    /// This replaces five hard-coded captions pinned to five hard-coded tiles of
+    /// the four default zones plus the gym. That list could not describe a second
+    /// farm, said nothing about a room that was not working, and vanished entirely
+    /// if the player erased the one tile it was nailed to.
+    /// </summary>
+    private void DrawRoomLabels()
     {
-        DrawZoneLabel(ZoneKind.Farm, new GridPoint(1, 1), "FARM");
-        DrawZoneLabel(ZoneKind.Kitchen, new GridPoint(9, 6), "KITCHEN");
-        DrawZoneLabel(ZoneKind.Larder, new GridPoint(13, 6), "LARDER");
-        DrawZoneLabel(ZoneKind.Quarters, new GridPoint(19, 2), "QUARTERS");
-        if (_projection!.Zone(ZoneKind.TrainingGround).Count > 0)
+        foreach (var room in _state!.Rooms)
         {
-            DrawZoneLabel(ZoneKind.TrainingGround, new GridPoint(7, 11), "TRAIN");
+            DrawRoomLabel(room);
         }
     }
 
-    private void DrawZoneLabel(ZoneKind zone, GridPoint anchor, string text)
+    private void DrawRoomLabel(PrototypeRoomSnapshot room)
     {
-        if (!_projection!.IsInZone(zone, anchor))
-        {
-            return;
-        }
+        var accent = RoomColor(MapAccents.Room(_projection!, room), room.Purpose);
+        var anchor = RoomGeometry.LabelAnchor(room.Perimeter, _tileSize);
+        var origin = new Vector2((float)anchor.X, (float)anchor.Y);
+        var icon = ScaleWorld(8);
 
+        DrawRoomIcon(room.Purpose, origin + ScaleWorld(2, 2), icon, accent);
         DrawString(
             ThemeDB.FallbackFont,
-            CellTopLeft(anchor) + ScaleWorld(2, 10),
-            text,
+            origin + new Vector2(ScaleWorld(3) + icon, ScaleWorld(10)),
+            RoomLabels.Caption(room),
             HorizontalAlignment.Left,
             -1,
             Math.Max(1, (int)Math.Round(ScaleWorld(7))),
-            ZoneColor(zone));
+            accent);
+    }
+
+    /// <summary>
+    /// The purpose glyph, scaled out of the unit-square strokes declared in
+    /// <c>DungeonFortress.Presentation.RoomIcons</c>. The shape is decided there
+    /// because this file is not built by the "Pure .NET" CI job; here it is
+    /// multiplied and translated and nothing else.
+    /// </summary>
+    private void DrawRoomIcon(ZoneKind purpose, Vector2 origin, float size, Color accent)
+    {
+        foreach (var stroke in RoomIcons.Of(purpose))
+        {
+            for (var index = 1; index < stroke.Count; index++)
+            {
+                DrawLine(
+                    origin + new Vector2((float)stroke[index - 1].X, (float)stroke[index - 1].Y) * size,
+                    origin + new Vector2((float)stroke[index].X, (float)stroke[index].Y) * size,
+                    accent,
+                    ScaleWorld(1.4f));
+            }
+        }
+    }
+
+    /// <summary>
+    /// An object standing outside every room that could use it — the other half of
+    /// the silence ADR 0013 names, and the one the shipped fixture starts in: four
+    /// training posts in the north store and no gym painted over them.
+    ///
+    /// A ring and a bar, no fill: the mark lands on the very cell a creature would
+    /// be working on if the zone existed.
+    /// </summary>
+    private void DrawUnroomedObjects()
+    {
+        foreach (var orphan in RoomObjects.Unroomed(_projection!))
+        {
+            var center = CellCenter(orphan.Position);
+            var accent = new Color("#fbbf24");
+            DrawArc(center, ScaleWorld(7.5f), 0, Mathf.Tau, 20, accent, ScaleWorld(1.6f), false);
+            DrawLine(
+                center + ScaleWorld(0, -4),
+                center + ScaleWorld(0, 1.5f),
+                accent,
+                ScaleWorld(1.8f));
+            DrawLine(
+                center + ScaleWorld(0, 3),
+                center + ScaleWorld(0, 4),
+                accent,
+                ScaleWorld(1.8f));
+        }
     }
 
     // EditMode used to be declared here. It is DungeonFortress.Presentation's

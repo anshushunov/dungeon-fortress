@@ -388,7 +388,11 @@ public sealed class PrototypeWorld
                 _waves.Count),
             _raiders.OrderBy(raider => raider.Id).Select(raider => new PrototypeRaiderSnapshot(
                 raider.Id, raider.Wave, raider.Hp, raider.Might, raider.Position, raider.CarryingMeals, raider.StealTicks, raider.ReturningToGate, raider.Mode)).ToArray(),
-            BuildSessionResult());
+            BuildSessionResult(),
+            // Derived here and stored nowhere (ADR 0013, variant C): a room is
+            // whatever the zones and the map add up to at this tick, so it cannot
+            // fall out of step with them and no command creates one directly.
+            PrototypeRooms.Derive(_map, _zones, _priorities));
     }
 
     /// <summary>

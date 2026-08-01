@@ -58,13 +58,6 @@ public static class InspectorText
 
         if (selectedCell is { } cell)
         {
-            var zones = view.ZonesAt(cell)
-                .Select(zone => zone.ToString())
-                .ToArray();
-            if (zones.Contains(nameof(ZoneKind.Quarters), StringComparer.Ordinal))
-            {
-                zones = zones.Append("QUARTERS: rest only at fatigue 50+, free bunk").ToArray();
-            }
             var jobs = state.Jobs
                 .Where(job => job.Origin == cell || job.Target == cell || job.StoreCell == cell)
                 .ToArray();
@@ -93,7 +86,7 @@ public static class InspectorText
             return
                 $"CELL ({cell.X}, {cell.Y})\n\n" +
                 $"tile {TileDescription(view, cell)}\n" +
-                $"zones {(zones.Length == 0 ? "none" : string.Join(", ", zones))}\n" +
+                DescribeRooms(view, cell) +
                 $"jobs {(jobs.Length == 0 ? "none" : string.Join(", ", jobs.Select(job => $"#{job.JobId} {job.Kind}")))}\n\n" +
                 looseSection +
                 buildSection +
@@ -179,6 +172,60 @@ public static class InspectorText
         // Deliberately terse: on a stockpile cell this section is the least
         // important one on the panel and must not push the rest out of the box.
         return $"not diggable: {ShortUndiggableReason(state, cell)}.";
+    }
+
+    /// <summary>
+    /// Which rooms this cell belongs to, and what is standing on it with no room
+    /// around it (Issue #52).
+    ///
+    /// This line replaced the <c>zones</c> line rather than joining it, and the
+    /// budget is why. The panel is measured by the HUD overflow guard at every
+    /// viewport the game supports, and it refused the frame of the demo blueprint
+    /// outright: sixteen lines needed, fifteen available at 2048x1440. The guard is
+    /// right — text that does not fit is dropped or drawn over the panel below —
+    /// and the cheapest honest answer was that the two lines said the same thing.
+    /// Every painted zone is a room, so <c>zones TrainingGround</c> and
+    /// <c>room TRAIN · no post [trainingGround@25,2]</c> name the same fact, and
+    /// only the second one says how it is doing.
+    ///
+    /// The one thing the zones line had that the room line has to keep is the
+    /// rule note for the quarters: resting has a condition the player cannot see
+    /// from the map.
+    ///
+    /// Empty for the great majority of cells, which are in no room at all — the
+    /// panel then simply has no room line, exactly as it had no zones to list.
+    /// </summary>
+    public static string DescribeRooms(MapProjection view, GridPoint cell)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        var lines = string.Empty;
+        var rooms = view.State.Rooms
+            .Where(room => room.Perimeter.Contains(cell))
+            .ToArray();
+        if (rooms.Length > 0)
+        {
+            var described = rooms
+                .Select(room => $"{RoomLabels.Caption(room)} [{room.Id}]")
+                .ToList();
+            if (rooms.Any(room => room.Purpose == ZoneKind.Quarters))
+            {
+                described.Add("QUARTERS: rest only at fatigue 50+, free bunk");
+            }
+
+            lines += "room " + string.Join(" · ", described) + "\n";
+        }
+
+        // The other half of the silence: a post nobody has zoned is in no room, so
+        // no room's caption can mention it. The map marks it; the panel says what
+        // to do about it.
+        var orphan = RoomObjects.Unroomed(view).FirstOrDefault(item => item.Position == cell);
+        if (orphan is not null)
+        {
+            lines += $"no room: this {RoomLabels.FeatureName(orphan.Kind)} needs " +
+                $"{orphan.Needs} painted over it\n";
+        }
+
+        return lines;
     }
 
     /// <summary>
