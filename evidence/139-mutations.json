@@ -95,6 +95,33 @@
           "revertedAndReverifiedGreen": true
         }
       ]
+    },
+    "round3LabelWiringGap": {
+      "description": "Independent review round 3, N1 (blocking, the one unmet acceptance criterion): round2LabelFix.d-ii above mutates DrawRoomLabel's two draw calls (whether they read labelTop by name) and correctly reddens Main_DrawRoomLabel_draws_the_icon_and_caption_at_the_computed_label_top. It does not — and was never able to — prove anything about where labelTop's own value comes from. L-1 and L-2, review's own numbering, target exactly that gap: both keep the variable named labelTop flowing into both draw calls (so d-ii's guard stays green) while breaking what labelTop is actually computed from. This is round2ReviewFoundGap's exact shape, reopened for the fix that was supposed to close it — of the four links in DrawRoomLabel's chain (rockTiles into DrawRoomLabels; BordersWallToNorth branch; labelTop from LabelTop(purposeInset); labelTop into the draw calls), only the first and last were guarded before this round.",
+      "mutants": [
+        {
+          "name": "L-1: labelTop stops being LabelTop(purposeInset), purposeInset computed and discarded",
+          "file": "src/DungeonFortress.Game/Main.cs",
+          "edit": "var labelTop = ScaleWorld((float)RoomGeometry.LabelTop(purposeInset)); -> var labelTop = ScaleWorld((float)RoomGeometry.LabelDefaultTop);",
+          "command": "dotnet build DungeonFortress.sln -c Release && dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --no-build",
+          "result": "Builds with 0 warnings, 0 errors. Of the full 430-test suite: не пройдено 1, пройдено 429. Only Main_DrawRoomLabel_computes_labelTop_from_the_picked_inset (added this round to close N1) went red — Assert.Contains found no 'RoomGeometry.LabelTop(purposeInset)' substring in the whitespace-normalised body. Main_DrawRoomLabel_draws_the_icon_and_caption_at_the_computed_label_top (round 2's guard) stayed green throughout, exactly as review reported: labelTop is still the name flowing into both draw calls, only its source silently reverted to the fixed pre-#139 constant, which reopens F1 verbatim (the border again reads inside the caption/icon band for every wall-adjacent room).",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "L-2: DrawRoomLabel's own copy of the ternary stops branching on BordersWallToNorth",
+          "file": "src/DungeonFortress.Game/Main.cs",
+          "edit": "var purposeInset = RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles) -> var purposeInset = RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles) && false (inside DrawRoomLabel only; DrawRoomBorder's own copy of the same ternary text is untouched — confirmed by reading DrawRoomBorder's body after the edit)",
+          "command": "dotnet build DungeonFortress.sln -c Release && dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --no-build",
+          "result": "Builds with 0 warnings, 0 errors. Of the full 430-test suite: не пройдено 1, пройдено 429. Only Main_DrawRoomLabel_branches_on_BordersWallToNorth (added this round to close N1) went red — the whitespace-normalised ternary substring no longer matches. Every DrawRoomBorder-side test (b-i, b-ii, e-i) stayed green, confirming the edit was isolated to DrawRoomLabel's own copy.",
+          "revertedAndReverifiedGreen": true
+        }
+      ],
+      "closure": "Two new tests, mirroring the border-side pair exactly: Main_DrawRoomLabel_computes_labelTop_from_the_picked_inset (whitespace-normalised Assert.Contains for 'RoomGeometry.LabelTop(purposeInset)', since AdapterSource.CallsTo cannot see this call — it is qualified on RoomGeometry, not the adapter itself, the same reason CallsTo cannot see RoomGeometry.Border either; verified empirically before writing the test: AdapterSource.CallsTo(body, \"LabelTop\") returns zero calls against DrawRoomLabel's real body, so a literal CallsTo-based assertion would be permanently red rather than a working guard) and Main_DrawRoomLabel_branches_on_BordersWallToNorth (identical technique to Main_DrawRoomBorder_branches_on_BordersWallToNorth). All four links in DrawRoomLabel's chain are now guarded."
+    },
+    "round3UnitsMismatch": {
+      "description": "Independent review round 3, N3: The_label_block_still_fits_one_cell_at_the_deepest_wall_adjacent_inset compared a reference-pixel quantity (labelBottom, max 18.0) against 32 — the real screen-pixel minimum tile size ADR 0008 allows, not the reference tile size the quantity is actually measured against. The same units mismatch review named in round 1 against Wall_adjacent_insets_are_still_distinct_and_bounded's 32 / 4.0 bound.",
+      "fix": "32 -> 22.0 (CameraView.ReferenceTileSize, private at CameraView.cs:108, restated as a local const with that provenance in the test). Margin at the true ceiling: 18.0 against 22.0 is 82% of the reference cell, 4.0 reference px of margin — against the old (wrong) 32 the bound was live only 45% over budget; against the corrected 22 it is live 18% over, which is the sensitivity the test's own name promises.",
+      "thirdPlaceCheck": "Swept tests/DungeonFortress.Presentation.Tests/RoomGeometryTests.cs and src/DungeonFortress.Presentation/RoomGeometry.cs for every remaining literal 32 or 48. Two occurrences of the identical `32 / 4.0` pattern remain, both InRange bounds comparing a reference-pixel inset against the same screen-pixel-derived ceiling: line 178 (Two_purposes_next_to_each_other_do_not_share_a_border_line, checking the plain BorderInset — predates this issue, from Issue #52) and line 417 (Wall_adjacent_insets_are_still_distinct_and_bounded, checking WallAdjacentBorderInset — the one review named in round 1). No third, previously unnamed place exists; RoomGeometry.cs itself contains no tile-size literal at all (it is reference-pixel throughout, by construction). Neither of the two known occurrences was touched this round: round 3 named exactly two mechanical edits (N1, N3) and the task explicitly excludes redoing anything already closed."
     }
   },
   "note": "Each mutant was applied with Edit, built and run in isolation with the command shown, then reverted with `git checkout -- <file>` and re-verified green (dotnet build + the same filtered dotnet test) before moving to the next. No mutant was left in place at any point between runs. The full suite was re-run green after the last mutant of each round.",
@@ -106,6 +133,10 @@
     "round2": {
       "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --no-build",
       "result": "Пройден!: не пройдено 0, пройдено 428, пропущено 0, всего 428"
+    },
+    "round3": {
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --no-build",
+      "result": "Пройден!: не пройдено 0, пройдено 430, пропущено 0, всего 430"
     }
   }
 }

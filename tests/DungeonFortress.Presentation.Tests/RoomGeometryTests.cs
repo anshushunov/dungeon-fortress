@@ -438,10 +438,26 @@ public sealed class RoomGeometryTests
     /// <see cref="Wall_adjacent_insets_are_still_distinct_and_bounded"/> above
     /// — one reference-domain assertion already covers every tile size the
     /// engine can be asked to run at, not only the two ends of the range.
+    ///
+    /// Review round 3's N3: that argument is the reason the ceiling has to be
+    /// <c>CameraView</c>'s own reference tile size (22.0, private at
+    /// <c>CameraView.cs:108</c>, restated here), not the real screen-pixel
+    /// minimum <see cref="Wall_adjacent_insets_are_still_distinct_and_bounded"/>
+    /// above uses — comparing a reference-pixel quantity against 32 is the
+    /// same units mismatch review named there in round 1, just harder to see
+    /// on a value that was already comfortably inside either ceiling. Against
+    /// 32 this bound was live only once the label block overran its cell by
+    /// 45%; against 22 it is live at 18% over, which is the margin that
+    /// actually protects the property the test's name promises.
     /// </summary>
     [Fact]
     public void The_label_block_still_fits_one_cell_at_the_deepest_wall_adjacent_inset()
     {
+        // CameraView.ReferenceTileSize: private there, restated here as the
+        // same reference-pixel cell every LabelTop/LabelIconSize number above
+        // is measured against before WorldVisualScale ever multiplies it.
+        const double referenceTileSize = 22.0;
+
         foreach (var purpose in Enum.GetValues<ZoneKind>())
         {
             var labelBottom =
@@ -449,9 +465,9 @@ public sealed class RoomGeometryTests
                 RoomGeometry.LabelIconSize;
 
             Assert.True(
-                labelBottom < 32,
+                labelBottom < referenceTileSize,
                 $"{purpose}: label block reaches {labelBottom} reference px of a " +
-                "32 px minimum tile — no longer inside one cell");
+                $"{referenceTileSize} reference-px cell — no longer inside one cell");
         }
     }
 
@@ -589,6 +605,52 @@ public sealed class RoomGeometryTests
         Assert.Contains(
             captionCall.Arguments,
             argument => argument.Contains("labelTop", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Review round 3's N1: the test above proves the icon and caption are
+    /// drawn from <c>labelTop</c> by name, but nothing proved where
+    /// <c>labelTop</c> itself came from — a mutant that reads
+    /// <c>RoomGeometry.LabelDefaultTop</c> straight, with <c>purposeInset</c>
+    /// computed and then thrown away, still assigns the result to a variable
+    /// named <c>labelTop</c> and passes to both draw calls by that name. That
+    /// mutant is L-1 in review's own numbering, and it reopens F1 verbatim
+    /// while leaving the test above green.
+    ///
+    /// <c>AdapterSource.CallsTo</c> cannot see this call directly —
+    /// <c>RoomGeometry.LabelTop(...)</c> is qualified on a different type, and
+    /// <c>CallsTo</c> only finds a call the adapter makes on itself (its own
+    /// header comment; <see cref="Main_DrawRoomBorder_scales_the_picked_inset_it_computed"/>
+    /// only works because <c>ScaleWorld</c> is unqualified). The same
+    /// <see cref="Whitespace"/> normalisation <see cref="Main_DrawRoomBorder_branches_on_BordersWallToNorth"/>
+    /// already uses for exactly this reason stands in for it here.
+    /// </summary>
+    [Fact]
+    public void Main_DrawRoomLabel_computes_labelTop_from_the_picked_inset()
+    {
+        var body = Whitespace(AdapterSource.Body("DrawRoomLabel"));
+        Assert.Contains("RoomGeometry.LabelTop(purposeInset)", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Review round 3's N1, second mutant (L-2): <c>DrawRoomLabel</c> computes
+    /// its own <c>purposeInset</c> from an independent copy of the same
+    /// ternary <c>DrawRoomBorder</c> uses — nothing before this test proved
+    /// that copy still branches on <see cref="RoomGeometry.BordersWallToNorth"/>
+    /// rather than a neutralised condition. Mirrors
+    /// <see cref="Main_DrawRoomBorder_branches_on_BordersWallToNorth"/> exactly,
+    /// against <c>DrawRoomLabel</c>'s body instead of <c>DrawRoomBorder</c>'s.
+    /// </summary>
+    [Fact]
+    public void Main_DrawRoomLabel_branches_on_BordersWallToNorth()
+    {
+        var body = Whitespace(AdapterSource.Body("DrawRoomLabel"));
+        Assert.Contains(
+            "RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles) " +
+            "? RoomGeometry.WallAdjacentBorderInset(room.Purpose) " +
+            ": RoomGeometry.BorderInset(room.Purpose);",
+            body,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
