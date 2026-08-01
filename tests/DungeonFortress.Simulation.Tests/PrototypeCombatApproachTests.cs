@@ -67,20 +67,6 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
 
     private static readonly string[] Fixtures = ["baseline", "prepared"];
 
-    public static TheoryData<string, ulong> Matrix()
-    {
-        var data = new TheoryData<string, ulong>();
-        foreach (var fixtureName in Fixtures)
-        {
-            foreach (var seed in MatrixSeeds)
-            {
-                data.Add(fixtureName, seed);
-            }
-        }
-
-        return data;
-    }
-
     /// <summary>
     /// The numbers themselves, printed rather than asserted. This is the "before
     /// and after" of Issue #129, and it is a fact rather than a requirement
@@ -91,16 +77,94 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
     public void Report_combat_approach_over_the_seed_matrix()
     {
         var report = new StringBuilder();
-        foreach (var fixtureName in Fixtures)
+        foreach (var measurement in Matrix)
         {
-            foreach (var seed in MatrixSeeds)
-            {
-                report.AppendLine(CultureInfo.InvariantCulture, $"{Measure(fixtureName, seed)}");
-            }
+            report.AppendLine(CultureInfo.InvariantCulture, $"{measurement}");
         }
 
         output.WriteLine(report.ToString());
     }
+
+    /// <summary>
+    /// Criterion 1 of Issue #129: with free tiles beside a raider, fighters do
+    /// not line up behind one another.
+    ///
+    /// It is asserted over the matrix as a whole rather than seed by seed,
+    /// following the rule of 13.4 that a corridor is a property of the runs and
+    /// only the matrix carries requirements. What is asserted is a ratio and not
+    /// a count: of the places around a raider that the fighters who came for it
+    /// could have filled, the share they did.
+    ///
+    /// Measured before the edit the share was 0.418 over the six runs
+    /// (0.354–0.471 individually), and after it 0.512 (0.475–0.555) —
+    /// <c>evidence/129-before.json</c> and <c>evidence/129-matrix.json</c>. The
+    /// threshold sits between the two and closer to the new floor than to the
+    /// old ceiling, because the number it guards is the destination rule, not the
+    /// jitter of a fight.
+    /// </summary>
+    [Fact]
+    public void The_places_beside_a_raider_are_taken_rather_than_queued_for()
+    {
+        var places = Matrix.Sum(measurement => measurement.SurroundPlaces);
+        var taken = Matrix.Sum(measurement => measurement.SurroundTaken);
+        var share = (double)taken / places;
+
+        Assert.True(
+            share >= 0.48,
+            $"Fighters filled {taken} of the {places} places around a raider that the fighters " +
+            $"present for it could have filled — a share of {share:F3}, where 0.48 is the floor. " +
+            "Below it they are queueing behind one another instead of taking the free tile " +
+            $"beside the enemy.{Environment.NewLine}{Detail()}");
+    }
+
+    /// <summary>
+    /// The second half of the owner's sentence — «похоже только 1 может атаковать
+    /// одновременно даже если с 2 сторон окружили» — asserted from the side the
+    /// edit is allowed to touch.
+    ///
+    /// The rules of combat never capped this: <c>ActCombatant</c> runs once per
+    /// fighter and counts nothing. Geometry did. Over the six matrix parties
+    /// before the edit, three defenders were never once simultaneously adjacent
+    /// to the same raider and never once struck it in the same tick; the ceiling
+    /// was two. Reaching three is therefore a binary fact about the approach rule
+    /// rather than a corridor, and it is asserted as one.
+    /// </summary>
+    [Fact]
+    public void Three_defenders_can_reach_and_strike_one_raider_in_the_same_tick()
+    {
+        var touching = Matrix.Max(measurement => measurement.MaxTouchingOneRaider);
+        var attackers = Matrix.Max(measurement => measurement.MaxAttackersOnOneRaider);
+
+        Assert.True(
+            touching >= 3,
+            $"Over the whole matrix at most {touching} defender(s) were ever adjacent to one " +
+            "raider at the same time, although a raider has four neighbouring tiles. That is the " +
+            "column: only the head of it is ever in reach." +
+            $"{Environment.NewLine}{Detail()}");
+        Assert.True(
+            attackers >= 3,
+            $"Over the whole matrix at most {attackers} defender(s) ever struck the same raider " +
+            "in the same tick, although the resolution of combat has never limited how many may. " +
+            $"Standing room, not the rule, is what was short.{Environment.NewLine}{Detail()}");
+    }
+
+    /// <summary>
+    /// The six parties, measured once and shared. A party takes about a second to
+    /// walk, and three assertions over the same six would otherwise pay for it
+    /// three times.
+    /// </summary>
+    private static IReadOnlyList<ApproachMeasurement> Matrix => MatrixMeasurements.Value;
+
+    private static readonly Lazy<IReadOnlyList<ApproachMeasurement>> MatrixMeasurements =
+        new(() =>
+        [
+            .. Fixtures.SelectMany(
+                _ => MatrixSeeds,
+                (fixtureName, seed) => Measure(fixtureName, seed)),
+        ]);
+
+    private static string Detail() =>
+        string.Join(Environment.NewLine, Matrix.Select(measurement => measurement.ToString()));
 
     /// <summary>
     /// One party, walked tick by tick, counting what the fight looked like from
@@ -154,6 +218,7 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
 
         var blocked = Blocked(snapshot, raiders);
         var reach = new Dictionary<int, IReadOnlyDictionary<GridPoint, int>>();
+        var wanted = new Dictionary<int, int>();
 
         foreach (var fighter in fighters)
         {
@@ -174,6 +239,7 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
             if (Manhattan(fighter.Position, target.Position) <= PrototypeTuning.MeleeAttackRange)
             {
                 tally.InContactFighterTicks++;
+                wanted[target.Id] = wanted.GetValueOrDefault(target.Id) + 1;
                 continue;
             }
 
@@ -188,6 +254,7 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
                 continue;
             }
 
+            wanted[target.Id] = wanted.GetValueOrDefault(target.Id) + 1;
             tally.QueuedInTheScrumFighterTicks++;
             var free = FreeTilesBeside(snapshot, target.Position, blocked);
             if (free > 0)
@@ -197,8 +264,25 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
             }
         }
 
+        var standing = fighters.Select(fighter => fighter.Position).ToHashSet();
         foreach (var raider in raiders)
         {
+            var perimeter = Neighbors(raider.Position)
+                .Where(tile => InBounds(tile) &&
+                    !snapshot.Map.RockTiles.Contains(tile) &&
+                    !snapshot.Zones[ZoneKind.Forbidden].Contains(tile) &&
+                    !raiders.Any(other => other.Position == tile))
+                .ToArray();
+            var taken = perimeter.Count(standing.Contains);
+            if (wanted.TryGetValue(raider.Id, out var candidates) && candidates > 0)
+            {
+                // How many of the places around this raider could have been
+                // filled by the fighters that are actually here for it, and how
+                // many are. A column is the gap between the two.
+                tally.SurroundPlaces += Math.Min(perimeter.Length, candidates);
+                tally.SurroundTaken += taken;
+            }
+
             var touching = fighters.Count(fighter =>
                 Manhattan(fighter.Position, raider.Position) <= PrototypeTuning.MeleeAttackRange);
             if (touching == 0)
@@ -335,6 +419,8 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
         public int Strikes;
         public int MaxRaidersOnOneTile;
         public int BlockedWhileFighting;
+        public int SurroundPlaces;
+        public int SurroundTaken;
         public readonly int[] TouchingHistogram = new int[5];
         public readonly int[] AttackerHistogram = new int[5];
 
@@ -357,6 +443,8 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
                 Strikes,
                 MaxRaidersOnOneTile,
                 BlockedWhileFighting,
+                SurroundPlaces,
+                SurroundTaken,
                 [.. TouchingHistogram],
                 [.. AttackerHistogram]);
     }
@@ -379,9 +467,20 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
         int Strikes,
         int MaxRaidersOnOneTile,
         int BlockedWhileFighting,
+        int SurroundPlaces,
+        int SurroundTaken,
         IReadOnlyList<int> TouchingHistogram,
         IReadOnlyList<int> AttackerHistogram)
     {
+        /// <summary>
+        /// Of the places around a raider that the fighters present for it could
+        /// have filled, the share they did fill. One is a raider surrounded by
+        /// everybody who came for it; a half is one fighter in place and one
+        /// standing behind it. This is the "line" of Issue #129 as a number.
+        /// </summary>
+        public double SurroundShare =>
+            SurroundPlaces == 0 ? 0 : (double)SurroundTaken / SurroundPlaces;
+
         public double ContactShare =>
             FighterTicks == 0 ? 0 : (double)InContactFighterTicks / FighterTicks;
 
@@ -409,7 +508,9 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
                 $"maxAttackers={MaxAttackersOnOneRaider} " +
                 $"attackerHistogram=[{string.Join(',', AttackerHistogram)}] " +
                 $"maxRaidersOnOneTile={MaxRaidersOnOneTile} " +
-                $"blockedWhileFighting={BlockedWhileFighting}");
+                $"blockedWhileFighting={BlockedWhileFighting} " +
+                $"surroundPlaces={SurroundPlaces} surroundTaken={SurroundTaken} " +
+                $"surroundShare={SurroundShare:F3}");
     }
 
     private static PrototypeCommandLog LoadFixture(string fixtureName) =>
