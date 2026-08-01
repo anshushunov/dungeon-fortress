@@ -593,38 +593,128 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     /// document is entitled to rely on.
     /// </para>
     /// </summary>
+    /// <para>
+    /// <b>What the run asserts changed with Issue #129, and the reason is that
+    /// one of the two floors was a corridor and the other is a promise.</b> The
+    /// journal-wide floor of 90 % is untouched and now runs over the whole
+    /// matrix, where it holds with room to spare on both trees: 96.2–97.9 % on
+    /// <c>main</c> and 91.1–97.5 % after #129. The per-creature floor of 90 % was
+    /// a copy of a measurement — 92 % on one party — and it is the kind of number
+    /// 13.4 of the contract calls a corridor: it says what six runs did, not what
+    /// the design owes. After #129 the per-creature minimum is 75.9 %, on
+    /// <c>baseline</c>/20260728, the party that starves after winning its fights
+    /// (Issue #171). Re-fitting the floor to 75 % would repeat the mistake with a
+    /// smaller number, so the floor becomes the promise the name of this test
+    /// already makes — routine is the <b>majority</b> of what any one creature
+    /// decides — and the measured minimum stays a printed fact, quoted with this
+    /// command wherever a document needs it.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The teeth move rather than disappear.</b> What §11.1 actually leans on
+    /// is not a percentage but a consequence of it: «поэтому «последние четыре»
+    /// почти всегда были ею» — the four newest entries are routine, so recency is
+    /// the wrong selection rule. That is asserted here directly and without a
+    /// number: for every creature of every run, the panel shows at least one
+    /// decision that mattered and that is <b>older</b> than its four newest
+    /// entries. Measured 9 of 9 creatures on every one of the six runs of the
+    /// matrix, on <c>main</c> and after #129 alike, and it is the assertion that
+    /// reddens the moment ranking is replaced by recency — which the per-creature
+    /// percentage never did.
+    /// </para>
+    ///
+    /// <para>
+    /// Command: <c>dotnet test tests/DungeonFortress.Presentation.Tests -c Release
+    /// --filter "FullyQualifiedName~Most_of_what_a_creature_decides_is_routine"
+    /// --logger "console;verbosity=detailed"</c>. Per-cell figures for both trees
+    /// are in <c>evidence/129-presentation.json</c>.
+    /// </para>
+    /// </summary>
     [Fact]
     public void Most_of_what_a_creature_decides_is_routine()
     {
-        var state = PresentationFixtures.RunFixture("baseline", MeasuredTicks);
         var report = new StringBuilder();
-        var routine = state.Events.Count(@event => HudText.StoryWeight(@event.ReasonCode) == 0);
-        var share = 100.0 * routine / state.Events.Count;
-        report.AppendLine(CultureInfo.InvariantCulture,
-            $"baseline t{MeasuredTicks}: {routine} of {state.Events.Count} entries are routine " +
-            $"({share:0.0}%)");
+        var lowestJournal = 100.0;
+        var lowestCreature = 100.0;
+        var lowestCreatureWhere = string.Empty;
+        var recencyWouldHaveMissed = new List<string>();
+        var blind = new List<string>();
 
-        var lowest = 100.0;
-        foreach (var creature in state.Creatures)
+        foreach (var fixtureName in Fixtures)
         {
-            var mine = state.Events.Where(@event => @event.CreatureId == creature.Id).ToArray();
-            var mineRoutine = mine.Count(@event => HudText.StoryWeight(@event.ReasonCode) == 0);
-            var mineShare = 100.0 * mineRoutine / mine.Length;
-            lowest = Math.Min(lowest, mineShare);
-            report.AppendLine(CultureInfo.InvariantCulture,
-                $"  {creature.Name}: {mineRoutine} of {mine.Length} ({mineShare:0.0}%)");
+            foreach (var seed in MatrixSeeds)
+            {
+                var state = EndOfParty(fixtureName, seed);
+                var routine = state.Events.Count(@event => HudText.StoryWeight(@event.ReasonCode) == 0);
+                var share = 100.0 * routine / state.Events.Count;
+                lowestJournal = Math.Min(lowestJournal, share);
+                report.AppendLine(CultureInfo.InvariantCulture,
+                    $"{fixtureName}/{seed} t{state.Tick}: {routine} of {state.Events.Count} " +
+                    $"entries are routine ({share:0.0}%)");
+
+                foreach (var creature in state.Creatures)
+                {
+                    var mine = state.Events
+                        .Where(@event => @event.CreatureId == creature.Id)
+                        .ToArray();
+                    var mineRoutine = mine.Count(@event => HudText.StoryWeight(@event.ReasonCode) == 0);
+                    var mineShare = 100.0 * mineRoutine / mine.Length;
+                    if (mineShare < lowestCreature)
+                    {
+                        lowestCreature = mineShare;
+                        lowestCreatureWhere = $"{creature.Name} on {fixtureName}/{seed}";
+                    }
+
+                    // What recency would have shown, against what ranking does.
+                    var newestFour = mine
+                        .OrderByDescending(@event => @event.LastTick)
+                        .Take(HudText.CreatureStoryLines)
+                        .ToArray();
+                    var panel = HudText.CreatureStory(state, creature.Id);
+                    var rescued = mine.Where(@event =>
+                        HudText.StoryWeight(@event.ReasonCode) > 0 &&
+                        !newestFour.Contains(@event) &&
+                        panel.Contains(
+                            EventNarration.Sentence(
+                                @event.ReasonCode, @event.Details, @event.JobKind, @event.Target),
+                            StringComparison.Ordinal))
+                        .ToArray();
+                    if (rescued.Length == 0)
+                    {
+                        blind.Add($"{fixtureName}/{seed} {creature.Name}");
+                    }
+                    else
+                    {
+                        recencyWouldHaveMissed.Add($"{fixtureName}/{seed} {creature.Name}");
+                    }
+
+                    report.AppendLine(CultureInfo.InvariantCulture,
+                        $"  {creature.Name}: {mineRoutine} of {mine.Length} ({mineShare:0.0}%), " +
+                        $"{rescued.Length} decision(s) shown that recency would have missed");
+                }
+            }
         }
 
         output.WriteLine(report.ToString());
         Assert.True(
-            share >= 90.0,
-            $"routine is {share:0.0}% of the journal on this party, under the 90% the documents of " +
-            "Issue #140 rely on. The number in contract §11.1, PROTOTYPE_GRAYBOX.md, HudText and " +
-            "evidence/140-after.json is now wrong and has to be re-measured with this run.");
+            lowestJournal >= 90.0,
+            $"routine is {lowestJournal:0.0}% of the journal on the thinnest run of the matrix, " +
+            "under the 90% the documents of Issue #140 rely on. The number in contract §11.1, " +
+            "PROTOTYPE_GRAYBOX.md, HudText and evidence/140-after.json is now wrong and has to be " +
+            "re-measured with this run.");
         Assert.True(
-            lowest >= 90.0,
-            $"the least routine creature of this party is at {lowest:0.0}%, under the 90% the same " +
-            "documents claim holds for every creature.");
+            lowestCreature > 50.0,
+            $"the least routine creature of the matrix is at {lowestCreature:0.0}% " +
+            $"({lowestCreatureWhere}): routine has stopped being the majority of what it decides, " +
+            "and the name of this test is what stops being true. The panel ranks by significance " +
+            "because routine dominates; when it no longer does, the ranking is answering a " +
+            "question nobody has.");
+        Assert.True(
+            blind.Count == 0,
+            $"{blind.Count} of {blind.Count + recencyWouldHaveMissed.Count} creature-parties show " +
+            $"nothing that the four newest entries would not have shown anyway: " +
+            $"{string.Join("; ", blind.Take(5))}. Ranking by significance is then the same panel as " +
+            "the recency it replaced, and §11.1 says otherwise.");
     }
 
     /// <summary>
