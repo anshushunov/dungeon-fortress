@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "issue": 145,
+  "when": "2026-08-01",
+  "what": "One mutant per half of the edit, not one for the edit as a whole. A check that only reddens when the whole change is reverted proves one half is covered and says nothing about the other.",
+  "howToReproduce": {
+    "runner": ".artifacts/mutate-145.py, which applies one replacement to src/DungeonFortress.Presentation/HudText.cs, runs `dotnet test tests/DungeonFortress.Presentation.Tests -c Release`, records the counts and the failing test names, and puts the file back. It refuses to run a mutant whose text does not match the shipped file exactly once, so a stale mutant cannot pass by mutating nothing.",
+    "command": "python .artifacts/mutate-145.py .artifacts/145-mutants.json",
+    "engine": "For the bound the mutation is a constant and the check is the engine's: set HudText.DomainFeedLines to 4 and run `powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -Stage godot -GodotPath <godot> -TemporaryRoot <temp>`.",
+    "baseline": "445 of 445 green on the shipped tree, run last, after every mutation was put back."
+  },
+  "mutants": [
+    {
+      "half": "significance decides the order of the feed",
+      "edit": "the ranking in HudText.MostSignificant drops the weight: `.OrderByDescending(Meaning)` becomes `.OrderByDescending(@event => @event.LastTick)`",
+      "result": "red: 6 of 445 failed",
+      "failing": [
+        "DomainFeedTests.The_feed_a_domain_shows_is_the_journal_ranked_by_what_it_meant (both fixtures)",
+        "CreatureStoryTests.Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel",
+        "CreatureStoryTests.A_refusal_by_memory_reads_in_the_creature_s_own_story",
+        "CreatureStoryTests.The_story_a_creature_shows_is_the_journal_ranked_by_what_it_meant (both fixtures)"
+      ],
+      "reading": "Worth reading carefully, because it is the one mutant the criterion-1 measurement survives. With the group representative still chosen by what it meant, every creature's line is still its worst moment, so plenty of turning points still reach the feed by luck of recency and the 45.8 % share holds. What breaks is the claim the panel actually makes: something that mattered less is on the feed while something that mattered more is off it. The share is the right measurement for the owner's question and the wrong one for this half; the rule test is what covers it, and it is why the rule is stated in the test rather than borrowed from the code."
+    },
+    {
+      "half": "a creature's line is its worst moment, not its last decision",
+      "edit": "the beat's representative in HudText.MostSignificant goes back to plain recency: `Meaning(next).CompareTo(Meaning(best)) >= 0` becomes `next.LastTick >= best.LastTick`",
+      "result": "red: 5 of 445 failed",
+      "failing": [
+        "DomainFeedTests.The_domain_feed_shows_what_mattered_and_not_only_what_happened_last",
+        "DomainFeedTests.The_feed_carries_something_that_mattered_whenever_the_party_has_one",
+        "DomainFeedTests.The_feed_a_domain_shows_is_the_journal_ranked_by_what_it_meant (both fixtures)",
+        "DomainFeedTests.The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it"
+      ],
+      "reading": "This is the half only the domain feed has, and the one a mutant on the change as a whole would never separate. In a creature's own story every entry of a reason-code group weighs the same, so 'the representative of a beat' can be read as 'the newest of that kind' and nobody notices — the whole of CreatureStoryTests stays green under this mutant. Group by creature and it is the entire panel: at the end of a baseline party the newest entry of nearly every creature is somebody in the way, and criterion 1 collapses. Both #145 measurements fall over here, which is exactly where they should."
+    },
+    {
+      "half": "the beat of a domain is the creature and not the kind of decision",
+      "edit": "HudText.DomainSelection passes the story panel's beat instead of its own: `@event => @event.CreatureId` becomes `@event => @event.ReasonCode`",
+      "result": "red: 7 of 445 failed",
+      "failing": [
+        "DomainFeedTests.One_creature_takes_one_line_of_the_feed_however_much_it_decided",
+        "DomainFeedTests.The_feed_a_domain_shows_is_the_journal_ranked_by_what_it_meant (both fixtures)",
+        "DomainFeedTests.The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it",
+        "GoldenUiTextTests.The_golden_HUD_text_is_reproduced_without_Godot (all three frames)"
+      ],
+      "reading": "The plausible wrong answer, and the one this issue had to choose between: reuse the story's beat wholesale. It ranks the same and still shows turning points, so criterion 1 survives — and the panel goes back to naming one creature twice, because at tick 2400 the two highest-weighted kinds and the third both belong to creatures that already have a line. 'Who' is the domain's question and this mutant answers 'what'."
+    },
+    {
+      "half": "one line per beat at all",
+      "edit": "the grouping is neutralised: every entry becomes its own beat (`@event => @event`, default record equality)",
+      "result": "red: 7 of 445 failed",
+      "failing": [
+        "DomainFeedTests.One_creature_takes_one_line_of_the_feed_however_much_it_decided",
+        "DomainFeedTests.The_feed_a_domain_shows_is_the_journal_ranked_by_what_it_meant (both fixtures)",
+        "DomainFeedTests.The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it",
+        "GoldenUiTextTests.The_golden_HUD_text_is_reproduced_without_Godot (all three frames)"
+      ],
+      "reading": "Without any deduplication the ranking alone puts three refusals by memory of one creature on the panel, or three lines of one creature stopped in one corridor before the first wave. The ranking does not bound the panel to nine different people; the grouping does, which is why it is its own half."
+    },
+    {
+      "half": "the header says what is off the panel",
+      "edit": "the counted header goes back to the bare `\"EVENT FEEDBACK\"`",
+      "result": "red: 6 of 445 failed",
+      "failing": [
+        "DomainFeedTests.The_feed_is_bounded_and_the_header_says_what_is_off_the_panel",
+        "DomainFeedTests.Before_anything_has_mattered_the_feed_is_still_the_crew_at_work",
+        "HudTextTests.The_event_panel_is_a_header_three_lines_and_the_diagnostics_count",
+        "GoldenUiTextTests.The_golden_HUD_text_is_reproduced_without_Godot (all three frames)"
+      ],
+      "reading": "The panel keeps choosing well and stops saying that it chose. Three of nine crew shown without saying so is a panel that tells a player the domain has three people in it and that nothing has happened to the rest — the same defect as showing the wrong three, told from the other end."
+    },
+    {
+      "half": "the feed is bounded",
+      "edit": "`.Take(lines)` is removed from HudText.MostSignificant",
+      "result": "red: 16 of 445 failed",
+      "failing": [
+        "DomainFeedTests.The_feed_is_bounded_and_the_header_says_what_is_off_the_panel",
+        "DomainFeedTests.The_feed_a_domain_shows_is_the_journal_ranked_by_what_it_meant (both fixtures)",
+        "DomainFeedTests.Before_anything_has_mattered_the_feed_is_still_the_crew_at_work",
+        "DomainFeedTests.The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it",
+        "HudTextTests.The_event_panel_is_a_header_three_lines_and_the_diagnostics_count",
+        "CreatureStoryTests.Nothing_selected_leaves_the_domain_feed_and_not_a_story",
+        "CreatureStoryTests.The_story_is_bounded_and_the_header_says_what_is_off_the_panel",
+        "CreatureStoryTests.The_story_a_creature_shows_is_the_journal_ranked_by_what_it_meant (both fixtures)",
+        "CreatureStoryTests.A_decision_a_creature_took_again_and_again_takes_one_line_of_its_story",
+        "CreatureStoryTests.Before_anything_has_happened_the_panel_is_still_what_it_has_been_doing",
+        "CreatureStoryTests.Early_in_a_party_the_panel_is_shorter_than_four_lines_and_says_so",
+        "GoldenUiTextTests.The_golden_HUD_text_is_reproduced_without_Godot (all three frames)"
+      ],
+      "reading": "Nine lines of feed and twenty of story instead of three and four. The bound is shared by both panels since the refactor, so this is also the check that the shared function is genuinely shared: a single deletion reddens both sides."
+    },
+    {
+      "half": "routine still fills what the turning points leave over",
+      "edit": "a `.Where(StoryWeight > 0)` is added in HudText.DomainSelection, so only what mattered is ever shown",
+      "result": "red: 8 of 445 failed",
+      "failing": [
+        "DomainFeedTests.Before_anything_has_mattered_the_feed_is_still_the_crew_at_work",
+        "DomainFeedTests.The_feed_a_domain_shows_is_the_journal_ranked_by_what_it_meant (both fixtures)",
+        "HudTextTests.The_event_panel_is_a_header_three_lines_and_the_diagnostics_count",
+        "CreatureStoryTests.Nothing_selected_leaves_the_domain_feed_and_not_a_story",
+        "GoldenUiTextTests.The_golden_HUD_text_is_reproduced_without_Godot (all three frames)"
+      ],
+      "reading": "A baseline party spends its first thirteen hundred ticks before the first wave. Without the fill the panel a player opens the game on is blank for more than half of it — the opposite defect to the one being fixed, easy to ship by accident, and the one that would look best in a screenshot taken at the end of a party."
+    },
+    {
+      "half": "the feed is in time order, newest first",
+      "edit": "the final re-ordering is dropped, so the lines come out in rank order",
+      "result": "red: 6 of 445 failed",
+      "failing": [
+        "DomainFeedTests.The_feed_a_domain_shows_is_the_journal_ranked_by_what_it_meant (both fixtures)",
+        "CreatureStoryTests.The_story_a_creature_shows_is_the_journal_ranked_by_what_it_meant (both fixtures)",
+        "GoldenUiTextTests.The_golden_HUD_text_is_reproduced_without_Godot (all three frames)"
+      ],
+      "reading": "Rank order puts a refusal above the panic that caused it. Three unconnected sentences only become a reading of the party when they are in the order the party happened."
+    },
+    {
+      "half": "the bound is what the frame can actually draw",
+      "edit": "not a source edit of the rule: HudText.DomainFeedLines raised from 3 to 4",
+      "check": "scripts/verify.ps1 -Stage godot",
+      "result": "red: verification_result status error, failedPhase stage, failedStage godot",
+      "message": "The HUD loses text in 1 place(s): 'feedback' needs 11 lines but only 10 fit in (287, 200) at viewport (2048, 1440), UI scale 2.",
+      "reading": "Every unit test is written against the constant and stays green at four; only the engine measuring the real label refuses it. That is what makes the budget half of the bound a measurement and not an assumption. Unlike the story panel it is the live 'feedback' label that fails rather than a padded worst case, because the domain feed is the shape the entry point actually carries. The same measurement caught a defect this issue shipped and then fixed: at THREE lines the panel also needed 11, because a turning point sentence is longer than a routine one and the diagnostics note took two drawn lines. See evidence/145-bound.json.",
+      "andThree": "the same command with the shipped bound of 3: the full nine-stage verify.ps1 run is ok — verification_result status ok, scope full, stagesExecuted [scripts, build, tests, mcp, sim, load, godot, ui, screenshots]."
+    }
+  ],
+  "notCovered": {
+    "scaleOrder": "Which reason codes sit at level 2 rather than level 1 is still a judgement no mutant falsifies — it was already recorded as a debt-ledger entry by Issue #140 and this issue reuses the scale unchanged rather than re-opening it.",
+    "theOwnersReading": "Criterion 2 of Issue #145 — 'the owner, without clicking any creature, says what is happening in the domain' — is a playtest and not a run. What is checkable was done: the panel text at six moments of a baseline party is in evidence/145-feed-after.json and a frame is in evidence/145-frames.json.",
+    "theSharedFunctionItself": "That StorySelection and DomainSelection are one function rather than two similar ones is an argument about the next change, not about this one. Nothing reddens if somebody inlines it back into two copies today; what the mutants above show is that both sides fall over together while it is shared, which is the property being bought."
+  }
+}

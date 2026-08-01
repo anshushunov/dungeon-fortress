@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "issue": 145,
+  "note": "PNGs land under .artifacts/evidence/145-feed and are not committed, per AGENTS.md's rule against committing large derived files. Everything below is copied verbatim from the manifest scripts/capture-evidence.ps1 itself wrote, not retyped: .artifacts/evidence/145-feed/manifest.json.",
+  "spec": "evidence/145-feed-frame.json",
+  "capture": {
+    "name": "145-domain-feed-t2400",
+    "sourceCommit": "3a85f7fe1e4072e0a8f46a06ec045bf551b8c274",
+    "sourceCommitSubject": "Лента платит за третью строку, контракт и evidence поправлены по замеру (#145)",
+    "sourceDirty": false,
+    "reproducible": true,
+    "publishable": true,
+    "fixture": "baseline",
+    "seed": 20260726,
+    "tick": 2400,
+    "checksum": "94907f228f807a84344443b3b7c7f84a2d3d51d36ef04acc8cf795c182a5f636",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 2400 -TileSize 40 -CameraZoom 0.75 -CameraPosition '560,320' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/145-feed/145-domain-feed-t2400.png",
+    "imagePath": ".artifacts/evidence/145-feed/145-domain-feed-t2400.png",
+    "imageSha256": "7dd9fc9a49e432a2ae89c1bef280eaa91c340d981034e13b8a51186c73bafee0",
+    "repeatImageSha256": "7dd9fc9a49e432a2ae89c1bef280eaa91c340d981034e13b8a51186c73bafee0",
+    "byteForByteRepeat": true,
+    "selectCreature": null,
+    "whyNothingIsSelected": "That is the whole point of the frame. Issue #145 is about the panel a player sees BEFORE the first click, and the capture spec therefore selects nobody."
+  },
+  "whatTheFrameShows": {
+    "panel": [
+      "EVENT FEEDBACK · 3 of 9 crew · 155 of 4425 mattered",
+      "t2384 · Брусок will not take cooking at (14,7): nerve broke at (18,7) t1703.",
+      "t2379 · Обух will not take cooking at (15,7): nerve broke at (17,7) t2024.",
+      "t2282 · Мотылёк will not take carrying at (15,7): nerve broke at (19,7) t2018. (x2)",
+      "",
+      "Diagnostics: 0"
+    ],
+    "beside": "The inspector says 'Click a creature or map cell' — nothing is selected, and the feed answers anyway.",
+    "reading": "Three of the nine crew will not take work at the places where their nerve went, and the panel says which work, which place and when each of them broke. That is the exit sentence of slice 2 — 'и как это изменило его следующее решение' — readable without a click. The same frame before the edit was three lines of Брусок stopped in one corridor (evidence/145-feed-before.json).",
+    "whatItDoesNotShow": "What the fourth wave cost. All three lines are refusals by memory because three creatures hold the top weight and the panel is three lines long; the summary line above carries 'WAVE 4/4 ACTIVE ×9' and 'crew 9', the roster line below carries FLED/FIGHT/READY per creature, and one click carries the rest."
+  }
+}

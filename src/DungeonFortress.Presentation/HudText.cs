@@ -166,9 +166,113 @@ public static class HudText
     public const int CreatureStoryLines = 4;
 
     /// <summary>
+    /// How many of the domain's own turning points the event feed shows at once,
+    /// with nothing selected.
+    ///
+    /// <para>
+    /// <b>The question is "how many lines does it take to read what is happening
+    /// in the domain", and the honest answer is larger than this number.</b> The
+    /// domain is its nine creatures, and what a player must be able to read
+    /// without clicking is which of them something happened to and what it was; on
+    /// the shipped <c>baseline</c> party at tick 2400 that is <b>nine</b> lines,
+    /// because all nine have had something that mattered — every creature's line
+    /// of <c>CreatureStoryTests.Most_of_what_a_creature_decides_is_routine</c>
+    /// prints more entries than routine ones
+    /// (<c>evidence/145-bound.json</c>). Nine does not fit, and saying so is
+    /// the whole point of asking the question first: Issue #128 asked only "how
+    /// many lines fit", got four, and a technical limit silently became a product
+    /// answer.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>What the frame can draw.</b> The panel holds ten drawn lines at the
+    /// tightest frame the HUD guard checks — viewport 2048x1440 at UI scale 2, a
+    /// 287-pixel column — and unlike the story panel the feed also carries the
+    /// session's diagnostics counter and the blank line above it.
+    /// <b>What binds is the sentences, not the header.</b> A turning point carries
+    /// its numbers with it — "Мотылёк broke and ran: 79% health, 5 raiders close,
+    /// 0 ally down." — and three of those need seven drawn lines, where three
+    /// routine sentences needed six. That is why this issue had to pay for its own
+    /// third line by trimming the diagnostics note (see <see cref="Feedback"/>):
+    /// with the note the panel measured 11 of 10, without it exactly 10.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>Main.AssertLabelsFit</c> is what refuses four, measured and not argued:
+    /// <em>"'feedback' needs 11 lines but only 10 fit in (287, 200) at viewport
+    /// (2048, 1440), UI scale 2"</em> (<c>evidence/145-bound.json</c>). And
+    /// unlike the story panel it is the <b>live</b> label that fails rather than a
+    /// padded worst case, because the feed is the shape every entry point actually
+    /// carries.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Which stage holds this bound, because the two do not hold the same
+    /// thing.</b> The <c>godot</c> stage reads the feed at ticks 1 and 190, where
+    /// every line is routine and the panel is <b>9 drawn lines of 10</b> — it has
+    /// a whole line of slack and will stay green through the next longer routine
+    /// sentence. The shape with no slack is the feed carrying <em>turning
+    /// points</em>, and inside <c>verify.ps1</c> exactly one input produces it:
+    /// the <c>screenshots</c> stage on the <c>prepared</c> party at tick 1670,
+    /// where the panel is <b>10 of 10</b>. Measured by putting one drawn line back
+    /// into the panel: <c>godot</c> reported <c>status ok</c> and
+    /// <c>screenshots</c> reported <c>'feedback' needs 11 lines but only 10 fit</c>
+    /// on that frame (<c>evidence/145-bound.json</c>).
+    /// </para>
+    ///
+    /// <para>
+    /// So they guard different mistakes, and the split is worth stating: raising
+    /// this constant adds two drawn lines and <c>godot</c> catches it on its own —
+    /// that is the mutant above. <b>Lengthening a sentence adds one, and only
+    /// <c>screenshots</c> catches that.</b>
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The slack is zero</b> on that shape, exactly as it is for the story panel
+    /// at four lines, and for the same reason: both panels are the tallest thing
+    /// their label can hold. Any sentence in <see cref="EventNarration"/> that
+    /// grows past two drawn lines reddens <c>verify.ps1</c> rather than quietly
+    /// losing a line — but it reddens the <b><c>screenshots</c> stage</b>, and
+    /// <c>-Stage godot</c> on its own will not see it. That is the run to make
+    /// after touching the wording, and it is the opposite of what an earlier
+    /// draft of this docstring said.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>What stays off the feed</b>, therefore, and is named rather than
+    /// hidden: six of the nine crew, every earlier beat of the three that are
+    /// shown, and all of the routine — 96.5 % of the journal. The header carries
+    /// the two counts that say so, and one click puts any creature's own four
+    /// beats on the same panel (<see cref="CreatureStory"/>).
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The feed is a digest and no longer a ticker</b>, and that is the second
+    /// thing given up. Ranking by what a decision meant means the top of the feed
+    /// can stand still for hundreds of ticks while the crew works — which is
+    /// exactly right when nothing has happened and would be wrong on a panel whose
+    /// job was to prove the world is running. The summary line above it already
+    /// carries the tick, the wave and the stocks, and the routine fill still moves
+    /// whenever nothing has mattered yet.
+    /// </para>
+    /// </summary>
+    public const int DomainFeedLines = 3;
+
+    /// <summary>
     /// How much one decision means for the creature that took it. The story panel
     /// spends its four lines from the top of this scale down, so routine never
     /// displaces a turning point (Issue #140).
+    ///
+    /// <para>
+    /// The domain feed spends its own lines down the <b>same</b> scale (Issue
+    /// #145), and that is a decision rather than an economy. There is no fact in
+    /// the canonical journal that means something to a domain and nothing to any
+    /// of its creatures: a domain has no body to be put down and no memory of its
+    /// own, and every entry it could be told about happened to somebody. What the
+    /// two panels do differ in is <b>what counts as one beat</b>, which is
+    /// <see cref="DomainSelection"/> against <see cref="StorySelection"/> and not
+    /// this scale.
+    /// </para>
     ///
     /// <para>
     /// Four levels, and each answers a different question a player asks about a
@@ -225,11 +329,12 @@ public static class HudText
     };
 
     /// <summary>
-    /// The event panel. With nothing selected it is the domain's feed: the last
-    /// three autonomous choices, newest first, plus the diagnostics count. With a
-    /// creature selected it becomes <b>that creature's story</b> — up to
-    /// <see cref="CreatureStoryLines"/> of the decisions that meant something for
-    /// its fate, newest first (Issue #128, reordered by Issue #140).
+    /// The event panel. With nothing selected it is the domain's feed: up to
+    /// <see cref="DomainFeedLines"/> of the crew's turning points, newest first,
+    /// plus the diagnostics count. With a creature selected it becomes <b>that
+    /// creature's story</b> — up to <see cref="CreatureStoryLines"/> of the
+    /// decisions that meant something for its fate, newest first (Issue #128,
+    /// reordered by Issue #140, and the feed beside it by Issue #145).
     ///
     /// <para>
     /// The owner played the first slice of memory of place and said: "Метки вижу,
@@ -262,8 +367,24 @@ public static class HudText
     /// </para>
     ///
     /// <para>
-    /// The header is deliberately part of both the empty and the populated case,
-    /// which is why the empty panel repeats it.
+    /// <b>The diagnostics counter says how many and no longer where to look.</b>
+    /// It used to read "Diagnostics: 0 (structured JSON is emitted by
+    /// smoke/capture)", which wraps onto two drawn lines and with the blank line
+    /// above it took three of the ten this panel has. That was affordable while
+    /// the feed showed the newest three entries, because the newest three are
+    /// routine and routine sentences are short. It stopped being affordable the
+    /// moment the feed started showing what mattered: a turning point carries its
+    /// numbers with it — "broke and ran: 79% health, 5 raiders close, 0 ally down"
+    /// — and three of those need seven drawn lines rather than six. Measured on
+    /// the two frames <c>verify.ps1</c> photographs, the panel needed 11 of 10
+    /// (<c>evidence/145-bound.json</c>).
+    /// </para>
+    ///
+    /// <para>
+    /// So the developer's note moved here and the count stayed. Where the
+    /// structured diagnostics are written is a fact about the tooling that a
+    /// player never needs and a developer reads once; how many there are is a
+    /// fact about this session, and it is the half worth a line of the HUD.
     /// </para>
     /// </summary>
     public static string Feedback(HudViewState view)
@@ -272,26 +393,119 @@ public static class HudText
         var state = view.Snapshot;
         // The diagnostics counter is a fact about the session, so it stays on the
         // session's own feed. Giving it up while a creature is selected is not a
-        // tidy-up: the line and the blank line above it are three of the ten
-        // drawn lines this panel has, and three lines is more than one entry of
-        // a creature's story. The count is one click away and the story is what
-        // the panel was clicked for.
+        // tidy-up: the line and the blank line above it are two of the ten drawn
+        // lines this panel has, and two lines is more than one entry of a
+        // creature's story. The count is one click away and the story is what the
+        // panel was clicked for.
         return view.SelectedCreatureId is { } creatureId
             ? CreatureStory(state, creatureId)
-            : DomainFeed(state) +
-                $"\n\nDiagnostics: {view.DiagnosticCount} (structured JSON is emitted by smoke/capture).";
+            : DomainFeed(state) + $"\n\nDiagnostics: {view.DiagnosticCount}";
     }
 
+    /// <summary>
+    /// The domain in at most <see cref="DomainFeedLines"/> lines: <b>who</b> in
+    /// the crew something happened to, and what, newest first.
+    ///
+    /// <para>
+    /// It used to be the newest three entries of the journal, and that made the
+    /// panel unreadable for exactly the reason Issue #140 measured about the story
+    /// panel — 96.5 % of what a creature decides is waiting for stock, being
+    /// blocked in a corridor and stepping aside, so the newest three almost always
+    /// are. Measured on the shipped <c>baseline</c> party, sampled every 50 ticks
+    /// to tick 2400: <b>3 of 48</b> windows of the feed carried anything that
+    /// mattered, and at tick 2400 all three lines were one creature stopped in one
+    /// corridor (<c>evidence/145-feed-before.json</c>). That is the screen a
+    /// player opens on, because nothing is selected until they click.
+    /// </para>
+    ///
+    /// <para>
+    /// So the feed is now the same rule as the story panel with one argument
+    /// changed: <b>the beat of a domain is a creature, where the beat of a
+    /// creature is a kind of decision</b>. One line per creature, its most
+    /// significant decision; the crew ranked by <see cref="StoryWeight"/> and then
+    /// by recency; cut to <see cref="DomainFeedLines"/>; put back in time order.
+    /// The scale is the same one and deliberately so (see
+    /// <see cref="StoryWeight"/>); what changes is the grouping, because the same
+    /// refusal from a second creature is news about the domain while the same
+    /// refusal from the same creature is not, and the defect being fixed is
+    /// literally three lines about one creature.
+    /// </para>
+    ///
+    /// <para>
+    /// Routine still fills whatever the turning points leave over, so the feed is
+    /// never blank and the first thousand ticks of a party — which have no turning
+    /// points at all — still read as what the crew is doing. Before the edit those
+    /// ticks were three lines about one or two creatures; they are now one line
+    /// each about <see cref="DomainFeedLines"/> of them.
+    /// </para>
+    ///
+    /// <para>
+    /// The header carries what is off the panel, in the idiom the story header
+    /// already uses: how many of the crew who have decided anything are shown, and
+    /// how much of the journal mattered at all. "EVENT FEEDBACK · 3 of 9 crew ·
+    /// 155 of 4425 mattered" is a panel that does not pretend to be the domain.
+    /// </para>
+    ///
+    /// <para>
+    /// The empty panel no longer repeats its own header. That doubling was
+    /// accidental — the header was concatenated in front of a body that already
+    /// had one — and a header that now carries counts cannot be printed twice
+    /// without lying about them.
+    /// </para>
+    ///
+    /// <para>
+    /// Nothing here runs a tick. Every input is a field of the snapshot that has
+    /// already been published, and the ranking is a function of the reason code
+    /// alone: this is the projection side of the same "projection against world"
+    /// line <see cref="CreatureStory"/> and <c>MapAccents</c> are written along.
+    /// </para>
+    /// </summary>
     private static string DomainFeed(PrototypeSnapshot state)
     {
-        var eventText = state.Events.Count == 0
-            ? "EVENT FEEDBACK\nNo events yet. Step or unpause to watch autonomous choices."
-            : string.Join(
-                "\n",
-                state.Events.TakeLast(3).Reverse().Select(@event =>
-                    $"t{@event.LastTick} · {EventNarration.Describe(state, @event)}"));
-        return "EVENT FEEDBACK\n" + eventText;
+        if (state.Events.Count == 0)
+        {
+            return "EVENT FEEDBACK\nNo events yet. Step or unpause to watch autonomous choices.";
+        }
+
+        var shown = DomainSelection(state.Events);
+        var crew = state.Events.Select(@event => @event.CreatureId).Distinct().Count();
+        var mattered = state.Events.Count(@event => StoryWeight(@event.ReasonCode) > 0);
+        var head = string.Create(
+            CultureInfo.InvariantCulture,
+            $"EVENT FEEDBACK · {shown.Count} of {crew} crew · {mattered} of {state.Events.Count} mattered");
+        return head + "\n" + string.Join(
+            "\n",
+            shown.Select(@event =>
+                $"t{@event.LastTick} · {EventNarration.Describe(state, @event)}"));
     }
+
+    /// <summary>
+    /// Which of the domain's entries the feed spends its lines on, newest first.
+    /// Public for the same reason <see cref="StorySelection"/> is: the test that
+    /// says "the feed never disagrees with the journal" has to be able to state
+    /// the rule rather than restate the code.
+    ///
+    /// <para>
+    /// It is <see cref="StorySelection"/> with one argument changed — the beat is
+    /// the creature rather than the kind of decision — and that is the whole of
+    /// the difference between the two panels. Both run
+    /// <see cref="MostSignificant"/>, so a change to how significance is spent is
+    /// a change to both by construction and cannot drift apart into two rules that
+    /// disagree.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>One line per creature</b> is what makes the ranking worth anything, and
+    /// it is the direct answer to what was measured: at tick 2400 the old feed's
+    /// three lines were one creature stopped in one corridor three times. A
+    /// creature's whole party is one line here — its most significant decision,
+    /// and the newest of those if it took several — because the domain has nine of
+    /// them and the question the panel answers is <em>who</em>. The rest of that
+    /// creature's story is one click away.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<PrototypeEvent> DomainSelection(IEnumerable<PrototypeEvent> journal) =>
+        MostSignificant(journal, @event => @event.CreatureId, EqualityComparer<int>.Default, DomainFeedLines);
 
     /// <summary>
     /// One creature's party in at most <see cref="CreatureStoryLines"/> lines:
@@ -404,45 +618,87 @@ public static class HudText
     /// </para>
     ///
     /// <para>
-    /// <b>"The newest of that kind" means the last one written, not the first
-    /// one found at the highest tick.</b> A creature can leave two entries of the
-    /// same kind on the same tick, and then the tick cannot tell them apart —
-    /// only the order the world wrote them in can, and the later one is the one
-    /// that happened later. Taking the first would be picking by an accident of
-    /// how the search runs.
-    /// </para>
-    ///
-    /// <para>
-    /// It is not hypothetical. On the shipped <c>baseline</c> party 14 of the 48
-    /// <c>combat_joined</c> entries are written one line before a second
-    /// <c>combat_joined</c> at the same tick, and only the second carries the
-    /// wave number; <c>MaxBy</c> took the first and the panel read "joined the
-    /// fight for wave ?." at the top of two of the three flagship stories. That
-    /// one code carries two different facts is a defect of its own and has an
-    /// Issue of its own; what belongs here is that the panel must show the last
-    /// thing a creature did, and this is what "last" means.
-    /// </para>
-    ///
-    /// <para>
-    /// Ties that survive that — two kinds ending on the same tick — are broken by
-    /// the order the journal is in, which is again the order the world wrote it
-    /// in, so the same snapshot always produces the same panel.
+    /// All three steps live in <see cref="MostSignificant"/>, which the domain
+    /// feed runs with a different beat (Issue #145). What is stated there and
+    /// matters here: <b>"the newest of that kind" means the last one written</b>,
+    /// not the first one found at the highest tick, because a creature can leave
+    /// two entries of one kind on one tick and only write order tells them apart —
+    /// and on <c>baseline</c> it does, 14 times out of 48
+    /// <c>combat_joined</c> entries.
     /// </para>
     /// </summary>
-    public static IReadOnlyList<PrototypeEvent> StorySelection(IEnumerable<PrototypeEvent> story)
+    public static IReadOnlyList<PrototypeEvent> StorySelection(IEnumerable<PrototypeEvent> story) =>
+        MostSignificant(story, @event => @event.ReasonCode, StringComparer.Ordinal, CreatureStoryLines);
+
+    /// <summary>
+    /// The one rule both panels are made of: <b>one line per beat, the beat's most
+    /// significant entry, the beats that mean most, put back in time order</b>.
+    /// What a beat is comes in as an argument — a kind of decision for one
+    /// creature's story (Issue #140), a creature for the domain's feed (Issue
+    /// #145) — and nothing else differs between them.
+    ///
+    /// <para>
+    /// It is a shared function rather than two similar ones on purpose. The
+    /// alternative was to copy the ranking into the feed, and a copy is how the
+    /// two panels would come to disagree about what matters after the next change
+    /// to <see cref="StoryWeight"/> — which is the failure Issue #145 was opened
+    /// about, told forwards instead of backwards: the story panel was fixed by
+    /// Issue #140 and the feed beside it was left showing the newest three
+    /// entries.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The representative of a beat is its best by "what it meant, then
+    /// when"</b>, and the later-written of two that tie. For a story that reduces
+    /// to "the newest of that kind", because every entry in a reason-code group
+    /// weighs the same; for the feed it is what makes a creature's line the worst
+    /// thing that happened to it rather than the last thing it did.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>"Later-written" and not "first found at the highest tick".</b> A
+    /// creature can leave two entries of one kind on one tick, and then only the
+    /// order the world wrote them in can tell them apart. On the shipped
+    /// <c>baseline</c> party 14 of the 48 <c>combat_joined</c> entries are written
+    /// one line before a second <c>combat_joined</c> on the same tick and only the
+    /// second carries the wave number; <c>MaxBy</c> took the first and the panel
+    /// read "joined the fight for wave ?." (Issue #140).
+    /// </para>
+    ///
+    /// <para>
+    /// Ties that survive that are broken by the order the journal is in, which is
+    /// again the order the world wrote it in, so the same snapshot always produces
+    /// the same panel.
+    /// </para>
+    /// </summary>
+    /// <param name="journal">The entries to choose from. Already scoped by the caller.</param>
+    /// <param name="beat">What counts as one line's worth of story.</param>
+    /// <param name="sameBeat">When two entries belong to the same beat.</param>
+    /// <param name="lines">How many lines the panel is worth.</param>
+    private static IReadOnlyList<PrototypeEvent> MostSignificant<TBeat>(
+        IEnumerable<PrototypeEvent> journal,
+        Func<PrototypeEvent, TBeat> beat,
+        IEqualityComparer<TBeat> sameBeat,
+        int lines)
     {
-        ArgumentNullException.ThrowIfNull(story);
-        return story
-            .GroupBy(@event => @event.ReasonCode, StringComparer.Ordinal)
-            .Select(kind => kind.Aggregate(
-                (newest, next) => next.LastTick >= newest.LastTick ? next : newest))
-            .OrderByDescending(@event => StoryWeight(@event.ReasonCode))
-            .ThenByDescending(@event => @event.LastTick)
-            .Take(CreatureStoryLines)
+        ArgumentNullException.ThrowIfNull(journal);
+        return journal
+            .GroupBy(beat, sameBeat)
+            .Select(group => group.Aggregate((best, next) =>
+                Meaning(next).CompareTo(Meaning(best)) >= 0 ? next : best))
+            .OrderByDescending(Meaning)
+            .Take(lines)
             .OrderByDescending(@event => @event.LastTick)
             .ThenByDescending(@event => @event.FirstTick)
             .ToArray();
     }
+
+    /// <summary>
+    /// What an entry means and when it happened, in that order — the key both
+    /// panels rank by, and the key a beat's representative is chosen by.
+    /// </summary>
+    private static (int Weight, int Tick) Meaning(PrototypeEvent @event) =>
+        (StoryWeight(@event.ReasonCode), @event.LastTick);
 
     /// <summary>
     /// One line of one creature's story: when it decided, and what it decided.

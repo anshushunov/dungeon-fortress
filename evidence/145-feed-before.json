@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "issue": 145,
+  "when": "2026-08-01, before the edit",
+  "what": "What the domain feed carries while a baseline party runs, when it is the last three entries of the journal. This is the panel a player opens on, because nothing is selected until they click.",
+  "theOwnersWords": "реакции на них не видно без каких-то записей, а лог очень короткий",
+  "whyItIsMeasuredAgain": "Issue #140 fixed the story of a SELECTED creature and did not touch DomainFeed. Independent review of #140 measured the feed separately and rated the risk on it higher than the risk on the story panel.",
+  "howItWasMeasured": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter \"FullyQualifiedName~DomainFeedTests\" --logger \"console;verbosity=detailed\"",
+    "where": "tests/DungeonFortress.Presentation.Tests/DomainFeedTests.cs",
+    "party": "the shipped baseline command log, scenarios/prototype1/baseline.commands.v2.json, stepped tick by tick to 2400",
+    "sampling": "the panel is read every 50 ticks, which is about how often a player looks at it, and is the sampling independent review used on #140",
+    "whatCounts": "a window 'carries something that mattered' when at least one of its event lines renders a journal entry with HudText.StoryWeight > 0. The sentence identifies the entry: one reason code has one sentence template and the weight is a function of the code.",
+    "note": "This is not a model of the panel. HudText.Feedback is called with nothing selected and its own output is read."
+  },
+  "party": {
+    "fixture": "baseline",
+    "ticks": 2400,
+    "creatures": 9,
+    "events": 4425,
+    "eventsThatMattered": 155,
+    "firstTickAnythingMattered": "between t1300 and t1350 — at t1300 the party has 1963 entries and none of them mattered, at t1350 it has 2006 and 16 of them did"
+  },
+  "criterionOneBeforeTheEdit": {
+    "test": "DomainFeedTests.The_domain_feed_shows_what_mattered_and_not_only_what_happened_last",
+    "result": "red",
+    "message": "3 of 48 windows of the domain feed (6,3%) carry anything that mattered to this party, under the 40% Issue #145 names.",
+    "windowsThatCarriedSomething": 3,
+    "windowsSampled": 48,
+    "share": "6.3%",
+    "windowsInWhichThePartyHadSomethingToShow": 22,
+    "theCeiling": "22 of 48 = 45.8%. Half the party happens before anything has mattered at all, so a feed that showed a turning point at every possible moment would still read 45.8% over the whole party. The 40% floor is set just under that ceiling and not under 100%.",
+    "theTicksThatCarriedSomething": ["t1350 (2 of 3 lines)", "t2000 (1 of 3)", "t2250 (1 of 3)"]
+  },
+  "criterionOneWithNoSlack": {
+    "test": "DomainFeedTests.The_feed_carries_something_that_mattered_whenever_the_party_has_one",
+    "result": "red",
+    "message": "19 of 22 windows show nothing that mattered while the party had something to show: t1400 (27 of 2044 entries mattered), t1450, t1500, t1550, t1600, t1650, t1700, t1750, …",
+    "reading": "At t2400 the party has 155 entries that mattered out of 4425 and the feed shows none of them."
+  },
+  "whatThePanelSaidBeforeTheEdit": {
+    "t2400": [
+      "EVENT FEEDBACK",
+      "t2399 · Брусок stopped at (14,7): somebody in the way.",
+      "t2399 · Брусок waits on cooking: nothing to work with.",
+      "t2398 · Брусок stopped at (14,7): somebody in the way.",
+      "",
+      "Diagnostics: 0 (structured JSON is emitted by smoke/capture)."
+    ],
+    "reading": "One creature, one corridor, three lines. Nine creatures are in this domain and 155 things worth reading have happened to them; without a click the player is told none of it. The independent review of #140 read the same panel and put it as 1 window of 47; this run reads 3 of 48 because it counts a window as carrying something whenever ANY of its lines does, which is the weaker of the two claims and still 6.3%."
+  },
+  "howMuchIsNeededToReadADomain": {
+    "question": "Not \"how many lines does the panel budget allow\" but \"how many lines does it take to read what is happening in the domain\".",
+    "theDomainIsItsCreatures": 9,
+    "creaturesWithSomethingThatMatteredAtT2400": 9,
+    "distinctWhoAndWhatBeatsAtT2400": 50,
+    "distinctKindsThatMatteredAtT2400": 11,
+    "openQuestion": "The full answer is nine lines, one per creature. What the edit has to decide is how many of them the frame can draw and what it says about the rest."
+  }
+}
