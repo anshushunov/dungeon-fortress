@@ -149,9 +149,41 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// The half of the rule that is about the crowd rather than about the free
+    /// tile: a fighter with nowhere to stand beside its enemy still closes on the
+    /// enemy, exactly as it did before Issue #129.
+    ///
+    /// The approach rule prefers a free place to the queue. It is not allowed to
+    /// invent a new way of standing still, and the difference is only visible
+    /// where the preference has nothing to offer — every tile beside the target
+    /// taken. That happens 721 fighter-ticks over the matrix, so the case is
+    /// sampled rather than hypothetical, and on 172 of them the fighter walked
+    /// anyway. Drop the fallback and the count is zero: the fighter would stop in
+    /// the middle of a fight because the last row of a crowd is full.
+    /// </summary>
+    [Fact]
+    public void A_fighter_with_nowhere_to_stand_beside_its_enemy_still_closes_on_it()
+    {
+        var crowded = Matrix.Sum(measurement => measurement.NoPlaceBesideTheEnemy);
+        var closedIn = Matrix.Sum(measurement => measurement.ClosedInWithNoPlaceBesideTheEnemy);
+
+        Assert.True(
+            crowded >= 200,
+            $"only {crowded} fighter-ticks over the matrix found every tile beside their enemy " +
+            "taken, which is too few for the fallback of the approach rule to have been read at " +
+            $"all.{Environment.NewLine}{Detail()}");
+        Assert.True(
+            closedIn >= 20,
+            $"of the {crowded} fighter-ticks with no free place beside the enemy, only {closedIn} " +
+            "moved. A fighter that stops walking because the crowd around its enemy is full has " +
+            "been given a new way to stand still, which the approach rule is not allowed to do." +
+            $"{Environment.NewLine}{Detail()}");
+    }
+
+    /// <summary>
     /// The six parties, measured once and shared. A party takes about a second to
-    /// walk, and three assertions over the same six would otherwise pay for it
-    /// three times.
+    /// walk, and four assertions over the same six would otherwise pay for it
+    /// four times.
     /// </summary>
     private static IReadOnlyList<ApproachMeasurement> Matrix => MatrixMeasurements.Value;
 
@@ -261,6 +293,33 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
             {
                 tally.QueuedInTheScrumWithAFreeTile++;
                 tally.FreeTilesWhileQueued += free;
+            }
+        }
+
+        foreach (var fighter in fighters)
+        {
+            var target = raiders
+                .OrderBy(raider => Manhattan(fighter.Position, raider.Position))
+                .ThenBy(raider => raider.Id)
+                .First();
+            if (raiders.Any(raider => raider.Position == fighter.Position))
+            {
+                tally.FightersStandingOnARaider++;
+            }
+
+            if (Manhattan(fighter.Position, target.Position) <= PrototypeTuning.MeleeAttackRange ||
+                FreeTilesBeside(snapshot, target.Position, blocked) > 0)
+            {
+                continue;
+            }
+
+            // Nowhere beside the enemy to stand. The fallback of ApproachTile is
+            // the only thing that keeps the fighter walking at all, so whether it
+            // walked is the whole observation.
+            tally.NoPlaceBesideTheEnemy++;
+            if (fighter.LastMoveTick == acted)
+            {
+                tally.ClosedInWithNoPlaceBesideTheEnemy++;
             }
         }
 
@@ -421,6 +480,9 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
         public int BlockedWhileFighting;
         public int SurroundPlaces;
         public int SurroundTaken;
+        public int FightersStandingOnARaider;
+        public int NoPlaceBesideTheEnemy;
+        public int ClosedInWithNoPlaceBesideTheEnemy;
         public readonly int[] TouchingHistogram = new int[5];
         public readonly int[] AttackerHistogram = new int[5];
 
@@ -445,6 +507,9 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
                 BlockedWhileFighting,
                 SurroundPlaces,
                 SurroundTaken,
+                FightersStandingOnARaider,
+                NoPlaceBesideTheEnemy,
+                ClosedInWithNoPlaceBesideTheEnemy,
                 [.. TouchingHistogram],
                 [.. AttackerHistogram]);
     }
@@ -469,6 +534,9 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
         int BlockedWhileFighting,
         int SurroundPlaces,
         int SurroundTaken,
+        int FightersStandingOnARaider,
+        int NoPlaceBesideTheEnemy,
+        int ClosedInWithNoPlaceBesideTheEnemy,
         IReadOnlyList<int> TouchingHistogram,
         IReadOnlyList<int> AttackerHistogram)
     {
@@ -510,7 +578,10 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
                 $"maxRaidersOnOneTile={MaxRaidersOnOneTile} " +
                 $"blockedWhileFighting={BlockedWhileFighting} " +
                 $"surroundPlaces={SurroundPlaces} surroundTaken={SurroundTaken} " +
-                $"surroundShare={SurroundShare:F3}");
+                $"surroundShare={SurroundShare:F3} " +
+                $"onARaidersTile={FightersStandingOnARaider} " +
+                $"noPlaceBeside={NoPlaceBesideTheEnemy} " +
+                $"closedInAnyway={ClosedInWithNoPlaceBesideTheEnemy}");
     }
 
     private static PrototypeCommandLog LoadFixture(string fixtureName) =>
