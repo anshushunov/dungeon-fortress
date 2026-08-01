@@ -2600,7 +2600,12 @@ public sealed class PrototypeWorld
     /// the domain — a body on the floor counts, exactly as it does in
     /// <see cref="Move"/> — and carries no raider. The last clause is the
     /// occupancy rule of contract 4.1 rather than the implementation's: standing
-    /// on a raider is not a place to stand;</description></item>
+    /// on a raider is not a place to stand. It is also the one clause here that
+    /// no check holds on its own, and the reason is measured rather than assumed:
+    /// with it a fighter shares a tile with a raider on 8 fighter-ticks over the
+    /// matrix and without it on 12, because most of that overlap is the raider
+    /// walking onto the fighter — <c>ActRaiders</c> assigns a position with no
+    /// occupancy check at all (<c>evidence/129-mutations.json</c>);</description></item>
     /// <item><description>of the free candidates, the fighter takes the one
     /// nearest **to itself** by the map, and the first in the order above when
     /// two are equally near. Nearest to itself is what spreads the fighters out:
