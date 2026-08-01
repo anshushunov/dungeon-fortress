@@ -171,11 +171,19 @@ public sealed class RoomGeometryTests
                 RoomGeometry.BorderInset(purposes[index]));
         }
 
-        // And no inset eats a whole tile even at the smallest tile size ADR 0008
-        // allows, or a one-cell room would have no inside left.
+        // And no inset eats a whole tile, or a one-cell room would have no inside
+        // left. The ceiling is RoomGeometry's own, in the reference pixels the
+        // inset is measured in; it used to be `32 / 4.0` here, which compared a
+        // reference-pixel quantity against the smallest *screen* tile ADR 0008
+        // allows — the units mistake the debt ledger records, and the reason
+        // Issue #147 had to answer what the ceiling actually is before it could
+        // move the ladder past the old one.
         foreach (var purpose in purposes)
         {
-            Assert.InRange(RoomGeometry.BorderInset(purpose), 1.0, 32 / 4.0);
+            Assert.InRange(
+                RoomGeometry.BorderInset(purpose),
+                1.0,
+                RoomGeometry.MaximumBorderInset);
         }
     }
 
@@ -257,10 +265,15 @@ public sealed class RoomGeometryTests
     /// edge, since <c>DrawLine</c> gives the stroke width and the eye reads the
     /// whole stroke) and the facade's bottom edge, in scaled screen pixels at the
     /// same tile size <see cref="RoomGeometryTests"/> uses everywhere else. It
-    /// picks the inset the same way <c>Main.DrawRoomBorder</c> does — plain
-    /// <see cref="RoomGeometry.BorderInset"/> unless <see cref="RoomGeometry.BordersWallToNorth"/>
-    /// says otherwise — so the test exercises the real decision and not a second
-    /// copy of it. A positive overlap means the two are not yet apart.
+    /// picks the inset the same way <c>Main.DrawRoomBorder</c> does — through
+    /// <see cref="RoomGeometry.BorderInsetFor"/> — so the test exercises the real
+    /// decision and not a second copy of it. A positive overlap means the two are
+    /// not yet apart.
+    ///
+    /// Kept alongside the wider all-sides sweep Issue #147 added
+    /// (<see cref="RoomWallClearanceTests"/>) rather than folded into it: this is
+    /// the property #139 bought, written the way #139 wrote it, and a narrower
+    /// check that names one mechanism is worth keeping next to a general one.
     /// </summary>
     [Fact]
     public void The_border_of_every_room_clears_a_neighbouring_walls_facade()
@@ -268,16 +281,15 @@ public sealed class RoomGeometryTests
         var state = PresentationFixtures.Baseline(1);
         var rockTiles = state.Map.RockTiles.ToHashSet();
         var scale = CameraView.WorldVisualScale(Tile);
-        // Main.DrawRoomBorder strokes the line at ScaleWorld(2.0f) wide; a line
-        // drawn "at" y actually covers y ± half that width.
-        var halfStrokeWidth = scale * 1.0;
+        // Main.DrawRoomBorder strokes the line RoomGeometry.BorderStrokeWidth
+        // wide; a line drawn "at" y actually covers y ± half that width.
+        var halfStrokeWidth = scale * RoomGeometry.BorderStrokeHalfWidth;
 
         var overlaps = new List<object>();
         foreach (var room in state.Rooms)
         {
-            var purposeInset = RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles)
-                ? RoomGeometry.WallAdjacentBorderInset(room.Purpose)
-                : RoomGeometry.BorderInset(room.Purpose);
+            var purposeInset =
+                RoomGeometry.BorderInsetFor(room.Purpose, room.Perimeter, rockTiles);
             var insetScaled = purposeInset * scale;
             foreach (var cell in room.Perimeter)
             {
@@ -350,18 +362,14 @@ public sealed class RoomGeometryTests
     {
         var state = PresentationFixtures.Baseline(1);
         var rockTiles = state.Map.RockTiles.ToHashSet();
-        // RoomGeometry's own (private) BorderStrokeHalfWidth: the reference
-        // pixel half-width Main.DrawRoomBorder actually strokes its line with.
-        const double halfStrokeWidth = 1.0;
 
         var oldPositionStillConflicts = new List<string>();
         var newPositionOverlaps = new List<object>();
         foreach (var room in state.Rooms)
         {
-            var purposeInset = RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles)
-                ? RoomGeometry.WallAdjacentBorderInset(room.Purpose)
-                : RoomGeometry.BorderInset(room.Purpose);
-            var borderFarEdge = purposeInset + halfStrokeWidth;
+            var purposeInset =
+                RoomGeometry.BorderInsetFor(room.Purpose, room.Perimeter, rockTiles);
+            var borderFarEdge = purposeInset + RoomGeometry.BorderStrokeHalfWidth;
 
             if (RoomGeometry.LabelDefaultTop < borderFarEdge)
             {
@@ -396,98 +404,267 @@ public sealed class RoomGeometryTests
     }
 
     /// <summary>
-    /// The wall-adjacent ladder keeps the same property <see cref="Two_purposes_next_to_each_other_do_not_share_a_border_line"/>
-    /// proves for the plain one: every purpose still gets a distinct depth, and
-    /// none of them eats a whole one-tile room even at the smallest tile size
-    /// ADR 0008 allows.
+    /// Every wall-aware ladder keeps the same property
+    /// <see cref="Two_purposes_next_to_each_other_do_not_share_a_border_line"/>
+    /// proves for the plain one, on every one of the sixteen side profiles
+    /// <see cref="RoomGeometry.WallSides"/> can return and not only on the one
+    /// Issue #139 had: every purpose still gets a distinct depth, none of them
+    /// eats a whole one-tile room, and a room pushed by a wall is never drawn
+    /// shallower than the same room would be with nothing against it.
     /// </summary>
     [Fact]
-    public void Wall_adjacent_insets_are_still_distinct_and_bounded()
+    public void Wall_aware_insets_are_still_distinct_and_bounded()
     {
         var purposes = Enum.GetValues<ZoneKind>();
-        for (var index = 1; index < purposes.Length; index++)
+        foreach (var sides in AllSideProfiles())
         {
-            Assert.NotEqual(
-                RoomGeometry.WallAdjacentBorderInset(purposes[index - 1]),
-                RoomGeometry.WallAdjacentBorderInset(purposes[index]));
-        }
+            for (var index = 1; index < purposes.Length; index++)
+            {
+                Assert.NotEqual(
+                    RoomGeometry.BorderInset(purposes[index - 1], sides),
+                    RoomGeometry.BorderInset(purposes[index], sides));
+            }
 
-        foreach (var purpose in purposes)
-        {
-            Assert.InRange(RoomGeometry.WallAdjacentBorderInset(purpose), 1.0, 32 / 4.0);
-
-            // And it is always the deeper of the two ladders: a room pushed by a
-            // wall never ends up drawn shallower than one that is not.
-            Assert.True(
-                RoomGeometry.WallAdjacentBorderInset(purpose) > RoomGeometry.BorderInset(purpose));
+            foreach (var purpose in purposes)
+            {
+                Assert.InRange(
+                    RoomGeometry.BorderInset(purpose, sides),
+                    1.0,
+                    RoomGeometry.MaximumBorderInset);
+                Assert.True(
+                    RoomGeometry.BorderInset(purpose, sides) >=
+                    RoomGeometry.BorderInset(purpose),
+                    $"{purpose} at {sides} is drawn shallower than with no wall at all");
+            }
         }
     }
+
+    /// <summary>
+    /// A wall to the south is the one side that buys no inset at all, and the one
+    /// that must not: <see cref="RoomGeometry.WallSides"/> reports it, and
+    /// <see cref="RoomGeometry.BorderInset(ZoneKind, WallNeighbors)"/> ignores it
+    /// on purpose. <see cref="RoomWallClearanceTests"/> is where the reason is
+    /// measured rather than asserted; this only pins that the deliberate choice
+    /// is still the one the code makes, because "south does nothing" is exactly
+    /// what a careless generalisation of this ladder would quietly change.
+    /// </summary>
+    [Fact]
+    public void A_wall_to_the_south_alone_does_not_move_the_border()
+    {
+        foreach (var purpose in Enum.GetValues<ZoneKind>())
+        {
+            Assert.Equal(
+                RoomGeometry.BorderInset(purpose),
+                RoomGeometry.BorderInset(purpose, WallNeighbors.South));
+        }
+    }
+
+    /// <summary>
+    /// The debt the ledger recorded against Issue #139, re-measured rather than
+    /// re-argued: two rooms painted over each other, of which only one touches a
+    /// wall, can be handed the same inset and draw one line where #52 bought two.
+    ///
+    /// The ledger's own example was <c>2.0 + 3.0 == 5.0 + 0.0</c>. Issue #147
+    /// moved every base, so the question "did that get worse" has to be answered
+    /// with a number and not with a shrug: this counts the colliding pairs across
+    /// the whole cross-product of side profile and purpose, and pins the count.
+    /// It is not zero and cannot be made zero by choosing better numbers here —
+    /// the collision is <see cref="WallRenderGeometry.FacadeReferenceOverhang"/>
+    /// (3.0, owned by Issue #83) landing exactly on the widest step of the
+    /// purpose ladder (3.0, owned by Issue #52), and neither constant belongs to
+    /// this issue. What is checked is that #147 did not add to it.
+    /// </summary>
+    [Fact]
+    public void Overlapping_rooms_with_different_wall_profiles_collide_no_more_than_before()
+    {
+        var purposes = Enum.GetValues<ZoneKind>();
+        var collisions = new List<(double Shallower, double Deeper, double Inset)>();
+
+        // Distinct *bases*, since two profiles that produce the same base are the
+        // same ladder and cannot collide with each other in a way #52 cares about.
+        var bases = AllSideProfiles()
+            .Select(RoomGeometry.WallClearance)
+            .Distinct()
+            .OrderBy(value => value)
+            .ToArray();
+        Assert.Equal(
+            [
+                RoomGeometry.PlainBorderBase,
+                RoomGeometry.SideWallClearance,
+                RoomGeometry.NorthWallClearance,
+            ],
+            bases);
+
+        foreach (var left in bases)
+        {
+            foreach (var right in bases)
+            {
+                if (left >= right)
+                {
+                    continue;
+                }
+
+                foreach (var first in purposes)
+                {
+                    foreach (var second in purposes)
+                    {
+                        var shallow = left + PurposeStep(first);
+                        if (Math.Abs(shallow - (right + PurposeStep(second))) < 1e-9)
+                        {
+                            collisions.Add((left, right, shallow));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Before #147 the bases were {2.0, 5.0} and the one colliding rung was
+        // 2.0 + 3.0 == 5.0 + 0.0, over the two purposes with step 3.0 against the
+        // three with step 0.0 — six ordered pairs. After #147 the bases are
+        // {2.0, 2.625, 5.625} and the surviving rung is 2.625 + 3.0 == 5.625 + 0,
+        // the same six pairs. The plain-against-north collision the ledger named
+        // is gone; a room with nothing against it can no longer be mistaken for a
+        // room under a wall.
+        var payload = JsonSerializer.Serialize(
+            collisions.Select(item => new
+            {
+                shallowerBase = item.Shallower,
+                deeperBase = item.Deeper,
+                inset = item.Inset,
+            }),
+            new JsonSerializerOptions { WriteIndented = true });
+        Assert.True(collisions.Count == 6, payload);
+        Assert.All(
+            collisions,
+            collision =>
+            {
+                Assert.Equal(RoomGeometry.SideWallClearance, collision.Shallower);
+                Assert.Equal(RoomGeometry.NorthWallClearance, collision.Deeper);
+            });
+    }
+
+    /// <summary>
+    /// The purpose step, restated from <c>RoomGeometry</c>'s private
+    /// <c>PurposeLadderStep</c> — a test about how two ladders line up needs the
+    /// rungs, and the alternative is making the ladder public for one caller.
+    /// <see cref="Two_purposes_next_to_each_other_do_not_share_a_border_line"/>
+    /// is what keeps this honest: it reads the real method.
+    /// </summary>
+    private static double PurposeStep(ZoneKind purpose) =>
+        RoomGeometry.BorderInset(purpose) - RoomGeometry.PlainBorderBase;
+
+    /// <summary>Every combination of sides a room can have rock against.</summary>
+    private static IEnumerable<WallNeighbors> AllSideProfiles() =>
+        Enumerable.Range(0, 16).Select(bits => (WallNeighbors)bits);
 
     /// <summary>
     /// Review round 2's F7: the bound above passes with zero margin at its own
     /// ceiling (8.0 against 32 / 4.0). This is the number that matters more
     /// directly — whether the caption/icon block <see cref="RoomGeometry.LabelTop"/>
     /// pushes down, plus its own <see cref="RoomGeometry.LabelIconSize"/>,
-    /// still fits inside one cell at the deepest the wall-adjacent ladder ever
-    /// reaches.
+    /// still fits inside one cell at the deepest the ladder ever reaches, which
+    /// after Issue #147 is 8.625 rather than 8.0.
     ///
     /// Not parametrised over 32 and 48, the real tile sizes ADR 0008 allows,
     /// and that is not a shortcut: every quantity involved is reference-pixel
     /// and pre-scale, and the real tile size and the scale it produces cancel
     /// in this comparison exactly the way they do in
-    /// <see cref="Wall_adjacent_insets_are_still_distinct_and_bounded"/> above
+    /// <see cref="Wall_aware_insets_are_still_distinct_and_bounded"/> above
     /// — one reference-domain assertion already covers every tile size the
     /// engine can be asked to run at, not only the two ends of the range.
     ///
     /// Review round 3's N3: that argument is the reason the ceiling has to be
-    /// <c>CameraView</c>'s own reference tile size (22.0, private at
-    /// <c>CameraView.cs:108</c>, restated here), not the real screen-pixel
-    /// minimum <see cref="Wall_adjacent_insets_are_still_distinct_and_bounded"/>
-    /// above uses — comparing a reference-pixel quantity against 32 is the
-    /// same units mismatch review named there in round 1, just harder to see
-    /// on a value that was already comfortably inside either ceiling. Against
-    /// 32 this bound was live only once the label block overran its cell by
-    /// 45%; against 22 it is live at 18% over, which is the margin that
-    /// actually protects the property the test's name promises.
+    /// the reference tile size and not the real screen-pixel minimum — comparing
+    /// a reference-pixel quantity against 32 is a units mismatch. Issue #147
+    /// moved the restated 22.0 out of this file and into
+    /// <see cref="RoomGeometry.ReferenceCell"/>, where
+    /// <see cref="ReferenceCell_is_the_one_CameraView_scales_by"/> pins it to
+    /// <c>CameraView</c>'s private copy executably instead of by comment.
     /// </summary>
     [Fact]
-    public void The_label_block_still_fits_one_cell_at_the_deepest_wall_adjacent_inset()
+    public void The_label_block_still_fits_one_cell_at_the_deepest_wall_aware_inset()
     {
-        // CameraView.ReferenceTileSize: private there, restated here as the
-        // same reference-pixel cell every LabelTop/LabelIconSize number above
-        // is measured against before WorldVisualScale ever multiplies it.
-        const double referenceTileSize = 22.0;
-
-        foreach (var purpose in Enum.GetValues<ZoneKind>())
+        foreach (var sides in AllSideProfiles())
         {
-            var labelBottom =
-                RoomGeometry.LabelTop(RoomGeometry.WallAdjacentBorderInset(purpose)) +
-                RoomGeometry.LabelIconSize;
+            foreach (var purpose in Enum.GetValues<ZoneKind>())
+            {
+                var labelBottom =
+                    RoomGeometry.LabelTop(RoomGeometry.BorderInset(purpose, sides)) +
+                    RoomGeometry.LabelIconSize;
 
-            Assert.True(
-                labelBottom < referenceTileSize,
-                $"{purpose}: label block reaches {labelBottom} reference px of a " +
-                $"{referenceTileSize} reference-px cell — no longer inside one cell");
+                Assert.True(
+                    labelBottom < RoomGeometry.ReferenceCell,
+                    $"{purpose} at {sides}: label block reaches {labelBottom} reference px " +
+                    $"of a {RoomGeometry.ReferenceCell} reference-px cell — no longer " +
+                    "inside one cell");
+            }
         }
     }
 
     /// <summary>
-    /// The predicate that switches ladders: true only when a cell of the room
-    /// really does have rock to its north, false for a room with no such
-    /// neighbour and false for a room whose only rock neighbour is on another
-    /// side (Issue #139 is specifically about the north-facing facade overhang,
-    /// per <see cref="WallTopology.HasFrontFacade"/>).
+    /// <see cref="RoomGeometry.ReferenceCell"/> restates a constant
+    /// <c>CameraView</c> keeps private, and a restated constant is the shape of
+    /// debt the ledger already records twice against this corner of the code. So
+    /// it is not left restated: <see cref="CameraView.WorldVisualScale"/> divides
+    /// by exactly that constant, so asking it for the scale of a real tile size
+    /// and comparing with the ratio computed here pins the two together without
+    /// widening anybody's API.
+    ///
+    /// 44 rather than the reference cell itself, because
+    /// <see cref="CameraView.ValidateTileSize"/> refuses anything outside ADR
+    /// 0008's 32–48 range and 22 is outside it.
     /// </summary>
     [Fact]
-    public void BordersWallToNorth_reads_only_the_north_neighbour()
+    public void ReferenceCell_is_the_one_CameraView_scales_by()
     {
-        var wallToNorth = new HashSet<GridPoint> { new(0, -1) };
-        Assert.True(RoomGeometry.BordersWallToNorth([new GridPoint(0, 0)], wallToNorth));
+        const int tile = 44;
 
-        var wallToSouth = new HashSet<GridPoint> { new(0, 1) };
-        Assert.False(RoomGeometry.BordersWallToNorth([new GridPoint(0, 0)], wallToSouth));
+        Assert.Equal(tile / RoomGeometry.ReferenceCell, CameraView.WorldVisualScale(tile));
+    }
 
-        Assert.False(RoomGeometry.BordersWallToNorth([new GridPoint(0, 0)], new HashSet<GridPoint>()));
+    /// <summary>
+    /// The predicate that picks a ladder. North and south read the straight
+    /// neighbour; east and west read the whole column beside the cell, because a
+    /// wall's side seam runs the height of a mass that is lifted above its own
+    /// row and hangs below it, so a diagonal neighbour paints into the cell at
+    /// the same depth as a straight one (Issue #147).
+    /// </summary>
+    [Fact]
+    public void WallSides_reads_straight_neighbours_north_and_south_and_columns_beside()
+    {
+        GridPoint[] room = [new(0, 0)];
+
+        Assert.Equal(
+            WallNeighbors.North,
+            RoomGeometry.WallSides(room, new HashSet<GridPoint> { new(0, -1) }));
+        Assert.Equal(
+            WallNeighbors.South,
+            RoomGeometry.WallSides(room, new HashSet<GridPoint> { new(0, 1) }));
+        Assert.Equal(
+            WallNeighbors.West,
+            RoomGeometry.WallSides(room, new HashSet<GridPoint> { new(-1, 0) }));
+        Assert.Equal(
+            WallNeighbors.East,
+            RoomGeometry.WallSides(room, new HashSet<GridPoint> { new(1, 0) }));
+
+        // The diagonals: a wall one row up and one column across is a west or an
+        // east neighbour for this purpose and nothing else. quarters@19,2 has
+        // exactly this at (18,1) and it alone would earn the room its inset.
+        Assert.Equal(
+            WallNeighbors.West,
+            RoomGeometry.WallSides(room, new HashSet<GridPoint> { new(-1, -1) }));
+        Assert.Equal(
+            WallNeighbors.East,
+            RoomGeometry.WallSides(room, new HashSet<GridPoint> { new(1, 1) }));
+
+        // And a diagonal is not a north or a south neighbour: a facade's overhang
+        // and a lifted top mass stay inside the wall's own column.
+        Assert.Equal(
+            WallNeighbors.None,
+            RoomGeometry.WallSides(room, new HashSet<GridPoint>()));
+        Assert.False(
+            RoomGeometry.WallSides(room, new HashSet<GridPoint> { new(-1, -1) })
+                .HasFlag(WallNeighbors.North));
     }
 
     // -------------------------------------------------- the adapter's wiring
@@ -502,9 +679,10 @@ public sealed class RoomGeometryTests
     /// <summary>
     /// The first half of the wiring: <c>Main.DrawMap</c> must hand
     /// <c>DrawRoomBorders</c> the real rock set it already computed for the
-    /// wall/floor passes, not a stand-in. Without this, <see cref="RoomGeometry.BordersWallToNorth"/>
-    /// would always see an empty wall set and the fix in RoomGeometry.cs would
-    /// never fire, however correct it is on its own.
+    /// wall/floor passes, not a stand-in. Without this,
+    /// <see cref="RoomGeometry.WallSides"/> would always see an empty wall set
+    /// and the fix in RoomGeometry.cs would never fire, however correct it is on
+    /// its own.
     /// </summary>
     [Fact]
     public void Main_DrawMap_passes_the_real_rock_tiles_into_DrawRoomBorders()
@@ -516,11 +694,15 @@ public sealed class RoomGeometryTests
     }
 
     /// <summary>
-    /// The second half: <c>Main.DrawRoomBorder</c> must actually pick
-    /// <see cref="RoomGeometry.WallAdjacentBorderInset"/> when
-    /// <see cref="RoomGeometry.BordersWallToNorth"/> says a wall is north, and
-    /// the plain <see cref="RoomGeometry.BorderInset"/> otherwise — not always
-    /// one or the other regardless of what the predicate says.
+    /// The second half: <c>Main.DrawRoomBorder</c> must take its inset from
+    /// <see cref="RoomGeometry.BorderInsetFor"/>, handing it the room's real
+    /// purpose, perimeter and rock set — not from the plain purpose-only ladder,
+    /// which is what the defect looked like.
+    ///
+    /// Issue #139 pinned a ternary written out here and copied into
+    /// <c>DrawRoomLabel</c>, and spent two review rounds proving the two copies
+    /// still agreed. Issue #147 moved the decision behind one method, so the two
+    /// bodies now name the same call and there is no copy left to diverge.
     ///
     /// Compares against <see cref="Whitespace"/>-normalised text rather than
     /// the raw multi-line literal <c>AdapterSource.Body</c> returns.
@@ -530,15 +712,52 @@ public sealed class RoomGeometryTests
     /// not have, and review round 2's F3 is exactly that finding.
     /// </summary>
     [Fact]
-    public void Main_DrawRoomBorder_branches_on_BordersWallToNorth()
+    public void Main_DrawRoomBorder_takes_its_inset_from_BorderInsetFor()
     {
         var body = Whitespace(AdapterSource.Body("DrawRoomBorder"));
         Assert.Contains(
-            "RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles) " +
-            "? RoomGeometry.WallAdjacentBorderInset(room.Purpose) " +
-            ": RoomGeometry.BorderInset(room.Purpose);",
+            "RoomGeometry.BorderInsetFor(room.Purpose, room.Perimeter, rockTiles);",
             body,
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And it strokes the line at the width <see cref="RoomGeometry"/> declares,
+    /// not at a literal of its own. The debt ledger's second entry against
+    /// Issue #139 is precisely that <c>BorderStrokeHalfWidth</c> was a silent
+    /// copy of half a <c>ScaleWorld(2.0f)</c> in this method, with no executable
+    /// link between them — and every clearance Issue #147 derives is measured
+    /// from that half-width, so the copy stopped being harmless.
+    /// </summary>
+    [Fact]
+    public void Main_DrawRoomBorder_strokes_the_width_RoomGeometry_declares()
+    {
+        var body = AdapterSource.Body("DrawRoomBorder");
+        var scaleWorldCalls = AdapterSource.CallsTo(body, "ScaleWorld");
+        Assert.Contains(
+            scaleWorldCalls,
+            call => call.Arguments.Any(argument =>
+                argument.Contains("RoomGeometry.BorderStrokeWidth", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// The same, for the other side of the same measurement: <c>Main.DrawWall</c>
+    /// must stroke each seam at the width
+    /// <see cref="WallRenderGeometry.ReferenceStrokeWidth"/> declares for its
+    /// kind. Half of that width is what a side seam paints into the neighbouring
+    /// floor cell, which is the whole of Issue #147's arithmetic; a literal here
+    /// would leave <see cref="RoomGeometry.SideWallClearance"/> guessing.
+    /// </summary>
+    [Fact]
+    public void Main_DrawWall_strokes_the_width_WallRenderGeometry_declares()
+    {
+        var body = AdapterSource.Body("DrawWall");
+        var scaleWorldCalls = AdapterSource.CallsTo(body, "ScaleWorld");
+        Assert.Contains(
+            scaleWorldCalls,
+            call => call.Arguments.Any(argument => argument.Contains(
+                "WallRenderGeometry.ReferenceStrokeWidth(stroke.Kind)",
+                StringComparison.Ordinal)));
     }
 
     /// <summary>
@@ -622,7 +841,8 @@ public sealed class RoomGeometryTests
     /// <c>CallsTo</c> only finds a call the adapter makes on itself (its own
     /// header comment; <see cref="Main_DrawRoomBorder_scales_the_picked_inset_it_computed"/>
     /// only works because <c>ScaleWorld</c> is unqualified). The same
-    /// <see cref="Whitespace"/> normalisation <see cref="Main_DrawRoomBorder_branches_on_BordersWallToNorth"/>
+    /// <see cref="Whitespace"/> normalisation
+    /// <see cref="Main_DrawRoomBorder_takes_its_inset_from_BorderInsetFor"/>
     /// already uses for exactly this reason stands in for it here.
     /// </summary>
     [Fact]
@@ -633,22 +853,21 @@ public sealed class RoomGeometryTests
     }
 
     /// <summary>
-    /// Review round 3's N1, second mutant (L-2): <c>DrawRoomLabel</c> computes
-    /// its own <c>purposeInset</c> from an independent copy of the same
-    /// ternary <c>DrawRoomBorder</c> uses — nothing before this test proved
-    /// that copy still branches on <see cref="RoomGeometry.BordersWallToNorth"/>
-    /// rather than a neutralised condition. Mirrors
-    /// <see cref="Main_DrawRoomBorder_branches_on_BordersWallToNorth"/> exactly,
-    /// against <c>DrawRoomLabel</c>'s body instead of <c>DrawRoomBorder</c>'s.
+    /// Review round 3's N1, second mutant (L-2): <c>DrawRoomLabel</c> used to
+    /// compute its own <c>purposeInset</c> from an independent copy of
+    /// <c>DrawRoomBorder</c>'s ternary, and nothing proved the copy still
+    /// branched the same way. Issue #147 deleted the copy — both bodies now call
+    /// <see cref="RoomGeometry.BorderInsetFor"/> — so what this pins is that the
+    /// label reads the same one decision the border does, against
+    /// <c>DrawRoomLabel</c>'s body instead of <c>DrawRoomBorder</c>'s. A label
+    /// silently back on the plain ladder reopens F1 verbatim.
     /// </summary>
     [Fact]
-    public void Main_DrawRoomLabel_branches_on_BordersWallToNorth()
+    public void Main_DrawRoomLabel_takes_its_inset_from_BorderInsetFor()
     {
         var body = Whitespace(AdapterSource.Body("DrawRoomLabel"));
         Assert.Contains(
-            "RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles) " +
-            "? RoomGeometry.WallAdjacentBorderInset(room.Purpose) " +
-            ": RoomGeometry.BorderInset(room.Purpose);",
+            "RoomGeometry.BorderInsetFor(room.Purpose, room.Perimeter, rockTiles);",
             body,
             StringComparison.Ordinal);
     }

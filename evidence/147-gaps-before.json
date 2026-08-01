@@ -1,0 +1,621 @@
+{
+  "schemaVersion": 1,
+  "issue": 147,
+  "checkpoint": "1 — the gap between every room border and every wall band, measured under the inset policy that shipped before this issue",
+  "policyMeasured": "Issue #139's ladder: RoomGeometry.BorderInset(purpose) = 2.0 + step, raised to 5.0 + step when any cell of the room has rock directly north. Reproduced in the test as RoomWallClearanceTests.PreIssue147Inset, from WallRenderGeometry.FacadeReferenceOverhang + RoomGeometry.BorderStrokeHalfWidth + RoomGeometry.WallVisibleGap — #139's own derivation — so the 'before' column stays runnable after the policy itself is gone.",
+  "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --filter \"FullyQualifiedName~The_pre_147_ladder_really_did_draw_the_border_inside_the_wall\"",
+  "howTheNumbersWereRead": "The test asserts and does not print. The table below was taken from the assertion payload by widening one comparison for a single run (violations.Length > 0 -> violations.Length > 99), capturing the failure message, and reverting — the same one-off technique evidence/139-overlap-before.json records as widenedRunForContext. Everything in the payload is produced by committed code; only the comparison that decides pass/fail was touched, and only to make the payload print.",
+  "method": "For every room PresentationFixtures.Baseline(1) publishes, for every edge RoomGeometry.BorderEdges draws (all four sides of every cell whose neighbour is outside the room), the border's stroke band — the line widened by RoomGeometry.BorderStrokeHalfWidth, which is what Main.DrawRoomBorder actually paints — is compared against every band every rock tile paints (WallRenderGeometry.DrawnBands: top mass, facade, and each seam widened by WallRenderGeometry.ReferenceStrokeWidth). The row kept per room and side is the closest wall band to it. Separation is the larger of the two per-axis gaps, negative when the two overlap; it understates a purely diagonal separation, which is the safe direction. Walls standing directly south of a room cell are excused, because a wall in front covers the bottom of the cell outright and no inset clears it — see RoomWallClearanceTests.A_wall_in_front_of_a_room_cannot_be_cleared_by_any_inset and docs/engineering/PROTOTYPE_GRAYBOX.md.",
+  "units": "ScreenPx is real screen pixels at the tile size of the run. ReferencePx is the same quantity divided by CameraView.WorldVisualScale(tileSize) — the pre-scale reference pixels every constant in RoomGeometry and WallRenderGeometry is written in. Inset is reference pixels.",
+  "findings": [
+    "quarters@19,2 is at 0.375 reference px on both its West and its East side — 0.55 screen px at tileSize 32, 0.68 at 40, 0.82 at 48. This is the figure Issue #147 was opened on, reproduced independently here: the wall's dark side seam is centred on the shared cell boundary, so half of WallRenderGeometry.EdgeReferenceWidth (0.625 reference px) is painted inside the room's own cell, and the plain ladder puts the border's near edge at 2.0 - 1.0 = 1.0.",
+    "NEW, and not in the issue: farm@1,1 is at exactly the same 0.375 reference px on its NORTH side, under the ladder #139 shipped. #139 cleared the facade RECTANGLE (FacadeReferenceOverhang, 3.0) but not the FacadeBottom seam drawn along its lower edge, whose own half-width (0.625) reaches lower still. The issue's table reports farm@1,1 at 6.14 screen px because it was measured against the rectangle. Measured against what is actually painted, #139's north case is exactly as tight as the west/east case it did not cover — the same 0.375 reference px, from the same omitted half-seam.",
+    "The three tile sizes give one answer in reference pixels and three in screen pixels, as expected: every quantity involved is a reference-pixel constant multiplied by one scale.",
+    "No side of any room is inside a wall band (no negative separation) under either policy. The defect is a gap too small to read, not a crossing."
+  ],
+  "resultRaw": [
+    {
+      "tileSize": 32,
+      "scale": 1.4545454545454546,
+      "requiredScreenPx": 1.4545454545454546,
+      "requiredReferencePx": 1,
+      "violationCount": 3,
+      "violations": [
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "North",
+          "Inset": 5,
+          "Cell": "1,1",
+          "Wall": "1,0",
+          "ScreenPx": 0.5454545454545467,
+          "ReferencePx": 0.3750000000000009
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "East",
+          "Inset": 2,
+          "Cell": "23,3",
+          "Wall": "24,4",
+          "ScreenPx": 0.5454545454546178,
+          "ReferencePx": 0.37500000000004974
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "West",
+          "Inset": 2,
+          "Cell": "19,2",
+          "Wall": "18,1",
+          "ScreenPx": 0.5454545454543904,
+          "ReferencePx": 0.3749999999998934
+        }
+      ],
+      "closestPerRoomAndSide": [
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "East",
+          "Inset": 5,
+          "Cell": "6,1",
+          "Wall": "6,0",
+          "ScreenPx": 2,
+          "ReferencePx": 1.375
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "North",
+          "Inset": 5,
+          "Cell": "1,1",
+          "Wall": "1,0",
+          "ScreenPx": 0.5454545454545467,
+          "ReferencePx": 0.3750000000000009
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "South",
+          "Inset": 5,
+          "Cell": "1,7",
+          "Wall": "0,7",
+          "ScreenPx": 6.363636363636367,
+          "ReferencePx": 4.375000000000002
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "West",
+          "Inset": 5,
+          "Cell": "1,1",
+          "Wall": "1,0",
+          "ScreenPx": 2,
+          "ReferencePx": 1.375
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "East",
+          "Inset": 6.5,
+          "Cell": "12,6",
+          "Wall": "12,5",
+          "ScreenPx": 4.181818181818187,
+          "ReferencePx": 2.8750000000000036
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "North",
+          "Inset": 6.5,
+          "Cell": "9,6",
+          "Wall": "9,5",
+          "ScreenPx": 2.7272727272727195,
+          "ReferencePx": 1.8749999999999947
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "South",
+          "Inset": 6.5,
+          "Cell": "9,8",
+          "Wall": "8,9",
+          "ScreenPx": 9.454545454545439,
+          "ReferencePx": 6.499999999999989
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "West",
+          "Inset": 6.5,
+          "Cell": "9,6",
+          "Wall": "9,5",
+          "ScreenPx": 4.181818181818187,
+          "ReferencePx": 2.8750000000000036
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "East",
+          "Inset": 8,
+          "Cell": "16,6",
+          "Wall": "16,5",
+          "ScreenPx": 6.3636363636363455,
+          "ReferencePx": 4.374999999999988
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "North",
+          "Inset": 8,
+          "Cell": "13,6",
+          "Wall": "13,5",
+          "ScreenPx": 4.909090909090878,
+          "ReferencePx": 3.3749999999999787
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "South",
+          "Inset": 8,
+          "Cell": "16,8",
+          "Wall": "17,9",
+          "ScreenPx": 10.727272727272748,
+          "ReferencePx": 7.375000000000014
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "West",
+          "Inset": 8,
+          "Cell": "13,6",
+          "Wall": "13,5",
+          "ScreenPx": 6.3636363636363455,
+          "ReferencePx": 4.374999999999988
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "East",
+          "Inset": 2,
+          "Cell": "23,3",
+          "Wall": "24,4",
+          "ScreenPx": 0.5454545454546178,
+          "ReferencePx": 0.37500000000004974
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "North",
+          "Inset": 2,
+          "Cell": "19,2",
+          "Wall": "18,1",
+          "ScreenPx": 1.9999999999998863,
+          "ReferencePx": 1.3749999999999218
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "South",
+          "Inset": 2,
+          "Cell": "19,5",
+          "Wall": "18,6",
+          "ScreenPx": 2.909090909090878,
+          "ReferencePx": 1.9999999999999787
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "West",
+          "Inset": 2,
+          "Cell": "19,2",
+          "Wall": "18,1",
+          "ScreenPx": 0.5454545454543904,
+          "ReferencePx": 0.3749999999998934
+        }
+      ]
+    },
+    {
+      "tileSize": 40,
+      "scale": 1.8181818181818181,
+      "requiredScreenPx": 1.8181818181818181,
+      "requiredReferencePx": 1,
+      "violationCount": 3,
+      "violations": [
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "North",
+          "Inset": 5,
+          "Cell": "1,1",
+          "Wall": "1,0",
+          "ScreenPx": 0.6818181818181799,
+          "ReferencePx": 0.37499999999999895
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "East",
+          "Inset": 2,
+          "Cell": "23,3",
+          "Wall": "24,4",
+          "ScreenPx": 0.6818181818182438,
+          "ReferencePx": 0.37500000000003414
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "West",
+          "Inset": 2,
+          "Cell": "19,2",
+          "Wall": "18,1",
+          "ScreenPx": 0.6818181818181301,
+          "ReferencePx": 0.3749999999999716
+        }
+      ],
+      "closestPerRoomAndSide": [
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "East",
+          "Inset": 5,
+          "Cell": "6,1",
+          "Wall": "6,0",
+          "ScreenPx": 2.5,
+          "ReferencePx": 1.375
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "North",
+          "Inset": 5,
+          "Cell": "1,1",
+          "Wall": "1,0",
+          "ScreenPx": 0.6818181818181799,
+          "ReferencePx": 0.37499999999999895
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "South",
+          "Inset": 5,
+          "Cell": "1,7",
+          "Wall": "0,7",
+          "ScreenPx": 7.954545454545453,
+          "ReferencePx": 4.374999999999999
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "West",
+          "Inset": 5,
+          "Cell": "1,1",
+          "Wall": "1,0",
+          "ScreenPx": 2.5,
+          "ReferencePx": 1.375
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "East",
+          "Inset": 6.5,
+          "Cell": "12,6",
+          "Wall": "12,5",
+          "ScreenPx": 5.227272727272691,
+          "ReferencePx": 2.87499999999998
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "North",
+          "Inset": 6.5,
+          "Cell": "9,6",
+          "Wall": "9,5",
+          "ScreenPx": 3.409090909090878,
+          "ReferencePx": 1.874999999999983
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "South",
+          "Inset": 6.5,
+          "Cell": "9,8",
+          "Wall": "8,9",
+          "ScreenPx": 11.818181818181813,
+          "ReferencePx": 6.499999999999997
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "West",
+          "Inset": 6.5,
+          "Cell": "9,6",
+          "Wall": "9,5",
+          "ScreenPx": 5.227272727272691,
+          "ReferencePx": 2.87499999999998
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "East",
+          "Inset": 8,
+          "Cell": "16,6",
+          "Wall": "16,5",
+          "ScreenPx": 7.954545454545411,
+          "ReferencePx": 4.374999999999976
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "North",
+          "Inset": 8,
+          "Cell": "13,6",
+          "Wall": "13,5",
+          "ScreenPx": 6.136363636363598,
+          "ReferencePx": 3.3749999999999787
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "South",
+          "Inset": 8,
+          "Cell": "16,8",
+          "Wall": "17,9",
+          "ScreenPx": 13.409090909090878,
+          "ReferencePx": 7.374999999999983
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "West",
+          "Inset": 8,
+          "Cell": "13,6",
+          "Wall": "13,5",
+          "ScreenPx": 7.954545454545411,
+          "ReferencePx": 4.374999999999976
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "East",
+          "Inset": 2,
+          "Cell": "23,3",
+          "Wall": "24,4",
+          "ScreenPx": 0.6818181818182438,
+          "ReferencePx": 0.37500000000003414
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "North",
+          "Inset": 2,
+          "Cell": "19,2",
+          "Wall": "18,1",
+          "ScreenPx": 2.5,
+          "ReferencePx": 1.375
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "South",
+          "Inset": 2,
+          "Cell": "19,5",
+          "Wall": "18,6",
+          "ScreenPx": 3.636363636363626,
+          "ReferencePx": 1.9999999999999944
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "West",
+          "Inset": 2,
+          "Cell": "19,2",
+          "Wall": "18,1",
+          "ScreenPx": 0.6818181818181301,
+          "ReferencePx": 0.3749999999999716
+        }
+      ]
+    },
+    {
+      "tileSize": 48,
+      "scale": 2.1818181818181817,
+      "requiredScreenPx": 2.1818181818181817,
+      "requiredReferencePx": 1,
+      "violationCount": 3,
+      "violations": [
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "North",
+          "Inset": 5,
+          "Cell": "1,1",
+          "Wall": "1,0",
+          "ScreenPx": 0.8181818181818201,
+          "ReferencePx": 0.37500000000000094
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "East",
+          "Inset": 2,
+          "Cell": "23,3",
+          "Wall": "24,4",
+          "ScreenPx": 0.8181818181819835,
+          "ReferencePx": 0.37500000000007583
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "West",
+          "Inset": 2,
+          "Cell": "19,2",
+          "Wall": "18,1",
+          "ScreenPx": 0.8181818181818699,
+          "ReferencePx": 0.3750000000000237
+        }
+      ],
+      "closestPerRoomAndSide": [
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "East",
+          "Inset": 5,
+          "Cell": "6,1",
+          "Wall": "6,0",
+          "ScreenPx": 3,
+          "ReferencePx": 1.375
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "North",
+          "Inset": 5,
+          "Cell": "1,1",
+          "Wall": "1,0",
+          "ScreenPx": 0.8181818181818201,
+          "ReferencePx": 0.37500000000000094
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "South",
+          "Inset": 5,
+          "Cell": "1,7",
+          "Wall": "0,7",
+          "ScreenPx": 9.545454545454547,
+          "ReferencePx": 4.375000000000001
+        },
+        {
+          "Room": "farm@1,1",
+          "Purpose": "Farm",
+          "Side": "West",
+          "Inset": 5,
+          "Cell": "1,1",
+          "Wall": "1,0",
+          "ScreenPx": 3,
+          "ReferencePx": 1.375
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "East",
+          "Inset": 6.5,
+          "Cell": "12,6",
+          "Wall": "12,5",
+          "ScreenPx": 6.272727272727252,
+          "ReferencePx": 2.8749999999999907
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "North",
+          "Inset": 6.5,
+          "Cell": "9,6",
+          "Wall": "9,5",
+          "ScreenPx": 4.090909090909065,
+          "ReferencePx": 1.8749999999999882
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "South",
+          "Inset": 6.5,
+          "Cell": "12,8",
+          "Wall": "13,9",
+          "ScreenPx": 14.18181818181813,
+          "ReferencePx": 6.499999999999977
+        },
+        {
+          "Room": "kitchen@9,6",
+          "Purpose": "Kitchen",
+          "Side": "West",
+          "Inset": 6.5,
+          "Cell": "9,6",
+          "Wall": "9,5",
+          "ScreenPx": 6.272727272727252,
+          "ReferencePx": 2.8749999999999907
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "East",
+          "Inset": 8,
+          "Cell": "16,6",
+          "Wall": "16,5",
+          "ScreenPx": 9.545454545454504,
+          "ReferencePx": 4.374999999999981
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "North",
+          "Inset": 8,
+          "Cell": "13,6",
+          "Wall": "13,5",
+          "ScreenPx": 7.363636363636317,
+          "ReferencePx": 3.374999999999979
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "South",
+          "Inset": 8,
+          "Cell": "16,8",
+          "Wall": "17,9",
+          "ScreenPx": 16.090909090909122,
+          "ReferencePx": 7.375000000000015
+        },
+        {
+          "Room": "larder@13,6",
+          "Purpose": "Larder",
+          "Side": "West",
+          "Inset": 8,
+          "Cell": "13,6",
+          "Wall": "13,5",
+          "ScreenPx": 9.545454545454504,
+          "ReferencePx": 4.374999999999981
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "East",
+          "Inset": 2,
+          "Cell": "23,3",
+          "Wall": "24,4",
+          "ScreenPx": 0.8181818181819835,
+          "ReferencePx": 0.37500000000007583
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "North",
+          "Inset": 2,
+          "Cell": "19,2",
+          "Wall": "18,1",
+          "ScreenPx": 3,
+          "ReferencePx": 1.375
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "South",
+          "Inset": 2,
+          "Cell": "19,5",
+          "Wall": "18,6",
+          "ScreenPx": 4.363636363636374,
+          "ReferencePx": 2.000000000000005
+        },
+        {
+          "Room": "quarters@19,2",
+          "Purpose": "Quarters",
+          "Side": "West",
+          "Inset": 2,
+          "Cell": "19,2",
+          "Wall": "18,1",
+          "ScreenPx": 0.8181818181818699,
+          "ReferencePx": 0.3750000000000237
+        }
+      ]
+    }
+  ]
+}
