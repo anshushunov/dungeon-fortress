@@ -61,8 +61,23 @@ public enum OverlayMarkPolicy
     TranslucentFill,
 
     /// <summary>
-    /// The mark has no fill at all: outline, stroke or glyph only. It cannot
-    /// hide anything, so nothing is asked of its alpha.
+    /// The mark has no fill at all: outline, stroke or glyph only, so nothing is
+    /// asked of its alpha.
+    ///
+    /// <b>This does not mean it hides nothing.</b> That is what the docstring here
+    /// used to say, and Issue #156 is the owner's playtest refuting it: a room's
+    /// border is a two reference-pixel stroke drawn across a twenty-two pixel cell,
+    /// and it struck through every goblin standing on it. A stroke covers what it
+    /// is drawn over exactly as an opaque fill does — it just covers less of it.
+    /// What this policy actually says is narrower and true: there is no fill, so
+    /// there is no alpha to get wrong.
+    ///
+    /// A mark that chooses it therefore still owes an answer to "what is underneath
+    /// me", and the answer has to be something other than "nothing can be":
+    /// <see cref="OverlayMark.RoomBorder"/>'s is draw order — the part of it that
+    /// can land on a body is drawn before the depth pass and the body walks over
+    /// it. Whether the other marks on this policy owe the same answer is a separate
+    /// audit, and it has its own Issue rather than a quiet paragraph here.
     /// </summary>
     StrokeOnly,
 
@@ -247,8 +262,16 @@ public static class InformationalOverlays
             1.0,
             1.0,
             "A room is where creatures work, so a body inside it is the point. " +
-            "The border is a line on the inside edge of the patch and never " +
-            "fills, so nothing standing in the room is hidden by it."),
+            "Since Issue #156 the mark is not the whole border: the border is a " +
+            "line on the floor a body stands on, so it is drawn under the depth " +
+            "pass and the body walks over it. What is left above the depth pass " +
+            "is the segment a wall standing directly in front of the room paints " +
+            "over completely, which no inset can clear (Issues #139, #147) and " +
+            "which therefore cannot hide anybody the wall is not hiding already. " +
+            "The mark never fills either way. The owner's playtest is what " +
+            "retired the old reason — «наверно существо должно быть над границей " +
+            "комнаты, а не под ней»: a stroke does not have to fill a cell to " +
+            "strike a creature through."),
         new(
             OverlayMark.RoomLabel,
             OverlayMarkSubject.Cell,

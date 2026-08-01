@@ -151,11 +151,19 @@ public sealed class RoomWallClearanceTests
     ///
     /// <para>
     /// The answer the project already gave is not geometry but draw order, taken
-    /// in Issue #83 and written down in <see cref="WorldDrawOrder"/>: the border
-    /// is an informational mark drawn after the depth pass, so «zone borders
-    /// remain complete instead of losing their south edge under a wall». The
-    /// second half of this test is that the declaration still says so — an
+    /// in Issue #83 and written down in <see cref="WorldDrawOrder"/>: the segment
+    /// a wall in front would swallow is drawn after the depth pass, so «zone
+    /// borders remain complete instead of losing their south edge under a wall».
+    /// The second half of this test is that the declaration still says so — an
     /// exception excused by a policy is only excused while the policy holds.
+    /// </para>
+    ///
+    /// <para>
+    /// Issue #156 narrowed which routine carries that policy without weakening it.
+    /// The whole border used to be drawn after the depth pass, and the price was
+    /// paid by every creature standing on a line anywhere on the map; now
+    /// <c>DrawRoomBordersOverWalls</c> draws exactly the segments this exception is
+    /// about, and <see cref="RoomBorderDepthTests"/> is what holds the split.
     /// </para>
     /// </summary>
     [Theory]
@@ -201,12 +209,13 @@ public sealed class RoomWallClearanceTests
             "reference-px cell, which is inside the ceiling after all");
 
         // And the policy that stands in for the inset is still declared.
-        var borders = WorldDrawOrder.Find("DrawRoomBorders");
+        var borders = WorldDrawOrder.Find("DrawRoomBordersOverWalls");
         Assert.NotNull(borders);
         Assert.True(
             borders!.Pass > WorldDrawPass.Depth,
-            "the room border is no longer drawn after the depth pass, so a wall in " +
-            "front of a room now erases its edge instead of merely standing over it");
+            "the segment a wall in front swallows is no longer drawn after the depth " +
+            "pass, so a wall in front of a room now erases its edge instead of " +
+            "merely standing over it");
 
         // The measurement is real at this tile size too: without the exception the
         // sweep above would report the front walls and nothing else.
@@ -436,20 +445,13 @@ public sealed class RoomWallClearanceTests
     }
 
     /// <summary>
-    /// The rectangle a border segment is painted as: the line widened by half a
-    /// stroke across itself, the same way <see cref="WallRenderGeometry.DrawnBands"/>
-    /// widens a wall seam.
+    /// The rectangle a border segment is painted as. It used to be a copy of the
+    /// widening rule kept here; Issue #156 needed the same rectangle in production
+    /// code, so <see cref="RoomGeometry.StrokeBand"/> is now the one that answers
+    /// and this measurement reads it rather than restating it.
     /// </summary>
-    private static ViewRect StrokeBand(ViewSegment segment, double halfStroke)
-    {
-        var left = Math.Min(segment.From.X, segment.To.X);
-        var right = Math.Max(segment.From.X, segment.To.X);
-        var top = Math.Min(segment.From.Y, segment.To.Y);
-        var bottom = Math.Max(segment.From.Y, segment.To.Y);
-        return right - left >= bottom - top
-            ? new ViewRect(left, top - halfStroke, right - left, (bottom - top) + (2.0 * halfStroke))
-            : new ViewRect(left - halfStroke, top, (right - left) + (2.0 * halfStroke), bottom - top);
-    }
+    private static ViewRect StrokeBand(ViewSegment segment, double halfStroke) =>
+        RoomGeometry.StrokeBand(segment, halfStroke);
 
     /// <summary>
     /// How far apart two axis-aligned rectangles are: the larger of the two

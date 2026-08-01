@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 1,
+  "issue": 156,
+  "checkpoint": "3 — a mutant per half of the fix, and the frame after; extended in review round 2 with the corner and the two mutants review derived by reading",
+  "rule": "Each half of the fix is reverted on its own and the suite has to go red for a reason that names that half. Both halves live in one expression, RoomGeometry.LayerOf, so each mutant is a one-line edit — the halves are genuinely separable rather than separable only on paper.",
+  "runAgainst": {
+    "roundOne": {
+      "commit": "a3c1ecfbb67d95567ecfc1d03c9b31afa1c42cc8",
+      "commitSubject": "Checkpoint 2 (#156): граница помещения — под телами, кроме сегмента за стеной",
+      "note": "The decision was called RoomGeometry.IsHiddenByWallInFront then and was taken per boundary edge."
+    },
+    "roundTwo": {
+      "commit": "5d08f8c",
+      "commitSubject": "Круг 2 (#156): разрыв угла обводки, снятый аргумент и пришпиленное число",
+      "note": "The decision is RoomGeometry.LayerOf(strokePiece, wallBandsInFront) and is taken per piece of an edge. Every mutant below was re-run against this commit; the numbers in this file are that run."
+    },
+    "hygiene": "Every mutant was applied to a committed, green state and reverted afterwards, so no mutant could take the fix down with it. The working tree was verified clean (git status --porcelain empty) between mutants."
+  },
+  "buildCommand": "dotnet build DungeonFortress.sln -c Debug",
+  "testCommand": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --no-build",
+  "greenBaseline": "не пройдено 0, пройдено 488, всего 488",
+
+  "mutants": [
+    {
+      "id": "h1",
+      "half": "1 of 2 — the border is drawn below the depth pass",
+      "name": "the whole border goes back above the depth pass",
+      "file": "src/DungeonFortress.Presentation/RoomGeometry.cs",
+      "edit": "LayerOf: the condition `wallBandsInFront.Count > 0 && IsCoveredBy(strokePiece, wallBandsInFront)` replaced by `true` — every piece is then classified OverWallInFront and drawn by the informational routine, which is exactly the arrangement that shipped before this issue",
+      "buildResult": "0 warnings, 0 errors — the mutant is silent at compile time, which is the point",
+      "result": "FAILED: 12 of 488",
+      "failures": [
+        "RoomBorderDepthTests.No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible (32, 40, 48) — 226 crossings in farm@1,1, kitchen@9,6, larder@13,6 and quarters@19,2, the owner's complaint restated as a number",
+        "RoomBorderDepthTests.No_body_anywhere_can_reach_a_stroke_the_wall_in_front_does_not_cover (32, 40, 48)",
+        "RoomBorderDepthTests.The_shipped_map_pays_for_the_exception_in_two_cells_of_the_larder (32, 40, 48)",
+        "RoomBorderDepthTests.The_first_round_of_156_opened_the_corner_at_a_wall_in_front (32, 40, 48) — the reproduction of the first round runs through the same expression, so a mutant of it changes what the 'before' column reports too. Named rather than left to be noticed."
+      ],
+      "stayedGreen": "A_wall_in_front_keeps_the_piece_it_swallows_above_the_depth_pass, and it is green for a real reason rather than a vacuous one: this mutant keeps every swallowed piece above the depth pass, which is exactly what that check asks for. The two halves fail apart, which is what makes them two halves."
+    },
+    {
+      "id": "h2",
+      "half": "2 of 2 — the piece a wall in front swallows stays above the depth pass",
+      "name": "the whole border goes below the depth pass",
+      "file": "src/DungeonFortress.Presentation/RoomGeometry.cs",
+      "edit": "LayerOf: the same condition replaced by `false` — every piece is then classified UnderBodies, and the pieces a wall in front paints over whole are erased outright, reopening Issues #139 and #147's south case",
+      "buildResult": "0 warnings, 0 errors",
+      "result": "FAILED: 12 of 488",
+      "failures": [
+        "RoomBorderDepthTests.A_wall_in_front_keeps_the_piece_it_swallows_above_the_depth_pass (32, 40, 48) — measured against WallRenderGeometry.DrawnBands, not asserted: these strokes really are painted over whole",
+        "RoomBorderDepthTests.An_outline_closes_at_the_corner_a_wall_in_front_reaches (32, 40, 48) — the corner opens the other way round, because now both edges are cut off by the wall",
+        "RoomBorderDepthTests.No_body_anywhere_can_reach_a_stroke_the_wall_in_front_does_not_cover (32, 40, 48)",
+        "RoomBorderDepthTests.The_shipped_map_pays_for_the_exception_in_two_cells_of_the_larder (32, 40, 48)"
+      ],
+      "stayedGreen": "No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible — and this green is **vacuous**, which the first version of this file glossed over by listing the two greens symmetrically. Under this mutant nothing at all is drawn above the depth pass, so a check about what is drawn above it has nothing left to look at; it is not evidence about this mutant. What covers the vacuum is a different check failing: No_body_anywhere_can_reach_a_stroke_the_wall_in_front_does_not_cover carries a `checkedStrokes > 0` guard for exactly this shape of hole, and it goes red. Independent review found the wording; the checks were already right."
+    },
+    {
+      "id": "g1",
+      "half": "the granularity of the decision — the limit review found on round one",
+      "name": "the decision taken per boundary edge instead of per piece of one",
+      "file": "src/DungeonFortress.Presentation/RoomGeometry.cs",
+      "edit": "Split: return the whole segment with `LayerOf` applied to its full stroke band, instead of cutting it where the answer changes. This is Issue #156's own first round, restored.",
+      "buildResult": "0 warnings, 0 errors",
+      "result": "FAILED: 6 of 488",
+      "failures": [
+        "RoomBorderDepthTests.An_outline_closes_at_the_corner_a_wall_in_front_reaches (32, 40, 48) — quarters@19,2 West at 19,5 stops 5.0 reference px short of the south stroke it meets, kitchen@9,6 0.5",
+        "RoomBorderDepthTests.The_shipped_map_pays_for_the_exception_in_two_cells_of_the_larder (32, 40, 48)"
+      ],
+      "why": "The round-one code passed everything else in this file. Nothing measured the outline as a line rather than as a bag of segments, and ADR 0013 and Issue #52 bought precisely that: a room is one line around the whole patch. Independent review found it on a frame; this is the check that finds it now."
+    },
+    {
+      "id": "c1",
+      "half": "the coverage test itself",
+      "name": "partial coverage accepted as coverage",
+      "file": "src/DungeonFortress.Presentation/RoomGeometry.cs",
+      "edit": "LayerOf: `IsCoveredBy(strokePiece, wallBandsInFront)` replaced by an ordinary rectangle-intersection test against any one band — the mistake of asking 'does a wall touch this stroke' instead of 'does the wall paint over all of it'",
+      "buildResult": "0 warnings, 0 errors",
+      "result": "FAILED: 12 of 488",
+      "failures": [
+        "RoomBorderDepthTests.No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible (32, 40, 48) — the larder's two front-wall cells move above the depth pass and the goblin standing on 13,8 is struck through again by the one reference pixel of stroke the wall does not paint over",
+        "RoomBorderDepthTests.No_body_anywhere_can_reach_a_stroke_the_wall_in_front_does_not_cover (32, 40, 48)",
+        "RoomBorderDepthTests.The_shipped_map_pays_for_the_exception_in_two_cells_of_the_larder (32, 40, 48)",
+        "RoomBorderDepthTests.The_first_round_of_156_opened_the_corner_at_a_wall_in_front (32, 40, 48)"
+      ],
+      "why": "Independent review derived this one by reading rather than running — its brief was read-only — and reasoned that it would be caught. It is, and this is the run that says so instead of the argument."
+    },
+    {
+      "id": "w1",
+      "half": "the wiring, which neither pure half can see",
+      "name": "the adapter asks the informational routine for the wrong layer",
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "edit": "DrawRoomBorderOverWall: `RoomBorderLayer.OverWallInFront` -> `RoomBorderLayer.UnderBodies`. The pure side still partitions correctly and every geometry check still passes; the frame goes straight back to the defect, because the routine drawn after the depth pass now draws the ordinary pieces.",
+      "buildResult": "0 warnings, 0 errors",
+      "result": "FAILED: 1 of 482 — run in round one; the wiring and the check are unchanged in round two",
+      "failedTest": "RoomBorderDepthTests.The_adapter_draws_each_layer_in_the_pass_it_is_declared_in",
+      "why": "This is the shape of gap independent review found twice on Issue #139 (F2, N1): a correct pure decision computed and then not used. Nothing in DungeonFortress.Presentation can build Main.cs (ADR 0011), so the link is checked by reading the adapter as text."
+    },
+    {
+      "id": "w2",
+      "half": "the wiring, other end",
+      "name": "the adapter draws the border after the depth pass again while the manifest still says otherwise",
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "edit": "DrawMap: the `DrawRoomBorders(rockTiles);` call moved back below `DrawElevatedWorld(rockTiles, diggableTiles);`",
+      "buildResult": "0 warnings, 0 errors",
+      "result": "FAILED: 1 of 482 — run in round one; unchanged in round two",
+      "failedTest": "WorldDrawPassGuardTests.DrawMap_runs_the_declared_steps_in_the_declared_order",
+      "why": "The pass a routine is declared in is only real while something compares the declaration with the adapter. This is the guard Issue #90 built doing exactly the job it was built for, on a new routine it knew nothing about."
+    }
+  ],
+
+  "notMutated": [
+    "RoomGeometry.IsCoveredBy's sweep is not mutated as a sweep: every check in RoomBorderDepthTests runs through it, and h1, h2 and c1 change what it is asked or whether it is asked rather than what it answers. Breaking it breaks all of them.",
+    "WallBandsInFrontOf reading the row north instead of south (`cell.Y + 1` -> `cell.Y - 1`) is not run separately: no room cell of the shipped map has a wall to the north that paints over a border stroke — the #139/#147 ladder exists to keep the border clear of exactly that band — so the mutant collapses into h2, which is run. Independent review derived the same conclusion by reading.",
+    "The manifest's own entries (WorldDrawPass of the four routines) are covered by The_two_halves_of_the_border_are_declared_in_the_two_passes and by the pre-existing WorldDrawPassGuardTests set; w2 is the one recorded here because it is the only one whose failure is not obvious from reading the diff."
+  ],
+
+  "corner": {
+    "finding": "Independent review, round 2, F2. Under round one's per-edge decision the outline of quarters@19,2 opened at its bottom-left corner: the south edge of the cell with a wall in front stayed above the depth pass while the west edge meeting it went below and was cut off by that same wall. The opposite corner of the same room, with no wall in front, stayed shut — an asymmetry inside one outline in one frame. Round one's write-up called the change to the vertical edges a correction rather than a price; that wording is withdrawn.",
+    "measurement": "gap = 8.625 − (inset + 1.0) reference px: the wall's reach above its own footprint, less where the horizontal stroke's upper edge sits. Executable as RoomBorderDepthTests.The_first_round_of_156_opened_the_corner_at_a_wall_in_front (before) and An_outline_closes_at_the_corner_a_wall_in_front_reaches (after), at 32, 40 and 48.",
+    "byRoom": {
+      "quarters@19,2": { "inset": 2.625, "firstRound": 5.0, "now": -1.0 },
+      "kitchen@9,6": { "inset": 7.125, "firstRound": 0.5, "now": -1.0 },
+      "larder@13,6": { "inset": 8.625, "firstRound": -1.0, "now": -1.0 }
+    },
+    "negativeMeansClosed": "A negative gap is an overlap: the vertical stroke reaches a half-stroke past the top of the horizontal one, which is what a closed corner looks like.",
+    "frames": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '960,282' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/156-corner-<first-round|after>/156-quarters-corner.png -GodotPath \"<godot console>\"",
+      "note": "The same command review used, run on both trees from this worktree: once with HEAD detached at a3c1ecf (round one) and once at 5d08f8c. run-game.ps1 rather than capture-evidence.ps1, because this is a comparison of two commits rather than a published capture, and a detached HEAD has no clean spec state to record.",
+      "firstRound": {
+        "commit": "a3c1ecfbb67d95567ecfc1d03c9b31afa1c42cc8",
+        "imagePath": ".artifacts/evidence/156-corner-first-round/156-quarters-corner.png",
+        "reading": "The purple vertical of QUARTERS' west edge stops on the top of the wall in front, and the purple horizontal of the south edge runs about 22 screen pixels lower. Between them the wall's tan top shows through: the outline is open at that corner."
+      },
+      "after": {
+        "commit": "5d08f8c",
+        "imagePath": ".artifacts/evidence/156-corner-after/156-quarters-corner.png",
+        "reading": "The vertical runs down over the wall's top to meet the horizontal. The corner is a corner again, and the goblin on 20,5 is still in front of the line."
+      }
+    }
+  },
+
+  "after": {
+    "commit": "a3c1ecfbb67d95567ecfc1d03c9b31afa1c42cc8",
+    "commitSubject": "Checkpoint 2 (#156): граница помещения — под телами, кроме сегмента за стеной",
+    "sourceDirty": false,
+    "spec": "evidence/156-border-frames.json",
+    "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\capture-evidence.ps1 -SpecPath evidence/156-border-frames.json -OutputRoot \"evidence/156-after\" -GodotPath \"<godot console>\"",
+    "note": "These two are the round-one captures. Round two changes what happens at the corners of cells with a wall in front and nothing else in these two views; the corner frames above are the round-two evidence.",
+    "captures": [
+      {
+        "name": "156-kitchen-larder-bottom-row",
+        "imagePath": ".artifacts/evidence/156-after/156-kitchen-larder-bottom-row.png",
+        "imageSha256": "9071b668e1da6aa4962eb4156b06c764e9f8065108839cc804835322ed75fc2d",
+        "beforeImageSha256": "b3508af0fb1e93251ece414cb839f0586747baf304e7ef2562128520665c10c4",
+        "canonicalChecksum": "9df8c18004b95aa4a6acd45ec338acc63ffd453e669314183e4959bfc6c3bfc9",
+        "byteForByteRepeat": true,
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '600,384' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/156-after/156-kitchen-larder-bottom-row.png",
+        "reading": "The owner's frame, answered. All three goblins on the bottom row now stand in front of the line: the orange kitchen outline and the yellow larder outline both run behind them and reappear on either side. The canonical checksum is unchanged from the before frame, so nothing about the world moved — only the order the same world is painted in."
+      },
+      {
+        "name": "156-quarters-wall-in-front",
+        "imagePath": ".artifacts/evidence/156-after/156-quarters-wall-in-front.png",
+        "imageSha256": "da5c0bc953ddda53bc2748656a88c81096d4c849686638354b63dcb7794e0383",
+        "beforeImageSha256": "5fc1e845418602f871427f0706c4201a39f9efcab759211d062f992ae839c6b2",
+        "canonicalChecksum": "9df8c18004b95aa4a6acd45ec338acc63ffd453e669314183e4959bfc6c3bfc9",
+        "byteForByteRepeat": true,
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '1008,264' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/156-after/156-quarters-wall-in-front.png",
+        "reading": "What was bought by Issues #139 and #147 is still there: QUARTERS' purple south edge still runs along the top of the wall standing in front of cells 19,5 and 20,5, because those two pieces are still drawn after the depth pass. The goblin at 20,5 is now in front of the line instead of behind it."
+      }
+    ]
+  },
+
+  "otherChecks": {
+    "fullVerify": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\verify.ps1 -GodotPath \"<godot console>\" -TemporaryRoot C:/df-tmp — status ok, scope full, all 9 stages (scripts, build, tests, mcp, sim, load, godot, ui, screenshots); golden UI compared without regeneration",
+    "issue52": "RoomGeometryTests / RoomReadingTests green: two purposes painted over each other still draw two lines, because the split is per piece and the per-purpose ladder is untouched. The property most at risk from a split — a room being one line around the patch rather than a frame per cell — is now measured directly by An_outline_closes_at_the_corner_a_wall_in_front_reaches.",
+    "issue139and147": "RoomWallClearanceTests green at 32, 40 and 48, including The_border_of_every_room_clears_every_wall_band_on_every_side, The_pre_147_ladder_really_did_draw_the_border_inside_the_wall and A_wall_in_front_of_a_room_cannot_be_cleared_by_any_inset — the last one now reads the pass of DrawRoomBordersOverWalls, which is the routine that carries the policy it excuses"
+  }
+}

@@ -96,6 +96,15 @@ public static class WorldDrawOrder
         new("DrawBlueprint", WorldDrawPass.BelowDepth, null),
         new("DrawStockpileCells", WorldDrawPass.BelowDepth, null),
         new("DrawStockpileCell", WorldDrawPass.BelowDepth, null),
+        // Issue #156. A room's border is a line on the floor a body stands on, so
+        // the depth pass is what should decide which of the two is on top — the
+        // owner reported the alternative from playtest, with the line struck
+        // through the creatures on the kitchen's bottom row. It is drawn last of
+        // this pass, after the things standing on the floor, because it is the
+        // edge of the room's own covering and a stockpile silhouette breaking the
+        // outline would be the same defect wearing a different hat.
+        new("DrawRoomBorders", WorldDrawPass.BelowDepth, null),
+        new("DrawRoomBorder", WorldDrawPass.BelowDepth, null),
 
         // Pass 2 — the depth pass itself.
         new("DrawElevatedWorld", WorldDrawPass.Depth, null),
@@ -106,8 +115,12 @@ public static class WorldDrawOrder
         new("DrawGoblin", WorldDrawPass.Depth, null),
 
         // Pass 3 — informational marks.
-        new("DrawRoomBorders", WorldDrawPass.Informational, OverlayMark.RoomBorder),
-        new("DrawRoomBorder", WorldDrawPass.Informational, OverlayMark.RoomBorder),
+        // The half of a room's border that a wall standing in front of it would
+        // otherwise swallow whole, and nothing else: RoomGeometry.RoomBorderLayer
+        // is where the split is decided, and no inset can buy that segment back
+        // (Issues #139, #147).
+        new("DrawRoomBordersOverWalls", WorldDrawPass.Informational, OverlayMark.RoomBorder),
+        new("DrawRoomBorderOverWall", WorldDrawPass.Informational, OverlayMark.RoomBorder),
         new("DrawZoneOutlines", WorldDrawPass.Informational, OverlayMark.ZoneOutline),
         new("DrawJobRoutes", WorldDrawPass.Informational, OverlayMark.JobRoute),
         new("DrawDigDesignations", WorldDrawPass.Informational, OverlayMark.DigDesignation),
@@ -164,8 +177,9 @@ public static class WorldDrawOrder
         "DrawStockpileCells",
         "DrawBeds",
         "DrawLooseItems",
-        "DrawElevatedWorld",
         "DrawRoomBorders",
+        "DrawElevatedWorld",
+        "DrawRoomBordersOverWalls",
         "DrawZoneOutlines",
         "DrawJobRoutes",
         "DrawDigDesignations",
