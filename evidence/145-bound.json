@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "issue": 145,
+  "when": "2026-08-01",
+  "what": "The upper bound on the domain feed: the question it answers, the answer the question gives, the answer the frame gives, and the gap between them.",
+  "whyThisFileExists": "Issue #128 asked only 'how many lines fit', got four, and a technical limit silently became a product result. Issue #145 forbids repeating that. So the question is asked first, its answer is written down even though it does not fit, and the wall is measured rather than assumed.",
+  "theQuestion": "How many lines does it take to read what is happening in the domain?",
+  "answerFromTheQuestion": {
+    "answer": 9,
+    "reasoning": "The domain is its creatures, and what a player must be able to read without clicking is which of them something happened to and what it was. One line per creature is the shape of that answer.",
+    "measured": "On the shipped baseline party at tick 2400 all 9 creatures have had something that mattered; the party holds 155 entries that mattered out of 4425, in 50 distinct who-and-what beats over 11 distinct kinds.",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter \"FullyQualifiedName~DomainFeedTests\" --logger \"console;verbosity=detailed\""
+  },
+  "answerFromTheFrame": {
+    "answer": 3,
+    "arithmetic": "header 1 drawn line + N sentences at 2 drawn lines each + a blank line + the diagnostics counter at 2 drawn lines = 2 + 2N. At N=3 that is exactly 10 of the 10 the label holds at the tightest frame the guard checks.",
+    "howItWasMeasured": {
+      "mutation": "HudText.DomainFeedLines raised from 3 to 4, nothing else changed.",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -Stage godot -GodotPath C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe -TemporaryRoot C:/Users/User/AppData/Local/Temp",
+      "resultAtFour": "verification_result status error, failedPhase stage, failedStage godot",
+      "messageAtFour": "The HUD loses text in 2 place(s): 'feedback' needs 12 lines but only 11 fit in (287, 219) at viewport (1024, 768), UI scale 1; 'feedback' needs 12 lines but only 10 fit in (287, 200) at viewport (2048, 1440), UI scale 2.",
+      "resultAtThree": "verification_result status ok for stages godot and ui, godotExitCode 0, engineErrorCount 0",
+      "whichLabel": "the live 'feedback' label, not a padded worst case. Main.CreatureStoryPanels pads the story shape; the domain feed is measured as the panel the entry point actually carries, which is why raising the constant is enough to redden it."
+    },
+    "slack": "zero, exactly as for the story panel at four lines. Any EventNarration sentence that grows past two drawn lines reddens the godot stage."
+  },
+  "theGap": {
+    "what": "Six of the nine crew are not on the panel, and neither are the earlier beats of the three that are.",
+    "whereItIsSaid": [
+      "in the product: the header reads 'EVENT FEEDBACK · 3 of 9 crew · 155 of 4425 mattered', so the panel never claims to be the domain",
+      "in the code: the HudText.DomainFeedLines docstring states the question, both answers and the gap",
+      "for the player: one click puts any creature's own four beats on the same panel (HudText.CreatureStory)"
+    ],
+    "whatWasNotDoneAboutIt": [
+      "The panel is not made taller. Its height is Main.cs arithmetic, and Main.cs is held by another task this block (#147).",
+      "The sentences are not shortened. EventNarration is shared by the feed, the story panel, the inspector and the map, so shortening it for the feed's budget would move wording nobody asked to change — and the debt ledger already records that the story panel has zero slack at four lines, so a shorter sentence would be spent there first.",
+      "The diagnostics counter is not moved off the panel. It plus the blank line above it is three of the ten drawn lines — more than one feed entry — and moving a developer counter is a HUD decision of its own rather than a side effect of this one. It is the cheapest line to buy if the feed is ever worth four."
+    ]
+  },
+  "theThreshold": {
+    "what": "The share of sampled feed windows that must carry at least one entry that mattered.",
+    "floor": "40%",
+    "whyThatNumber": "The ceiling on this party is 45.8% — 22 of the 48 sampled windows are taken at a moment when the party has produced anything that mattered at all, and the first ~1300 ticks of a baseline party have none. A floor of 100% would be a claim about the party rather than about the panel. The claim with no slack in it is stated separately and is 100% of the windows where it applies: DomainFeedTests.The_feed_carries_something_that_mattered_whenever_the_party_has_one.",
+    "before": "3 of 48, 6.3%",
+    "after": "22 of 48, 45.8% — the ceiling"
+  }
+}
