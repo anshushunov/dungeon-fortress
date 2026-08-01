@@ -8,8 +8,11 @@
   "answerFromTheQuestion": {
     "answer": 9,
     "reasoning": "The domain is its creatures, and what a player must be able to read without clicking is which of them something happened to and what it was. One line per creature is the shape of that answer.",
-    "measured": "On the shipped baseline party at tick 2400 all 9 creatures have had something that mattered; the party holds 155 entries that mattered out of 4425, in 50 distinct who-and-what beats over 11 distinct kinds.",
-    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter \"FullyQualifiedName~DomainFeedTests\" --logger \"console;verbosity=detailed\""
+    "measured": "On the shipped baseline party at tick 2400 all 9 creatures have had something that mattered.",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter \"FullyQualifiedName~Most_of_what_a_creature_decides_is_routine\" --logger \"console;verbosity=detailed\"",
+    "howToReadThatRun": "It prints one line per creature of the baseline party at tick 2400 — '<name>: <routine> of <entries> (<share>%)'. All nine lines have entries > routine, which is 'something that mattered' for every one of them.",
+    "correction": "An earlier version of this file named the DomainFeedTests run as the source of this number and of two others — '50 distinct who-and-what beats' and '11 distinct kinds'. That run prints neither. The two numbers came from a throwaway probe, nothing reproduces them and nothing reads them, so they are removed rather than re-sourced: they decorated a decision the reasoning above already carries. Found by independent review of PR #152.",
+    "howMuchOfTheJournalMattered": "155 of 4425 entries at tick 2400. Printed by the DomainFeedTests run (the per-window report line) and carried on the panel's own header."
   },
   "answerFromTheFrame": {
     "answer": 3,
@@ -25,7 +28,22 @@
       "beforeTheDiagnosticsNoteWasTrimmed": "at THREE lines the same command reported 'feedback' needs 11 lines but only 10 fit at the same frame, and the failing stage was screenshots, on the prepared party at tick 1670 and on baseline at tick 2400. That run is what turned the arithmetic above from a guess into a measurement.",
       "whichLabel": "the live 'feedback' label, not a padded worst case. Main.CreatureStoryPanels pads the story shape; the domain feed is measured as the panel the entry point actually carries, which is why raising the constant is enough to redden it."
     },
-    "slack": "zero, exactly as for the story panel at four lines. Any EventNarration sentence that grows past two drawn lines reddens the godot stage. That is the right failure — loud rather than silent, on every entry point — but it is a second HUD panel with no headroom and it belongs in the debt ledger beside the first."
+    "slack": "zero on the shape that carries turning points, exactly as for the story panel at four lines. That is the right failure — loud rather than silent — but it is a second HUD panel with no headroom and it belongs in the debt ledger beside the first.",
+    "whichStageHoldsIt": {
+      "claim": "The two stages that measure this panel do not hold the same thing, and only one of them holds the ceiling.",
+      "godot": "reads the feed at ticks 1 and 190, where every line is routine and the panel is 9 drawn lines of 10. It has a whole line of slack and stays green through the next longer routine sentence.",
+      "screenshots": "the only input inside verify.ps1 where the feed carries turning points: the prepared party at tick 1670. There the panel is 10 of 10.",
+      "howItWasMeasured": {
+        "probe": "one drawn line put back into the panel — the diagnostics counter temporarily restored to 'Diagnostics: {n} (structured JSON is emitted by smoke/capture).', nothing else changed",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -Stage godot,screenshots -GodotPath C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe -TemporaryRoot C:/Users/User/AppData/Local/Temp",
+        "godotResult": "verification_stage status ok, stage godot, elapsedSeconds 29.9",
+        "screenshotsResult": "verification_result status error, failedStage screenshots; 'The HUD loses text in 1 place(s): 'feedback' needs 11 lines but only 10 fit in (287, 200) at viewport (2048, 1440), UI scale 2.' The two baseline t1 captures of that stage passed; the prepared t1670 capture is the one that failed.",
+        "secondReading": "consistent with the bound mutant above: at DomainFeedLines = 4 the godot stage itself reports 11 needed, which is header 1 + four routine sentences at 2 drawn lines each + blank 1 + counter 1. Three routine sentences is therefore 9."
+      },
+      "whichStageGuardsWhat": "They catch different mistakes. Raising DomainFeedLines adds two drawn lines and godot catches it on its own — that is the bound mutant. Lengthening a sentence adds one, and only screenshots catches that.",
+      "practicalConsequence": "Whoever lengthens an EventNarration sentence next must run the screenshots stage, or the full verify.ps1. `-Stage godot` alone will pass and the feed will ship a line short.",
+      "correction": "The first version of this file, of the HudText.DomainFeedLines docstring and of contract 11.1 all said the godot stage holds this bound. That was wrong, and this same file contradicted it two keys away in howItWasMeasured.beforeTheDiagnosticsNoteWasTrimmed, which records screenshots as the stage that actually failed. Found by independent review of PR #152; the cost of leaving it was that Issue #145's own 'known limitation' instructs the next implementer to run -Stage godot and would have handed them a green run on a truncated panel."
+    }
   },
   "theGap": {
     "what": "Six of the nine crew are not on the panel, and neither are the earlier beats of the three that are.",

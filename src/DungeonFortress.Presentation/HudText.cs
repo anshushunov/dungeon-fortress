@@ -175,8 +175,10 @@ public static class HudText
     /// domain is its nine creatures, and what a player must be able to read
     /// without clicking is which of them something happened to and what it was; on
     /// the shipped <c>baseline</c> party at tick 2400 that is <b>nine</b> lines,
-    /// because all nine have had something that mattered
-    /// (<c>evidence/145-feed-after.json</c>). Nine does not fit, and saying so is
+    /// because all nine have had something that mattered — every creature's line
+    /// of <c>CreatureStoryTests.Most_of_what_a_creature_decides_is_routine</c>
+    /// prints more entries than routine ones
+    /// (<c>evidence/145-bound.json</c>). Nine does not fit, and saying so is
     /// the whole point of asking the question first: Issue #128 asked only "how
     /// many lines fit", got four, and a technical limit silently became a product
     /// answer.
@@ -205,11 +207,35 @@ public static class HudText
     /// </para>
     ///
     /// <para>
-    /// <b>The slack is zero</b>, exactly as it is for the story panel at four
-    /// lines, and for the same reason: both panels are the tallest thing their
-    /// label can hold. Any sentence in <see cref="EventNarration"/> that grows past
-    /// two drawn lines reddens the <c>godot</c> stage rather than quietly losing a
-    /// line, which is the right failure but not a comfortable one.
+    /// <b>Which stage holds this bound, because the two do not hold the same
+    /// thing.</b> The <c>godot</c> stage reads the feed at ticks 1 and 190, where
+    /// every line is routine and the panel is <b>9 drawn lines of 10</b> — it has
+    /// a whole line of slack and will stay green through the next longer routine
+    /// sentence. The shape with no slack is the feed carrying <em>turning
+    /// points</em>, and inside <c>verify.ps1</c> exactly one input produces it:
+    /// the <c>screenshots</c> stage on the <c>prepared</c> party at tick 1670,
+    /// where the panel is <b>10 of 10</b>. Measured by putting one drawn line back
+    /// into the panel: <c>godot</c> reported <c>status ok</c> and
+    /// <c>screenshots</c> reported <c>'feedback' needs 11 lines but only 10 fit</c>
+    /// on that frame (<c>evidence/145-bound.json</c>).
+    /// </para>
+    ///
+    /// <para>
+    /// So they guard different mistakes, and the split is worth stating: raising
+    /// this constant adds two drawn lines and <c>godot</c> catches it on its own —
+    /// that is the mutant above. <b>Lengthening a sentence adds one, and only
+    /// <c>screenshots</c> catches that.</b>
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The slack is zero</b> on that shape, exactly as it is for the story panel
+    /// at four lines, and for the same reason: both panels are the tallest thing
+    /// their label can hold. Any sentence in <see cref="EventNarration"/> that
+    /// grows past two drawn lines reddens <c>verify.ps1</c> rather than quietly
+    /// losing a line — but it reddens the <b><c>screenshots</c> stage</b>, and
+    /// <c>-Stage godot</c> on its own will not see it. That is the run to make
+    /// after touching the wording, and it is the opposite of what an earlier
+    /// draft of this docstring said.
     /// </para>
     ///
     /// <para>
