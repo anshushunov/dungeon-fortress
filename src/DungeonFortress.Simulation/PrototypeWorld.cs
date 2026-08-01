@@ -2550,7 +2550,8 @@ public sealed class PrototypeWorld
         // MeleeAttackRange is the whole edit a ranged weapon would need here.
         if (Manhattan(creature.Position, target.Position) > PrototypeTuning.MeleeAttackRange)
         {
-            var next = _map.NextStep(creature.Position, target.Position, _zones[ZoneKind.Forbidden]);
+            var destination = ApproachTile(creature, target);
+            var next = _map.NextStep(creature.Position, destination, _zones[ZoneKind.Forbidden]);
             if (next is { } step)
             {
                 _ = Move(creature, step);
@@ -2570,6 +2571,90 @@ public sealed class PrototypeWorld
             _raidersDownedTotal++;
             RecordDecision(creature, "combat_raider_downed", new Dictionary<string, int> { ["raiderId"] = target.Id });
         }
+    }
+
+    /// <summary>
+    /// Where a fighter walks when it walks towards a raider: a free tile
+    /// **beside** the raider, and the raider's own tile only when there is no
+    /// free one to be had.
+    ///
+    /// The destination is the whole of Issue #129. Sending everybody to the
+    /// raider's own tile gives every fighter that shares a nearest enemy one and
+    /// the same point to path to, and <see cref="PrototypeMap.NextStep"/> is a
+    /// BFS with one tie-break, so it hands them all the same corridor: they
+    /// arrive in a column and only the head of it is ever in reach. Measured on
+    /// the seed matrix before this method existed, three defenders were never
+    /// simultaneously adjacent to one raider in six whole parties, while a free
+    /// tile beside the target went unused on 158 to 333 fighter-ticks a party
+    /// (<c>evidence/129-before.json</c>).
+    ///
+    /// The rule, stated so that it can be checked rather than read:
+    ///
+    /// <list type="number">
+    /// <item><description>the candidates are the four neighbours of the target,
+    /// visited in the map's own order — north, east, south, west — which is the
+    /// same order <see cref="PrototypeMap.NextStep"/> breaks its ties
+    /// in;</description></item>
+    /// <item><description>a candidate is **free** when it is passable, is not in
+    /// the <see cref="ZoneKind.Forbidden"/> zone, carries no other creature of
+    /// the domain — a body on the floor counts, exactly as it does in
+    /// <see cref="Move"/> — and carries no raider. The last clause is the
+    /// occupancy rule of contract 4.1 rather than the implementation's: standing
+    /// on a raider is not a place to stand. It is also the one clause here that
+    /// no check holds on its own, and the reason is measured rather than assumed:
+    /// with it a fighter shares a tile with a raider on 8 fighter-ticks over the
+    /// matrix and without it on 12, because most of that overlap is the raider
+    /// walking onto the fighter — <c>ActRaiders</c> assigns a position with no
+    /// occupancy check at all (<c>evidence/129-mutations.json</c>);</description></item>
+    /// <item><description>of the free candidates, the fighter takes the one
+    /// nearest **to itself** by the map, and the first in the order above when
+    /// two are equally near. Nearest to itself is what spreads the fighters out:
+    /// a single fixed corner would just move the column one tile
+    /// sideways;</description></item>
+    /// <item><description>if no neighbour is both free and reachable, the
+    /// destination stays the raider's own tile, which is what it always was. The
+    /// rule prefers a free place to the queue; it does not invent a new way to
+    /// stand still.</description></item>
+    /// </list>
+    ///
+    /// Everything here is a function of the published world and is evaluated in
+    /// ascending creature id inside the tick, so two fighters never quietly pick
+    /// the same tile: the second one sees the first already standing on it. What
+    /// this method deliberately does not do is walk around an occupied tile —
+    /// <see cref="PrototypeMap.NextStep"/> still ignores bodies, and making it
+    /// see them is <see href="https://github.com/anshushunov/dungeon-fortress/issues/76">Issue #76</see>.
+    /// </summary>
+    private GridPoint ApproachTile(CreatureState creature, RaiderState target)
+    {
+        GridPoint? chosen = null;
+        var shortest = int.MaxValue;
+        foreach (var candidate in PrototypeMap.Neighbors(target.Position))
+        {
+            if (!IsFreeApproachTile(creature, candidate))
+            {
+                continue;
+            }
+
+            if (_map.Distance(creature.Position, candidate, _zones[ZoneKind.Forbidden])
+                is not { } steps ||
+                steps >= shortest)
+            {
+                continue;
+            }
+
+            shortest = steps;
+            chosen = candidate;
+        }
+
+        return chosen ?? target.Position;
+    }
+
+    private bool IsFreeApproachTile(CreatureState creature, GridPoint tile)
+    {
+        return _map.IsPassable(tile) &&
+            !_zones[ZoneKind.Forbidden].Contains(tile) &&
+            !_creatures.Any(other => other != creature && other.Position == tile) &&
+            !_raiders.Any(raider => raider.Mode == RaiderMode.Raiding && raider.Position == tile);
     }
 
     private void ActRaiders()

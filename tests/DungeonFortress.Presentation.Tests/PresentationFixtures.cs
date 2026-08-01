@@ -141,10 +141,16 @@ internal static class PresentationFixtures
     /// to read the same journals the game ships with.
     /// </summary>
     internal static PrototypeSnapshot RunFixture(string fixtureName, int ticks) =>
-        PrototypeScenario.Run(
-            PrototypeCommandDocument.Load(Path.Combine(
-                FindRepositoryRoot(), "scenarios", "prototype1", $"{fixtureName}.commands.v2.json")),
-            ticks).State;
+        PrototypeScenario.Run(LogOf(fixtureName), ticks).State;
+
+    /// <summary>
+    /// The shipped journal of a scenario, unrun. A test that has to walk a party
+    /// tick by tick, or run one on a seed other than the journal's own, needs the
+    /// log rather than a finished snapshot.
+    /// </summary>
+    internal static PrototypeCommandLog LogOf(string fixtureName) =>
+        PrototypeCommandDocument.Load(Path.Combine(
+            FindRepositoryRoot(), "scenarios", "prototype1", $"{fixtureName}.commands.v2.json"));
 
     internal static PrototypeCommandLog Log(params PrototypeCommand[] commands) =>
         new("custom", PrototypeTuning.DefaultSeed, commands);

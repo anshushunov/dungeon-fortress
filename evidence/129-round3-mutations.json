@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "issue": 129,
+  "when": "2026-08-02, after the owner accepted the new corridors",
+  "what": "One mutant per reformulated assertion. Every check that was rewritten in this round has to redden when the thing it now promises is taken out of the code — otherwise the rewrite would be a way of not checking.",
+  "howToReproduce": {
+    "runners": [".artifacts/mutate-129-round3.py", ".artifacts/mutate-129-round3b.py"],
+    "command": "python .artifacts/mutate-129-round3.py && python .artifacts/mutate-129-round3b.py",
+    "method": "Each mutant is one textual replacement in one source file. The runner applies it, runs the whole test project that is supposed to notice, records which checks failed and restores the file in a finally block. Both runners end by running the restored tree.",
+    "baseline": "Presentation 488 of 488 and Simulation 275 of 275 green, run last, after every mutation was put back."
+  },
+  "mutants": [
+    {
+      "assertion": "MemoryInspectorTests: a creature that remembers places says so on its panel, newest first",
+      "mutant": "InspectorText.DescribeMemory returns the empty string for every creature",
+      "result": "red: 1 failed",
+      "failing": ["MemoryInspectorTests.The_panel_of_a_creature_that_remembers_places_lists_them_newest_first"],
+      "reading": "The rewrite changed how the subject is chosen, not what is asserted about it, and the assertion still has teeth: with no line on the panel the check fails at the subject it now finds by rule."
+    },
+    {
+      "assertion": "CreatureStoryTests: every creature that refused by memory reads that refusal on its panel",
+      "mutant": "HudText.StoryWeight ranks refused_place_of_panic and refused_place_of_wound at 0 instead of 3, so a refusal by memory becomes routine",
+      "result": "red: 4 failed",
+      "failing": [
+        "CreatureStoryTests.Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel",
+        "CreatureStoryTests.A_refusal_by_memory_reads_in_the_creature_s_own_story",
+        "CreatureStoryTests.Every_reason_code_the_matrix_produces_is_ranked_on_purpose",
+        "CreatureStoryTests.The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it"
+      ],
+      "reading": "Reading the whole matrix rather than one cell did not soften the criterion: it fails on the first fixture it reaches."
+    },
+    {
+      "assertion": "Most_of_what_a_creature_decides_is_routine, first and second clauses: the journal is at least 90 % routine on every run, and routine is the majority for every creature",
+      "mutant": "HudText.StoryWeight gives waiting_blocked_by_other a weight of 1, so the commonest routine decision stops being routine",
+      "result": "red: 3 failed",
+      "failing": [
+        "CreatureStoryTests.Most_of_what_a_creature_decides_is_routine",
+        "CreatureStoryTests.Before_anything_has_happened_the_panel_is_still_what_it_has_been_doing",
+        "CreatureStoryTests.Before_anything_has_mattered_the_feed_is_still_the_crew_at_work"
+      ]
+    },
+    {
+      "assertion": "Most_of_what_a_creature_decides_is_routine, third clause: the panel shows a decision older than the four newest entries",
+      "mutant": "HudText.Meaning returns a constant weight, so the panel ranks by recency alone",
+      "result": "red: 6 failed",
+      "failing": [
+        "CreatureStoryTests.Most_of_what_a_creature_decides_is_routine",
+        "CreatureStoryTests.Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel",
+        "CreatureStoryTests.A_refusal_by_memory_reads_in_the_creature_s_own_story",
+        "CreatureStoryTests.The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it",
+        "CreatureStoryTests.The_domain_feed_shows_what_mattered_and_not_only_what_happened_last",
+        "CreatureStoryTests.The_feed_carries_something_that_mattered_whenever_the_party_has_one"
+      ],
+      "reading": "This is the clause that replaced the per-creature percentage, and it is the one the percentage never had: a panel that ranks by recency passes any share of routine and fails this."
+    },
+    {
+      "assertion": "Invariant 11, first clause: a party that survived outranks one that fell",
+      "mutant": "PrototypeTuning.ScoreOutcomeFallen goes from 0 to 2000, above the band of a party that survived",
+      "result": "red: 2 failed",
+      "failing": [
+        "PrototypeScenarioTests.Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party",
+        "PrototypeScenarioTests.Preparation_outscores_its_absence_over_the_matrix"
+      ],
+      "message": "baseline survived with score 758 and neglected fell with 2000; and on seed 20260728, prepared survived with 927 and baseline fell with 1777",
+      "reading": "The clause names the outcome rather than the fixture, and the mutant proves it reads that way: the pair it fails on includes baseline-as-a-fallen-party, which the old fixture-named form could not have expressed at all. A weaker mutant — ScoreOutcomeFallen = 1000 — leaves this clause green and is caught by The_outcome_ranks_strictly_when_every_other_fact_is_equal instead, which is why the mutant is the one that inverts the order rather than the one that flattens it."
+    },
+    {
+      "assertion": "Invariant 4: preparation makes the raid cheaper, per resolved wave",
+      "mutant": "a completed Drill adds 0 to MartialForm, so preparation buys nothing",
+      "result": "red: 2 failed",
+      "failing": [
+        "PrototypeScenarioTests.Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party",
+        "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders"
+      ],
+      "message": "the raid cost prepared 453 over 4 resolved wave(s) and baseline 283 over 3: preparation has stopped making the raid cheaper. Stolen 41/31, defenders lost 31/16.",
+      "reading": "The mutant is worth reading twice: prepared is robbed of 10 more meals and loses 15 more defenders than baseline, and the old two-count form would have failed too — but the new form fails while comparing a four-wave party with a three-wave one, which is the case the old form got wrong in the other direction."
+    },
+    {
+      "assertion": "#168: most flights are walks, in every cell",
+      "mutant": "the Fled branch of ActCreatures never calls RunFromTheFight, so a broken defender stands where it broke",
+      "result": "red: 2 failed",
+      "failing": [
+        "PrototypeMoraleTests.Most_broken_defenders_actually_leave_the_tile_they_broke_on",
+        "PrototypeMoraleTests.Every_tick_a_runner_stands_still_is_explained_in_the_log"
+      ],
+      "reading": "Both halves of what carries the promise after the matrix share was removed: the per-cell floor and the per-tick rule. Removing the corridor did not remove the check."
+    },
+    {
+      "assertion": "#170: the half of Traffic_arbitration that is a rule, kept after the spread bound was removed",
+      "mutant": "Move drops the check that the next tile is free of other creatures",
+      "result": "red: 107 failed",
+      "failing": ["PrototypeContractRegressionTests.Traffic_arbitration_preserves_one_move_no_overlap_and_no_swap", "… and 106 more across the project"],
+      "reading": "The occupancy rule is load-bearing for a third of the project, which is the answer to whether removing the fairness bound left the test toothless. It did not: what stayed is the part that a hundred other checks also depend on."
+    }
+  ],
+  "notCoveredAndSaidSo": [
+    {
+      "assertion": "Invariant 11, second clause: the outcome band of prepared is never below the band of baseline",
+      "why": "No single textual mutant found that reddens it on its own. It is a floor on the worst case rather than a corridor: to fail it, a mutant has to make the prepared party fall while the unprepared one survives, and every mutant tried that hurts preparation hurts both plans or hurts prepared without flipping the band. The strongest one available — a Drill that buys nothing — leaves prepared paying 453 against baseline's 283 in raid cost and still ending the party at the same band.",
+      "howItIsCoveredAnyway": "It is not. An earlier revision claimed partial coverage in combination — that the same mutant reddens invariant 4 in the same block, so a broken build would not reach this clause green. The independent review disproved it by reading the order of the asserts: the band assert runs BEFORE the raid-cost assert, so under every mutant tried the band was evaluated, passed, and stayed green while the later assert went red. The claim described a property of any assert standing in front of a failing one, not coverage. Removed rather than reworded; the admission that the clause is uncovered stands on its own.",
+      "secondUncoveredClause": "Invariant 4's division by waves resolved is likewise uncovered: the review's mutant that drops the division leaves 275/275 green, because no matrix cell today pairs parties with different wave counts where the undivided answer differs. Said here because this section is the one place that promises to name what is not covered."
+    }
+  ]
+}

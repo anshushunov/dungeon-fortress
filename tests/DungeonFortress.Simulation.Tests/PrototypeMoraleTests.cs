@@ -154,23 +154,58 @@ public sealed class PrototypeMoraleTests(ITestOutputHelper output)
     /// That no creature ever moves more than a tile, for the whole party and not
     /// only for a runner, is
     /// <c>Traffic_arbitration_preserves_one_move_no_overlap_and_no_swap</c>.
+    ///
+    /// <para>
+    /// <b>The matrix bound is gone as of Issue #168, and what it was standing in
+    /// for is named instead.</b> After the approach rule of Issue #129 the share
+    /// is 76 of 108 (70.4 %) against 104 of 123 (84.5 %) before it, and the
+    /// tempting reading — "waves end sooner, so runners have less time" — is
+    /// measured to be false as a mechanism: the distribution of flight lengths
+    /// barely moves, 92 % of flights last sixteen ticks or more on both trees,
+    /// and the whole of the shortfall sits <b>inside</b> the long ones, 72.0 %
+    /// against 87.6 %. The approach rule changes the <b>place</b> a defender
+    /// breaks, not the time it has: it now breaks pressed against the enemy
+    /// inside a crowd of its own side, and the way out of that place is a body
+    /// that <c>PrototypeMap.NextStep</c> will not route around
+    /// (<see href="https://github.com/anshushunov/dungeon-fortress/issues/76">Issue
+    /// #76</see>).
+    /// </para>
+    ///
+    /// <para>
+    /// A share cannot express that, and re-fitting it to 70 % would say only that
+    /// somebody measured this build. Two things carry the promise instead, and
+    /// neither contains a number chosen after the fact: the per-cell floor below
+    /// — most flights are walks, in every cell — and
+    /// <see cref="Every_tick_a_runner_stands_still_is_explained_in_the_log"/>,
+    /// which makes the claim on every tick rather than on an average, and which
+    /// is green. The matrix share stays here as a printed measurement, together
+    /// with the long flights it lives in, so the next change is compared against
+    /// a figure rather than against nothing.
+    /// </para>
     /// </summary>
     [Fact]
     public void Most_broken_defenders_actually_leave_the_tile_they_broke_on()
     {
         var walked = 0;
         var total = 0;
+        var walkedLong = 0;
+        var totalLong = 0;
         var report = new StringBuilder();
 
         foreach (var (fixtureName, seed) in Cells())
         {
             var runs = FlightRuns(fixtureName, seed);
             var moved = runs.Count(run => run.Distance > 0);
+            var longRuns = runs.Where(run => run.Ticks >= LongFlightTicks).ToArray();
             walked += moved;
             total += runs.Count;
+            walkedLong += longRuns.Count(run => run.Distance > 0);
+            totalLong += longRuns.Length;
             report.AppendLine(CultureInfo.InvariantCulture,
                 $"{fixtureName}/{seed}: {moved} of {runs.Count} flights moved the creature, " +
-                $"furthest {(runs.Count == 0 ? 0 : runs.Max(run => run.Distance))} tiles");
+                $"furthest {(runs.Count == 0 ? 0 : runs.Max(run => run.Distance))} tiles; " +
+                $"of the {longRuns.Length} that lasted {LongFlightTicks}+ ticks, " +
+                $"{longRuns.Count(run => run.Distance > 0)} moved");
 
             Assert.True(
                 moved * 2 >= runs.Count,
@@ -179,10 +214,31 @@ public sealed class PrototypeMoraleTests(ITestOutputHelper output)
                 $"middle of a fight reads as broken rather than as frightened.\n{report}");
         }
 
+        // Not a bound. The share and the long flights it lives in are printed so
+        // that the next change to the fight is compared against a figure; what is
+        // asserted is the per-cell floor above and the per-tick rule in
+        // Every_tick_a_runner_stands_still_is_explained_in_the_log.
+        report.AppendLine(CultureInfo.InvariantCulture,
+            $"over the matrix {walked} of {total} flights moved the creature " +
+            $"({100.0 * walked / total:0.0}%); of the {totalLong} that lasted " +
+            $"{LongFlightTicks}+ ticks, {walkedLong} moved " +
+            $"({100.0 * walkedLong / Math.Max(1, totalLong):0.0}%)");
+        output.WriteLine(report.ToString());
+
+        // The sample itself, so the floor above cannot pass by measuring nothing.
         Assert.True(
-            walked * 100 >= total * 80,
-            $"over the matrix only {walked} of {total} flights moved the creature.\n{report}");
+            total >= Cells().Count() * 5,
+            $"only {total} flights over the whole matrix, which is too few for the share of them " +
+            $"that are walks to mean anything.\n{report}");
     }
+
+    /// <summary>
+    /// Long enough that a runner had somewhere to get to. Sixteen ticks is where
+    /// Issue #168 read the distribution: 92 % of flights are at least this long
+    /// both before and after Issue #129, so it is the bulk of them rather than a
+    /// tail chosen to make a number.
+    /// </summary>
+    private const int LongFlightTicks = 16;
 
     /// <summary>
     /// A runner that stands still is not automatically a defect — a corridor can

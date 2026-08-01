@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "issue": 129,
+  "when": "2026-08-01, third round: the owner accepted the new corridors and sent the starvation channel to Issue #171",
+  "what": "Why the three memory checks of DungeonFortress.Presentation.Tests reddened after #129, and what each of them asserts now. Every figure below is measured on both trees with the same probe, so the question 'is this a fit to the new run' is answered by numbers rather than by argument.",
+  "howItWasMeasured": {
+    "probe": "A throwaway xunit fact in tests/DungeonFortress.Presentation.Tests that walks each of the six matrix runs (baseline and prepared, seeds 20260726-20260728) and reads the same things the three checks read. Deleted after the measurement; the figures are here and in the docstrings.",
+    "trees": {
+      "main": "cbbd588, a detached worktree of origin/main — that is #156 merged and the goblin pack v2, so the only difference from the branch is #129 itself",
+      "branch": "agent/129-combat-approach-free-tile at the merge of origin/main"
+    },
+    "commands": [
+      "git worktree add --detach <path> origin/main",
+      "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter \"FullyQualifiedName~<check>\" --logger \"console;verbosity=detailed\""
+    ]
+  },
+  "theSubjectOfTheInspectorPanel": {
+    "check": "MemoryInspectorTests.The_panel_of_a_creature_that_remembers_places_lists_them_newest_first",
+    "was": "run baseline to FirstRaidTick + 500 (tick 1800) and take whoever carries two remembered places there",
+    "whyThatWasWrongBeforeThisBranch": "Creatures carrying two memories at tick 1800, over the six runs of the matrix on main: 4, 0, 2, 0, 1, 2. Two of six cells had no subject at all. The check survived only because it looked at the cell with four, so the tick was fitted to one cell and the fit was already broken on main.",
+    "afterTheBranch": {"perRun": [0, 0, 1, 1, 1, 1], "note": "the cell the check runs is the first one, and it is now empty"},
+    "isNow": "the first tick of the party at which any creature carries two remembered places, searched from FirstRaidTick to the end of the party, lowest id on a tie",
+    "whyThatIsNotAFit": "It contains no tick and no seed. It fails if the party never produces a subject, which is the same alarm the old assertion raised, and it cannot be tuned by moving a number because there is no number to move.",
+    "whereItLands": {"main": 1664, "branch": 2011}
+  },
+  "everyCreatureThatRefusedByMemory": {
+    "check": "CreatureStoryTests.Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel",
+    "was": "one cell — the baseline journal on its own seed at tick 2400 — guarded by 'at least three creatures refused by memory here'",
+    "whyThatWasWrongBeforeThisBranch": "Creatures that ever refused by memory, per run of the matrix on main: 3, 2, 2, 0, 4, 2. The guard of three passes on two cells out of six — on the cell the test actually ran, with no slack at all (exactly 3), and on one other (4) — while on a third there would have been nothing to check at all. An earlier revision said 'exactly one cell'; corrected by the independent review, which read the row rather than the claim. The substance is unchanged: the threshold was a copy of one measurement, not a property.",
+    "afterTheBranch": {"perRun": [2, 0, 3, 3, 5, 2]},
+    "totalsOverTheMatrix": {"main": 13, "branch": 15},
+    "isNow": "the same criterion read over all six runs; the sample floor is 'as many subjects as a party has creatures', counted off the party rather than written down, and they must come from more than one run",
+    "whyThatIsNotAFit": "#129 gives the criterion more subjects, not fewer (15 against 13). The old form reddened because it was looking at one cell, and the new floor is a rule about the sample rather than a figure from it."
+  },
+  "mostOfWhatACreatureDecidesIsRoutine": {
+    "check": "CreatureStoryTests.Most_of_what_a_creature_decides_is_routine",
+    "wasTwoFloors": "journal-wide routine share >= 90 % and per-creature routine share >= 90 %, both on one party",
+    "journalWideShare": {
+      "main": {"baseline/20260726": 96.4, "baseline/20260727": 97.5, "baseline/20260728": 96.4, "prepared/20260726": 96.3, "prepared/20260727": 97.9, "prepared/20260728": 96.2},
+      "branch": {"baseline/20260726": 95.5, "baseline/20260727": 97.5, "baseline/20260728": 91.1, "prepared/20260726": 95.0, "prepared/20260727": 97.5, "prepared/20260728": 96.9},
+      "verdict": "The 90 % floor is untouched and now runs over the whole matrix, where it holds on every cell of both trees. Nothing was moved."
+    },
+    "perCreatureMinimum": {
+      "main": {"baseline/20260726": 92.0, "baseline/20260727": 96.7, "baseline/20260728": 93.6, "prepared/20260726": 92.0, "prepared/20260727": 92.9, "prepared/20260728": 93.4},
+      "branch": {"baseline/20260726": 88.8, "baseline/20260727": 95.1, "baseline/20260728": 75.9, "prepared/20260726": 92.0, "prepared/20260727": 92.1, "prepared/20260728": 90.4},
+      "verdict": "This is the floor that broke, and it broke on the party that starves after winning its fights — channel 1, Issue #171. Re-fitting it to 75 % would repeat with a smaller number the mistake of copying a measurement into an assertion, so the floor becomes what the name of the check promises: routine is the majority of what any one creature decides. The measured minimum stays a printed fact and is quoted in contract 11.1, PROTOTYPE_GRAYBOX.md and HudText with the command that produces it."
+    },
+    "whatReplacesTheTeeth": {
+      "claim": "For every creature of every run, the panel shows at least one decision that mattered and that is older than its four newest entries — that is, ranking by significance is not the same panel as recency.",
+      "why": "It is the sentence 11.1 actually leans on («поэтому «последние четыре» почти всегда были ею»), stated without a percentage, and it reddens the moment ranking is replaced by recency — which the per-creature percentage never did.",
+      "measured": {"main": "9 of 9 creatures on all six runs", "branch": "9 of 9 creatures on all six runs"},
+      "alsoMeasured": "Creatures whose four newest entries are all routine, per run: main 1, 0, 1, 0, 0, 0; branch 2, 0, 7, 0, 0, 0. The seven are the starving party, where routine floods the journal in a different way — more reason for the claim to be about what the panel rescues rather than about a share."
+    }
+  }
+}

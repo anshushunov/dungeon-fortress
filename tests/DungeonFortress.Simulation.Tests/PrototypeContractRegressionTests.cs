@@ -1,14 +1,16 @@
-﻿using System.Text;
+﻿using System.Globalization;
+using System.Text;
 using System.Text.Json;
 
 using DungeonFortress.Scenarios;
 using DungeonFortress.Simulation;
 
 using Xunit;
+using Xunit.Abstractions;
 
 namespace DungeonFortress.Simulation.Tests;
 
-public sealed class PrototypeContractRegressionTests
+public sealed class PrototypeContractRegressionTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData("""{"schemaVersion":2,"scenario":"custom","commands":[]}""")]
@@ -394,18 +396,37 @@ public sealed class PrototypeContractRegressionTests
             flightsWitnessed >= 5,
             $"only {flightsWitnessed} defenders broke in this party, which is too few " +
             "for the walk out of a fight to have been read at all.");
-        // A soft fairness bound, not a rule. Re-measured over the whole party
-        // rather than over the run-up to the first wave, and re-measured again
-        // after a broken defender became a participant in traffic arbitration:
-        // 27 over the short window on `origin/main`, 30 over the whole party, 28
-        // now that a runner both yields and is yielded to and so carries its own
-        // share of the count. The bound keeps roughly the proportion of slack it
-        // had before.
-        Assert.InRange(
-            previous.Creatures.Max(creature => creature.YieldCount) -
-            previous.Creatures.Min(creature => creature.YieldCount),
-            0,
-            40);
+        // The spread of yieldCount across the nine creatures used to be bounded
+        // here at 0..40 as "a soft fairness bound". Issue #170 removed the bound
+        // and kept the number, because the bound could not tell a change of code
+        // from a change of seed — which is not a weak check but a wrong one.
+        //
+        // Measured over the matrix in four builds (evidence/129-matrix.json, key
+        // theTrafficBound): on `main` the same spread is 15 on the cell this test
+        // runs and 226 and 235 on seed 20260727. The 28 the bound was built
+        // around is the calmest party of the six, and 40 was chosen with slack
+        // under it; six times that figure was already reachable on `main` without
+        // anybody touching the code. Issue #129 moves this cell to 74, which is
+        // inside the range `main` produces on its own, and re-fitting the bound
+        // to 74 would repeat the mistake with a bigger number.
+        //
+        // What the same measurement also ruled out is worth keeping next to it:
+        // 592 of the 625 yields of this party happen on ticks with no raider on
+        // the map at all, and turning memory of place off leaves the spread at 65
+        // against 74 — so it is neither combat traffic nor the memory channel of
+        // Issue #171 that moves it. It is a different party.
+        //
+        // Everything else in this test is a rule and stays: one move a tick, no
+        // overlap, no swap, no teleport, yields witnessed with and without a
+        // dependency cycle, every creature yielding at least once, and at least
+        // five flights so that the walk out of a fight was read at all.
+        output.WriteLine(string.Create(
+            CultureInfo.InvariantCulture,
+            $"yieldCount spread on baseline/{previous.Seed}: " +
+            $"{previous.Creatures.Max(creature => creature.YieldCount)} - " +
+            $"{previous.Creatures.Min(creature => creature.YieldCount)} = " +
+            $"{previous.Creatures.Max(creature => creature.YieldCount) -
+                previous.Creatures.Min(creature => creature.YieldCount)}"));
     }
 
     [Fact]

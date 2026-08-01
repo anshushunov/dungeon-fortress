@@ -893,11 +893,18 @@ that to the player, and none of them needs the log:
   already publishes.
 
   **The lines are the decisions that mattered, not the newest ones.** A creature's
-  journal is 96.5 % waiting for stock, being blocked in a corridor and stepping
-  aside — never under 92 % for any one creature — so the newest four almost always
-  were: on `baseline` at tick 2400 none of the three creatures that ever refused
-  work by memory of a place had that refusal on its panel
-  (`evidence/140-before.json`). That share is a run rather than a remembered
+  journal is 91.1 % to 97.5 % waiting for stock, being blocked in a corridor and
+  stepping aside, over the six runs of the seed matrix, so the newest four almost
+  always were: on `baseline` at tick 2400 none of the three creatures that ever
+  refused work by memory of a place had that refusal on its panel
+  (`evidence/140-before.json`). Per creature the promise is that routine is the
+  majority rather than that it is over 92 %: that figure was one party, and after
+  Issue #129 the minimum over the matrix is 75.9 % on the party that starves
+  after winning its fights (Issue #171). What the paragraph above actually needs
+  is asserted instead, without a percentage — every creature of every run is shown
+  at least one decision that mattered and that its four newest entries would have
+  missed, 9 of 9 on all six runs before and after #129
+  (`evidence/129-presentation.json`). That share is a run rather than a remembered
   number, and it is the run this document quotes:
 
   ```powershell

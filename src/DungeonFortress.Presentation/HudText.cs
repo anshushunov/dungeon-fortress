@@ -148,19 +148,37 @@ public static class HudText
     /// <b>What stays off the panel</b>, therefore, and is named rather than
     /// hidden: the older beats of a story with more than four, and every routine
     /// decision — waiting for stock, being blocked in a corridor, stepping aside
-    /// — which is <b>96.5 %</b> of the journal, and never under 92 % for any one
-    /// creature. The header carries both counts, and the inspector next to it
-    /// carries every place the creature avoids.
+    /// — which is <b>91.1 % to 97.5 %</b> of the journal over the seed matrix.
+    /// The header carries both counts, and the inspector next to it carries every
+    /// place the creature avoids.
     /// </para>
     ///
     /// <para>
     /// That share is a run and not a remembered number:
     /// <c>CreatureStoryTests.Most_of_what_a_creature_decides_is_routine</c>
-    /// prints it per party and per creature and fails if it drops under the 90 %
-    /// this file and the two documents rely on. It is quoted here, in contract
-    /// §11.1 and in <c>PROTOTYPE_GRAYBOX.md</c>; an earlier draft of all three
-    /// said 89 %, which was four particular codes of one particular creature
-    /// generalised to the journal, and nothing could have caught that but a run.
+    /// prints it per run and per creature and fails if the journal of any run
+    /// drops under the 90 % this file and the two documents rely on. It is quoted
+    /// here, in contract §11.1 and in <c>PROTOTYPE_GRAYBOX.md</c>; an earlier
+    /// draft of all three said 89 %, which was four particular codes of one
+    /// particular creature generalised to the journal, and nothing could have
+    /// caught that but a run.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Per creature the promise is that routine is the majority, and no
+    /// longer that it is over 92 %.</b> That figure was a measurement of one
+    /// party; after Issue #129 the minimum over the matrix is <b>75.9 %</b>, on
+    /// the party that starves after winning its fights (Issue #171). That is not
+    /// the whole reason, and the difference matters to whoever reads this after
+    /// #171 is fixed: the per-creature minima are 88.8 / 95.1 / 75.9 / 92.0 /
+    /// 92.1 / 90.4, so the old 90 % threshold fails on <b>two</b> cells, and the
+    /// second one (baseline/20260726) survives its party to the end with no
+    /// starvation at all. Measured by the independent review; the threshold does
+    /// not come back once #171 closes. The claim
+    /// this panel actually rests on is asserted instead, and without a
+    /// percentage: for every creature of every run, the panel shows at least one
+    /// decision that mattered and that the four newest entries would have missed
+    /// — 9 of 9 creatures on all six runs, before Issue #129 and after it.
     /// </para>
     /// </summary>
     public const int CreatureStoryLines = 4;
