@@ -7,10 +7,10 @@ Runtime candidates live in
 `src/DungeonFortress.Game/assets/generated/goblins/`:
 `goblin_idle_v2.png`, `goblin_work_v2.png`, `goblin_combat_v2.png`,
 `goblin_downed_v2.png`, `goblin_windup_v2.png`, and
-`goblin_flinch_v2.png`. They are transparent 192×192 PNGs prepared for the
-61.8 px creature draw size. Crew and raiders share the same generated pack;
-the runtime distinguishes factions with the existing teal/red outline, so no
-second raider set was generated.
+`goblin_flinch_v2.png`. They are transparent 272×192 PNGs with a 17:12 canvas
+prepared for a 61.8 px creature body height. Crew and raiders share the same
+generated pack; the runtime distinguishes factions with the existing teal/red
+outline, so no second raider set was generated.
 
 ## Reproduction record
 
@@ -50,39 +50,45 @@ Exact prompt:
    pixels out of 1,572,864.
 2. Split the 1536×1024 alpha sheet into six 512×512 cells in prompt order:
    `idle`, `work`, `combat`, `windup`, `flinch`, `downed`.
-3. Cropped each cell to its non-zero alpha bounds and resized with Pillow
-   LANCZOS. The common base scale is `168 / 330 = 0.509091`, derived from the
-   idle sprite's 330 px source height. Wide poses are capped at 188 px so no
-   ear, weapon, or body part is clipped during this initial size-normalization
-   step: combat uses `0.489583`, downed uses `0.478372`; the other four
-   states use the common base scale.
-4. Review correction F2 removes the baked debris from `work` before placement.
-   The cleanup finds 8-connected components on the full `alpha > 0` mask and
-   retains only the largest component (body plus held tool, 15,500 pixels).
-   It removes 764 alpha pixels across 25 detached components, including their
-   antialiased fringes. On the review's `alpha > 32` measurement the retained
-   body has 14,607 pixels; the meaningful discarded fragments begin with 312,
-   85, 76, and 25 pixels. No pixel is painted or regenerated.
-5. Review correction F1 aligns the body by its support zone instead of
-   centering the full alpha bounds with the weapon. The support zone is
-   `172 <= y <= 187`; its horizontal center is
-   `(min_x + max_x) / 2` over pixels with `alpha > 32`. The target is the
-   192 px canvas center `x = 95.5`. Translation uses the nearest integer with
-   half values rounded away from zero:
+3. In every source cell, cropped to the original non-zero alpha bounds, found
+   all 8-connected components on the full `alpha > 0` mask, and retained only
+   the largest component before resize. The same cleanup is applied to all six
+   states, rather than being a `work`-only exception:
 
-   | State | Original support center | After cleanup | Applied `dx` | Final support center | Final alpha bbox |
-   |---|---:|---:|---:|---:|---|
-   | `idle` | 98.5 | 98.5 | -3 | 95.5 | 35,20–151,188 |
-   | `work` | 93.5 | 58.0 | +38 | 96.0 | 45,37–192,188 |
-   | `combat` | 56.5 | 56.5 | +39 | 95.5 | 41,39–192,188 |
-   | `windup` | 109.0 | 109.0 | -14 | 95.0 | 0,30–175,188 |
-   | `flinch` | 111.5 | 111.5 | -16 | 95.5 | 0,24–171,188 |
-   | `downed` | 94.5 | 94.5 | +1 | 95.5 | 3,104–191,188 |
+   | State | Source components | Removed components | Removed alpha pixels |
+   |---|---:|---:|---:|
+   | `idle` | 1 | 0 | 0 |
+   | `work` | 7 | 6 | 1,841 |
+   | `combat` | 1 | 0 | 0 |
+   | `windup` | 1 | 0 | 0 |
+   | `flinch` | 1 | 0 | 0 |
+   | `downed` | 1 | 0 | 0 |
 
-   Translation writes into a fresh transparent 192×192 canvas without vertical
-   movement or wraparound. Content outside the fixed canvas is discarded; it
-   is not rescaled or repainted. The final non-transparent row remains
-   `y = 187` in every state (exclusive alpha-bound bottom `188`).
+   Thus the generated floor debris and all its antialiased fringe are removed
+   from `work`; no intended pixels are removed from the other five poses.
+4. Resized the cleaned source cells with Pillow LANCZOS to the same dimensions
+   used before the canvas correction: idle 116×168, work 178×151, combat
+   188×149, windup 186×158, flinch 182×164, and downed 188×84. Body height and
+   state scale are therefore unchanged.
+5. Placed each resized state in a fresh transparent 272×192 RGBA canvas
+   (aspect ratio 17:12). The support zone is `172 <= y <= 187`; its horizontal
+   center is `(min_x + max_x) / 2` over pixels with `alpha > 32`. The target
+   is the canvas center `x = 135.5`. Integer placement is rounded to the
+   nearest pixel with half values rounded away from zero:
+
+   | State | Placement x,y | Final support center | Final alpha bbox |
+   |---|---|---:|---|
+   | `idle` | 75,20 | 135.5 | 75,20–191,188 |
+   | `work` | 85,37 | 136.0 | 85,37–263,188 |
+   | `combat` | 81,39 | 135.5 | 81,39–269,188 |
+   | `windup` | 30,30 | 136.0 | 30,30–216,188 |
+   | `flinch` | 29,24 | 135.5 | 29,24–211,188 |
+   | `downed` | 43,104 | 135.5 | 43,104–231,188 |
+
+   The final support-center spread is 0.5 px. Every state ends on the same last
+   non-transparent row `y = 187` (exclusive alpha-bound bottom `188`), and
+   columns `x = 0` and `x = 271` are fully transparent. No content is clipped
+   or wrapped.
 6. Saved optimized PNGs. No paint-over, palette replacement, regeneration, or
    other manual correction was applied.
 
@@ -90,6 +96,7 @@ Exact prompt:
 
 This art task does not change runtime code. `Main.cs` still maps the four
 currently supported keys (`idle`, `work`, `combat`, `downed`) to v1 assets.
-An implementation task must switch those paths to v2 and connect the new
-`windup` and `flinch` states when hit feedback and procedural animation are
-implemented in #77.
+When #77 connects v2, runtime rendering must preserve the 17:12 canvas with a
+rectangle rather than the current square `drawSize × drawSize`: at 61.8 px
+height the proportional width is 87.55 px. That task also connects the new
+`windup` and `flinch` states.
