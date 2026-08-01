@@ -1,12 +1,14 @@
+using System.Globalization;
 using System.Text;
 
 using DungeonFortress.Simulation;
 
 using Xunit;
+using Xunit.Abstractions;
 
 namespace DungeonFortress.Simulation.Tests;
 
-public sealed class PrototypeScenarioTests
+public sealed class PrototypeScenarioTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData("baseline")]
@@ -325,6 +327,66 @@ public sealed class PrototypeScenarioTests
     }
 
     /// <summary>
+    /// The half of invariant 11 that the seed used to carry: <b>preparation
+    /// outscores its absence.</b>
+    ///
+    /// <para>
+    /// Until Issue #129 this was asserted seed by seed, and 13.4 already recorded
+    /// why that was uncomfortable — «зазор меньше разброса», the gap between the
+    /// two plans is smaller than the spread of either across seeds. The approach
+    /// rule narrowed the gap further, because it helps the plan with the worse
+    /// geometry more: on seed 20260727 <c>baseline</c> gains a repelled wave and
+    /// finishes at 831 against prepared's 803. The owner accepted that price on
+    /// 2026-08-01 and asked for a ground that says what is promised after it.
+    /// </para>
+    ///
+    /// <para>
+    /// What is promised is the matrix, not the seed: over the three seeds
+    /// together preparation scores more than its absence. That is not a weaker
+    /// version of the old claim fitted to the new run — it holds on <c>main</c>
+    /// as well (2525 against 2193) and after #129 (2526 against 1366), and it is
+    /// the level at which 13.4 has always said its corridors mean anything. The
+    /// per-seed half of the promise survives as the band comparison in
+    /// <c>AssertEndOfPartyInvariants</c>: preparation may cost score on a seed,
+    /// but it may not end the domain worse off than doing nothing.
+    /// </para>
+    ///
+    /// <para>
+    /// Command:
+    /// <c>dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter
+    /// "FullyQualifiedName~Preparation_outscores_its_absence_over_the_matrix"
+    /// --logger "console;verbosity=detailed"</c>. Both trees are in
+    /// <c>evidence/129-invariants.json</c>.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Preparation_outscores_its_absence_over_the_matrix()
+    {
+        var seeds = new[] { 20_260_726UL, 20_260_727UL, 20_260_728UL };
+        var prepared = 0;
+        var baseline = 0;
+        var report = new StringBuilder();
+        foreach (var seed in seeds)
+        {
+            var preparedEnd = RunAtSeed("prepared", seed, PrototypeTuning.SessionTicks);
+            var baselineEnd = RunAtSeed("baseline", seed, PrototypeTuning.SessionTicks);
+            prepared += Score(preparedEnd);
+            baseline += Score(baselineEnd);
+            report.AppendLine(CultureInfo.InvariantCulture,
+                $"{seed}: prepared {Score(preparedEnd)} ({preparedEnd.SessionResult.Outcome}), " +
+                $"baseline {Score(baselineEnd)} ({baselineEnd.SessionResult.Outcome})");
+        }
+
+        output.WriteLine(report.ToString());
+        Assert.True(
+            prepared > baseline,
+            $"over the matrix preparation scored {prepared} and its absence {baseline}. The one " +
+            "thing the party score is for is ranking how well the domain was played, and a plan " +
+            $"that stops paying over three seeds has stopped being a plan.{Environment.NewLine}" +
+            $"{report}");
+    }
+
+    /// <summary>
     /// The invariants read where the fixtures are still comparable: the arrival
     /// of the first wave. Both are condition numbers, and condition is only
     /// comparable at the same moment of the same story — read at the end of the
@@ -364,39 +426,98 @@ public sealed class PrototypeScenarioTests
             $"renown baseline={baseline.Domain.Renown}, prepared={prepared.Domain.Renown}, " +
             $"neglected={neglected.Domain.Renown}");
 
-        // The invariant renown could not carry, returned in its own number: a
-        // party that survived outscores one that died, and preparation outscores
-        // living as one always did. Both are read on the same seed, because a
-        // plan is only comparable with the same combat rolls behind it.
-        var score = (
-            Baseline: Score(baseline),
-            Prepared: Score(prepared),
-            Neglected: Score(neglected));
-        Assert.True(
-            score.Baseline > score.Neglected && score.Prepared > score.Neglected,
-            $"score baseline={score.Baseline}, prepared={score.Prepared}, " +
-            $"neglected={score.Neglected}");
-        Assert.True(
-            score.Prepared > score.Baseline,
-            $"score prepared={score.Prepared} must beat baseline={score.Baseline}; " +
-            $"repelled {prepared.SessionResult.WavesRepelled}/{baseline.SessionResult.WavesRepelled}, " +
-            $"stolen {prepared.SessionResult.MealsStolen}/{baseline.SessionResult.MealsStolen}, " +
-            $"defenders lost " +
-            $"{prepared.SessionResult.DefendersDowned + prepared.SessionResult.DefendersFled}/" +
-            $"{baseline.SessionResult.DefendersDowned + baseline.SessionResult.DefendersFled}");
+        // Invariant 11, first half, in the form the owner accepted on 2026-08-01:
+        // a party that survived its four waves outranks a party that fell, on the
+        // same seed. It used to name the fixtures — baseline and prepared above
+        // neglected — and that reading stopped being about survival the moment a
+        // fixture other than `neglected` could fall, which Issue #129 made
+        // possible. Naming the outcome instead says the same thing about more
+        // pairs and takes the fixture names out of a claim that was never about
+        // them. It holds on both trees; see evidence/129-invariants.json.
+        var parties = new (string Name, PrototypeSnapshot State)[]
+        {
+            ("baseline", baseline), ("prepared", prepared), ("neglected", neglected),
+        };
+        foreach (var lived in parties.Where(party => Survived(party.State)))
+        {
+            foreach (var fell in parties.Where(party => !Survived(party.State)))
+            {
+                Assert.True(
+                    Score(lived.State) > Score(fell.State),
+                    $"{lived.Name} survived with score {Score(lived.State)} and {fell.Name} fell " +
+                    $"with {Score(fell.State)}: a party that lived has to outrank one that did " +
+                    "not, and the score is the only thing that says so (10.8, ADR 0016).");
+            }
+        }
 
-        // Preparation buys the price of the raid, not attendance at it. The
-        // comparison excludes `neglected` on purpose: it never meets a wave, so
-        // its zeroes are an absence of the event and not a better result.
+        // Invariant 11, second half, in the form the owner accepted on 2026-08-01
+        // together with the approach rule of Issue #129. It used to be
+        // `score(prepared) > score(baseline)` on every seed. That is a claim
+        // about the *gap* between the two plans, and the approach rule narrows
+        // the gap because it helps the weaker geometry more: on seed 20260727
+        // `baseline` gains a repelled wave and 831 beats 803. The owner accepted
+        // that price, so what is promised now is what preparation is actually
+        // for — it must never end the party in a worse band than its absence,
+        // and over the matrix it must still score more.
         Assert.True(
-            prepared.SessionResult.MealsStolen < baseline.SessionResult.MealsStolen,
-            $"meals stolen prepared={prepared.SessionResult.MealsStolen}, " +
-            $"baseline={baseline.SessionResult.MealsStolen}");
+            Band(prepared) >= Band(baseline),
+            $"prepared ended the party as {prepared.SessionResult.Outcome} and baseline as " +
+            $"{baseline.SessionResult.Outcome}: preparation may cost score on a seed, but it may " +
+            "not end the domain in a worse state than doing nothing.");
+
+        // Invariant 4 in the form the owner accepted on 2026-08-01: preparation
+        // makes the raid cheaper, measured as one price rather than two counts.
+        //
+        // It used to be two separate comparisons — meals stolen and defenders
+        // broken by morale — and two counts that can trade against each other are
+        // two claims, not one. After #129 they do trade: on seed 20260727
+        // `prepared` is robbed of 12 fewer meals and breaks 5 more defenders, so
+        // the second count fails while the raid is plainly cheaper. The price is
+        // the score's own cost side (10.8) with the owner's own weights, so this
+        // is not a new metric invented here; and it counts every defender the
+        // domain lost rather than only the ones who ran, which stops preparation
+        // from buying the count by trading a flight for a downing.
+        //
+        // It is read per wave the party actually resolved, and that is what makes
+        // seed 20260728 a fair comparison rather than an exception: `baseline`
+        // falls there before its fourth wave, so it pays for three waves against
+        // prepared's four, and comparing the totals would have flattered the
+        // party that died. The old form's failure on that seed was exactly this
+        // artefact.
+        var costPrepared = RaidCost(prepared);
+        var costBaseline = RaidCost(baseline);
+        var wavesPrepared = Math.Max(1, prepared.SessionResult.WavesResolved);
+        var wavesBaseline = Math.Max(1, baseline.SessionResult.WavesResolved);
         Assert.True(
-            CountEvents(prepared, "combat_fled_morale") < CountEvents(baseline, "combat_fled_morale"),
-            $"broken by morale prepared={CountEvents(prepared, "combat_fled_morale")}, " +
-            $"baseline={CountEvents(baseline, "combat_fled_morale")}");
+            costPrepared * wavesBaseline < costBaseline * wavesPrepared,
+            $"the raid cost prepared {costPrepared} over {wavesPrepared} resolved wave(s) and " +
+            $"baseline {costBaseline} over {wavesBaseline}: preparation has stopped making the " +
+            $"raid cheaper. Stolen {prepared.SessionResult.MealsStolen}/" +
+            $"{baseline.SessionResult.MealsStolen}, defenders lost " +
+            $"{prepared.SessionResult.DefendersDowned + prepared.SessionResult.DefendersFled}/" +
+            $"{baseline.SessionResult.DefendersDowned + baseline.SessionResult.DefendersFled}.");
     }
+
+    /// <summary>
+    /// What the raid took out of the domain, in the currency the party score
+    /// already uses: meals carried out of the gate and defenders the domain no
+    /// longer has, at the weights of 10.8. Reading the price rather than its two
+    /// halves is what stops one half being bought with the other.
+    /// </summary>
+    private static int RaidCost(PrototypeSnapshot state) =>
+        state.SessionResult.MealsStolen * PrototypeTuning.ScorePerMealStolen +
+        (state.SessionResult.DefendersDowned + state.SessionResult.DefendersFled) *
+            PrototypeTuning.ScorePerDefenderLost;
+
+    private static bool Survived(PrototypeSnapshot state) =>
+        state.SessionResult.Outcome is "held" or "raided";
+
+    private static int Band(PrototypeSnapshot state) => state.SessionResult.Outcome switch
+    {
+        "held" => 2,
+        "raided" => 1,
+        _ => 0,
+    };
 
     /// <summary>
     /// The score of a party that ended. A party without one has not ended, and

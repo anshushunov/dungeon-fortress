@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "issue": 129,
+  "when": "2026-08-01, after the owner accepted the new corridors together with a new ground for the invariants",
+  "what": "The new form of invariants 4 and 11 of contract 13.4, and the measurement that says it is a re-grounding rather than a fit: every clause holds on `main` as well as after #129.",
+  "ownersDecision": "2026-08-01, gate log docs/product/ROADMAP.md — accept the new corridors together with a new ground for the invariants. The starvation channel (channel 1 of evidence/129-matrix.json) goes to Issue #171 and is not part of this.",
+  "trees": {
+    "main": "cbbd588 (origin/main, that is #156 and the goblin pack v2 already in)",
+    "branch": "agent/129-combat-approach-free-tile after merging origin/main"
+  },
+  "commands": [
+    "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\evaluate-prototype.ps1 -OutputPath .\\.artifacts\\129-after-batch.json",
+    "python .artifacts/ground-129.py",
+    "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeScenarioTests\" --logger \"console;verbosity=detailed\""
+  ],
+  "invariant11": {
+    "wasUntil20260801": "score(baseline) > score(neglected) and score(prepared) > score(neglected) — a party that lived outranks one that died; and score(prepared) > score(baseline) on every seed of the matrix.",
+    "whyTheFirstHalfWasRewritten": "It named fixtures for a claim that was never about them. It stopped being a statement about survival the moment a fixture other than `neglected` could fall, which #129 made possible: on seed 20260728 `baseline` falls with a score of -223, and the assertion then read 'the fallen baseline must outrank the fallen neglected'. Naming the outcome instead covers more pairs and says the same thing.",
+    "whyTheSecondHalfWasRewritten": "It measures the gap between the two plans, and the approach rule narrows the gap because it helps the plan with the worse geometry more. On seed 20260727 baseline had the only cell of the matrix where two defenders were never simultaneously adjacent to a raider, gains 5 -> 14 raiders downed, repels a second wave and finishes at 831 against prepared's 803. The owner accepted that price. 13.4 had already recorded that the gap is smaller than the spread of either plan across seeds, so the seed was never the right level for this claim.",
+    "isNow": [
+      "on one seed, every party that survived scores above every party that fell",
+      "on every seed, the outcome band of prepared is not below the band of baseline (held > raided > fallen)",
+      "over the matrix, the sum of prepared's scores is above the sum of baseline's"
+    ],
+    "measured": {
+      "survivedOutranksFallen": {"main": "holds on all three seeds", "branch": "holds on all three seeds"},
+      "bandOfPreparedNotBelowBaseline": {
+        "main": {"20260726": "raided = raided", "20260727": "raided = raided", "20260728": "raided = raided"},
+        "branch": {"20260726": "raided = raided", "20260727": "raided = raided", "20260728": "raided > fallen"}
+      },
+      "scoreSumOverTheMatrix": {
+        "main": {"prepared": 2525, "baseline": 2193},
+        "branch": {"prepared": 2526, "baseline": 1366}
+      },
+      "perSeedScore": {
+        "main": {"20260726": [727, 799], "20260727": [806, 868], "20260728": [660, 858]},
+        "branch": {"20260726": [758, 796], "20260727": [831, 803], "20260728": [-223, 927]},
+        "order": "[baseline, prepared]"
+      }
+    }
+  },
+  "invariant4": {
+    "wasUntil20260801": "among the fixtures that lived to a wave, preparation makes the raid cheaper: mealsStolen(prepared) < mealsStolen(baseline) and combat_fled_morale(prepared) < combat_fled_morale(baseline).",
+    "whyItWasRewritten": "Two counts that can be traded against each other are two claims, not one, and after #129 they do trade: on seed 20260727 prepared is robbed of 12 fewer meals and breaks 5 more defenders, so the raid is plainly cheaper while the second count fails. The second breach, on seed 20260728, was an artefact of a different kind — baseline falls before its fourth wave, so the old form compared a four-wave party with a three-wave one and the flights of the wave that never happened are zero by definition.",
+    "isNow": "raidCost = mealsStolen * T.score_per_meal_stolen + (defendersDowned + defendersFled) * T.score_per_defender_lost, divided by the waves the party actually resolved; prepared must be below baseline on every seed.",
+    "whyThatShape": [
+      "One price instead of two counts, so one half cannot be bought with the other.",
+      "The price is the cost side of the party score (10.8) with the owner's own weights, so it is not a metric invented for this test.",
+      "It counts every defender the domain lost rather than only the ones who ran, so preparation cannot buy the count by trading a flight for a downing.",
+      "Per resolved wave, which makes seed 20260728 comparable on the substance instead of excluded by seed: the party that fell early paid for three waves against four, and comparing totals would have flattered it."
+    ],
+    "measured": {
+      "raidCostPerResolvedWave": {
+        "main": {"20260726": {"baseline": 105.75, "prepared": 70.25}, "20260727": {"baseline": 78.5, "prepared": 65.5}, "20260728": {"baseline": 120.0, "prepared": 85.5}},
+        "branch": {"20260726": {"baseline": 98.0, "prepared": 93.5}, "20260727": {"baseline": 92.25, "prepared": 89.25}, "20260728": {"baseline": 94.33, "prepared": 65.75}}
+      },
+      "rawInputs": {
+        "branch": {
+          "20260726": {"baseline": {"stolen": 40, "lost": 24, "wavesResolved": 4}, "prepared": {"stolen": 38, "lost": 23, "wavesResolved": 4}},
+          "20260727": {"baseline": {"stolen": 45, "lost": 18, "wavesResolved": 4}, "prepared": {"stolen": 33, "lost": 24, "wavesResolved": 4}},
+          "20260728": {"baseline": {"stolen": 31, "lost": 16, "wavesResolved": 3}, "prepared": {"stolen": 19, "lost": 21, "wavesResolved": 4}}
+        }
+      },
+      "note": "The comparison is strict in the harder direction on 20260728: prepared meets one more wave than baseline and is still cheaper per wave."
+    }
+  },
+  "whyThisIsNotAFit": "Every clause of both invariants is true on `main` — before the approach rule existed — and after it. A ground fitted to the new run would hold only on the new run. The narrowest margin on either tree is the raid cost on seed 20260727 after #129 (89.25 against 92.25), and it is a strict inequality between two measured quantities rather than a threshold anybody chose."
+}
