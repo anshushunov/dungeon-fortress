@@ -706,10 +706,12 @@ Godot-адаптер вызывает его на каждом входе.
 
 Отдельное правило и отдельный guard: `DungeonFortress.Presentation.HudReadability`
 задаёт минимальный **физический** размер текста и потолок логической плотности,
-адаптер измеряет `GetThemeFontSize` у живых `Label` и передаёт замер. Подробности,
-таблица измерений по матрице кадров и негативный прогон
-`--smoke-hud-readability-regression` — в
-[`PROTOTYPE_GRAYBOX.md`](PROTOTYPE_GRAYBOX.md#hud-readability-guard).
+адаптер измеряет `GetThemeFontSize` у живых `Label` и передаёт замер. Подсказка
+кнопки (Issue #127) измеряется тем же способом через постоянный невидимый
+образец в дереве `_hudRoot`, а не через сам попап Godot, который туда не
+входит. Подробности, таблица измерений по матрице кадров и негативные прогоны
+`--smoke-hud-readability-regression` / `--smoke-hud-tooltip-readability-regression`
+— в [`PROTOTYPE_GRAYBOX.md`](PROTOTYPE_GRAYBOX.md#hud-readability-guard).
 
 ## CI
 

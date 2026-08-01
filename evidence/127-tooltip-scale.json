@@ -1,0 +1,74 @@
+{
+  "issue": 127,
+  "checkpoint": "1 — hypothesis verified before touching a font-size number",
+  "hypothesis": "The tooltip popup HudButton._MakeCustomTooltip returns is not a descendant of the HUD's own scaled Control subtree (_hudRoot), so it cannot inherit _hudRoot.Scale the way every other HUD label does, and its literal font sizes stay the same physical size while the rest of the interface grows with UiScale.",
+  "verdict": "confirmed, by source reading; not independently confirmed by a live hover-triggered render — see residualRisk",
+  "structuralEvidence": [
+    {
+      "claim": "Before this change, HudButton._MakeCustomTooltip set the tooltip's font sizes and width as literal integers with no reference to any scale variable, so they could not have varied with UiScale regardless of how the popup is parented.",
+      "source": "git show ff6d679:src/DungeonFortress.Game/HudButton.cs (the tree the owner's playtest and Issue #127 were taken from)",
+      "quotedLines": [
+        "column.AddChild(MakeTooltipLine(title, 11, \"#dbeafe\"));",
+        "column.AddChild(MakeTooltipLine(body, 9, \"#94a3b8\"));",
+        "private const int TooltipWidth = 240;"
+      ]
+    },
+    {
+      "claim": "Main.LayoutHud scales the rest of the HUD by setting _hudRoot.Scale, a Control-level 2D transform. Every Label/Button that is an actual descendant of _hudRoot renders through that transform automatically.",
+      "source": "src/DungeonFortress.Game/Main.cs, LayoutHud",
+      "quotedLine": "_hudRoot!.Scale = Vector2.One * (float)uiScale;"
+    },
+    {
+      "claim": "Godot 4.7's own engine source shows the tooltip popup is never added as a child of the hovered control's ancestor Control tree: it is wrapped in a PopupPanel (a Window) and parented directly under the hovered control itself, bypassing _hudRoot's Scale.",
+      "source": "https://raw.githubusercontent.com/godotengine/godot/4.7/scene/main/viewport.cpp, function Viewport::_gui_show_tooltip_at, fetched via WebFetch",
+      "quotedLines": [
+        "PopupPanel *panel = memnew(PopupPanel);",
+        "panel->add_child(base_tooltip);",
+        "panel->gui_parent = this;",
+        "gui.tooltip_popup = panel;",
+        "tooltip_owner->add_child(gui.tooltip_popup);",
+        "Size2 scale = get_popup_base_transform().get_scale();",
+        "real_t popup_scale = MIN(scale.x, scale.y);",
+        "panel->content_scale_factor = popup_scale;"
+      ]
+    },
+    {
+      "claim": "A Window scales its own content by content_scale_factor, computed from get_popup_base_transform(), which is unrelated to any ambient Control.Scale a game applies manually. This project's own stretch configuration (canvas_items + aspect=expand) keeps that base transform's scale at 1 for any window size, because 'expand' exposes more of the design frame instead of stretching it — so popup_scale is 1 regardless of window size in this project, and the tooltip has no ambient scale to pick up from either mechanism.",
+      "source": "src/DungeonFortress.Game/project.godot, [display] section"
+    }
+  ],
+  "guardFormulaCheck": {
+    "whatThisIsNot": "This is NOT a measurement of the live, hover-triggered popup. Independent review (round 1) found the first version of this file conflated the two: it read as if the physical-pixel growth below came from the real tooltip Window, when it is in fact HudReadability's own arithmetic (logicalPixels * this run's UiScale) applied to HudButton.MakeAuthoredTooltip's frozen scale-1 sample. That sample's own logicalPixels field is, and is designed to be, invariant to the live scale — measured directly: Label[TooltipBody].logicalPixels is 10 at --ui-scale 1 and 10 at --ui-scale 2 in the same runs below. Review's exact words: 'величина, которую меряет guard, инвариантна к живому масштабу'.",
+    "whatThisIs": "Confirmation of two narrower, still useful facts: (a) the tooltip now appears in view.hudReadability.texts at all (Scope item 3 — before Issue #127 it did not appear under any name), and (b) HudReadability's per-frame multiplication (PhysicalTextPixels) treats that entry the same arithmetic way it treats every other HUD label. Whether the real popup's font-size override is actually set from the live HudButton.UiScale rather than a fixed baseline is proven separately and without an engine: HudReadabilityTests.LayoutHud_applies_the_live_UI_scale_to_every_tooltip_button (structural check on Main.LayoutHud's body) and HudReadabilityTests.MakeCustomTooltip_reads_the_live_UI_scale_rather_than_a_fixed_one (raw read of HudButton.cs), both added in review round 2, both proven to fail under the exact two mutations that would silently reintroduce Issue #127 (evidence/127-mutations.json, section c_scaleApplication).",
+    "command": ".artifacts/evidence-127.ps1 (dot-sources scripts/GodotTools.ps1, invokes Godot 4.7.1 console directly with --headless --resolution <frame> --path src/DungeonFortress.Game -- --smoke --fixture baseline --tile-size 40 --camera-position 560,320 --ui-scale <scale> --frame-size <frame>, then parses the printed godot_headless_smoke JSON event's view.hudReadability.texts)",
+    "results": [
+      {
+        "requestedUiScale": 1.0,
+        "requestedFrameSize": "1280x720",
+        "liveUiScaleReportedByEngine": 1,
+        "exitCode": 0,
+        "tooltipTitle": { "name": "Label[TooltipTitle]", "logicalPixels": 12, "physicalPixels": 12 },
+        "tooltipBody": { "name": "Label[TooltipBody]", "logicalPixels": 10, "physicalPixels": 10 }
+      },
+      {
+        "requestedUiScale": 1.5,
+        "requestedFrameSize": "1920x1080",
+        "liveUiScaleReportedByEngine": 1.5,
+        "exitCode": 0,
+        "tooltipTitle": { "name": "Label[TooltipTitle]", "logicalPixels": 12, "physicalPixels": 18 },
+        "tooltipBody": { "name": "Label[TooltipBody]", "logicalPixels": 10, "physicalPixels": 15 }
+      },
+      {
+        "requestedUiScale": 2.0,
+        "requestedFrameSize": "2048x1440",
+        "liveUiScaleReportedByEngine": 2,
+        "exitCode": 0,
+        "tooltipTitle": { "name": "Label[TooltipTitle]", "logicalPixels": 12, "physicalPixels": 24 },
+        "tooltipBody": { "name": "Label[TooltipBody]", "logicalPixels": 10, "physicalPixels": 20 }
+      }
+    ],
+    "note": "logicalPixels is 12/10 in every row above regardless of requestedUiScale — that invariance is expected and correct for what this specific field is (the authored baseline HudReadability.Violations multiplies per supported frame), and it is exactly why this file no longer calls it a measurement of the tooltip's own scaling."
+  },
+  "residualRisk": "The premise that the tooltip popup does not inherit _hudRoot.Scale is confirmed by reading Godot 4.7's engine source (above) and is consistent with the owner's original playtest observation (a tooltip that did inherit the scale would have grown on the maximized window, and Issue #127 would not have been filed). It is not confirmed by an actual hover-triggered render on this machine: there is no local Godot engine source checkout to build and step through, and a true popup capture needs a windowed run with simulated mouse hover, which the project's headless smoke infrastructure does not drive. If this premise were wrong — if the popup turns out to pick up some ambient scale after all — this fix would double-scale the tooltip rather than under-scale it. The owner should check tooltip size specifically at UiScale 1.5 and 2.0 on the next playtest as the acceptance check this file could not fully close.",
+  "conclusion": "The hypothesis holds by source reading. The fix changes where the tooltip's size comes from (HudButton.UiScale, kept in step with Main.LayoutHud's uiScale, applied inside HudButton.BuildTooltip via HudFontSizes.ScaledSize) rather than only raising the two literal font-size numbers, and gives the readability guard a permanent, invisible sample of the tooltip inside the scaled HUD subtree (Main.CreateControlStrips) rather than trying to read a popup that only exists on hover. That sample proves guard coverage (checkpoint 3); it cannot and does not prove the live popup scales, which is why the wiring itself now has its own structural tests (see guardFormulaCheck.whatThisIs) and why residualRisk above is named for the owner rather than treated as closed."
+}
