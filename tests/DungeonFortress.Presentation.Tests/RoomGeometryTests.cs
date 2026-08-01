@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using DungeonFortress.Simulation;
 
 using Xunit;
@@ -239,5 +241,78 @@ public sealed class RoomGeometryTests
                 .ToArray();
             Assert.All(ends, group => Assert.Equal(2, group.Count()));
         }
+    }
+
+    /// <summary>
+    /// Issue #139, checkpoint 1: measures whether the hypothesis is real before
+    /// touching any drawing code. A room's border must not sit inside the band a
+    /// neighbouring wall's front facade occupies. The wall is drawn as a volume —
+    /// a top plus a facade that overhangs downward past the wall's own footprint,
+    /// per <see cref="WallRenderGeometry"/> — and when a room cell's north
+    /// neighbour is rock, that facade hangs over part of the room's own cell.
+    ///
+    /// This walks every room of the shipped starting map — not one screenshot of
+    /// two rooms — using the border inset exactly as <c>Main.DrawRoomBorder</c>
+    /// computes it today (<see cref="RoomGeometry.BorderInset"/>, the only inset
+    /// that exists before this issue's fix), and measures the signed gap between
+    /// the drawn line's near edge (since <c>DrawLine</c> gives the stroke width
+    /// and the eye reads the whole stroke) and the facade's bottom edge, in scaled
+    /// screen pixels at the same tile size <see cref="RoomGeometryTests"/> uses
+    /// everywhere else. A positive overlap means the two are not apart.
+    /// </summary>
+    [Fact]
+    public void The_border_of_every_room_clears_a_neighbouring_walls_facade()
+    {
+        var state = PresentationFixtures.Baseline(1);
+        var rockTiles = state.Map.RockTiles.ToHashSet();
+        var scale = CameraView.WorldVisualScale(Tile);
+        // Main.DrawRoomBorder strokes the line at ScaleWorld(2.0f) wide; a line
+        // drawn "at" y actually covers y ± half that width.
+        var halfStrokeWidth = scale * 1.0;
+
+        var overlaps = new List<object>();
+        foreach (var room in state.Rooms)
+        {
+            var insetScaled = RoomGeometry.BorderInset(room.Purpose) * scale;
+            foreach (var cell in room.Perimeter)
+            {
+                var north = new GridPoint(cell.X, cell.Y - 1);
+                if (!rockTiles.Contains(north))
+                {
+                    continue;
+                }
+
+                var variant = WallTopology.SelectVariant(north, rockTiles);
+                var mass = WallRenderGeometry.ForCell(north, variant, Tile);
+                if (mass.Facade is not { } facade)
+                {
+                    continue;
+                }
+
+                var roomTop = CameraView.CellTopLeft(cell, Tile).Y;
+                var lineNearEdge = roomTop + insetScaled - halfStrokeWidth;
+                var facadeBottom = facade.Y + facade.Height;
+                var overlapPx = facadeBottom - lineNearEdge;
+                if (overlapPx > 0)
+                {
+                    overlaps.Add(new
+                    {
+                        room = room.Id,
+                        purpose = room.Purpose.ToString(),
+                        cell = $"{cell.X},{cell.Y}",
+                        insetScaled,
+                        lineNearEdge,
+                        facadeBottom,
+                        overlapPx,
+                    });
+                }
+            }
+        }
+
+        var payload = JsonSerializer.Serialize(
+            new { tileSize = Tile, scale, overlapCount = overlaps.Count, overlaps },
+            new JsonSerializerOptions { WriteIndented = true });
+
+        Assert.True(overlaps.Count == 0, payload);
     }
 }

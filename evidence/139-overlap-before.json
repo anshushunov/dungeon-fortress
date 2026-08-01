@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "issue": 139,
+  "checkpoint": "1 — hypothesis measured before any drawing code changed",
+  "hypothesis": "The border inset (RoomGeometry.BorderInset, 2.0-5.0 reference px, purpose-only) does not know a wall stands to a room's north. A wall's front facade overhangs WallRenderGeometry.FacadeReferenceOverhang (3.0 reference px) past its own footprint, into the room cell south of it, so a room's north border line can be drawn inside the strip the facade occupies.",
+  "verdict": "confirmed, with one correction to the informal report: the literal geometric overlap is real for FARM and KITCHEN, and LARDER (also named in the report) is a sub-pixel near-touch rather than a crossing. QUARTERS (also named in the report) has no rock cell directly north of it in the authored starting layout at all — its close call in the screenshot is against a wall on its WEST side, which this renderer draws as a plain vertical stroke with no downward overhang, so it is not an instance of this mechanism and is out of this issue's scope.",
+  "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -c Release --filter \"FullyQualifiedName~The_border_of_every_room_clears_a_neighbouring_walls_facade\"",
+  "method": "A test (tests/DungeonFortress.Presentation.Tests/RoomGeometryTests.cs, committed at this checkpoint) builds the real shipped baseline map (PresentationFixtures.Baseline(1), the same fixture the golden UI captures and screenshots use), walks every room cell whose north neighbour is rock, and for each computes: the room border's drawn line (RoomGeometry.BorderInset(purpose), scaled by CameraView.WorldVisualScale, at tileSize=40 which is real ADR-0008 screen coordinates) minus half the 2-reference-pixel stroke width Main.DrawRoomBorder actually draws with, against the wall's own facade rectangle (WallRenderGeometry.ForCell(...).Facade, the exact geometry Main.DrawWall uses). overlapPx = facadeBottom - lineNearEdge; positive means the border's stroke is drawn inside the facade's band.",
+  "resultRaw": {
+    "tileSize": 40,
+    "scale": 1.8181818181818181,
+    "note": "scale = CameraView.WorldVisualScale(40) = 40 / 22 (ReferenceTileSize)",
+    "overlapCount": 9,
+    "overlaps": [
+      {"room": "farm@1,1", "purpose": "Farm", "cell": "1,1", "insetScaled": 3.6363636363636362, "lineNearEdge": 41.81818181818181, "facadeBottom": 45.45454545454545, "overlapPx": 3.6363636363636402},
+      {"room": "farm@1,1", "purpose": "Farm", "cell": "2,1", "insetScaled": 3.6363636363636362, "lineNearEdge": 41.81818181818181, "facadeBottom": 45.45454545454545, "overlapPx": 3.6363636363636402},
+      {"room": "farm@1,1", "purpose": "Farm", "cell": "3,1", "insetScaled": 3.6363636363636362, "lineNearEdge": 41.81818181818181, "facadeBottom": 45.45454545454545, "overlapPx": 3.6363636363636402},
+      {"room": "farm@1,1", "purpose": "Farm", "cell": "4,1", "insetScaled": 3.6363636363636362, "lineNearEdge": 41.81818181818181, "facadeBottom": 45.45454545454545, "overlapPx": 3.6363636363636402},
+      {"room": "farm@1,1", "purpose": "Farm", "cell": "5,1", "insetScaled": 3.6363636363636362, "lineNearEdge": 41.81818181818181, "facadeBottom": 45.45454545454545, "overlapPx": 3.6363636363636402},
+      {"room": "farm@1,1", "purpose": "Farm", "cell": "6,1", "insetScaled": 3.6363636363636362, "lineNearEdge": 41.81818181818181, "facadeBottom": 45.45454545454545, "overlapPx": 3.6363636363636402},
+      {"room": "kitchen@9,6", "purpose": "Kitchen", "cell": "9,6", "insetScaled": 6.363636363636363, "lineNearEdge": 244.54545454545456, "facadeBottom": 245.45454545454547, "overlapPx": 0.9090909090909065},
+      {"room": "kitchen@9,6", "purpose": "Kitchen", "cell": "10,6", "insetScaled": 6.363636363636363, "lineNearEdge": 244.54545454545456, "facadeBottom": 245.45454545454547, "overlapPx": 0.9090909090909065},
+      {"room": "kitchen@9,6", "purpose": "Kitchen", "cell": "12,6", "insetScaled": 6.363636363636363, "lineNearEdge": 244.54545454545456, "facadeBottom": 245.45454545454547, "overlapPx": 0.9090909090909065}
+    ]
+  },
+  "widenedRunForContext": {
+    "note": "A one-off, non-committed widening of the same test (dropped the `overlapPx > 0` filter) to see every wall-adjacent room-cell, not only the ones that literally cross. Not part of the regression test; recorded here only to explain the LARDER near-touch and the QUARTERS non-finding named above.",
+    "command": "same filter as above, run against a temporary local edit that removed the `if (overlapPx > 0)` guard",
+    "additionalRows": [
+      {"room": "larder@13,6", "purpose": "Larder", "cell": "13,6", "insetScaled": 9.09090909090909, "lineNearEdge": 247.27272727272728, "facadeBottom": 245.45454545454547, "overlapPx": -1.818181818181813, "reading": "a 1.8-screen-pixel gap at tileSize 40 — not a crossing, but the closest non-crossing case in the shipped map, and the likely source of the report's \"LARDER ... вплотную к её фасаду\""},
+      {"room": "larder@13,6", "purpose": "Larder", "cell": "14,6", "insetScaled": 9.09090909090909, "lineNearEdge": 247.27272727272728, "facadeBottom": 245.45454545454547, "overlapPx": -1.818181818181813},
+      {"room": "larder@13,6", "purpose": "Larder", "cell": "15,6", "insetScaled": 9.09090909090909, "lineNearEdge": 247.27272727272728, "facadeBottom": 245.45454545454547, "overlapPx": -1.818181818181813},
+      {"room": "larder@13,6", "purpose": "Larder", "cell": "16,6", "insetScaled": 9.09090909090909, "lineNearEdge": 247.27272727272728, "facadeBottom": 245.45454545454547, "overlapPx": -1.818181818181813}
+    ],
+    "quartersCheck": "quarters@19,2 has cells at rows y=2..5, columns x=19..23 (PrototypeMap.cs PaintRectangle(zones[Quarters], new(19,2), new(23,5))). Every cell one row north of it (y=1, x=19..23) is authored floor ('.') in PrototypeLayout.Authored, not rock — confirmed by reading the row string directly. quarters@19,2 therefore contributes zero rows to this measurement at any tick: it has no wall to its north to overlap. Its only rock neighbour in the authored layout is the vertical wall at x=18, i.e. to its WEST, and WallRenderGeometry gives a west-facing wall stroke no downward overhang (the facade rectangle it draws stays inside the wall's own column), so that adjacency cannot produce this defect under the current renderer."
+  }
+}
