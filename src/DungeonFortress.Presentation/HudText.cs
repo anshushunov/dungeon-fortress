@@ -168,7 +168,13 @@ public static class HudText
     /// <b>Per creature the promise is that routine is the majority, and no
     /// longer that it is over 92 %.</b> That figure was a measurement of one
     /// party; after Issue #129 the minimum over the matrix is <b>75.9 %</b>, on
-    /// the party that starves after winning its fights (Issue #171). The claim
+    /// the party that starves after winning its fights (Issue #171). That is not
+    /// the whole reason, and the difference matters to whoever reads this after
+    /// #171 is fixed: the per-creature minima are 88.8 / 95.1 / 75.9 / 92.0 /
+    /// 92.1 / 90.4, so the old 90 % threshold fails on <b>two</b> cells, and the
+    /// second one (baseline/20260726) survives its party to the end with no
+    /// starvation at all. Measured by the independent review; the threshold does
+    /// not come back once #171 closes. The claim
     /// this panel actually rests on is asserted instead, and without a
     /// percentage: for every creature of every run, the panel shows at least one
     /// decision that mattered and that the four newest entries would have missed

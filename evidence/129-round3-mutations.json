@@ -97,7 +97,8 @@
     {
       "assertion": "Invariant 11, second clause: the outcome band of prepared is never below the band of baseline",
       "why": "No single textual mutant found that reddens it on its own. It is a floor on the worst case rather than a corridor: to fail it, a mutant has to make the prepared party fall while the unprepared one survives, and every mutant tried that hurts preparation hurts both plans or hurts prepared without flipping the band. The strongest one available — a Drill that buys nothing — leaves prepared paying 453 against baseline's 283 in raid cost and still ending the party at the same band.",
-      "howItIsCoveredAnyway": "Partially, and only in combination: the same mutant reddens invariant 4 in the same assertion block, so a build that broke preparation would not reach this clause green. That is a weaker statement than a mutant of its own, and it is written here rather than left to be assumed."
+      "howItIsCoveredAnyway": "It is not. An earlier revision claimed partial coverage in combination — that the same mutant reddens invariant 4 in the same block, so a broken build would not reach this clause green. The independent review disproved it by reading the order of the asserts: the band assert runs BEFORE the raid-cost assert, so under every mutant tried the band was evaluated, passed, and stayed green while the later assert went red. The claim described a property of any assert standing in front of a failing one, not coverage. Removed rather than reworded; the admission that the clause is uncovered stands on its own.",
+      "secondUncoveredClause": "Invariant 4's division by waves resolved is likewise uncovered: the review's mutant that drops the division leaves 275/275 green, because no matrix cell today pairs parties with different wave counts where the undivided answer differs. Said here because this section is the one place that promises to name what is not covered."
     }
   ]
 }

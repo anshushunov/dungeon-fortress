@@ -26,7 +26,7 @@
   "everyCreatureThatRefusedByMemory": {
     "check": "CreatureStoryTests.Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel",
     "was": "one cell — the baseline journal on its own seed at tick 2400 — guarded by 'at least three creatures refused by memory here'",
-    "whyThatWasWrongBeforeThisBranch": "Creatures that ever refused by memory, per run of the matrix on main: 3, 2, 2, 0, 4, 2. The guard of three passes on exactly one cell, with no slack at all, and on a second cell there would have been nothing to check.",
+    "whyThatWasWrongBeforeThisBranch": "Creatures that ever refused by memory, per run of the matrix on main: 3, 2, 2, 0, 4, 2. The guard of three passes on two cells out of six — on the cell the test actually ran, with no slack at all (exactly 3), and on one other (4) — while on a third there would have been nothing to check at all. An earlier revision said 'exactly one cell'; corrected by the independent review, which read the row rather than the claim. The substance is unchanged: the threshold was a copy of one measurement, not a property.",
     "afterTheBranch": {"perRun": [2, 0, 3, 3, 5, 2]},
     "totalsOverTheMatrix": {"main": 13, "branch": 15},
     "isNow": "the same criterion read over all six runs; the sample floor is 'as many subjects as a party has creatures', counted off the party rather than written down, and they must come from more than one run",

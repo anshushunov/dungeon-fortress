@@ -30,7 +30,8 @@
       },
       "scoreSumOverTheMatrix": {
         "main": {"prepared": 2525, "baseline": 2193},
-        "branch": {"prepared": 2526, "baseline": 1366}
+        "branch": {"prepared": 2526, "baseline": 1366},
+        "whatTheMarginIsMadeOf": "2526 > 1366 reads like a wide margin and is not one. Per-seed gaps on the branch are +38, -28, +1150: 1150 of the 1160 come from one cell — baseline/20260728, the party that wins its fights and starves, i.e. defect #171. On the two seeds where both parties survive to the end, preparation wins by 10 points out of roughly 1600. On main there is no such concentration (largest single cell 60% of the total). Measured by the independent review. This does not mean the clause collapses once #171 is fixed, but today's number says nothing either way — recheck the clause when #171 closes."
       },
       "perSeedScore": {
         "main": {"20260726": [727, 799], "20260727": [806, 868], "20260728": [660, 858]},

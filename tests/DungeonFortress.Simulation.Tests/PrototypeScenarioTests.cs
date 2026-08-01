@@ -350,6 +350,14 @@ public sealed class PrototypeScenarioTests(ITestOutputHelper output)
     /// <c>AssertEndOfPartyInvariants</c>: preparation may cost score on a seed,
     /// but it may not end the domain worse off than doing nothing.
     /// </para>
+    /// <para>
+    /// What today's margin is made of, named because the number misleads:
+    /// the per-seed gaps are +38, -28 and +1150, so 1150 of the 1160 come from
+    /// baseline/20260728 — the party that wins its fights and starves, defect
+    /// #171. On the two seeds where both parties survive, preparation wins by
+    /// 10 points out of roughly 1600. Measured by the independent review; main
+    /// shows no such concentration. Recheck this clause when #171 closes.
+    /// </para>
     ///
     /// <para>
     /// Command:
