@@ -175,7 +175,8 @@ public sealed class RoomGeometryTests
         // left. The ceiling is RoomGeometry's own, in the reference pixels the
         // inset is measured in; it used to be `32 / 4.0` here, which compared a
         // reference-pixel quantity against the smallest *screen* tile ADR 0008
-        // allows — the units mistake the debt ledger records, and the reason
+        // allows — the units mistake the debt ledger recorded until PR #151 closed it,
+        // and the reason
         // Issue #147 had to answer what the ceiling actually is before it could
         // move the ladder past the old one.
         foreach (var purpose in purposes)
@@ -723,8 +724,8 @@ public sealed class RoomGeometryTests
 
     /// <summary>
     /// And it strokes the line at the width <see cref="RoomGeometry"/> declares,
-    /// not at a literal of its own. The debt ledger's second entry against
-    /// Issue #139 is precisely that <c>BorderStrokeHalfWidth</c> was a silent
+    /// not at a literal of its own. The debt ledger recorded, until PR #151 closed
+    /// the entry, that <c>BorderStrokeHalfWidth</c> was a silent
     /// copy of half a <c>ScaleWorld(2.0f)</c> in this method, with no executable
     /// link between them — and every clearance Issue #147 derives is measured
     /// from that half-width, so the copy stopped being harmless.

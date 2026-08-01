@@ -193,7 +193,9 @@ public static class RoomGeometry
     /// with. The adapter reads it from here rather than repeating the number, so
     /// the arithmetic below cannot go stale behind a change to the drawn line —
     /// which is exactly what the debt ledger recorded against the private
-    /// half-width this used to be a silent copy of.
+    /// half-width this used to be a silent copy of. That ledger entry was
+    /// deleted once this link became executable; the record of why it existed
+    /// is this docstring and PR #151.
     /// </summary>
     public const double BorderStrokeWidth = 2.0;
 
@@ -252,7 +254,8 @@ public static class RoomGeometry
     /// This is the ceiling the ladder is bounded against, and it replaces the
     /// "a quarter of a tile" rule the tests used to carry. That rule compared a
     /// reference-pixel inset against 32 — the smallest <em>screen</em> tile ADR
-    /// 0008 allows — which is the units mistake the debt ledger already records;
+    /// 0008 allows — which is the units mistake the debt ledger recorded until PR #151
+    /// closed it — the entry is gone, and this comment is what is left of it;
     /// and once Issue #139 pushed the wall-adjacent ladder to 8.0 it was no
     /// longer true at any reading of the units. The ceiling that survives the
     /// question is the geometric one: the inset must leave a room to be inside.
