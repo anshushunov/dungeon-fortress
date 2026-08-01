@@ -156,10 +156,17 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
     /// The approach rule prefers a free place to the queue. It is not allowed to
     /// invent a new way of standing still, and the difference is only visible
     /// where the preference has nothing to offer — every tile beside the target
-    /// taken. That happens 721 fighter-ticks over the matrix, so the case is
-    /// sampled rather than hypothetical, and on 172 of them the fighter walked
-    /// anyway. Drop the fallback and the count is zero: the fighter would stop in
-    /// the middle of a fight because the last row of a crowd is full.
+    /// taken. That happens on 721 fighter-ticks over the matrix, so the case is
+    /// sampled rather than hypothetical, and on 172 of them (24 %) the fighter
+    /// walked anyway. Replace the fallback with "stay where you are" and the
+    /// share falls to 21 of 583 (4 %): the fighter stops in the middle of a fight
+    /// because the last row of a crowd is full.
+    ///
+    /// It does not fall to zero, and the residue is the measurement rather than
+    /// the rule. "Every tile taken" is read off the snapshot at the end of the
+    /// tick, and the fighter decided at the start of it, before the allies who
+    /// ended the tick in those tiles arrived there. The floor is therefore a
+    /// share and sits between the two, at a tenth.
     /// </summary>
     [Fact]
     public void A_fighter_with_nowhere_to_stand_beside_its_enemy_still_closes_on_it()
@@ -173,11 +180,11 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
             "taken, which is too few for the fallback of the approach rule to have been read at " +
             $"all.{Environment.NewLine}{Detail()}");
         Assert.True(
-            closedIn >= 20,
+            closedIn * 10 >= crowded,
             $"of the {crowded} fighter-ticks with no free place beside the enemy, only {closedIn} " +
-            "moved. A fighter that stops walking because the crowd around its enemy is full has " +
-            "been given a new way to stand still, which the approach rule is not allowed to do." +
-            $"{Environment.NewLine}{Detail()}");
+            $"moved — {(double)closedIn / crowded:P1}, where a tenth is the floor. A fighter that " +
+            "stops walking because the crowd around its enemy is full has been given a new way to " +
+            $"stand still, which the approach rule is not allowed to do.{Environment.NewLine}{Detail()}");
     }
 
     /// <summary>
