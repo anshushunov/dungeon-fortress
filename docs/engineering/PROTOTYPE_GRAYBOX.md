@@ -677,19 +677,33 @@ that to the player, and none of them needs the log:
   reason codes at all: `DungeonFortress.Presentation.EventNarration` turns the
   code plus its own `details`, `jobKind` and `target` into a sentence with the
   creature's name in front of it;
-- **the story of the selected creature** (Issue #128). The event feed is the
-  domain's until somebody is selected and that creature's afterwards: a header
-  naming it and how much is behind the panel — `STORY · Мотылёк · last 4 of 469`
-  — then its last `HudText.CreatureStoryLines` decisions, newest first, a folded
-  one printing the span of ticks it held and how many. The marks answered "it
-  remembers something happened here"; this answers "and here is what it did about
-  it". Reading it needs no tick: it is `events[]` filtered by creature id, which
-  the snapshot already publishes. Run one:
+- **the story of the selected creature** (Issue #128, reordered by Issue #140).
+  The event feed is the domain's until somebody is selected and that creature's
+  afterwards: a header naming it and three counts — shown, in all, and how many
+  of them mattered, `STORY · Брусок · 4 of 397 · 29 mattered` — then up to
+  `HudText.CreatureStoryLines` decisions, newest first, a folded one printing the
+  span of ticks it held and how many. The marks answered "it remembers something
+  happened here"; this answers "and here is what it did about it". Reading it
+  needs no tick: it is `events[]` filtered by creature id, which the snapshot
+  already publishes.
+
+  **The lines are the decisions that mattered, not the newest ones.** A creature's
+  journal is 89 % waiting for stock, being blocked in a corridor and stepping
+  aside, so the newest four almost always were: on `baseline` at tick 2400 none of
+  the three creatures that ever refused work by memory of a place had that refusal
+  on its panel (`evidence/140-before.json`). The panel now takes one entry per
+  reason code — the newest of that kind, so fourteen refusals cannot become four
+  lines of the same refusal — orders them by `HudText.StoryWeight` and then by
+  recency, cuts to four and puts them back in time order. Routine fills whatever
+  is left over, so a panel is never blank before the first wave. Read bottom to
+  top, creature #0 now says: it broke and ran at t2011, it was whole again at
+  t2271, and at t2384 it would not take the cooking at (14,7) because its nerve
+  had gone at (18,7) at t1703. Run one:
 
   ```powershell
   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
     -GodotPath "<path-to-godot-console>" `
-    -Fixture baseline -ScreenshotTicks 1720 -SelectCreature 2 `
+    -Fixture baseline -ScreenshotTicks 2390 -SelectCreature 0 `
     -ScreenshotPath .artifacts\story.png `
     -TileSize 40 -CameraZoom 0.75 -CameraPosition 560,320 -UiScale 1 -FrameSize 1280x720
   ```

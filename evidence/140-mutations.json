@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "issue": 140,
+  "when": "2026-08-01",
+  "what": "One mutant per half of the edit, not one for the edit as a whole. A check that only reddens when the whole change is reverted proves one half is covered and says nothing about the other.",
+  "howToReproduce": {
+    "code": "Apply the edit to src/DungeonFortress.Presentation/HudText.cs, run the whole presentation test project, restore. Runner: .artifacts/mutate.py, which applies each replacement, runs `dotnet test tests/DungeonFortress.Presentation.Tests -c Release`, records the counts and puts the file back.",
+    "engine": "For the bound, the mutation is a constant and the check is the engine's: set HudText.CreatureStoryLines to 5 and run `powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -Stage godot -GodotPath <godot> -TemporaryRoot <temp>`.",
+    "baseline": "422 of 422 green on the shipped tree, run last, after every mutation was put back."
+  },
+  "mutants": [
+    {
+      "half": "significance decides what is shown at all",
+      "edit": "every arm of HudText.StoryWeight returns 0, so a refusal by memory ranks with stepping aside",
+      "result": "red: 3 of 422 failed",
+      "failing": [
+        "CreatureStoryTests.Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel",
+        "CreatureStoryTests.A_refusal_by_memory_reads_in_the_creature_s_own_story",
+        "CreatureStoryTests.Every_reason_code_the_matrix_produces_is_ranked_on_purpose"
+      ],
+      "reading": "This is criterion 1 falling over: without the ranking, two of the three creatures that ever refused by memory lose the refusal off the panel again. The third keeps it by luck — its refusal happens to be among the four newest kinds — which is exactly why the criterion is asserted over every creature and not over one."
+    },
+    {
+      "half": "one line per kind of decision",
+      "edit": "the GroupBy that keeps the newest entry of each reason code is removed, so the ranking runs over every entry",
+      "result": "red: 3 of 422 failed (the rule test twice, once per fixture)",
+      "failing": [
+        "CreatureStoryTests.A_decision_a_creature_took_again_and_again_takes_one_line_of_its_story",
+        "CreatureStoryTests.The_story_a_creature_shows_is_the_journal_ranked_by_what_it_meant"
+      ],
+      "reading": "Creature #0 refused by memory fourteen times, so without this half criterion 1 still passes and the panel is four copies of the same refusal. This is the half a mutant on the change as a whole would never have found."
+    },
+    {
+      "half": "the header says what is off the panel",
+      "edit": "the three-number header goes back to `last {shown} of {total}`",
+      "result": "red: 2 of 422 failed",
+      "failing": [
+        "CreatureStoryTests.The_story_is_bounded_and_the_header_says_what_is_off_the_panel",
+        "CreatureStoryTests.Before_anything_has_happened_the_panel_is_still_what_it_has_been_doing"
+      ],
+      "reading": "Two things break at once and both are the point: the counts that say how much is hidden are gone, and the word 'last' is back — a word that was true of the old panel and is a lie about this one."
+    },
+    {
+      "half": "the panel is in time order, newest first",
+      "edit": "the final ordering is dropped, so the lines come out in rank order",
+      "result": "red: 2 of 422 failed (once per fixture)",
+      "failing": ["CreatureStoryTests.The_story_a_creature_shows_is_the_journal_ranked_by_what_it_meant"],
+      "reading": "Rank order puts the refusal above the panic that caused it. The story stops reading bottom to top as the party happened, which is the only way four unconnected sentences become a story."
+    },
+    {
+      "half": "the story is bounded",
+      "edit": "`.Take(CreatureStoryLines)` is removed",
+      "result": "red: 5 of 422 failed",
+      "failing": [
+        "CreatureStoryTests.The_story_is_bounded_and_the_header_says_what_is_off_the_panel",
+        "CreatureStoryTests.The_story_a_creature_shows_is_the_journal_ranked_by_what_it_meant",
+        "CreatureStoryTests.A_decision_a_creature_took_again_and_again_takes_one_line_of_its_story",
+        "CreatureStoryTests.Before_anything_has_happened_the_panel_is_still_what_it_has_been_doing"
+      ],
+      "reading": "Seventeen to twenty-one lines instead of four. The dedup alone does not bound the panel, which is why the bound is its own half."
+    },
+    {
+      "half": "routine still fills what the beats leave over",
+      "edit": "a `.Where(StoryWeight > 0)` is added, so only what mattered is ever shown",
+      "result": "red: 3 of 422 failed",
+      "failing": [
+        "CreatureStoryTests.Before_anything_has_happened_the_panel_is_still_what_it_has_been_doing",
+        "CreatureStoryTests.The_story_a_creature_shows_is_the_journal_ranked_by_what_it_meant"
+      ],
+      "reading": "A party spends its first thirteen hundred ticks before the first wave. Without the fill every panel is blank for the whole of that time, and the owner's first click would show nothing — the opposite defect to the one being fixed, and easy to ship by accident."
+    },
+    {
+      "half": "the bound is what the frame can actually draw",
+      "edit": "not a source edit of the rule: HudText.CreatureStoryLines raised from 4 to 5",
+      "check": "scripts/verify.ps1 -Stage godot",
+      "result": "red: verification_result status error, failedStage godot, \"Godot emitted 1 unexpected ERROR line(s).\"",
+      "message": "The HUD loses text in 2 place(s): the story of 'widest padded story' needs 12 lines but only 11 fit at viewport (1024, 768), UI scale 1; the story of 'widest padded story' needs 12 lines but only 10 fit at viewport (2048, 1440), UI scale 2.",
+      "reading": "Every unit test is written against the constant and stays green at five; only the engine measuring real labels refuses it. That is what makes the budget half of the bound a claim and not an assumption. The shape it catches is the padded worst case — six repeats of the widest line the session's journal can produce — because the smoke stands at tick 1 where a real story is one line long; the shape is the right one, and a late-party panel measured directly at 1280x720 is 5 hard lines drawn as 6 with 6 fitting (evidence/140-after.json).",
+      "andFour": "the same command with the shipped bound of 4: verification_result status ok for stages godot and ui"
+    }
+  ],
+  "notCovered": {
+    "what": "Which reason codes sit at level 2 rather than level 1 — 'what the wave cost it' above 'how it met the wave' — is a judgement no mutant here falsifies.",
+    "why": "Both are above routine, so criterion 1 and every rule test hold either way. What the split changes is which four of eight beats a creature with a long story shows: at level 2 Прель's panel is its wound (put down, carried off, mending, whole again) and at one level it would be its muster (joined, came back, could not reach the fight). The measurements for both are in the run behind evidence/140-after.json; the choice was made on the owner's question 'что с ним произошло' and is a preference that the owner's next playtest can overturn."
+  }
+}
