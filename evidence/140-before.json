@@ -1,0 +1,238 @@
+{
+  "schemaVersion": 1,
+  "issue": 140,
+  "when": "2026-08-01, before the edit",
+  "what": "What one creature has to say about itself at the end of a baseline party, and how much of it the panel could reach when it showed the last four entries.",
+  "theOwnersWords": "По персонажам всё ещё непонятно — что изменилось? Выглядит как прошлая версия. Также есть точки страха, но реакции на них не видно без каких-то записей. А лог очень короткий.",
+  "howItWasMeasured": {
+    "snapshot": "dotnet run -c Release --no-build --project tests/DungeonFortress.Scenarios -- --prototype --commands scenarios/prototype1/baseline.commands.v2.json --ticks 2400 --snapshot .artifacts/140-baseline-2400.json",
+    "checksum": "94907f228f807a84344443b3b7c7f84a2d3d51d36ef04acc8cf795c182a5f636",
+    "counting": "python over the canonical event log of that snapshot; the panel rule it models is HudText.CreatureStory as shipped — story.TakeLast(4).Reverse().",
+    "thePanelItself": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter \"FullyQualifiedName~Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel\" --logger \"console;verbosity=detailed\"",
+    "note": "The panel text below is not modelled. It is what HudText printed on this snapshot, captured by the criterion-1 test running red against the unchanged HudText."
+  },
+  "party": {
+    "fixture": "baseline",
+    "seed": 20260726,
+    "ticks": 2400,
+    "creatures": 9,
+    "events": 4425,
+    "waves": "4 announced, 3 resolved: repelled_costly, larder_raided, overrun; the fourth is on the floor at t2400"
+  },
+  "theShape": {
+    "claim": "A creature spends its party waiting and stepping aside, and the four newest entries are almost always that.",
+    "refusalsByMemoryInTheWholeParty": 27,
+    "shareOfTheJournalThatIsARefusalByMemory": "0.6%",
+    "creaturesThatEverRefusedByMemory": 3,
+    "creaturesWhoseLastFourEntriesCarriedThatRefusal": 0,
+    "byReasonCode": {
+      "waiting_blocked_by_other": 1105,
+      "refused_rule_reserve": 1060,
+      "waiting_stock_sufficient": 642,
+      "chosen_traffic_yield": 517,
+      "refused_zone_unreachable": 256,
+      "waiting_input_missing": 187,
+      "refused_too_exhausted": 116,
+      "chosen_only_option": 102,
+      "chosen_need_hunger": 90,
+      "waiting_crop_not_ripe": 52,
+      "chosen_nearest": 52,
+      "combat_joined": 48,
+      "chosen_bottleneck": 30,
+      "combat_attack": 28,
+      "refused_place_of_panic": 27,
+      "combat_fled_morale": 23,
+      "chosen_tie_break": 18,
+      "combat_returned": 16,
+      "chosen_affinity_match": 15,
+      "combat_absent_unreachable": 15,
+      "combat_refused_injured": 7,
+      "injury_healed": 6,
+      "combat_raider_downed": 5,
+      "combat_downed": 3,
+      "injury_tended": 3,
+      "injury_mending": 2
+    },
+    "perCreature": [
+      {
+        "id": 0,
+        "name": "Брусок",
+        "entries": 419,
+        "refusalsByMemory": 14,
+        "whatTheWaveCost": 5,
+        "howItMetTheWave": 12,
+        "routine": 388,
+        "distinctKinds": 19,
+        "lastFourKinds": [
+          "waiting_input_missing",
+          "waiting_blocked_by_other",
+          "waiting_input_missing",
+          "waiting_blocked_by_other"
+        ]
+      },
+      {
+        "id": 1,
+        "name": "Кремень",
+        "entries": 486,
+        "refusalsByMemory": 0,
+        "whatTheWaveCost": 3,
+        "howItMetTheWave": 6,
+        "routine": 477,
+        "distinctKinds": 18,
+        "lastFourKinds": [
+          "waiting_blocked_by_other",
+          "combat_attack",
+          "combat_fled_morale",
+          "waiting_input_missing"
+        ]
+      },
+      {
+        "id": 2,
+        "name": "Мотылёк",
+        "entries": 654,
+        "refusalsByMemory": 7,
+        "whatTheWaveCost": 4,
+        "howItMetTheWave": 8,
+        "routine": 635,
+        "distinctKinds": 17,
+        "lastFourKinds": [
+          "waiting_blocked_by_other",
+          "waiting_blocked_by_other",
+          "combat_fled_morale",
+          "waiting_input_missing"
+        ]
+      },
+      {
+        "id": 3,
+        "name": "Смола",
+        "entries": 357,
+        "refusalsByMemory": 0,
+        "whatTheWaveCost": 3,
+        "howItMetTheWave": 10,
+        "routine": 344,
+        "distinctKinds": 19,
+        "lastFourKinds": [
+          "waiting_blocked_by_other",
+          "chosen_traffic_yield",
+          "waiting_blocked_by_other",
+          "combat_absent_unreachable"
+        ]
+      },
+      {
+        "id": 4,
+        "name": "Дёготь",
+        "entries": 335,
+        "refusalsByMemory": 0,
+        "whatTheWaveCost": 5,
+        "howItMetTheWave": 10,
+        "routine": 320,
+        "distinctKinds": 18,
+        "lastFourKinds": [
+          "chosen_traffic_yield",
+          "waiting_blocked_by_other",
+          "chosen_traffic_yield",
+          "waiting_blocked_by_other"
+        ]
+      },
+      {
+        "id": 5,
+        "name": "Уголёк",
+        "entries": 820,
+        "refusalsByMemory": 0,
+        "whatTheWaveCost": 4,
+        "howItMetTheWave": 10,
+        "routine": 806,
+        "distinctKinds": 19,
+        "lastFourKinds": [
+          "combat_fled_morale",
+          "waiting_blocked_by_other",
+          "chosen_traffic_yield",
+          "waiting_blocked_by_other"
+        ]
+      },
+      {
+        "id": 6,
+        "name": "Прель",
+        "entries": 453,
+        "refusalsByMemory": 0,
+        "whatTheWaveCost": 5,
+        "howItMetTheWave": 11,
+        "routine": 437,
+        "distinctKinds": 21,
+        "lastFourKinds": [
+          "combat_absent_unreachable",
+          "waiting_blocked_by_other",
+          "combat_absent_unreachable",
+          "waiting_blocked_by_other"
+        ]
+      },
+      {
+        "id": 7,
+        "name": "Обух",
+        "entries": 264,
+        "refusalsByMemory": 6,
+        "whatTheWaveCost": 3,
+        "howItMetTheWave": 12,
+        "routine": 243,
+        "distinctKinds": 17,
+        "lastFourKinds": [
+          "chosen_traffic_yield",
+          "waiting_blocked_by_other",
+          "combat_joined",
+          "combat_joined"
+        ]
+      },
+      {
+        "id": 8,
+        "name": "Тишина",
+        "entries": 637,
+        "refusalsByMemory": 0,
+        "whatTheWaveCost": 5,
+        "howItMetTheWave": 12,
+        "routine": 620,
+        "distinctKinds": 17,
+        "lastFourKinds": [
+          "waiting_input_missing",
+          "waiting_input_missing",
+          "combat_refused_injured",
+          "waiting_input_missing"
+        ]
+      }
+    ]
+  },
+  "whatThePanelSaidBeforeTheEdit": {
+    "Брусок": [
+      "STORY · Брусок · last 4 of 419",
+      "t2399 · stopped at (14,7): somebody in the way.",
+      "t2399 · waits on work: nothing to work with.",
+      "t2398 · stopped at (14,7): somebody in the way.",
+      "t2398 · waits on work: nothing to work with."
+    ],
+    "Мотылёк": [
+      "STORY · Мотылёк · last 4 of 654",
+      "t2390-2399 · waits on work: nothing to work with. (x10)",
+      "t2374 · broke and ran: 54% health, 3 raiders close, 0 ally down.",
+      "t2362-2373 · stopped at (13,7): somebody in the way. (x12)",
+      "t2350-2360 · stopped at (12,7): somebody in the way. (x11)"
+    ],
+    "Обух": [
+      "STORY · Обух · last 4 of 264",
+      "t2390 · joined the fight for wave 4.",
+      "t2390 · joined the fight for wave ?.",
+      "t2383-2389 · stopped at (10,7): somebody in the way. (x6)",
+      "t2382 · stepped aside at (16,7) for #4."
+    ],
+    "reading": "Брусок refused work fourteen times because of a place where its nerve broke, and its panel is four lines of traffic. That is the whole of Issue #140 in one panel: the bound was never the problem, the ordering was."
+  },
+  "criterionOneBeforeTheEdit": {
+    "test": "CreatureStoryTests.Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel",
+    "result": "red",
+    "message": "3 of 3 creatures hide the one decision that explains their next one: Брусок refused by memory 14 time(s) and its panel says none of it; Мотылёк refused by memory 7 time(s) and its panel says none of it; Обух refused by memory 6 time(s) and its panel says none of it."
+  },
+  "howMuchIsNeededToReadAStory": {
+    "question": "Not \"how many lines does the panel budget allow\" but \"how many beats does one creature's story have\".",
+    "distinctKindsOfDecisionPerCreatureAtTheEndOfAParty": "17 to 21",
+    "kindsThatMatterPerCreature": "4 to 8 (memory refusal, panic, flight, being put down, being carried off, mending, healed, joining the wave, coming back, being unable to reach the fight)",
+    "openQuestion": "Four lines cannot hold eight beats. What the edit has to decide is which four, and what it says about the rest."
+  }
+}
