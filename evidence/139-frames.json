@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "issue": 139,
+  "checkpoint": "2 — fix made, before/after frames captured through scripts/capture-evidence.ps1",
+  "spec": "evidence/139-facade-frames.json",
+  "note": "PNGs land under .artifacts/evidence/139-before and .artifacts/evidence/139-after per Resolve-EvidenceOutputRoot (OutputRoot must resolve inside repository .artifacts) and are not committed, per AGENTS.md's rule against committing large derived files. This file records the reproduction commands and the image hashes that prove the two frames actually differ.",
+  "before": {
+    "commit": "2d8f23d5cbec432b7d3ade68b45bc6c15af6b3d6",
+    "commitSubject": "Measure: room border vs wall facade overlap on the shipped starting map (#139) — checkpoint 1, pre-fix",
+    "sourceDirty": false,
+    "captures": [
+      {
+        "name": "139-farm-north-border",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '168,48' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/139-before/139-farm-north-border.png",
+        "imagePath": ".artifacts/evidence/139-before/139-farm-north-border.png",
+        "imageSha256": "22ab810ce570c7ef876f30a148afbaf3aab23729bfb5e2dfb1d48a440ff308aa",
+        "reading": "The FARM border's top-left corner stroke sits directly against the wall's dark facade bottom edge — no daylight between them, matching the literal overlap measured in evidence/139-overlap-before.json (farm@1,1, overlapPx ~3.6)."
+      },
+      {
+        "name": "139-kitchen-north-border",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '504,288' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/139-before/139-kitchen-north-border.png",
+        "imagePath": ".artifacts/evidence/139-before/139-kitchen-north-border.png",
+        "imageSha256": "e015cde309cd9fd1e207830f03301dc90a49d211c0d96d821d984a50333b0ae5",
+        "reading": "The frame also happens to show LARDER (yellow) next to KITCHEN (orange) — this is the exact pairing the owner's playtest report named. Both top borders sit right on the wall's facade lip, reproducing the reported \"режет глаз\" look."
+      }
+    ]
+  },
+  "after": {
+    "commit": "38567b256c1054da511db0688844d94b1fce8534",
+    "commitSubject": "Fix: room border clears a north-adjacent wall's facade (#139)",
+    "sourceDirty": false,
+    "captures": [
+      {
+        "name": "139-farm-north-border",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '168,48' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/139-after/139-farm-north-border.png",
+        "imagePath": ".artifacts/evidence/139-after/139-farm-north-border.png",
+        "imageSha256": "6763f7257eede53db2095c304e4f06a8e0384fc4124a3e6890e7ecdeeea53c91",
+        "reading": "A visible dark gap now separates the wall's facade bottom from the FARM border's top-left corner."
+      },
+      {
+        "name": "139-kitchen-north-border",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '504,288' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/139-after/139-kitchen-north-border.png",
+        "imagePath": ".artifacts/evidence/139-after/139-kitchen-north-border.png",
+        "imageSha256": "57050a1bb87a94b33c514c66601a68e62b88dbe968b4b536a7628378052cc983",
+        "reading": "Both KITCHEN and LARDER top borders now sit visibly below the wall's facade lip, apart from it rather than lying on it."
+      }
+    ]
+  },
+  "canonicalStateUnchanged": {
+    "note": "Both runs report the same canonical checksum 9df8c18004b95aa4a6acd45ec338acc63ffd453e669314183e4959bfc6c3bfc9 — this is a presentation-only change, the simulation state at tick 1 is identical before and after.",
+    "imageHashesDiffer": true
+  }
+}
