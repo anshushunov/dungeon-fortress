@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "issue": 129,
+  "when": "2026-08-01, before the edit",
+  "what": "The shape of a fight as the canonical snapshot publishes it, on the six matrix runs, before the destination of a combat move was changed. Both halves of the owner's playtest sentence are answered here: how fighters stand, and how many of them reach one raider at the same time.",
+  "theOwnersWords": "Про бой всё ещё не нравится как выглядит, рейдеры друг на друга налезают, похоже только 1 может атаковать одновременно даже если с 2 сторон окружили.",
+  "tree": {
+    "branch": "agent/129-combat-approach-free-tile",
+    "baseCommit": "74af087",
+    "note": "The base commit is named because it is on `main` and survives squash; the branch head is not, so it is described in prose instead (Issue #106)."
+  },
+  "howItWasMeasured": {
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_combat_approach_over_the_seed_matrix\" --logger \"console;verbosity=detailed\"",
+    "harness": "tests/DungeonFortress.Simulation.Tests/PrototypeCombatApproachTests.cs, added by this branch. It walks each party tick by tick with PrototypeWorld.Step() and reads PrototypeWorld.GetSnapshot() after every tick.",
+    "positions": "Counted from the snapshot, not from the canonical event log. Events coalesce a repeated identical decision into one entry with a Repeats count and no per-tick record, so scanning entries by tick undercounts a fighter that rolled the same damage twice running. Positions do not coalesce.",
+    "strikes": "Read from PrototypeCreatureSnapshot.LastDecision, which carries its own tick. combat_attack and combat_raider_downed both count as a strike, because a killing blow overwrites the attack that caused it, and both carry details.raiderId.",
+    "definitions": {
+      "fighterTicks": "creature-ticks in CreatureMode.Fighting on a tick when at least one raider is Raiding",
+      "inContact": "fighter-ticks where the fighter is within T.melee_attack_range (1) of the raider it would pick as its own target",
+      "contactShare": "inContact / fighterTicks",
+      "queuedInScrum": "fighter-ticks where the fighter is within 3 steps of its own target by the map (rock and Forbidden stop the flood, creatures do not) and is not in contact",
+      "queuedWithFreeTile": "queuedInScrum, restricted to the ticks on which at least one tile beside that target was free — passable, not Forbidden, no creature and no raider on it",
+      "engagedRaiderTicks": "(tick, raider) pairs where at least one defender is within striking distance",
+      "meanTouching": "defenders within striking distance per engagedRaiderTick",
+      "maxRaidersOnOneTile": "the most Raiding raiders sharing one tile at any tick of the party"
+    }
+  },
+  "matrix": [
+    {"fixture": "baseline", "seed": 20260726, "ticks": 2404, "combatTicks": 180, "fighterTicks": 794, "inContact": 116, "contactShare": 0.146, "queuedInScrum": 185, "queuedWithFreeTile": 177, "freeTilesWhileQueued": 304, "engagedRaiderTicks": 277, "meanTouching": 1.166, "maxTouching": 2, "touchingHistogram": [0, 231, 46, 0, 0], "strikes": 94, "attackedRaiderTicks": 82, "meanAttackers": 1.146, "maxAttackers": 2, "attackerHistogram": [0, 70, 12, 0, 0], "maxRaidersOnOneTile": 8, "blockedWhileFighting": 504},
+    {"fixture": "baseline", "seed": 20260727, "ticks": 2404, "combatTicks": 136, "fighterTicks": 743, "inContact": 86, "contactShare": 0.116, "queuedInScrum": 158, "queuedWithFreeTile": 158, "freeTilesWhileQueued": 402, "engagedRaiderTicks": 270, "meanTouching": 1.000, "maxTouching": 1, "touchingHistogram": [0, 270, 0, 0, 0], "strikes": 67, "attackedRaiderTicks": 67, "meanAttackers": 1.000, "maxAttackers": 1, "attackerHistogram": [0, 67, 0, 0, 0], "maxRaidersOnOneTile": 8, "blockedWhileFighting": 430},
+    {"fixture": "baseline", "seed": 20260728, "ticks": 2424, "combatTicks": 154, "fighterTicks": 763, "inContact": 115, "contactShare": 0.151, "queuedInScrum": 163, "queuedWithFreeTile": 163, "freeTilesWhileQueued": 295, "engagedRaiderTicks": 343, "meanTouching": 1.076, "maxTouching": 2, "touchingHistogram": [0, 317, 26, 0, 0], "strikes": 95, "attackedRaiderTicks": 83, "meanAttackers": 1.145, "maxAttackers": 2, "attackerHistogram": [0, 71, 12, 0, 0], "maxRaidersOnOneTile": 8, "blockedWhileFighting": 408},
+    {"fixture": "prepared", "seed": 20260726, "ticks": 2406, "combatTicks": 141, "fighterTicks": 607, "inContact": 133, "contactShare": 0.219, "queuedInScrum": 254, "queuedWithFreeTile": 219, "freeTilesWhileQueued": 371, "engagedRaiderTicks": 403, "meanTouching": 1.114, "maxTouching": 2, "touchingHistogram": [0, 357, 46, 0, 0], "strikes": 111, "attackedRaiderTicks": 101, "meanAttackers": 1.099, "maxAttackers": 2, "attackerHistogram": [0, 91, 10, 0, 0], "maxRaidersOnOneTile": 7, "blockedWhileFighting": 399},
+    {"fixture": "prepared", "seed": 20260727, "ticks": 2406, "combatTicks": 128, "fighterTicks": 646, "inContact": 147, "contactShare": 0.228, "queuedInScrum": 360, "queuedWithFreeTile": 188, "freeTilesWhileQueued": 371, "engagedRaiderTicks": 304, "meanTouching": 1.280, "maxTouching": 2, "touchingHistogram": [0, 219, 85, 0, 0], "strikes": 127, "attackedRaiderTicks": 106, "meanAttackers": 1.198, "maxAttackers": 2, "attackerHistogram": [0, 85, 21, 0, 0], "maxRaidersOnOneTile": 8, "blockedWhileFighting": 452},
+    {"fixture": "prepared", "seed": 20260728, "ticks": 2409, "combatTicks": 136, "fighterTicks": 785, "inContact": 144, "contactShare": 0.183, "queuedInScrum": 441, "queuedWithFreeTile": 333, "freeTilesWhileQueued": 635, "engagedRaiderTicks": 355, "meanTouching": 1.259, "maxTouching": 2, "touchingHistogram": [0, 263, 92, 0, 0], "strikes": 124, "attackedRaiderTicks": 108, "meanAttackers": 1.148, "maxAttackers": 2, "attackerHistogram": [0, 92, 16, 0, 0], "maxRaidersOnOneTile": 9, "blockedWhileFighting": 570}
+  ],
+  "theSecondHalfOfTheObservation": {
+    "question": "«похоже только 1 может атаковать одновременно даже если с 2 сторон окружили» — does the limit follow from the rules of combat or from where the movement rule puts the fighters?",
+    "answer": "From where the movement rule puts them. The rules of combat do not cap anything.",
+    "whatTheRuleSays": "PrototypeWorld.ActCombatant (src/DungeonFortress.Simulation/PrototypeWorld.cs:2538 on 74af087) runs once per Fighting creature in ascending id. It picks that creature's own nearest Raiding raider, and if Manhattan distance <= PrototypeTuning.MeleeAttackRange (1) it applies damage. There is no per-target counter, no reservation on the target and no check that somebody already struck it this tick. Neither has ActRaiders. Nothing in the resolution of combat limits how many defenders strike one raider in one tick, and section 10.3 of the contract does not state such a limit either.",
+    "whatTheMeasurementSays": "Two defenders do strike the same raider in the same tick on five of the six matrix runs — 12, 12, 10, 21 and 16 (tick, raider) pairs respectively; only baseline/20260727 never gets there. So the observed cap is not one by rule; it is one or two by geometry.",
+    "whereTheCapActuallyIs": "maxTouching is 2 on five runs and 1 on the sixth: over six whole parties, three defenders are never simultaneously adjacent to the same raider, although a raider has four neighbouring tiles. At the same time a free tile beside the target existed on 158 to 333 fighter-ticks per party while a fighter stood within three steps of that target without touching it. Free places to stand and nobody standing in them is the definition of the column: ActCombatant sends every fighter to the raider's own tile, one point for everybody who shares a nearest enemy, and PrototypeMap.NextStep hands them all the same corridor to it.",
+    "conclusion": "No escalation. The change stays where the decision of 2026-08-01 put it: the destination of a combat move, in one method. The rules of combat are not touched."
+  },
+  "twoThingsFoundNextToTheAnswerAndNotFixedHere": [
+    {
+      "what": "Raiders stack on one tile: up to 7, 8 or 9 Raiding raiders share a single tile at some point in every one of the six parties.",
+      "why": "ActRaiders assigns raider.Position = step with no occupancy check at all, and every raider walks to the same PrototypeMap.LarderTiles[0]. This is the most literal reading of «рейдеры друг на друга налезают», and it is on the raiders' side of the fight, not the defenders'.",
+      "whyNotHere": "The contract states it on purpose: 10.3, morale, «Налётчики не занимают тайл монопольно, поэтому raidersNear считает тела, а не клетки: семеро на одном тайле дают семь». Making a raider hold a tile changes the morale rule, the count raidersNear is built on and the occupancy rule of 4.1. That is a decision, not a side effect of this task, and it is returned to the coordinator rather than taken."
+    },
+    {
+      "what": "A defender adjacent to a stack of raiders strikes exactly one of them per tick, the one its own target rule picked.",
+      "why": "One strike per defender per tick is the rule, and it is not the same statement as «only one attacker per target». It is named here because with eight raiders on one tile it produces the same picture the owner described from the other direction.",
+      "whyNotHere": "Changing it is changing the rules of combat, which this task is explicitly not allowed to do."
+    }
+  ]
+}
