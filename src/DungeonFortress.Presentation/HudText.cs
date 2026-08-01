@@ -184,15 +184,24 @@ public static class HudText
     ///
     /// <para>
     /// <b>What the frame can draw.</b> The panel holds ten drawn lines at the
-    /// tightest frame the HUD guard checks — viewport 2048x1440 at UI scale 2 —
-    /// and unlike the story panel the feed also carries the session's diagnostics
-    /// counter, which with the blank line above it is three of those ten. A feed
-    /// sentence has a name in front of it and wraps onto two drawn lines, so the
-    /// header plus <c>N</c> sentences plus the counter is <c>2 + 2N</c> drawn
-    /// lines, and three of them is exactly ten of ten. <c>Main.AssertLabelsFit</c>
-    /// is what refuses four, measured and not argued: <em>"'feedback' needs 12
-    /// lines but only 10 fit in (287, 200) at viewport (2048, 1440), UI scale
-    /// 2"</em> (<c>evidence/145-bound.json</c>).
+    /// tightest frame the HUD guard checks — viewport 2048x1440 at UI scale 2, a
+    /// 287-pixel column — and unlike the story panel the feed also carries the
+    /// session's diagnostics counter and the blank line above it.
+    /// <b>What binds is the sentences, not the header.</b> A turning point carries
+    /// its numbers with it — "Мотылёк broke and ran: 79% health, 5 raiders close,
+    /// 0 ally down." — and three of those need seven drawn lines, where three
+    /// routine sentences needed six. That is why this issue had to pay for its own
+    /// third line by trimming the diagnostics note (see <see cref="Feedback"/>):
+    /// with the note the panel measured 11 of 10, without it exactly 10.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>Main.AssertLabelsFit</c> is what refuses four, measured and not argued:
+    /// <em>"'feedback' needs 11 lines but only 10 fit in (287, 200) at viewport
+    /// (2048, 1440), UI scale 2"</em> (<c>evidence/145-bound.json</c>). And
+    /// unlike the story panel it is the <b>live</b> label that fails rather than a
+    /// padded worst case, because the feed is the shape every entry point actually
+    /// carries.
     /// </para>
     ///
     /// <para>
@@ -332,8 +341,24 @@ public static class HudText
     /// </para>
     ///
     /// <para>
-    /// The header is deliberately part of both the empty and the populated case,
-    /// which is why the empty panel repeats it.
+    /// <b>The diagnostics counter says how many and no longer where to look.</b>
+    /// It used to read "Diagnostics: 0 (structured JSON is emitted by
+    /// smoke/capture)", which wraps onto two drawn lines and with the blank line
+    /// above it took three of the ten this panel has. That was affordable while
+    /// the feed showed the newest three entries, because the newest three are
+    /// routine and routine sentences are short. It stopped being affordable the
+    /// moment the feed started showing what mattered: a turning point carries its
+    /// numbers with it — "broke and ran: 79% health, 5 raiders close, 0 ally down"
+    /// — and three of those need seven drawn lines rather than six. Measured on
+    /// the two frames <c>verify.ps1</c> photographs, the panel needed 11 of 10
+    /// (<c>evidence/145-bound.json</c>).
+    /// </para>
+    ///
+    /// <para>
+    /// So the developer's note moved here and the count stayed. Where the
+    /// structured diagnostics are written is a fact about the tooling that a
+    /// player never needs and a developer reads once; how many there are is a
+    /// fact about this session, and it is the half worth a line of the HUD.
     /// </para>
     /// </summary>
     public static string Feedback(HudViewState view)
@@ -342,14 +367,13 @@ public static class HudText
         var state = view.Snapshot;
         // The diagnostics counter is a fact about the session, so it stays on the
         // session's own feed. Giving it up while a creature is selected is not a
-        // tidy-up: the line and the blank line above it are three of the ten
-        // drawn lines this panel has, and three lines is more than one entry of
-        // a creature's story. The count is one click away and the story is what
-        // the panel was clicked for.
+        // tidy-up: the line and the blank line above it are two of the ten drawn
+        // lines this panel has, and two lines is more than one entry of a
+        // creature's story. The count is one click away and the story is what the
+        // panel was clicked for.
         return view.SelectedCreatureId is { } creatureId
             ? CreatureStory(state, creatureId)
-            : DomainFeed(state) +
-                $"\n\nDiagnostics: {view.DiagnosticCount} (structured JSON is emitted by smoke/capture).";
+            : DomainFeed(state) + $"\n\nDiagnostics: {view.DiagnosticCount}";
     }
 
     /// <summary>

@@ -303,7 +303,7 @@ public sealed class HudTextTests
         Assert.Equal(
             "EVENT FEEDBACK\n" +
             "No events yet. Step or unpause to watch autonomous choices." +
-            "\n\nDiagnostics: 0 (structured JSON is emitted by smoke/capture).",
+            "\n\nDiagnostics: 0",
             HudText.Feedback(View(state)));
     }
 
@@ -351,7 +351,7 @@ public sealed class HudTextTests
         // Header, three event lines, a blank line, the diagnostics line.
         Assert.Equal(3 + HudText.DomainFeedLines, lines.Length);
         Assert.EndsWith(
-            "Diagnostics: 2 (structured JSON is emitted by smoke/capture).",
+            "Diagnostics: 2",
             feedback,
             StringComparison.Ordinal);
     }

@@ -13,16 +13,19 @@
   },
   "answerFromTheFrame": {
     "answer": 3,
-    "arithmetic": "header 1 drawn line + N sentences at 2 drawn lines each + a blank line + the diagnostics counter at 2 drawn lines = 2 + 2N. At N=3 that is exactly 10 of the 10 the label holds at the tightest frame the guard checks.",
+    "whatActuallyBinds": "The sentences, not the header — which is the thing this issue got wrong first and had to measure. A turning point carries its numbers with it ('Мотылёк broke and ran: 79% health, 5 raiders close, 0 ally down.') and three of those need SEVEN drawn lines in a 287-pixel column, where three routine sentences needed six. The old feed showed the newest three entries, and the newest three are routine, so it never paid for that. The header is one drawn line at 51 characters and was never the constraint: measured by shortening it to 39 and then to 28 characters, both of which left the panel needing the same 11 lines.",
+    "arithmetic": "header 1 + three turning-point sentences 7 + blank line 1 + diagnostics counter 1 = exactly 10 of the 10 the label holds at the tightest frame the guard checks.",
+    "whatThisIssuePaidWithIt": "The diagnostics counter used to read 'Diagnostics: 0 (structured JSON is emitted by smoke/capture).', which wraps onto two drawn lines. With the note the panel measured 11 of 10 and the screenshots stage failed; with the note moved into the HudText.Feedback docstring and the count kept, it is 10 of 10. The alternatives are listed under theGap.whatWasNotDoneAboutIt.",
     "howItWasMeasured": {
       "mutation": "HudText.DomainFeedLines raised from 3 to 4, nothing else changed.",
-      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -Stage godot -GodotPath C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe -TemporaryRoot C:/Users/User/AppData/Local/Temp",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -Stage godot,screenshots -GodotPath C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe -TemporaryRoot C:/Users/User/AppData/Local/Temp",
       "resultAtFour": "verification_result status error, failedPhase stage, failedStage godot",
-      "messageAtFour": "The HUD loses text in 2 place(s): 'feedback' needs 12 lines but only 11 fit in (287, 219) at viewport (1024, 768), UI scale 1; 'feedback' needs 12 lines but only 10 fit in (287, 200) at viewport (2048, 1440), UI scale 2.",
-      "resultAtThree": "verification_result status ok for stages godot and ui, godotExitCode 0, engineErrorCount 0",
+      "messageAtFour": "The HUD loses text in 1 place(s): 'feedback' needs 11 lines but only 10 fit in (287, 200) at viewport (2048, 1440), UI scale 2.",
+      "resultAtThree": "the full nine-stage run is ok: verification_result status ok, scope full, stagesExecuted [scripts, build, tests, mcp, sim, load, godot, ui, screenshots]",
+      "beforeTheDiagnosticsNoteWasTrimmed": "at THREE lines the same command reported 'feedback' needs 11 lines but only 10 fit at the same frame, and the failing stage was screenshots, on the prepared party at tick 1670 and on baseline at tick 2400. That run is what turned the arithmetic above from a guess into a measurement.",
       "whichLabel": "the live 'feedback' label, not a padded worst case. Main.CreatureStoryPanels pads the story shape; the domain feed is measured as the panel the entry point actually carries, which is why raising the constant is enough to redden it."
     },
-    "slack": "zero, exactly as for the story panel at four lines. Any EventNarration sentence that grows past two drawn lines reddens the godot stage."
+    "slack": "zero, exactly as for the story panel at four lines. Any EventNarration sentence that grows past two drawn lines reddens the godot stage. That is the right failure — loud rather than silent, on every entry point — but it is a second HUD panel with no headroom and it belongs in the debt ledger beside the first."
   },
   "theGap": {
     "what": "Six of the nine crew are not on the panel, and neither are the earlier beats of the three that are.",
@@ -33,8 +36,8 @@
     ],
     "whatWasNotDoneAboutIt": [
       "The panel is not made taller. Its height is Main.cs arithmetic, and Main.cs is held by another task this block (#147).",
-      "The sentences are not shortened. EventNarration is shared by the feed, the story panel, the inspector and the map, so shortening it for the feed's budget would move wording nobody asked to change — and the debt ledger already records that the story panel has zero slack at four lines, so a shorter sentence would be spent there first.",
-      "The diagnostics counter is not moved off the panel. It plus the blank line above it is three of the ten drawn lines — more than one feed entry — and moving a developer counter is a HUD decision of its own rather than a side effect of this one. It is the cheapest line to buy if the feed is ever worth four."
+      "The sentences are not shortened. EventNarration is shared by the feed, the story panel, the inspector and the map, so shortening it for the feed's budget would move wording nobody asked to change — and the debt ledger already records that the story panel has zero slack at four lines, so a shorter sentence would be spent there first. This is the cheapest remaining line to buy if the feed is ever worth four.",
+      "The blank line between the feed and the diagnostics counter is kept. Dropping it would buy a tenth line of slack and cost the only visual separation between what the crew did and a developer's counter. The count was trimmed instead, which buys the same line and costs a note nobody reads twice."
     ]
   },
   "theThreshold": {

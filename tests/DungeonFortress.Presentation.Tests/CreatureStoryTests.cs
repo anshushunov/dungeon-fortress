@@ -422,7 +422,7 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
         Assert.StartsWith("EVENT FEEDBACK", lines[0], StringComparison.Ordinal);
         Assert.Equal(3 + HudText.DomainFeedLines, lines.Length);
         Assert.EndsWith(
-            "Diagnostics: 2 (structured JSON is emitted by smoke/capture).",
+            "Diagnostics: 2",
             feedback,
             StringComparison.Ordinal);
         Assert.DoesNotContain("STORY", feedback, StringComparison.Ordinal);

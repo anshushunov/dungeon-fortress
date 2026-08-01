@@ -119,9 +119,9 @@
       "edit": "not a source edit of the rule: HudText.DomainFeedLines raised from 3 to 4",
       "check": "scripts/verify.ps1 -Stage godot",
       "result": "red: verification_result status error, failedPhase stage, failedStage godot",
-      "message": "The HUD loses text in 2 place(s): 'feedback' needs 12 lines but only 11 fit in (287, 219) at viewport (1024, 768), UI scale 1; 'feedback' needs 12 lines but only 10 fit in (287, 200) at viewport (2048, 1440), UI scale 2.",
-      "reading": "Every unit test is written against the constant and stays green at four; only the engine measuring the real label refuses it. That is what makes the budget half of the bound a measurement and not an assumption. Unlike the story panel it is the live 'feedback' label that fails rather than a padded worst case, because the domain feed is the shape the entry point actually carries.",
-      "andThree": "the same command with the shipped bound of 3: verification_result status ok for stages godot and ui, godotExitCode 0, engineErrorCount 0."
+      "message": "The HUD loses text in 1 place(s): 'feedback' needs 11 lines but only 10 fit in (287, 200) at viewport (2048, 1440), UI scale 2.",
+      "reading": "Every unit test is written against the constant and stays green at four; only the engine measuring the real label refuses it. That is what makes the budget half of the bound a measurement and not an assumption. Unlike the story panel it is the live 'feedback' label that fails rather than a padded worst case, because the domain feed is the shape the entry point actually carries. The same measurement caught a defect this issue shipped and then fixed: at THREE lines the panel also needed 11, because a turning point sentence is longer than a routine one and the diagnostics note took two drawn lines. See evidence/145-bound.json.",
+      "andThree": "the same command with the shipped bound of 3: the full nine-stage verify.ps1 run is ok — verification_result status ok, scope full, stagesExecuted [scripts, build, tests, mcp, sim, load, godot, ui, screenshots]."
     }
   ],
   "notCovered": {

@@ -78,6 +78,12 @@
     ],
     "reading": "Without clicking anything, the player is now told that three of the nine crew will not take work at the places where their nerve went, and where and when each of them broke. That is the sentence the whole slice exists for — 'и как это изменило его следующее решение' — on the screen the game opens on. At t1400 the same panel is what the first wave cost: two carried off the floor and one that broke and ran. Before the edit all of it was one creature stopped in one corridor."
   },
+  "whatElseChangedInThePanel": {
+    "what": "The diagnostics counter reads 'Diagnostics: 0' instead of 'Diagnostics: 0 (structured JSON is emitted by smoke/capture).'",
+    "why": "Not tidying. A turning-point sentence carries its numbers with it and is longer than a routine one, so three of them need seven drawn lines where three routine ones needed six. With the developer's note the panel measured 11 drawn lines against the 10 its label holds and the screenshots stage of verify.ps1 failed on the prepared party at tick 1670 and on baseline at tick 2400. The note moved into the HudText.Feedback docstring, the count stayed, and the panel is 10 of 10.",
+    "measurement": "evidence/145-bound.json, answerFromTheFrame",
+    "alsoRemoved": "the doubled 'EVENT FEEDBACK' header of the empty panel. It was a header concatenated in front of a body that already opened with one; a header that now carries counts cannot be printed twice without lying about them. HudTextTests.An_empty_event_buffer_still_carries_the_header_and_the_diagnostics_count used to assert the doubling with the note 'changing it is a product decision, not a tidy-up' — that decision is made here and written down in the test."
+  },
   "theGoldenFrames": {
     "what": "The three committed --demo-stone frames, regenerated with scripts/update-golden-ui.ps1 and reviewed rather than accepted.",
     "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/update-golden-ui.ps1 -GodotPath C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe",
