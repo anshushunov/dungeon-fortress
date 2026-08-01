@@ -141,10 +141,12 @@ public sealed class RoomWallClearanceTests
     /// it: <see cref="WallRenderGeometry"/> lifts a wall's top mass
     /// <see cref="WallRenderGeometry.FacadeReferenceHeight"/> reference pixels
     /// above its own footprint, so it covers the bottom of the cell to its north
-    /// outright — not a seam's worth, the whole band. Clearing that would need an
-    /// inset past <see cref="RoomGeometry.MaximumBorderInset"/>, at which point
-    /// the two opposite sides of a one-cell room meet and there is no border
-    /// left to draw. This measures that impossibility instead of asserting it.
+    /// outright — not a seam's worth, the whole band, and the bright seam along
+    /// the top of that mass reaches half its own width higher still. Clearing
+    /// that would need an inset past <see cref="RoomGeometry.MaximumBorderInset"/>,
+    /// at which point the stroke bands of the two opposite sides of a one-cell
+    /// room meet and there is no border left to draw. This measures that
+    /// impossibility instead of asserting it.
     /// </para>
     ///
     /// <para>
@@ -171,18 +173,24 @@ public sealed class RoomWallClearanceTests
         Assert.True(inFront > 0, "no room of the shipped map has a wall to its south");
 
         // What clearing it would cost, in the same reference pixels the ladder is
-        // measured in: the whole lifted mass, the border's own half-stroke and a
-        // visible gap. It lands exactly on the ceiling — the base alone would eat
-        // half the cell — and the ladder built on that base reaches half again as
-        // far, because every purpose still climbs its own step above it.
+        // measured in: the whole lifted mass, the upper half of the bright seam
+        // drawn along its top, the border's own half-stroke and a visible gap. It
+        // lands past the ceiling — the base alone would eat more than half the
+        // cell — and the ladder built on that base reaches half again as far,
+        // because every purpose still climbs its own step above it.
+        //
+        // The half-seam term is the same one Issue #139 left out of the north
+        // clearance and Issue #147 put back: a wall's mass is not the rectangle,
+        // it is the rectangle plus the bands its seams are painted as.
         var neededBase =
             WallRenderGeometry.FacadeReferenceHeight +
+            (WallRenderGeometry.EdgeReferenceWidth / 2.0) +
             RoomGeometry.BorderStrokeHalfWidth +
             RoomGeometry.WallVisibleGap;
         var widestStep = Enum.GetValues<ZoneKind>()
             .Max(purpose => RoomGeometry.BorderInset(purpose) - RoomGeometry.PlainBorderBase);
         Assert.True(
-            neededBase >= RoomGeometry.MaximumBorderInset,
+            neededBase > RoomGeometry.MaximumBorderInset,
             $"a wall in front would be cleared by a base inset of {neededBase} reference px, " +
             $"which is inside the {RoomGeometry.MaximumBorderInset} ceiling — the exception " +
             "below is no longer necessary and the border should simply clear it");
@@ -234,6 +242,86 @@ public sealed class RoomWallClearanceTests
 
         Assert.Equal(
             WallRenderGeometry.EdgeReferenceWidth / 2.0 * scale,
+            reach,
+            10);
+    }
+
+    /// <summary>
+    /// The same measurement across the other axis, and the one Issue #147
+    /// actually turns on: how far below its own footprint a wall paints.
+    ///
+    /// <para>
+    /// The facade rectangle overhangs
+    /// <see cref="WallRenderGeometry.FacadeReferenceOverhang"/>, and the seam
+    /// that closes it off is drawn <em>on</em> that lower edge, so half of
+    /// <see cref="WallRenderGeometry.EdgeReferenceWidth"/> lands below the
+    /// rectangle. Issue #139 cleared the rectangle and stopped there, which is
+    /// why <c>farm@1,1</c> still had only 0.375 reference px of daylight after
+    /// it shipped — the same figure as the west and east sides #139 never
+    /// covered.
+    /// </para>
+    ///
+    /// <para>
+    /// It exists because independent review of this branch found the gap by
+    /// running the targeted mutant: stop widening the <c>FacadeBottom</c> seam
+    /// alone and the whole suite stayed green.
+    /// <see cref="A_walls_side_seam_paints_half_its_width_into_the_next_cell"/>
+    /// pinned the lateral half of <see cref="WallRenderGeometry.DrawnBands"/>
+    /// and nothing pinned the downward half; the one mutant that did reach it
+    /// zeroed every seam at once, which is a coarser edit than the sub-mechanism
+    /// this issue exists for. Two measurements, one per axis, and neither stands
+    /// in for the other.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_walls_facade_seam_paints_half_its_width_below_the_facade()
+    {
+        const int tile = CameraView.DefaultTileSize;
+        var scale = CameraView.WorldVisualScale(tile);
+        var cell = new GridPoint(3, 3);
+        var footprintBottom = CameraView.CellTopLeft(cell, tile).Y + tile;
+
+        var bands = WallRenderGeometry.DrawnBands(cell, WallTileVariant.Isolated, tile);
+        var reach = bands.Max(band => band.Y + band.Height) - footprintBottom;
+
+        Assert.Equal(
+            (WallRenderGeometry.FacadeReferenceOverhang +
+             (WallRenderGeometry.EdgeReferenceWidth / 2.0)) * scale,
+            reach,
+            10);
+
+        // And the north clearance is that reach plus the border's own share, so
+        // the constant the ladder is built from cannot drift away from the
+        // measurement above.
+        Assert.Equal(
+            RoomGeometry.NorthWallClearance,
+            (reach / scale) +
+            RoomGeometry.BorderStrokeHalfWidth +
+            RoomGeometry.WallVisibleGap,
+            10);
+    }
+
+    /// <summary>
+    /// The upward half of the same question, which is what makes a wall standing
+    /// in front of a room impossible to clear rather than merely expensive: the
+    /// bright seam along the top of the lifted mass is centred on it, so a wall
+    /// reaches <see cref="WallRenderGeometry.FacadeReferenceHeight"/> plus half a
+    /// seam above its own footprint.
+    /// </summary>
+    [Fact]
+    public void A_walls_top_seam_paints_half_its_width_above_the_lifted_mass()
+    {
+        const int tile = CameraView.DefaultTileSize;
+        var scale = CameraView.WorldVisualScale(tile);
+        var cell = new GridPoint(3, 3);
+        var footprintTop = CameraView.CellTopLeft(cell, tile).Y;
+
+        var bands = WallRenderGeometry.DrawnBands(cell, WallTileVariant.Isolated, tile);
+        var reach = footprintTop - bands.Min(band => band.Y);
+
+        Assert.Equal(
+            (WallRenderGeometry.FacadeReferenceHeight +
+             (WallRenderGeometry.EdgeReferenceWidth / 2.0)) * scale,
             reach,
             10);
     }
