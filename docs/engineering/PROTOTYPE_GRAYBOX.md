@@ -489,15 +489,24 @@ that list and no longer is: see
 [A room's border is under the body standing on it](#a-rooms-border-is-under-the-body-standing-on-it-issue-156).
 
 **One rule governs every mark in this pass: a mark that can share a cell with a
-body must not hide it.** Its fill is translucent; an outline may stay opaque,
-which is what keeps a countable mark countable. The rule is stated once because
-it is not a style preference — three separate marks broke it in turn, each
-landing opaque on the very creature it explains. The simulation is what makes
-this the normal case rather than an edge one: `Drill` requires the post cell,
-`Build` requires the site cell for every one of its ticks, and storing stone
-requires the stockpile cell. So work-goal dots, blueprint delivery pips,
-stockpile occupancy pips and the build progress bar are all translucent, and a
-new mark added to this pass inherits the rule instead of rediscovering it.
+body must not hide it.** Its fill is translucent, which is what keeps a countable
+mark countable. The rule is stated once because it is not a style preference —
+three separate marks broke it in turn, each landing opaque on the very creature it
+explains. The simulation is what makes this the normal case rather than an edge
+one: `Drill` requires the post cell, `Build` requires the site cell for every one
+of its ticks, and storing stone requires the stockpile cell. So work-goal dots,
+blueprint delivery pips, stockpile occupancy pips and the build progress bar are
+all translucent, and a new mark added to this pass inherits the rule instead of
+rediscovering it.
+
+This paragraph used to end "an outline may stay opaque", and Issue #156 is the
+owner's playtest refuting the reason behind that: **an outline covers what it is
+drawn over too**, it just covers less of it. Opacity is what a *fill* is asked
+about, and having no fill answers that question and no other. A stroke that can
+land on a body still owes an answer to "what is underneath me" — the room border's
+is draw order, below. Whether the other marks declared `StrokeOnly` owe the same
+answer is a sweep of its own and has its own Issue; nothing here claims it has
+been done.
 
 ### What now protects that rule (Issue #90)
 
@@ -750,60 +759,103 @@ split is a measurement rather than a named side:
 
 | Layer | Pass | What is in it |
 |---|---|---|
-| `UnderBodies` | below depth, last of that pass | every segment a wall in front does not paint over whole |
-| `OverWallInFront` | above depth | a segment whose entire stroke band is inside the union of the drawn bands of the walls in the row below it |
+| `UnderBodies` | below depth, last of that pass | every piece a wall in front does not paint over whole |
+| `OverWallInFront` | above depth | a piece whose entire stroke band is inside the union of the drawn bands of the walls in the row below it |
 
-`RoomGeometry.IsHiddenByWallInFront` is the whole of the decision. Three things
-about it are load bearing:
+`RoomGeometry.LayerOf` is the whole of the decision, and
+`RoomGeometry.WallBandsInFrontOf` is what it is asked about. Three things are load
+bearing:
 
-- it asks about the **union** of the wall's bands, not about any one of them. The
-  first version asked for a single band and answered "no" for the kitchen, whose
-  south stroke straddles the boundary between the wall's lifted top mass and the
-  bright seam along it, with both of them painting over it;
-- it asks only about the row directly south, because that is the only direction
-  from which a wall is drawn *after* a body standing on the cell. A wall to the
-  north hangs its facade into the cell as well and the body walks over that, so
-  its band is no shelter;
-- answering "no" wrongly costs a segment a wall clips; answering "yes" wrongly
-  costs the whole issue. It is built to fail towards "no".
+- coverage is asked of the **union** of the wall's bands, not of any one of them.
+  The first version asked for a single band and answered "no" for the kitchen,
+  whose south stroke straddles the boundary between the wall's lifted top mass and
+  the bright seam along it, with both of them painting over it;
+- only the row directly south counts, because that is the only direction from
+  which a wall is drawn *after* a body standing on the cell. A wall to the north
+  hangs its facade into the cell as well and the body walks over that, so its band
+  is no shelter;
+- answering "no" wrongly costs a piece a wall clips; answering "yes" wrongly costs
+  the whole issue. It is built to fail towards "no".
+
+### The unit is a piece, not an edge
+
+The first round of Issue #156 classified a whole boundary edge at a time, and
+independent review found what that costs at a corner. On `quarters@19,2` the south
+edge of the cell with a wall in front was swallowed whole and stayed above the
+depth pass; the west edge meeting it is covered by that same wall only along its
+lower few pixels, so it went below and the wall cut it off short. **The outline
+opened at that corner** while the opposite corner of the same room, with no wall in
+front, stayed shut.
+
+That matters more than it sounds. ADR 0013 and Issue #52 bought exactly the
+property that broke: a room is *one line around the whole patch*, not a frame per
+cell. The gap is `8.625 − (inset + 1.0)` reference pixels — the wall's reach above
+its own footprint less where the horizontal stroke's upper edge sits:
+
+| Room | Inset | Gap in the first round | Gap now |
+|---|---:|---:|---:|
+| `quarters@19,2` | 2.625 | **5.0** | −1.0 (they overlap by a half-stroke) |
+| `kitchen@9,6` | 7.125 | 0.5 | −1.0 |
+| `larder@13,6` | 8.625 | −1.0 (already met) | −1.0 |
+
+So `RoomGeometry.BorderPieces` cuts each edge **where the answer changes** instead
+of classifying it whole: the covered tail of a vertical edge goes above the depth
+pass together with the horizontal edge it meets, and the corner closes. The cut
+points are the wall bands' own boundaries along the segment's axis, so the answer
+is constant inside every piece — the same argument `IsCoveredBy` makes across two
+axes, used along one.
+
+`An_outline_closes_at_the_corner_a_wall_in_front_reaches` measures the gap on the
+frame as a player sees it — a piece below the depth pass is followed only as far as
+the wall's paint starts — and `The_first_round_of_156_opened_the_corner_at_a_wall_in_front`
+keeps the "before" column of that table reproducible, the same way every other
+"before" in this corner of the codebase is kept.
+
+### What holds it
 
 `RoomBorderDepthTests` holds both halves, and each half has its own mutant on the
-same one-line predicate:
+same one-line expression:
 
 | Mutation | What fails |
 |---|---|
-| `IsHiddenByWallInFront` hardwired `true` — the whole border back above the depth pass | `No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible` |
-| `IsHiddenByWallInFront` hardwired `false` — the whole border below it | `A_wall_in_front_keeps_the_segment_it_swallows_above_the_depth_pass` |
+| `LayerOf` hardwired `OverWallInFront` — the whole border back above the depth pass | `No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible` |
+| `LayerOf` hardwired `UnderBodies` — the whole border below it | `A_wall_in_front_keeps_the_piece_it_swallows_above_the_depth_pass` |
+| the decision taken per edge instead of per piece | `An_outline_closes_at_the_corner_a_wall_in_front_reaches` |
+| `WallBandsInFrontOf` reading the row *north* instead of south | collapses into the second row above, and fails the same way |
+| partial coverage accepted as coverage instead of `IsCoveredBy` | `No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible` — the larder's two cells move above the depth pass and the goblin on 13,8 is crossed again |
 | either routine moved between passes in `WorldDrawOrder` | `The_two_halves_of_the_border_are_declared_in_the_two_passes`, and `DrawMap_runs_the_declared_steps_in_the_declared_order` |
 | the adapter drawing both layers from one routine | `The_adapter_draws_each_layer_in_the_pass_it_is_declared_in` |
 
 The first check is the owner's complaint as a measurement: for every room, every
-segment drawn above the depth pass, and every cell of the map a body can stand on
+piece drawn above the depth pass, and every cell of the map a body can stand on
 (plus the midpoint of every step between two of them, because a render centre is
 interpolated), an overlap between a stroke and a body's drawn rectangle has to be
 painted over by walls this frame draws *in front of* that body. An overlap with no
 such wall is a creature with a line through it. `The_border_used_to_be_drawn_over_
 every_body_that_stood_on_it` runs the same measurement against the arrangement
 that shipped before, so the "before" column of `evidence/156-before.json` stays
-reproducible and the check is known to be able to fail: 226 crossings, in all four
-rooms of the map, at every tile size. `evidence/156-mutations.json` records each
-mutant against a committed green state, with what stayed green as well as what
-went red — the two halves fail apart, which is what makes them two halves.
+reproducible and the check is known to be able to fail: **226** crossings, in all
+four rooms of the map, at every tile size — pinned as `Assert.Equal(226, …)` and by
+name, not merely as "more than none". `evidence/156-mutations.json` records each
+mutant against a committed green state, with what stayed green as well as what went
+red, and which of the greens is vacuous.
 
-**The price, in two cells.** On the shipped map four segments end up above the
-depth pass — `kitchen@9,6` south at 9,8 and 12,8, `quarters@19,2` south at 19,5
-and 20,5. The larder's two front-wall cells do not, because its ladder reaches
-8.625 reference pixels and one of the two pixels of its stroke is drawn above
-everything the wall paints. Above the depth pass that pixel lands on the goblin
-standing there; below it the wall clips the other pixel, and the larder keeps a
-line half as thick along those two cells. That is the trade, it is taken
-deliberately, and `The_shipped_map_pays_for_the_exception_in_two_cells_of_the_larder`
-pins both halves of it by name so neither can drift unnoticed.
+**The price, in two cells.** The larder's two front-wall cells keep their south
+stroke below the depth pass, because its ladder reaches 8.625 reference pixels and
+one of the two pixels of that stroke is drawn above everything the wall paints.
+Above the depth pass that pixel lands on the goblin standing there; below it the
+wall clips the other pixel, and the larder keeps a line half as thick along those
+two cells — about 4.4 screen pixels against 8.7 on the cells beside it at tile 48.
+The neighbouring kitchen, whose shallower ladder lets the wall swallow its stroke
+whole, keeps full thickness over its own wall, so two adjacent rooms behave
+differently in one frame with nothing in the world to explain it. The trade is
+taken deliberately and `The_shipped_map_pays_for_the_exception_in_two_cells_of_the_larder`
+pins both halves of it by name; the asymmetry is a finding for the debt ledger
+rather than something to argue away here.
 
-The other visible change is a correction rather than a price: the east and west
-edges of a cell with a wall in front used to be drawn over that wall's face for
-their whole height. They now stop where the wall begins, which is what a wall in
-front is supposed to do.
+The other visible change is smaller and is a correction rather than a price: the
+part of an east or west edge that is *behind* a wall in front — above the tail that
+closes the corner — is no longer drawn over that wall's face.
 
 ## Memory of place (Issue #117)
 

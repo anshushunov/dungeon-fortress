@@ -3254,26 +3254,30 @@ public partial class Main : Node2D
     }
 
     /// <summary>
-    /// The other half of the same outline, drawn after the depth pass: the
-    /// segments a wall standing directly in front of the room paints over
-    /// completely.
+    /// The other half of the same outline, drawn after the depth pass: the pieces
+    /// a wall standing directly in front of the room paints over completely.
     ///
     /// A wall to the south is drawn in front of the cell behind it and covers the
     /// bottom of that cell outright — clearing it would cost more than
     /// <c>RoomGeometry.MaximumBorderInset</c>, so no inset is an answer and the
     /// answer is this pass (Issues #139, #147). What Issue #156 changed is how
-    /// much of the border pays that price: only the segments the wall really does
-    /// swallow, which is a measurement
-    /// <see cref="RoomGeometry.IsHiddenByWallInFront"/> makes rather than a side of
-    /// a cell somebody named. Because such a segment is inside the wall's own
-    /// drawn band, it cannot cover a body the wall is not covering already.
+    /// much of the border pays that price: only the pieces the wall really does
+    /// swallow, which is a measurement <see cref="RoomGeometry.LayerOf"/> makes
+    /// rather than a side of a cell somebody named. Because such a piece is inside
+    /// the wall's own drawn band, it cannot cover a body the wall is not covering
+    /// already.
+    ///
+    /// The unit is a piece and not a boundary edge, and that is not a detail:
+    /// classifying whole edges left a wall in front cutting the vertical edge short
+    /// of the horizontal one it meets, and the room's outline opened at that corner
+    /// (<c>RoomGeometry.BorderPieces</c>).
     ///
     /// The loop below repeats <see cref="DrawRoomBorder"/>'s four lines instead of
     /// sharing them: a routine may only call routines of its own pass
     /// (<c>WorldDrawPassGuardTests.A_routine_only_calls_routines_of_its_own_pass</c>),
     /// and a shared drawing helper would be a routine in two passes at once.
-    /// Everything that could actually drift — the colour, the inset, which
-    /// segments belong here — comes from the same pure calls both bodies make.
+    /// Everything that could actually drift — the colour, the inset, which pieces
+    /// belong here — comes from the same pure calls both bodies make.
     /// </summary>
     private void DrawRoomBordersOverWalls(IReadOnlySet<GridPoint> rockTiles)
     {

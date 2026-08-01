@@ -30,17 +30,25 @@ namespace DungeonFortress.Presentation.Tests;
 /// <item>the border is drawn <b>before</b> the depth pass, so the body walks over
 /// it — <see cref="No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible"/>
 /// is what fails if that is undone;</item>
-/// <item><b>except</b> the segments a wall standing directly in front of the room
+/// <item><b>except</b> the pieces a wall standing directly in front of the room
 /// paints over completely, which stay above the depth pass because the wall would
 /// otherwise erase them outright and no inset buys them back (Issues #139, #147) —
-/// <see cref="A_wall_in_front_keeps_the_segment_it_swallows_above_the_depth_pass"/>
+/// <see cref="A_wall_in_front_keeps_the_piece_it_swallows_above_the_depth_pass"/>
 /// is what fails if <em>that</em> is undone.</item>
 /// </list>
 ///
 /// <para>
-/// Both halves are one predicate, <see cref="RoomGeometry.IsHiddenByWallInFront"/>,
-/// so each half has a one-line mutant: hardwire it <c>true</c> and the first check
-/// reddens, hardwire it <c>false</c> and the second does.
+/// Both halves are one expression, <see cref="RoomGeometry.LayerOf"/>, so each half
+/// has a one-line mutant: hardwire it to <c>OverWallInFront</c> and the first check
+/// reddens, to <c>UnderBodies</c> and the second does.
+/// </para>
+///
+/// <para>
+/// <b>Pieces, not edges.</b> The first round of this issue classified a whole
+/// boundary edge at a time and independent review found the corner that costs:
+/// <see cref="An_outline_closes_at_the_corner_a_wall_in_front_reaches"/> measures
+/// it, and <see cref="The_first_round_of_156_opened_the_corner_at_a_wall_in_front"/>
+/// keeps the "before" of that column reproducible too.
 /// </para>
 /// </summary>
 public sealed class RoomBorderDepthTests
@@ -92,7 +100,7 @@ public sealed class RoomBorderDepthTests
             Assert.NotNull(routine);
             Assert.True(
                 routine!.Pass > WorldDrawPass.Depth,
-                $"'{name}' is declared {routine.Pass}. The segment a wall in front " +
+                $"'{name}' is declared {routine.Pass}. The piece a wall in front " +
                 "swallows is only kept by being drawn after the wall.");
             Assert.Equal(OverlayMark.RoomBorder, routine.Mark);
         }
@@ -107,10 +115,10 @@ public sealed class RoomBorderDepthTests
     }
 
     /// <summary>
-    /// The two layers partition the outline: every segment is drawn in exactly one
-    /// pass, none twice and none not at all. Splitting a line in two is how a line
-    /// goes missing, so this is asked before anything is asked about where the
-    /// halves land.
+    /// The two layers partition the outline exactly: the pieces of one boundary
+    /// edge run end to end, in order, from the edge's own start to its own end, and
+    /// nothing is drawn twice. Cutting a line in two is how a line goes missing, so
+    /// this is asked before anything is asked about where the halves land.
     /// </summary>
     [Theory]
     [MemberData(nameof(TileSizes))]
@@ -119,26 +127,51 @@ public sealed class RoomBorderDepthTests
         var state = PresentationFixtures.Baseline(1);
         var rock = state.Map.RockTiles.ToHashSet();
         var scale = CameraView.WorldVisualScale(tileSize);
-        var total = 0;
+        var checkedEdges = 0;
+
         foreach (var room in state.Rooms)
         {
             var inset = RoomGeometry.BorderInsetFor(room.Purpose, room.Perimeter, rock) * scale;
-            var all = RoomGeometry.BorderEdges(room.Perimeter, tileSize, inset)
-                .Select(edge => edge.Segment)
-                .ToArray();
+            var pieces = RoomGeometry.BorderPieces(room.Perimeter, tileSize, inset, rock);
+
+            // Every piece is in exactly one layer, and the two the adapter asks for
+            // are the same pieces split by that layer and nothing else.
             var under = RoomGeometry.Border(
                 room.Perimeter, tileSize, inset, rock, RoomBorderLayer.UnderBodies);
             var over = RoomGeometry.Border(
                 room.Perimeter, tileSize, inset, rock, RoomBorderLayer.OverWallInFront);
-
-            Assert.Equal(all.Length, under.Count + over.Count);
+            Assert.Equal(pieces.Count, under.Count + over.Count);
             Assert.Equal(
-                all.OrderBy(Key, StringComparer.Ordinal),
+                pieces.Select(piece => piece.Segment).OrderBy(Key, StringComparer.Ordinal),
                 under.Concat(over).OrderBy(Key, StringComparer.Ordinal));
-            total += all.Length;
+
+            foreach (var edge in RoomGeometry.BorderEdges(room.Perimeter, tileSize, inset))
+            {
+                var mine = pieces
+                    .Where(piece => piece.Cell == edge.Cell && piece.Side == edge.Side)
+                    .ToArray();
+                Assert.NotEmpty(mine);
+
+                var horizontal = Math.Abs(edge.Segment.To.X - edge.Segment.From.X) >=
+                    Math.Abs(edge.Segment.To.Y - edge.Segment.From.Y);
+                var low = horizontal ? edge.Segment.From.X : edge.Segment.From.Y;
+                var high = horizontal ? edge.Segment.To.X : edge.Segment.To.Y;
+                var walked = low;
+                foreach (var piece in mine)
+                {
+                    var from = horizontal ? piece.Segment.From.X : piece.Segment.From.Y;
+                    var to = horizontal ? piece.Segment.To.X : piece.Segment.To.Y;
+                    Assert.Equal(walked, from, 9);
+                    Assert.True(to > from, $"{room.Id} {edge.Side} has an empty piece");
+                    walked = to;
+                }
+
+                Assert.Equal(high, walked, 9);
+                checkedEdges++;
+            }
         }
 
-        Assert.True(total > 0, "the shipped map draws no border at all");
+        Assert.True(checkedEdges > 0, "the shipped map draws no border at all");
     }
 
     // ---------------------------------------------------- the owner's complaint
@@ -150,8 +183,8 @@ public sealed class RoomBorderDepthTests
     ///
     /// <para>
     /// "Visible" is not assumed — for every overlap between a stroke and a body's
-    /// drawn rectangle, the check looks for a rock tile whose own drawn bands cover
-    /// that overlap whole and whose depth anchor is behind the body's, i.e. a wall
+    /// drawn rectangle, the check looks for rock tiles whose own drawn bands cover
+    /// that overlap whole and whose depth anchor is behind the body's, i.e. walls
     /// this very frame draws in front of that body. An overlap with no such wall is
     /// a creature with a line through it, which is the defect.
     /// </para>
@@ -169,7 +202,7 @@ public sealed class RoomBorderDepthTests
     [MemberData(nameof(TileSizes))]
     public void No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible(int tileSize)
     {
-        var crossings = Measure(tileSize, RoomGeometry.LayerOf);
+        var crossings = Measure(tileSize, Arrangement.Today);
         Assert.True(crossings.Count == 0, Payload(tileSize, crossings));
     }
 
@@ -180,20 +213,30 @@ public sealed class RoomBorderDepthTests
     /// gone, and so the check above is known to be able to fail.
     ///
     /// <para>
-    /// What it pins is the frame the owner sent: the goblins on the bottom row of
-    /// the kitchen and the larder, each with its own room's line across it. Both
-    /// rooms are named here rather than counted, because a count would stay green
-    /// if the defect moved to two other rooms.
+    /// The count is pinned and not merely required to be positive. It is the number
+    /// the issue and the documentation both quote, and a number quoted in prose with
+    /// only <c>&gt; 0</c> behind it is a number nothing holds — independent review
+    /// found exactly that here, against
+    /// <c>RoomWallClearanceTests.The_pre_147_ladder…</c>, which pins its own figure.
+    /// The rooms are named as well as counted, because a count alone would stay
+    /// green if the defect moved to two other rooms.
     /// </para>
     /// </summary>
     [Theory]
     [MemberData(nameof(TileSizes))]
     public void The_border_used_to_be_drawn_over_every_body_that_stood_on_it(int tileSize)
     {
-        var crossings = Measure(tileSize, PreIssue156Layer);
+        var crossings = Measure(tileSize, Arrangement.BeforeIssue156);
         var payload = Payload(tileSize, crossings);
 
-        Assert.True(crossings.Count > 0, payload);
+        Assert.True(crossings.Count == 226, payload);
+        Assert.Equal(
+            new[] { "farm@1,1", "kitchen@9,6", "larder@13,6", "quarters@19,2" },
+            crossings.Select(row => row.Room).Distinct().OrderBy(
+                name => name,
+                StringComparer.Ordinal));
+
+        // The frame the owner sent, by name: the goblins on the bottom row.
         Assert.True(crossings.Any(row => row.Room == "kitchen@9,6" && row.Body == "11,8"), payload);
         Assert.True(crossings.Any(row => row.Room == "larder@13,6" && row.Body == "16,8"), payload);
 
@@ -209,17 +252,16 @@ public sealed class RoomBorderDepthTests
 
     /// <summary>
     /// The claim the sweep above samples, made once for every body position there
-    /// is: a stroke drawn above the depth pass sits inside a single drawn band of
-    /// the wall directly in front of its own cell, and that wall is drawn after any
-    /// body whose sprite can reach the stroke at all.
+    /// is: a piece drawn above the depth pass sits inside the drawn bands of walls
+    /// that are drawn after any body whose sprite can reach it at all.
     ///
     /// <para>
-    /// The second half is arithmetic rather than a sweep. A body's sprite reaches
-    /// at most half of <see cref="CameraView.GoblinDrawSize"/> below its own render
-    /// centre, so the southernmost centre from which a body can touch the stroke is
-    /// the stroke's lower edge plus that half — and every such centre has to be
-    /// north of the wall's depth anchor, which is the bottom of the wall's own
-    /// footprint. North of it means drawn before it, which means covered by it.
+    /// The reach is arithmetic rather than a sweep. A body's sprite reaches at most
+    /// half of <see cref="CameraView.GoblinDrawSize"/> below its own render centre,
+    /// so the southernmost centre from which a body can touch the stroke is the
+    /// stroke's lower edge plus that half — and
+    /// <see cref="InFrontOfEverybodyTouching"/> keeps only walls anchored south of
+    /// that point, which are therefore drawn after every one of those bodies.
     /// </para>
     /// </summary>
     [Theory]
@@ -233,19 +275,19 @@ public sealed class RoomBorderDepthTests
         var walls = Walls(rock, tileSize);
         var checkedStrokes = 0;
 
-        foreach (var (room, edge) in Edges(state, rock, tileSize))
+        foreach (var (room, piece) in Pieces(state, rock, tileSize, Arrangement.Today))
         {
-            if (RoomGeometry.LayerOf(edge, rock, tileSize) != RoomBorderLayer.OverWallInFront)
+            if (piece.Layer != RoomBorderLayer.OverWallInFront)
             {
                 continue;
             }
 
-            var stroke = RoomGeometry.StrokeBand(edge.Segment, half);
+            var stroke = RoomGeometry.StrokeBand(piece.Segment, half);
             var covering = InFrontOfEverybodyTouching(stroke, walls, tileSize);
             Assert.True(
                 covering.Count > 0 && RoomGeometry.IsCoveredBy(stroke, covering),
-                $"{room} {edge.Side} at {edge.Cell.X},{edge.Cell.Y} is drawn above the " +
-                "depth pass, and the walls that this frame draws in front of every " +
+                $"{room} {piece.Side} at {piece.Cell.X},{piece.Cell.Y} is drawn above " +
+                "the depth pass, and the walls that this frame draws in front of every " +
                 "body able to touch it do not paint over the whole stroke. Part of " +
                 "that line lands on whoever is standing there, which is Issue #156.");
             checkedStrokes++;
@@ -253,8 +295,8 @@ public sealed class RoomBorderDepthTests
 
         Assert.True(
             checkedStrokes > 0,
-            "no segment of the shipped map is drawn above the depth pass, so this " +
-            "says nothing — see A_wall_in_front_keeps_the_segment_it_swallows_above_" +
+            "no piece of the shipped map is drawn above the depth pass, so this " +
+            "says nothing — see A_wall_in_front_keeps_the_piece_it_swallows_above_" +
             "the_depth_pass for why there have to be some.");
     }
 
@@ -264,19 +306,20 @@ public sealed class RoomBorderDepthTests
     /// The second half, and the reason the first one cannot simply be "draw the
     /// whole border under the depth pass": a wall standing directly in front of a
     /// room paints over the bottom of the room's cell outright, so a border drawn
-    /// under the depth pass loses that segment completely — the failure
+    /// under the depth pass loses that piece completely — the failure
     /// <see cref="RoomWallClearanceTests.A_wall_in_front_of_a_room_cannot_be_cleared_by_any_inset"/>
     /// measures as impossible to fix with any inset.
     ///
     /// <para>
-    /// The shipped map has such segments, they are drawn above the depth pass, and
+    /// The shipped map has such pieces, they are drawn above the depth pass, and
     /// each of them really is painted over whole — measured against the wall's own
-    /// drawn bands, so "erased" is a fact about the frame and not a worry.
+    /// drawn bands, and against a wall set this check picks itself rather than the
+    /// row the production predicate looks at.
     /// </para>
     /// </summary>
     [Theory]
     [MemberData(nameof(TileSizes))]
-    public void A_wall_in_front_keeps_the_segment_it_swallows_above_the_depth_pass(int tileSize)
+    public void A_wall_in_front_keeps_the_piece_it_swallows_above_the_depth_pass(int tileSize)
     {
         var state = PresentationFixtures.Baseline(1);
         var rock = state.Map.RockTiles.ToHashSet();
@@ -285,27 +328,100 @@ public sealed class RoomBorderDepthTests
         var walls = Walls(rock, tileSize);
         var swallowed = new List<string>();
 
-        foreach (var (room, edge) in Edges(state, rock, tileSize))
+        foreach (var (room, piece) in Pieces(state, rock, tileSize, Arrangement.Today))
         {
-            var stroke = RoomGeometry.StrokeBand(edge.Segment, half);
+            var stroke = RoomGeometry.StrokeBand(piece.Segment, half);
             var covering = InFrontOfEverybodyTouching(stroke, walls, tileSize);
             if (covering.Count == 0 || !RoomGeometry.IsCoveredBy(stroke, covering))
             {
                 continue;
             }
 
-            swallowed.Add($"{room} {edge.Side} at {edge.Cell.X},{edge.Cell.Y}");
-            Assert.Equal(
-                RoomBorderLayer.OverWallInFront,
-                RoomGeometry.LayerOf(edge, rock, tileSize));
+            swallowed.Add($"{room} {piece.Side} at {piece.Cell.X},{piece.Cell.Y}");
+            Assert.Equal(RoomBorderLayer.OverWallInFront, piece.Layer);
         }
 
         Assert.True(
             swallowed.Count > 0,
-            "no segment of the shipped map is painted over whole by a wall in front " +
+            "no piece of the shipped map is painted over whole by a wall in front " +
             "of it, so the exception this layer exists for is excusing nothing. " +
             "Either the map changed or the layer has stopped selecting anything, " +
             "and the second one is a room silently losing its south edge.");
+    }
+
+    // ------------------------------------------------------------- the corner
+
+    /// <summary>
+    /// ADR 0013 and Issue #52 bought one property above all: a room is <b>one line
+    /// around the whole patch</b>, not a frame per cell. Splitting that line between
+    /// two passes must not open it.
+    ///
+    /// <para>
+    /// The corner at risk is where a horizontal edge meets a vertical one on a cell
+    /// with a wall in front. The horizontal edge is swallowed whole and is drawn
+    /// after the wall; the vertical edge is swallowed only along its lower few
+    /// pixels. Classifying whole edges therefore put one of them above the depth
+    /// pass and the other below it, and the wall cut the second one off short of
+    /// the first — see
+    /// <see cref="The_first_round_of_156_opened_the_corner_at_a_wall_in_front"/> for
+    /// what that measured.
+    /// </para>
+    ///
+    /// <para>
+    /// What is measured here is the line as a player sees it: the lowest point the
+    /// vertical stroke is still visible at, with a piece below the depth pass cut
+    /// off where the wall's paint starts, against the top of the horizontal stroke
+    /// it has to reach. A positive gap is a hole in the outline.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(TileSizes))]
+    public void An_outline_closes_at_the_corner_a_wall_in_front_reaches(int tileSize)
+    {
+        var corners = Corners(tileSize, Arrangement.Today);
+
+        Assert.NotEmpty(corners);
+        Assert.All(
+            corners,
+            corner => Assert.True(
+                corner.GapReferencePx <= 0,
+                $"{corner.Room} {corner.Side} at {corner.Cell}: the vertical stroke " +
+                $"stops {corner.GapReferencePx} reference px short of the horizontal " +
+                "one it meets, so the room's outline has a hole at that corner. A " +
+                "room is one line around the patch, not a frame per cell (ADR 0013, " +
+                "Issue #52)."));
+    }
+
+    /// <summary>
+    /// The "before" column of the corner, kept reproducible the same way every other
+    /// "before" in this file is: the arrangement that produced it is restated rather
+    /// than remembered.
+    ///
+    /// The gap is <c>8.625 − (inset + 1.0)</c> reference pixels — the wall's reach
+    /// above its own footprint, less where the horizontal stroke's upper edge sits.
+    /// It is pinned per room because that is what makes it a finding rather than an
+    /// impression: 5.0 on the quarters, 0.5 on the kitchen, and none at all on the
+    /// larder, whose ladder is deep enough that the two already meet.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(TileSizes))]
+    public void The_first_round_of_156_opened_the_corner_at_a_wall_in_front(int tileSize)
+    {
+        var corners = Corners(tileSize, Arrangement.FirstRoundOf156);
+
+        Assert.Equal(
+            new Dictionary<string, double>(StringComparer.Ordinal)
+            {
+                ["kitchen@9,6"] = 0.5,
+                ["larder@13,6"] = -1.0,
+                ["quarters@19,2"] = 5.0,
+            },
+            corners
+                .GroupBy(corner => corner.Room, StringComparer.Ordinal)
+                .ToDictionary(
+                    group => group.Key,
+                    group => Math.Round(group.Max(corner => corner.GapReferencePx), 6),
+                    StringComparer.Ordinal));
     }
 
     // ---------------------------------------------------------- adapter wiring
@@ -356,20 +472,18 @@ public sealed class RoomBorderDepthTests
     }
 
     /// <summary>
-    /// Which segments of the shipped map the exception actually buys, by name, and
-    /// the one price this issue pays — stated here rather than left in a commit
-    /// message, because it is an appearance change and the next person to look at
-    /// the larder deserves to find the reason rather than a suspicion.
+    /// Which pieces of the shipped map the exception actually buys, by name, and the
+    /// one price this issue pays — stated here rather than left in a commit message,
+    /// because it is an appearance change and the next person to look at the larder
+    /// deserves to find the reason rather than a suspicion.
     ///
     /// <para>
-    /// Four segments of the shipped map are drawn above the depth pass: the
-    /// kitchen's and the quarters' south edges where a wall stands in front of
-    /// them. The larder's two are <em>not</em>, and that is the price: its ladder
-    /// reaches 8.625 reference pixels, deep enough that one of the two reference
-    /// pixels of its stroke is drawn above everything the wall paints. Drawn after
-    /// the depth pass that one pixel would land on the goblin standing there, which
-    /// is the frame the owner sent; drawn before it, the wall clips the other
-    /// pixel and the room keeps a line half as thick along those two cells.
+    /// The larder's two front-wall cells keep their south stroke below the depth
+    /// pass, because its ladder reaches 8.625 reference pixels and one of the two
+    /// pixels of that stroke is drawn above everything the wall paints. Above the
+    /// depth pass that one pixel lands on the goblin standing there, which is the
+    /// frame the owner sent; below it the wall clips the other pixel, and the room
+    /// keeps a line half as thick along those two cells.
     /// </para>
     /// </summary>
     [Theory]
@@ -380,14 +494,13 @@ public sealed class RoomBorderDepthTests
         var rock = state.Map.RockTiles.ToHashSet();
         var scale = CameraView.WorldVisualScale(tileSize);
         var half = RoomGeometry.BorderStrokeHalfWidth * scale;
-        var walls = Walls(rock, tileSize);
         var above = new List<string>();
         var clipped = new Dictionary<string, double>(StringComparer.Ordinal);
 
-        foreach (var (room, edge) in Edges(state, rock, tileSize))
+        foreach (var (room, piece) in Pieces(state, rock, tileSize, Arrangement.Today))
         {
-            var name = $"{room} {edge.Side} {edge.Cell.X},{edge.Cell.Y}";
-            if (RoomGeometry.LayerOf(edge, rock, tileSize) == RoomBorderLayer.OverWallInFront)
+            var name = $"{room} {piece.Side} {piece.Cell.X},{piece.Cell.Y}";
+            if (piece.Layer == RoomBorderLayer.OverWallInFront)
             {
                 above.Add(name);
                 continue;
@@ -398,13 +511,13 @@ public sealed class RoomBorderDepthTests
             // reference pixels. Only that wall: a seam belonging to a wall one
             // column across paints a sliver of the same stroke without hiding the
             // rest of it, and a sliver is not what this is measuring.
-            var front = new GridPoint(edge.Cell.X, edge.Cell.Y + 1);
+            var front = new GridPoint(piece.Cell.X, piece.Cell.Y + 1);
             if (!rock.Contains(front))
             {
                 continue;
             }
 
-            var stroke = RoomGeometry.StrokeBand(edge.Segment, half);
+            var stroke = RoomGeometry.StrokeBand(piece.Segment, half);
             var covering = WallRenderGeometry.DrawnBands(
                 front,
                 WallTopology.SelectVariant(front, rock),
@@ -419,10 +532,21 @@ public sealed class RoomBorderDepthTests
         Assert.Equal(
             new[]
             {
+                // The south strokes a wall in front swallows whole, and the tails
+                // of the vertical strokes meeting them, which is what closes the
+                // corner. quarters@21,5's south stroke is here for a smaller
+                // reason worth naming: only the first 0.625 reference px of it,
+                // the sliver inside the side seam of the wall at 20,6, which is a
+                // wall of the same row and therefore also drawn after any body on
+                // 21,5. The rest of that stroke is below the depth pass.
+                "kitchen@9,6 East 12,8",
                 "kitchen@9,6 South 12,8",
                 "kitchen@9,6 South 9,8",
+                "kitchen@9,6 West 9,8",
                 "quarters@19,2 South 19,5",
                 "quarters@19,2 South 20,5",
+                "quarters@19,2 South 21,5",
+                "quarters@19,2 West 19,5",
             },
             above.OrderBy(name => name, StringComparer.Ordinal));
 
@@ -437,6 +561,30 @@ public sealed class RoomBorderDepthTests
 
     // ------------------------------------------------------------- the measure
 
+    /// <summary>
+    /// Which arrangement of the border a measurement is taken against.
+    /// </summary>
+    private enum Arrangement
+    {
+        /// <summary>What the adapter draws now: one piece per run of one answer.</summary>
+        Today,
+
+        /// <summary>
+        /// What shipped before Issue #156: every segment of every outline drawn after
+        /// the depth pass. Restated rather than remembered, because a "before" column
+        /// has to stay reproducible once the "before" is gone — the same reason
+        /// <c>RoomWallClearanceTests.PreIssue147Inset</c> exists.
+        /// </summary>
+        BeforeIssue156,
+
+        /// <summary>
+        /// Issue #156's own first round: the same decision taken per boundary edge
+        /// rather than per piece of one. It is what opened the corner at a wall in
+        /// front, and it is kept for the same reason as the one above.
+        /// </summary>
+        FirstRoundOf156,
+    }
+
     /// <param name="Room">The room whose outline this stroke belongs to.</param>
     /// <param name="Side">Which side of its cell the stroke faces.</param>
     /// <param name="Cell">The room cell the stroke was drawn for.</param>
@@ -449,26 +597,55 @@ public sealed class RoomBorderDepthTests
         string Body,
         double OverlapPx);
 
-    /// <summary>
-    /// The arrangement this issue replaced: every segment of every outline drawn
-    /// after the depth pass, which is what <c>WorldDrawOrder</c> declared until
-    /// Issue #156. Restated here because a "before" column has to stay reproducible
-    /// once the "before" is gone — the same reason
-    /// <c>RoomWallClearanceTests.PreIssue147Inset</c> exists.
-    /// </summary>
-    private static RoomBorderLayer PreIssue156Layer(
-        RoomBorderEdge edge,
-        IReadOnlySet<GridPoint> wallTiles,
-        int tileSize) =>
-        RoomBorderLayer.OverWallInFront;
+    /// <summary>Every room's outline as the pieces one arrangement draws.</summary>
+    private static IReadOnlyList<(string Room, RoomBorderPiece Piece)> Pieces(
+        PrototypeSnapshot state,
+        IReadOnlySet<GridPoint> rock,
+        int tileSize,
+        Arrangement arrangement)
+    {
+        var scale = CameraView.WorldVisualScale(tileSize);
+        var half = RoomGeometry.BorderStrokeHalfWidth * scale;
+        var pieces = new List<(string, RoomBorderPiece)>();
+        foreach (var room in state.Rooms)
+        {
+            var inset = RoomGeometry.BorderInsetFor(room.Purpose, room.Perimeter, rock) * scale;
+            if (arrangement == Arrangement.Today)
+            {
+                foreach (var piece in RoomGeometry.BorderPieces(
+                             room.Perimeter,
+                             tileSize,
+                             inset,
+                             rock))
+                {
+                    pieces.Add((room.Id, piece));
+                }
+
+                continue;
+            }
+
+            foreach (var edge in RoomGeometry.BorderEdges(room.Perimeter, tileSize, inset))
+            {
+                var stroke = RoomGeometry.StrokeBand(edge.Segment, half);
+                var layer = arrangement == Arrangement.BeforeIssue156
+                    ? RoomBorderLayer.OverWallInFront
+                    : RoomGeometry.LayerOf(
+                        stroke,
+                        RoomGeometry.WallBandsInFrontOf(edge.Cell, stroke, rock, tileSize));
+                pieces.Add((
+                    room.Id,
+                    new RoomBorderPiece(edge.Cell, edge.Side, edge.Segment, layer)));
+            }
+        }
+
+        return pieces;
+    }
 
     /// <summary>
     /// Every place a stroke drawn above the depth pass lands on a body that no wall
     /// is drawing in front of.
     /// </summary>
-    private static IReadOnlyList<Crossing> Measure(
-        int tileSize,
-        Func<RoomBorderEdge, IReadOnlySet<GridPoint>, int, RoomBorderLayer> layer)
+    private static IReadOnlyList<Crossing> Measure(int tileSize, Arrangement arrangement)
     {
         var state = PresentationFixtures.Baseline(1);
         var rock = state.Map.RockTiles.ToHashSet();
@@ -478,14 +655,14 @@ public sealed class RoomBorderDepthTests
         var walls = Walls(rock, tileSize);
 
         var crossings = new List<Crossing>();
-        foreach (var (room, edge) in Edges(state, rock, tileSize))
+        foreach (var (room, piece) in Pieces(state, rock, tileSize, arrangement))
         {
-            if (layer(edge, rock, tileSize) != RoomBorderLayer.OverWallInFront)
+            if (piece.Layer != RoomBorderLayer.OverWallInFront)
             {
                 continue;
             }
 
-            var stroke = RoomGeometry.StrokeBand(edge.Segment, half);
+            var stroke = RoomGeometry.StrokeBand(piece.Segment, half);
             foreach (var body in bodies)
             {
                 if (Overlap(stroke, body.Rect) is not { } overlap)
@@ -507,8 +684,8 @@ public sealed class RoomBorderDepthTests
                 {
                     crossings.Add(new Crossing(
                         room,
-                        edge.Side.ToString(),
-                        $"{edge.Cell.X},{edge.Cell.Y}",
+                        piece.Side.ToString(),
+                        $"{piece.Cell.X},{piece.Cell.Y}",
                         body.Name,
                         Math.Round(overlap.Width * overlap.Height, 6)));
                 }
@@ -521,6 +698,90 @@ public sealed class RoomBorderDepthTests
             .ThenBy(row => row.Side, StringComparer.Ordinal)
             .ThenBy(row => row.Body, StringComparer.Ordinal)
             .ToArray();
+    }
+
+    /// <param name="Room">The room whose outline this corner belongs to.</param>
+    /// <param name="Cell">The cell with a wall in front of it.</param>
+    /// <param name="Side">The vertical side whose stroke has to reach the horizontal one.</param>
+    /// <param name="GapReferencePx">
+    /// How far short of the horizontal stroke the vertical one stops, in reference
+    /// pixels. Zero or less means they meet.
+    /// </param>
+    private sealed record Corner(string Room, string Cell, string Side, double GapReferencePx);
+
+    /// <summary>
+    /// Every corner where a wall in front can open the outline, and by how much.
+    ///
+    /// <para>
+    /// The vertical stroke is followed piece by piece. A piece above the depth pass
+    /// is drawn whole; a piece below it is cut off where the wall in front starts
+    /// painting, because that is what the frame does to it. The lowest point still
+    /// visible is compared with the top of the horizontal stroke of the same cell —
+    /// the one the corner turns into.
+    /// </para>
+    /// </summary>
+    private static IReadOnlyList<Corner> Corners(int tileSize, Arrangement arrangement)
+    {
+        var state = PresentationFixtures.Baseline(1);
+        var rock = state.Map.RockTiles.ToHashSet();
+        var scale = CameraView.WorldVisualScale(tileSize);
+        var half = RoomGeometry.BorderStrokeHalfWidth * scale;
+        var pieces = Pieces(state, rock, tileSize, arrangement);
+        var corners = new List<Corner>();
+
+        foreach (var group in pieces.GroupBy(item => (item.Room, item.Piece.Cell)))
+        {
+            var (room, cell) = group.Key;
+            var front = new GridPoint(cell.X, cell.Y + 1);
+            if (!rock.Contains(front))
+            {
+                continue;
+            }
+
+            var south = group
+                .Where(item => item.Piece.Side == WallNeighbors.South)
+                .Select(item => RoomGeometry.StrokeBand(item.Piece.Segment, half))
+                .ToArray();
+            if (south.Length == 0)
+            {
+                continue;
+            }
+
+            // Where the wall in front starts painting: above this the vertical
+            // stroke survives, below it the wall covers the whole of the column.
+            var wallTop = WallRenderGeometry
+                .DrawnBands(front, WallTopology.SelectVariant(front, rock), tileSize)
+                .Min(band => band.Y);
+            var target = south.Min(band => band.Y);
+
+            foreach (var side in new[] { WallNeighbors.West, WallNeighbors.East })
+            {
+                var vertical = group
+                    .Where(item => item.Piece.Side == side)
+                    .ToArray();
+                if (vertical.Length == 0)
+                {
+                    continue;
+                }
+
+                var visible = vertical.Max(item =>
+                {
+                    var stroke = RoomGeometry.StrokeBand(item.Piece.Segment, half);
+                    var bottom = stroke.Y + stroke.Height;
+                    return item.Piece.Layer == RoomBorderLayer.OverWallInFront
+                        ? bottom
+                        : Math.Max(stroke.Y, Math.Min(bottom, wallTop));
+                });
+
+                corners.Add(new Corner(
+                    room,
+                    $"{cell.X},{cell.Y}",
+                    side.ToString(),
+                    Math.Round((target - visible) / scale, 6)));
+            }
+        }
+
+        return corners;
     }
 
     /// <param name="Anchor">The Y the depth pass sorts this wall by.</param>
@@ -559,23 +820,6 @@ public sealed class RoomBorderDepthTests
             .SelectMany(wall => wall.Bands)
             .Where(band => Overlap(band, stroke) is not null)
             .ToArray();
-    }
-
-    /// <summary>Every room's outline, with the room's id kept alongside.</summary>
-    private static IEnumerable<(string Room, RoomBorderEdge Edge)> Edges(
-        PrototypeSnapshot state,
-        IReadOnlySet<GridPoint> rock,
-        int tileSize)
-    {
-        var scale = CameraView.WorldVisualScale(tileSize);
-        foreach (var room in state.Rooms)
-        {
-            var inset = RoomGeometry.BorderInsetFor(room.Purpose, room.Perimeter, rock) * scale;
-            foreach (var edge in RoomGeometry.BorderEdges(room.Perimeter, tileSize, inset))
-            {
-                yield return (room.Id, edge);
-            }
-        }
     }
 
     /// <param name="Name">The cell, or the step, this position is.</param>

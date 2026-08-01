@@ -274,8 +274,14 @@ public sealed class WorldDrawPassGuardTests
 
     /// <summary>
     /// The other half of the same claim: a mark declared as strokes only must not
-    /// grow a fill. An outline may be opaque precisely because it covers nothing,
-    /// and that stops being true the moment somebody fills it in.
+    /// grow a fill. A declaration of "no fill" that grows one is a declaration
+    /// about nothing, and the alpha check above has nothing left to hold it to.
+    ///
+    /// This used to say "an outline may be opaque precisely because it covers
+    /// nothing". Issue #156 retired that argument — an outline covers what it is
+    /// drawn over as well, just less of it — and
+    /// <see cref="OverlayMarkPolicy.StrokeOnly"/> now says what the policy actually
+    /// claims. What this check holds is unchanged.
     /// </summary>
     [Fact]
     public void A_stroke_only_mark_draws_no_fill_at_all()
