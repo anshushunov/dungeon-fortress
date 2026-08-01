@@ -556,17 +556,26 @@ gate-решение `CONTINUE`, счётчик `ADJUST` остаётся 0, см
 [#165](https://github.com/anshushunov/dungeon-fortress/issues/165), поза `flinch`
 без копья. Блок не запущен: он начинается следующей сессией.
 
-**Смержено этим блоком** — коммиты названы поимённо, потому что `git log` перестаёт
-воспроизводить это дерево после следующего merge: `cbbd588` и `35ea72d`.
-[#156](https://github.com/anshushunov/dungeon-fortress/issues/156) граница
-помещения рисуется под существом (PR #166) и
-[#163](https://github.com/anshushunov/dungeon-fortress/issues/163) пак существ v2
-под масштаб 170 % (PR #162). Картинка от второго не изменилась: рантайм грузит
-v1, подключение — внутри [#77](https://github.com/anshushunov/dungeon-fortress/issues/77).
+**Смержено этим блоком** — коммиты названы поимённо, потому что `git log`
+перестаёт воспроизводить это дерево после следующего merge; соответствие PR и
+коммита получено `gh pr list --state merged --json number,title,mergeCommit`:
 
-**Ждут merge:** PR #164 — правило подхода в бою (#129), после строки gate в
-журнале выше; PR #161 — [ADR 0019](../decisions/0019-verdict-not-order.md),
-принятый владельцем, условие входа среза 3.
+- `35ea72d` — [#163](https://github.com/anshushunov/dungeon-fortress/issues/163)
+  пак существ v2 под масштаб 170 % (PR #162). Картинка не изменилась: рантайм
+  грузит v1, подключение — внутри
+  [#77](https://github.com/anshushunov/dungeon-fortress/issues/77);
+- `cbbd588` — [#156](https://github.com/anshushunov/dungeon-fortress/issues/156)
+  граница помещения рисуется под существом (PR #166);
+- `0f20868` — [#160](https://github.com/anshushunov/dungeon-fortress/issues/160)
+  [ADR 0019](../decisions/0019-verdict-not-order.md) «вердикт о существе — можно,
+  приказ — нельзя» (PR #161), условие входа среза 3;
+- `c5aa31b` — состояние блока боя: журнал, `NOW`, очередь, реестр (PR #172);
+- `15bab1b` — [#129](https://github.com/anshushunov/dungeon-fortress/issues/129)
+  в бою цель движения — свободная клетка рядом с врагом (PR #164), сам
+  gameplay-слайс блока.
+
+Ничего из блока merge не ждёт: последним ушёл PR #164, и playtest владельца
+проходил уже на этом дереве.
 
 **Что ушло из блока в очередь**, всё — находки независимого review, каждая с
 измерением: [#165](https://github.com/anshushunov/dungeon-fortress/issues/165),
