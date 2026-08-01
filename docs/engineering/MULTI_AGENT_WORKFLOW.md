@@ -469,7 +469,7 @@ reasoning budget фиксируются в handoff для оценки каче�
 Сжато 2026-07-31 решением владельца (Issue
 [#122](https://github.com/anshushunov/dungeon-fortress/issues/122)): пять
 строк, разные **виды работы**, а не разные даты. Полная таблица (2026-07-29 —
-2026-07-31, 22 строки) и все одиннадцать выводов —
+2026-07-31, 22 строки) и все четырнадцать выводов —
 [`archive/CALIBRATION_HISTORY.md`](archive/CALIBRATION_HISTORY.md); ни одно
 число не потеряно.
 
