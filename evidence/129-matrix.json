@@ -85,7 +85,8 @@
           "mechanism": "Fighters now stand around the raider instead of behind one another. A raider stands at the larder, so its neighbours are larder and kitchen tiles — and that is where the defenders now break. Memory of place (5.1, Issue #117) then refuses work at a tile where a creature's nerve failed, so the tiles the food chain runs through are the tiles that get forbidden.",
           "numbers": "baseline/20260728: refused_place_of_panic 12 → 412, meals produced 117 → 75, average satiety 45 → 1, the domain falls at tick 2299 of hunger rather than of the raid. baseline/20260726 shows the same channel without the fall: 28 → 187.",
           "inTheScore": "Of the -883 points on baseline/20260728, -1000 is the band moving raided → fallen and -80 is survivors going to zero. Every combat term moved the other way: stolen 56 → 31 (+125) and defenders lost 25 → 16 (+72).",
-          "alsoConcentrates": "On baseline/20260726 the refusals rise 55 → 232 but spread over two creatures instead of three, which is what the three presentation failures below are reading."
+          "alsoConcentrates": "On baseline/20260726 the refusals rise 28 → 187 but spread over two creatures instead of three, which is what the three presentation failures below are reading.",
+          "correctionOfThisFigure": "An earlier revision said 55 → 232. That was entries + Sum(Repeats), double-counting every first occurrence; the canonical count is Sum(Repeats) and it is already recorded in the refused_place_of_panic row of the matrix table. Found by the confirming round of the independent review."
         },
         {
           "channel": 2,
