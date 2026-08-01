@@ -3059,7 +3059,7 @@ public partial class Main : Node2D
         DrawElevatedWorld(rockTiles, diggableTiles);
         // Flat informational marks are projected above elevated geometry. A wall
         // must not erase one side of a room or the destination of an active job.
-        DrawRoomBorders();
+        DrawRoomBorders(rockTiles);
         DrawZoneOutlines();
         DrawJobRoutes();
         // A dig mark is a player-intent overlay on the wall, not wall material.
@@ -3068,7 +3068,7 @@ public partial class Main : Node2D
         DrawBuildSiteInformationOverlays();
         DrawStockpileInformationOverlays();
         DrawBodyInformationOverlays();
-        DrawRoomLabels();
+        DrawRoomLabels(rockTiles);
         DrawUnroomedObjects();
         DrawRememberedPlaces(rockTiles);
         DrawCellInteractionOverlays(rockTiles);
@@ -3207,18 +3207,27 @@ public partial class Main : Node2D
     /// each of its cells. ADR 0013 makes this mandatory — a room whose boundary is
     /// never shown is the Dwarf Fortress failure the variant was chosen against.
     /// </summary>
-    private void DrawRoomBorders()
+    private void DrawRoomBorders(IReadOnlySet<GridPoint> rockTiles)
     {
         foreach (var room in _state!.Rooms)
         {
-            DrawRoomBorder(room);
+            DrawRoomBorder(room, rockTiles);
         }
     }
 
-    private void DrawRoomBorder(PrototypeRoomSnapshot room)
+    /// <summary>
+    /// A room whose border would otherwise sit under a wall's facade
+    /// (Issue #139) is drawn with <see cref="RoomGeometry.WallAdjacentBorderInset"/>
+    /// instead of the plain <see cref="RoomGeometry.BorderInset"/>, so the line
+    /// clears the wall rather than lying on it.
+    /// </summary>
+    private void DrawRoomBorder(PrototypeRoomSnapshot room, IReadOnlySet<GridPoint> rockTiles)
     {
         var accent = RoomColor(MapAccents.Room(_projection!, room), room.Purpose);
-        var inset = ScaleWorld((float)RoomGeometry.BorderInset(room.Purpose));
+        var purposeInset = RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles)
+            ? RoomGeometry.WallAdjacentBorderInset(room.Purpose)
+            : RoomGeometry.BorderInset(room.Purpose);
+        var inset = ScaleWorld((float)purposeInset);
         foreach (var segment in RoomGeometry.Border(room.Perimeter, _tileSize, inset))
         {
             DrawLine(
@@ -5330,25 +5339,37 @@ public partial class Main : Node2D
     /// farm, said nothing about a room that was not working, and vanished entirely
     /// if the player erased the one tile it was nailed to.
     /// </summary>
-    private void DrawRoomLabels()
+    private void DrawRoomLabels(IReadOnlySet<GridPoint> rockTiles)
     {
         foreach (var room in _state!.Rooms)
         {
-            DrawRoomLabel(room);
+            DrawRoomLabel(room, rockTiles);
         }
     }
 
-    private void DrawRoomLabel(PrototypeRoomSnapshot room)
+    /// <summary>
+    /// A room whose border is drawn deep because it borders a wall
+    /// (<see cref="RoomGeometry.WallAdjacentBorderInset"/>, Issue #139) pushes
+    /// its caption and icon down with it via <see cref="RoomGeometry.LabelTop"/>,
+    /// so the border does not cut through either — the regression independent
+    /// review found in F1 of the same issue's second round.
+    /// </summary>
+    private void DrawRoomLabel(PrototypeRoomSnapshot room, IReadOnlySet<GridPoint> rockTiles)
     {
         var accent = RoomColor(MapAccents.Room(_projection!, room), room.Purpose);
         var anchor = RoomGeometry.LabelAnchor(room.Perimeter, _tileSize);
         var origin = new Vector2((float)anchor.X, (float)anchor.Y);
-        var icon = ScaleWorld(8);
+        var icon = ScaleWorld((float)RoomGeometry.LabelIconSize);
 
-        DrawRoomIcon(room.Purpose, origin + ScaleWorld(2, 2), icon, accent);
+        var purposeInset = RoomGeometry.BordersWallToNorth(room.Perimeter, rockTiles)
+            ? RoomGeometry.WallAdjacentBorderInset(room.Purpose)
+            : RoomGeometry.BorderInset(room.Purpose);
+        var labelTop = ScaleWorld((float)RoomGeometry.LabelTop(purposeInset));
+
+        DrawRoomIcon(room.Purpose, origin + new Vector2(ScaleWorld(2), labelTop), icon, accent);
         DrawString(
             ThemeDB.FallbackFont,
-            origin + new Vector2(ScaleWorld(3) + icon, ScaleWorld(10)),
+            origin + new Vector2(ScaleWorld(3) + icon, labelTop + icon),
             RoomLabels.Caption(room),
             HorizontalAlignment.Left,
             -1,

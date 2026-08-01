@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "issue": 139,
+  "note": "PNGs land under .artifacts/evidence/139-* per Resolve-EvidenceOutputRoot (OutputRoot must resolve inside repository .artifacts) and are not committed, per AGENTS.md's rule against committing large derived files. This file records the reproduction commands and the image hashes that prove each pair of frames actually differs, and which commit each one was actually captured against — copied verbatim from the manifest capture-evidence.ps1 itself wrote, not retyped by hand.",
+  "correction": {
+    "what": "Independent review round 2, F8: this file's checkpoint-2 'before' commit was recorded as 2d8f23d5... (the checkpoint-1 measurement commit), but the manifest capture-evidence.ps1 actually wrote for that capture (.artifacts/evidence/139-before/manifest.json) names sourceCommit afc2ef87cb20139f5216bea5806431686152a91e — the very next commit, which is where evidence/139-facade-frames.json (the capture spec used) was first added. On 2d8f23d alone, -SpecPath evidence/139-facade-frames.json does not resolve: the file did not exist yet, so the named reproduction point could not have produced the capture.",
+    "fix": "checkpoint2FacadeFix.before.commit below is copied from that manifest's own sourceCommit field. Nothing else about the checkpoint-2 pair needed to change: the images themselves, their hashes and their reading are all still accurate to what they show."
+  },
+  "checkpoint2FacadeFix": {
+    "description": "Checkpoint 2's own before/after: the border-vs-facade fix alone, before F1 was found. Kept for the record; superseded visually by round2LabelFix below, which shows the same two frames after F1 also landed.",
+    "before": {
+      "commit": "afc2ef87cb20139f5216bea5806431686152a91e",
+      "commitSubject": "Evidence: capture spec for #139 before/after frames (farm and kitchen north borders)",
+      "sourceDirty": false,
+      "captures": [
+        {
+          "name": "139-farm-north-border",
+          "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '168,48' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/139-before/139-farm-north-border.png",
+          "imagePath": ".artifacts/evidence/139-before/139-farm-north-border.png",
+          "imageSha256": "22ab810ce570c7ef876f30a148afbaf3aab23729bfb5e2dfb1d48a440ff308aa",
+          "reading": "The FARM border's top-left corner stroke sits directly against the wall's dark facade bottom edge — no daylight between them, matching the literal overlap measured in evidence/139-overlap-before.json (farm@1,1, overlapPx ~3.6)."
+        },
+        {
+          "name": "139-kitchen-north-border",
+          "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '504,288' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/139-before/139-kitchen-north-border.png",
+          "imagePath": ".artifacts/evidence/139-before/139-kitchen-north-border.png",
+          "imageSha256": "e015cde309cd9fd1e207830f03301dc90a49d211c0d96d821d984a50333b0ae5",
+          "reading": "The frame also happens to show LARDER (yellow) next to KITCHEN (orange) — this is the exact pairing the owner's playtest report named. Both top borders sit right on the wall's facade lip, reproducing the reported \"режет глаз\" look."
+        }
+      ]
+    },
+    "after": {
+      "commit": "38567b256c1054da511db0688844d94b1fce8534",
+      "commitSubject": "Fix: room border clears a north-adjacent wall's facade (#139)",
+      "sourceDirty": false,
+      "captures": [
+        {
+          "name": "139-farm-north-border",
+          "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '168,48' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/139-after/139-farm-north-border.png",
+          "imagePath": ".artifacts/evidence/139-after/139-farm-north-border.png",
+          "imageSha256": "6763f7257eede53db2095c304e4f06a8e0384fc4124a3e6890e7ecdeeea53c91",
+          "reading": "A visible dark gap now separates the wall's facade bottom from the FARM border's top-left corner — but, unnoticed at checkpoint 2, the border now runs through the icon and caption instead. See round2LabelFix."
+        },
+        {
+          "name": "139-kitchen-north-border",
+          "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '504,288' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/139-after/139-kitchen-north-border.png",
+          "imagePath": ".artifacts/evidence/139-after/139-kitchen-north-border.png",
+          "imageSha256": "57050a1bb87a94b33c514c66601a68e62b88dbe968b4b536a7628378052cc983",
+          "reading": "Both KITCHEN and LARDER top borders now sit visibly below the wall's facade lip, apart from it rather than lying on it — and, unnoticed at checkpoint 2, straight through the middle of both captions and LARDER's icon. See round2LabelFix."
+        }
+      ]
+    },
+    "canonicalStateUnchanged": {
+      "note": "Both runs report the same canonical checksum 9df8c18004b95aa4a6acd45ec338acc63ffd453e669314183e4959bfc6c3bfc9 — this is a presentation-only change, the simulation state at tick 1 is identical before and after.",
+      "imageHashesDiffer": true
+    }
+  },
+  "round2LabelFix": {
+    "description": "Independent review round 2, F1 (blocking): the same two frames, before F1's fix (commit 38567b2, identical code to checkpoint2FacadeFix's 'after' above — same image hashes, confirmed below) and after it (this round's fix commit). Shows the caption and icon cut by the border, then clear of it.",
+    "before": {
+      "commit": "38567b256c1054da511db0688844d94b1fce8534",
+      "commitSubject": "Fix: room border clears a north-adjacent wall's facade (#139) — the state F1 was filed against",
+      "sourceDirty": false,
+      "captures": [
+        {
+          "name": "139-farm-north-border",
+          "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '168,48' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/139-f1-before/139-farm-north-border.png",
+          "imagePath": ".artifacts/evidence/139-f1-before/139-farm-north-border.png",
+          "imageSha256": "6763f7257eede53db2095c304e4f06a8e0384fc4124a3e6890e7ecdeeea53c91",
+          "matchesCheckpoint2After": true,
+          "reading": "The FARM icon's tree crown is visibly sliced through the middle by the green border stroke, and the border cuts across the top of the 'FARM' letters — exactly what independent review described."
+        },
+        {
+          "name": "139-kitchen-north-border",
+          "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '504,288' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/139-f1-before/139-kitchen-north-border.png",
+          "imagePath": ".artifacts/evidence/139-f1-before/139-kitchen-north-border.png",
+          "imageSha256": "57050a1bb87a94b33c514c66601a68e62b88dbe968b4b536a7628378052cc983",
+          "matchesCheckpoint2After": true,
+          "reading": "The orange KITCHEN border runs straight through the middle of the word 'KITCHEN'; the yellow LARDER border runs through its icon and the top of its own caption."
+        }
+      ]
+    },
+    "after": {
+      "commit": "d1e3a9ccc7b5693517efe1faa1ec8046e07443ca",
+      "commitSubject": "Fix: caption/icon clear the deepened border, wiring value-flow closed (#139 F1/F2/F3/F7)",
+      "sourceDirty": false,
+      "captures": [
+        {
+          "name": "139-farm-north-border",
+          "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '168,48' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/139-f1-after/139-farm-north-border.png",
+          "imagePath": ".artifacts/evidence/139-f1-after/139-farm-north-border.png",
+          "imageSha256": "71f5f911f69eca9e393f3e8fde289c4b6c0081702a8f418fddcb8a809fbead29",
+          "reading": "The tree icon is whole and the word FARM is fully legible, both sitting below the border line with a visible gap; the border itself is still clear of the wall's facade, unchanged from checkpoint 2."
+        },
+        {
+          "name": "139-kitchen-north-border",
+          "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 48 -CameraZoom 2 -CameraPosition '504,288' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/139-f1-after/139-kitchen-north-border.png",
+          "imagePath": ".artifacts/evidence/139-f1-after/139-kitchen-north-border.png",
+          "imageSha256": "0d9e95c91367aa9b39e4e1e4186c0b6147ef7a26e818825e512e74f003e3ba46",
+          "reading": "Both KITCHEN and LARDER read cleanly again — full words, LARDER's icon intact — each pushed further down inside its own cell than checkpoint 2's frame, clear of both the wall's facade above and its own border stroke."
+        }
+      ]
+    },
+    "canonicalStateUnchanged": {
+      "note": "Both runs report the same canonical checksum 9df8c18004b95aa4a6acd45ec338acc63ffd453e669314183e4959bfc6c3bfc9 — F1's fix is presentation-only, same as the facade fix.",
+      "imageHashesDiffer": true
+    }
+  }
+}

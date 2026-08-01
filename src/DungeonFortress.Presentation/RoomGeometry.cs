@@ -36,10 +36,135 @@ public static class RoomGeometry
     /// pixels are one border. Purposes three apart in the enum share a value, and
     /// that is deliberate rather than an oversight — the inset exists so that a
     /// second border is not swallowed whole, and colour does the rest of the
-    /// telling apart. Widening the ladder would push the innermost border a third
-    /// of the way into a one-tile room at the smallest tile size ADR 0008 allows.
+    /// telling apart.
+    ///
+    /// This ladder itself stays shallow — 2.0 to 5.0 — on purpose: widening it
+    /// would push the innermost border a third of the way into a one-tile room
+    /// at the smallest tile size ADR 0008 allows.
+    /// <see cref="WallAdjacentBorderInset"/> spends exactly that cost anyway,
+    /// but only for a room that actually borders a wall (Issue #139): the
+    /// alternative was a border sitting inside the wall's own facade, and that
+    /// reads worse than a deep inset does. Naming the trade rather than paying
+    /// it silently: it does not stop at the border. The wall-adjacent ladder's
+    /// own reach pushed a second, smaller cost into view — it can overlap
+    /// <see cref="LabelDefaultTop"/>'s old fixed caption position, which is why
+    /// that position moves for a room that pays for it (<see cref="LabelTop"/>).
     /// </summary>
-    public static double BorderInset(ZoneKind purpose) => 2.0 + ((int)purpose % 3) * 1.5;
+    public static double BorderInset(ZoneKind purpose) => 2.0 + PurposeLadderStep(purpose);
+
+    /// <summary>
+    /// <see cref="BorderInset"/> for a room whose border sits under a wall — one
+    /// of its cells has rock directly to the north (<see cref="BordersWallToNorth"/>).
+    ///
+    /// <see cref="WallRenderGeometry"/> draws a wall as a volume: its front facade
+    /// overhangs <see cref="WallClearance"/>-worth of ground past the wall's own
+    /// footprint, into whichever cell sits right below it. The plain
+    /// <see cref="BorderInset"/> ladder knows nothing about a neighbour and was
+    /// tuned only so two overlapping purposes stay apart from each other
+    /// (Issue #52) — nothing in it keeps a purpose apart from a wall, so at the
+    /// low end of the ladder the border was drawn inside the facade's own
+    /// overhang (Issue #139). This uses the same per-purpose step, so two
+    /// overlapping purposes pushed by the same wall are exactly as apart from
+    /// each other as they were before the push, just both moved past the facade.
+    /// </summary>
+    public static double WallAdjacentBorderInset(ZoneKind purpose) =>
+        WallClearance + PurposeLadderStep(purpose);
+
+    /// <summary>
+    /// Whether any cell of the room has a wall directly to its north — the one
+    /// direction a wall's facade can hang over a room's own footprint, since
+    /// <see cref="WallRenderGeometry"/> only ever draws a facade on a wall's
+    /// south-facing (observer-facing) side.
+    /// </summary>
+    public static bool BordersWallToNorth(
+        IReadOnlyCollection<GridPoint> tiles,
+        IReadOnlySet<GridPoint> wallTiles)
+    {
+        ArgumentNullException.ThrowIfNull(tiles);
+        ArgumentNullException.ThrowIfNull(wallTiles);
+        return tiles.Any(cell => wallTiles.Contains(new GridPoint(cell.X, cell.Y - 1)));
+    }
+
+    /// <summary>
+    /// Half the width <c>Main.DrawRoomBorder</c> strokes a border line with: a
+    /// line "at" some coordinate actually covers a band a half-stroke to either
+    /// side of it, and it is the near edge of that band — not the coordinate
+    /// itself — that must clear the facade.
+    /// </summary>
+    private const double BorderStrokeHalfWidth = 1.0;
+
+    /// <summary>
+    /// A further reference pixel kept clear once the overhang and the stroke's
+    /// own half-width are both accounted for, so the border reads as apart from
+    /// the wall rather than merely not touching it.
+    /// </summary>
+    private const double WallVisibleGap = 1.0;
+
+    /// <summary>
+    /// The reference-pixel depth a wall-adjacent border needs before its own
+    /// per-purpose step: the facade's downward overhang past the wall's own
+    /// footprint, the half-width of the stroke that draws the border, and a
+    /// visible gap. Derived from <see cref="WallRenderGeometry.FacadeReferenceOverhang"/>
+    /// rather than restated, so a change to the wall's geometry cannot silently
+    /// leave this stale.
+    /// </summary>
+    public const double WallClearance =
+        WallRenderGeometry.FacadeReferenceOverhang + BorderStrokeHalfWidth + WallVisibleGap;
+
+    /// <summary>
+    /// The step <see cref="BorderInset"/> and <see cref="WallAdjacentBorderInset"/>
+    /// both climb by purpose, so that whichever base either starts from, two
+    /// overlapping purposes stay exactly as far apart from each other.
+    /// </summary>
+    private static double PurposeLadderStep(ZoneKind purpose) => ((int)purpose % 3) * 1.5;
+
+    /// <summary>
+    /// The reference-pixel size <c>Main.DrawRoomIcon</c> draws a room's purpose
+    /// glyph at. <see cref="LabelTop"/> also uses it as the vertical span
+    /// between the icon's own top and the caption baseline directly under it,
+    /// because that is what <c>Main.DrawRoomLabel</c> draws: the two shared one
+    /// unnamed literal before Issue #139 F1, and a border cutting through both
+    /// of them at once is what independent review found by naming the two
+    /// separately at the same coordinate.
+    /// </summary>
+    public const double LabelIconSize = 8.0;
+
+    /// <summary>
+    /// Where a room's caption and icon start, in reference pixels below the
+    /// anchor cell's top edge, absent any reason to move them — <c>Main.cs</c>'s
+    /// original, unconditional position from before Issue #139 gave the border
+    /// underneath a reason to move.
+    /// </summary>
+    public const double LabelDefaultTop = 2.0;
+
+    /// <summary>
+    /// A reference pixel of daylight kept between a room's border stroke and
+    /// its caption/icon block, past the stroke's own half-width — the same
+    /// shape of margin <see cref="WallClearance"/> keeps against the wall's
+    /// facade — so a border pushed deep by <see cref="WallAdjacentBorderInset"/>
+    /// cannot read as cutting through the glyphs sitting next to it.
+    /// </summary>
+    private const double LabelClearanceGap = 1.0;
+
+    /// <summary>
+    /// How far below the anchor cell's top edge a room's caption and icon may
+    /// start, in reference pixels, given the inset the room's own border is
+    /// actually drawn at — whichever of <see cref="BorderInset"/> or
+    /// <see cref="WallAdjacentBorderInset"/> <c>Main.DrawRoomBorder</c> picked
+    /// for the same room, passed in as <paramref name="borderInset"/> rather
+    /// than recomputed here, so the two can never read a different inset for
+    /// one room than the other.
+    ///
+    /// Below <see cref="LabelDefaultTop"/> only when the border's own stroke
+    /// band — <paramref name="borderInset"/> ± the stroke's half-width — would
+    /// otherwise reach into it. Issue #139 F1: independent review found the
+    /// deepened wall-adjacent ladder cutting straight through the caption and
+    /// icon of every room checkpoint 2's own evidence screenshotted, because
+    /// the label was still drawn at the fixed pre-#139 position and knew
+    /// nothing of how far the border underneath it had moved.
+    /// </summary>
+    public static double LabelTop(double borderInset) =>
+        Math.Max(LabelDefaultTop, borderInset + BorderStrokeHalfWidth + LabelClearanceGap);
 
     /// <summary>
     /// The closed outline of a room, as the boundary edges of its patch — one
