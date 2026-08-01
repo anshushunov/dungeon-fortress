@@ -18,6 +18,61 @@ public readonly record struct RoomBorderEdge(
     ViewSegment Segment);
 
 /// <summary>
+/// One run of a room's outline that is drawn in one pass, together with the cell
+/// and the side of that cell it came from.
+/// </summary>
+/// <param name="Cell">The room cell whose boundary this is.</param>
+/// <param name="Side">Which side of that cell faces outward here.</param>
+/// <param name="Segment">The line as drawn: inset, ends resolved, then cut where
+/// the pass it belongs to changes.</param>
+/// <param name="Layer">The pass it is drawn in.</param>
+public readonly record struct RoomBorderPiece(
+    GridPoint Cell,
+    WallNeighbors Side,
+    ViewSegment Segment,
+    RoomBorderLayer Layer);
+
+/// <summary>
+/// Which of the two passes a piece of a room's outline is drawn in (Issue #156).
+///
+/// A room's border used to be one informational mark drawn after the depth pass,
+/// and the owner reported the consequence from playtest: «наверно существо должно
+/// быть над границей комнаты, а не под ней» — a creature standing on the bottom
+/// row of the kitchen was struck through by the line. A body has volume on this
+/// map and a border is a line on the floor it stands on, so the depth pass is the
+/// thing that should answer which of the two wins.
+///
+/// It cannot be the only answer, because the reason the border was put above the
+/// depth pass in the first place is still true: a wall standing directly south of
+/// a room cell is drawn <em>in front of</em> that cell and covers the bottom of it
+/// outright, so a border drawn under the depth pass loses its south edge there and
+/// no inset buys it back (Issues #139 and #147, and
+/// <see cref="MaximumBorderInset"/>). Hence two layers rather than one, split by a
+/// measurement rather than by taste: <see cref="LayerOf"/>.
+///
+/// The split is per <see cref="RoomBorderPiece"/> and not per boundary edge,
+/// because a wall in front covers the lower part of the vertical edge meeting the
+/// horizontal one and not the whole of it. Classifying whole edges opened the
+/// corner between them; see <see cref="BorderPieces"/>.
+/// </summary>
+public enum RoomBorderLayer
+{
+    /// <summary>
+    /// Drawn before the depth pass, so whoever stands on the line is drawn over
+    /// it. This is where all but a handful of a map's border segments belong.
+    /// </summary>
+    UnderBodies,
+
+    /// <summary>
+    /// Drawn after the depth pass, and only for a segment a wall in front paints
+    /// over completely. Nothing that is not behind that wall can be hidden by such
+    /// a segment — the wall already hides it — so this layer is above the depth
+    /// pass without being above a body anybody can see.
+    /// </summary>
+    OverWallInFront,
+}
+
+/// <summary>
 /// The shape of a room on screen: its border, where its caption sits, and how far
 /// in the border is drawn.
 ///
@@ -103,9 +158,13 @@ public static class RoomGeometry
     /// that mass reaches half its own width higher still. Clearing it would cost
     /// more than <see cref="MaximumBorderInset"/> before a single purpose step is
     /// added — over half a cell — so no inset is an answer to it. The accepted
-    /// answer is draw order, decided in Issue #83 and declared in <see cref="WorldDrawOrder"/>:
-    /// the border is an informational mark drawn after the depth pass, so the
-    /// room keeps its south edge instead of losing it under the wall.
+    /// answer is draw order, decided in Issue #83 and declared in
+    /// <see cref="WorldDrawOrder"/>: the segment a wall in front would swallow is
+    /// drawn after the depth pass, so the room keeps its south edge instead of
+    /// losing it under the wall.
+    ///
+    /// Since Issue #156 that is <em>only</em> that segment and no longer the whole
+    /// border: see <see cref="RoomBorderLayer"/>.
     /// </summary>
     public static double BorderInset(ZoneKind purpose, WallNeighbors wallSides) =>
         WallClearance(wallSides) + PurposeLadderStep(purpose);
@@ -394,6 +453,311 @@ public static class RoomGeometry
 
         return edges;
     }
+
+    /// <summary>
+    /// The part of a room's outline that belongs to one of the two passes it is
+    /// drawn in (Issue #156). The two layers partition
+    /// <see cref="BorderPieces"/> exactly: every piece is in one of them and no
+    /// piece is in both, so splitting the border cannot quietly lose a line.
+    /// </summary>
+    public static IReadOnlyList<ViewSegment> Border(
+        IReadOnlyCollection<GridPoint> tiles,
+        int tileSize,
+        double inset,
+        IReadOnlySet<GridPoint> wallTiles,
+        RoomBorderLayer layer) =>
+        BorderPieces(tiles, tileSize, inset, wallTiles)
+            .Where(piece => piece.Layer == layer)
+            .Select(piece => piece.Segment)
+            .ToArray();
+
+    /// <summary>
+    /// The whole outline, cut where the pass it is drawn in changes, with each
+    /// piece still knowing which cell and which side of that cell it came from.
+    ///
+    /// <para>
+    /// <b>Why pieces and not edges.</b> The first version of Issue #156 classified
+    /// a whole boundary edge at a time, and independent review found what that
+    /// costs at a corner: on <c>quarters@19,2</c> the south edge of the cell with a
+    /// wall in front stayed above the depth pass while the west edge meeting it —
+    /// covered by that same wall only along its lower few pixels — went below and
+    /// was cut off by it. The two ends no longer met, and the outline of the room
+    /// opened at one corner while the opposite corner stayed shut. ADR 0013 and
+    /// Issue #52 bought exactly the property that broke: a room is <em>one line
+    /// around the whole patch</em>, not a frame per cell. The gap was
+    /// <c>8.625 − (inset + 1.0)</c> reference pixels — 5.0 on quarters, 0.5 on the
+    /// kitchen — and it was a limit of the granularity, not of the decision.
+    /// </para>
+    ///
+    /// <para>
+    /// So the cut is made where the answer changes rather than per edge. The
+    /// covered tail of a vertical edge now goes above the depth pass with the
+    /// horizontal edge it meets, and the corner closes.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<RoomBorderPiece> BorderPieces(
+        IReadOnlyCollection<GridPoint> tiles,
+        int tileSize,
+        double inset,
+        IReadOnlySet<GridPoint> wallTiles)
+    {
+        ArgumentNullException.ThrowIfNull(wallTiles);
+        var half = BorderStrokeHalfWidth * CameraView.WorldVisualScale(tileSize);
+        var pieces = new List<RoomBorderPiece>();
+        foreach (var edge in BorderEdges(tiles, tileSize, inset))
+        {
+            var stroke = StrokeBand(edge.Segment, half);
+            var bands = WallBandsInFrontOf(edge.Cell, stroke, wallTiles, tileSize);
+            foreach (var (segment, layer) in Split(edge.Segment, stroke, bands))
+            {
+                pieces.Add(new RoomBorderPiece(edge.Cell, edge.Side, segment, layer));
+            }
+        }
+
+        return pieces;
+    }
+
+    /// <summary>
+    /// Which pass one piece of stroke is drawn in — the whole of Issue #156's
+    /// decision, as one expression everything else reads.
+    ///
+    /// <para>
+    /// A piece a wall in front paints over completely may be drawn after the depth
+    /// pass, because nothing it lands on is visible anyway; a piece that is not
+    /// must be drawn before it, or it lands on whoever is standing there.
+    /// </para>
+    ///
+    /// <para>
+    /// Coverage is asked of the <em>union</em> of the wall's bands, not of any one
+    /// of them — the first version asked for a single band and answered
+    /// <c>UnderBodies</c> for the kitchen, whose south stroke straddles the
+    /// boundary between the wall's lifted top mass and the bright seam along it,
+    /// with both of them painting over it. Answering <c>UnderBodies</c> wrongly
+    /// costs a piece a wall clips; answering <c>OverWallInFront</c> wrongly costs
+    /// the whole issue.
+    /// </para>
+    /// </summary>
+    public static RoomBorderLayer LayerOf(
+        ViewRect strokePiece,
+        IReadOnlyList<ViewRect> wallBandsInFront) =>
+        wallBandsInFront.Count > 0 && IsCoveredBy(strokePiece, wallBandsInFront)
+            ? RoomBorderLayer.OverWallInFront
+            : RoomBorderLayer.UnderBodies;
+
+    /// <summary>
+    /// Every rectangle painted by the walls that are drawn <em>after</em> a body
+    /// standing on <paramref name="cell"/> and can reach
+    /// <paramref name="stroke"/>: the row directly south of it, and nothing else.
+    ///
+    /// <para>
+    /// South is the one direction that qualifies.
+    /// <see cref="WorldRenderGeometry"/> anchors a wall at the bottom of its own
+    /// footprint and a body at its interpolated centre, and a body can never
+    /// interpolate into rock, so a wall at <c>(x, y + 1)</c> is always behind a
+    /// body at <c>(x, y)</c> in the Y-order and always covers it. A wall to the
+    /// north hangs its facade into the cell too — and is drawn <em>before</em> the
+    /// body, which walks over it — so its band is no shelter at all. A wall further
+    /// south is drawn later still, but its mass reaches only
+    /// <see cref="WallRenderGeometry.FacadeReferenceHeight"/> plus half a seam
+    /// above its own footprint and cannot reach this row.
+    /// </para>
+    ///
+    /// <para>
+    /// The bands are measured with <see cref="WallRenderGeometry.DrawnBands"/>
+    /// rather than derived from a mechanism, for the reason Issue #147 had to learn
+    /// twice: a wall is its rectangles <em>plus</em> the bands its seams are
+    /// painted as.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<ViewRect> WallBandsInFrontOf(
+        GridPoint cell,
+        ViewRect stroke,
+        IReadOnlySet<GridPoint> wallTiles,
+        int tileSize)
+    {
+        ArgumentNullException.ThrowIfNull(wallTiles);
+        var row = cell.Y + 1;
+        var first = (int)Math.Floor(stroke.X / tileSize) - 1;
+        var last = (int)Math.Floor((stroke.X + stroke.Width) / tileSize) + 1;
+        var bands = new List<ViewRect>();
+        for (var column = first; column <= last; column++)
+        {
+            var wall = new GridPoint(column, row);
+            if (!wallTiles.Contains(wall))
+            {
+                continue;
+            }
+
+            bands.AddRange(WallRenderGeometry.DrawnBands(
+                wall,
+                WallTopology.SelectVariant(wall, wallTiles),
+                tileSize));
+        }
+
+        return bands;
+    }
+
+    /// <summary>
+    /// One boundary segment cut into the runs that answer <see cref="LayerOf"/> the
+    /// same way, in order along the segment.
+    ///
+    /// The cut points are the wall bands' own boundaries along the segment's axis,
+    /// so within each elementary interval no band starts or ends and the answer is
+    /// constant — the same argument <see cref="IsCoveredBy"/> makes across two axes,
+    /// used here along one. Neighbouring intervals with the same answer are merged,
+    /// so a segment nothing changes across comes back as itself.
+    /// </summary>
+    private static IEnumerable<(ViewSegment Segment, RoomBorderLayer Layer)> Split(
+        ViewSegment segment,
+        ViewRect stroke,
+        IReadOnlyList<ViewRect> bands)
+    {
+        var horizontal = stroke.Width >= stroke.Height;
+        var low = horizontal ? stroke.X : stroke.Y;
+        var high = low + (horizontal ? stroke.Width : stroke.Height);
+        if (high - low <= Tolerance)
+        {
+            yield break;
+        }
+
+        var cuts = Cuts(
+            low,
+            high,
+            bands.SelectMany(band => horizontal
+                ? new[] { band.X, band.X + band.Width }
+                : new[] { band.Y, band.Y + band.Height }));
+
+        var runStart = low;
+        var runLayer = (RoomBorderLayer?)null;
+        for (var index = 0; index + 1 < cuts.Count; index++)
+        {
+            var from = cuts[index];
+            var to = cuts[index + 1];
+            if (to - from <= Tolerance)
+            {
+                continue;
+            }
+
+            var layer = LayerOf(
+                horizontal
+                    ? new ViewRect(from, stroke.Y, to - from, stroke.Height)
+                    : new ViewRect(stroke.X, from, stroke.Width, to - from),
+                bands);
+            if (runLayer is { } current && current != layer)
+            {
+                yield return (Piece(segment, horizontal, runStart, from), current);
+                runStart = from;
+            }
+
+            runLayer = layer;
+        }
+
+        yield return (
+            Piece(segment, horizontal, runStart, high),
+            runLayer ?? RoomBorderLayer.UnderBodies);
+    }
+
+    private static ViewSegment Piece(
+        ViewSegment segment,
+        bool horizontal,
+        double from,
+        double to) =>
+        horizontal
+            ? new ViewSegment(
+                new ViewPoint(from, segment.From.Y),
+                new ViewPoint(to, segment.To.Y))
+            : new ViewSegment(
+                new ViewPoint(segment.From.X, from),
+                new ViewPoint(segment.To.X, to));
+
+    /// <summary>
+    /// Whether every pixel of <paramref name="target"/> is inside at least one of
+    /// <paramref name="bands"/>.
+    ///
+    /// The rectangles overlap, so this cannot be asked of one of them at a time.
+    /// It is answered exactly rather than by sampling: cutting the target at every
+    /// band boundary that falls inside it leaves a grid of pieces, each of which is
+    /// wholly inside a band or wholly outside every one of them, so testing the
+    /// centre of each piece decides the whole piece.
+    ///
+    /// It is public because a check has to be able to ask the same question of a
+    /// wall set it chose itself. The <em>decision</em> — which walls count as being
+    /// drawn in front of a body — stays in <see cref="WallBandsInFrontOf"/> and
+    /// <see cref="LayerOf"/>; this is only the geometry underneath them, and
+    /// sharing the geometry is what stops a check re-deriving a sweep and getting
+    /// it subtly different.
+    /// </summary>
+    public static bool IsCoveredBy(ViewRect target, IReadOnlyList<ViewRect> bands)
+    {
+        var xs = Cuts(
+            target.X,
+            target.X + target.Width,
+            bands.SelectMany(band => new[] { band.X, band.X + band.Width }));
+        var ys = Cuts(
+            target.Y,
+            target.Y + target.Height,
+            bands.SelectMany(band => new[] { band.Y, band.Y + band.Height }));
+
+        for (var column = 0; column + 1 < xs.Count; column++)
+        {
+            for (var row = 0; row + 1 < ys.Count; row++)
+            {
+                if (xs[column + 1] - xs[column] <= Tolerance ||
+                    ys[row + 1] - ys[row] <= Tolerance)
+                {
+                    continue;
+                }
+
+                var x = (xs[column] + xs[column + 1]) / 2.0;
+                var y = (ys[row] + ys[row + 1]) / 2.0;
+                if (!bands.Any(band =>
+                        x >= band.X && x <= band.X + band.Width &&
+                        y >= band.Y && y <= band.Y + band.Height))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private static IReadOnlyList<double> Cuts(
+        double low,
+        double high,
+        IEnumerable<double> boundaries) =>
+        boundaries
+            .Where(value => value > low && value < high)
+            .Append(low)
+            .Append(high)
+            .Distinct()
+            .OrderBy(value => value)
+            .ToArray();
+
+    /// <summary>
+    /// The rectangle a border segment is actually painted as: the line widened by
+    /// <see cref="BorderStrokeHalfWidth"/> across itself, the same way
+    /// <see cref="WallRenderGeometry.DrawnBands"/> widens a wall seam. A line is
+    /// not a line on screen, and every question about what a border covers or is
+    /// covered by is a question about this band.
+    /// </summary>
+    public static ViewRect StrokeBand(ViewSegment segment, double halfStroke)
+    {
+        var left = Math.Min(segment.From.X, segment.To.X);
+        var right = Math.Max(segment.From.X, segment.To.X);
+        var top = Math.Min(segment.From.Y, segment.To.Y);
+        var bottom = Math.Max(segment.From.Y, segment.To.Y);
+        return right - left >= bottom - top
+            ? new ViewRect(left, top - halfStroke, right - left, (bottom - top) + (2.0 * halfStroke))
+            : new ViewRect(left - halfStroke, top, (right - left) + (2.0 * halfStroke), bottom - top);
+    }
+
+    /// <summary>
+    /// The slack allowed when a piece of the target is too thin to be a piece at
+    /// all. Both sides are built from the same tile size and the same reference
+    /// pixel, so the only difference this absorbs is the last bit of a double.
+    /// </summary>
+    private const double Tolerance = 1e-9;
 
     /// <summary>
     /// Where the caption and the icon of a room go: the top-left corner of the

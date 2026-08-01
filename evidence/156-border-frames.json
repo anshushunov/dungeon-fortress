@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "captures": [
+    {"name": "156-kitchen-larder-bottom-row", "fixture": "baseline", "screenshotTicks": 1, "tileSize": 48, "cameraZoom": 2.0, "cameraPosition": "600,384", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "156-quarters-wall-in-front", "fixture": "baseline", "screenshotTicks": 1, "tileSize": 48, "cameraZoom": 2.0, "cameraPosition": "1008,264", "uiScale": 1.0, "frameSize": "1280x720"}
+  ]
+}
