@@ -110,13 +110,14 @@
     "reading": "253 refusals survive over the matrix against 639 before, spread over up to four creatures a party instead of three, and on the cell the defect lives on the count of refusing creatures goes up rather than down: 3 -> 4. Nothing was zeroed. The floors PrototypeMemoryTests holds each fixture to — ten refusals over the matrix, five with the counterfactual probe — are met with 219 on `baseline` and 34 on `prepared`.",
     "alsoMeasured": "A hungry creature taking work it would otherwise refuse is not a theory: PrototypeMemoryCostTests.A_creature_going_hungry_takes_the_work_it_would_otherwise_refuse counts the ticks it happens on and fails if the answer is zero."
   },
-  "whatIsRedAndWasNotBefore": {
+  "whatWentRedAndWasRepairedInASecondRound": {
     "test": "DungeonFortress.Presentation.Tests.DomainFeedTests.The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it",
-    "file": "tests/DungeonFortress.Presentation.Tests/DomainFeedTests.cs:290 — held by Issue #77, not touched by this branch",
+    "file": "tests/DungeonFortress.Presentation.Tests/DomainFeedTests.cs — held by Issue #77 when this was first found, reassigned to this task in writing by the coordinator afterwards",
     "message": "only 2 of the 3 lines of this feed show something other than that creature's newest entry",
-    "whatStillHolds": "The rule the test is named for. `Assert.Equal(best, Rank(@event))` passes for all three lines: every line of the feed is still the worst thing that happened to that creature. What fails is the clause below it, which counts how many of the three lines *differ* from that creature's newest entry and requires all three.",
-    "whyItMoved": "On `baseline` at tick 2400 the party is no longer one in which almost every creature's last word is somebody standing in the way. One of the three creatures on the feed now has its worst entry as its newest one, so the counter reads 2 of 3.",
-    "notADefectOfEitherSide": "The simulation is behaving better and the presentation rule is intact; what broke is an exercise counter fitted to the party `main` happens to produce. Reported to the coordinator rather than repaired here, because the file belongs to another task."
+    "whatStillHolds": "The rule the test is named for. Every line of the feed is still the worst thing that happened to that creature — asserted, and now over 864 lines of the sampled matrix instead of three.",
+    "whatActuallyFailed": "The clause below it was fitted to one window: `baseline` on its own seed at tick 2400, required to be a window in which all three lines differ from their creature's newest entry. Measured over the sampled matrix, such a window happens 33.9% of the time on `main` and 35.8% here, so the old check demanded that one particular tick be one in three.",
+    "theExerciseDidNotWeaken": "41.0% of lines on `main` against 42.0% here. The first hypothesis of this branch — that the game got better and the difference thinned — was refuted by the measurement.",
+    "measurement": "evidence/171-feed-exercise.json"
   },
   "determinism": {
     "command": "the evaluation runner above runs every cell twice and refuses to write a report if the two checksums differ; `powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\verify.ps1 -Stage sim,load`",
@@ -124,22 +125,20 @@
   },
   "verification": {
     "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\verify.ps1 -TemporaryRoot C:/dftmp -GodotPath <godot console>",
-    "full": {
-      "result": "error at stage `tests`",
-      "reason": "the single presentation failure recorded under `whatIsRedAndWasNotBefore`. `dotnet test` returns 1, the stage throws and the six stages after it never run.",
-      "simulationInThatSameStage": "280 of 280 green"
+    "result": "ok, scope full, stagesNotRun []",
+    "stages": "scripts, build, tests, mcp, sim, load, godot, ui, screenshots — all green",
+    "counts": "Simulation 280 of 280, Presentation 489 of 489, domain MCP 8 of 8",
+    "goldenUi": "all three committed frames match. They are captured at ticks 190, 336 and 950, before the first wave at 1300, so no memory exists yet on any of them and this change cannot reach them.",
+    "checksums": {
+      "deterministic": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+      "changedSeed": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
+      "load": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+      "viewInvariant": "7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead"
     },
-    "remainder": {
-      "command": "the same line with `-Skip tests`",
-      "result": "ok, partial: scripts, build, mcp, sim, load, godot, ui, screenshots all green",
-      "why": "the red stage cannot be repaired from this branch — the file belongs to Issue #77 — so the stages it blocked were run separately rather than left unmeasured. This is the completion of one full run, not a second one.",
-      "goldenUi": "all three committed frames match. They are captured at ticks 190, 336 and 950, before the first wave at 1300, so no memory exists yet on any of them and this change cannot reach them.",
-      "checksums": {
-        "deterministic": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
-        "changedSeed": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
-        "load": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
-        "viewInvariant": "7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead"
-      }
+    "theRunBeforeThisOne": {
+      "result": "error at stage `tests`",
+      "reason": "DomainFeedTests.The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it, at a moment when the file belonged to Issue #77 and could not be touched from here. The coordinator reassigned that one file to this task; the check was measured and repaired, and this run is the re-run of the same full verification rather than a second one.",
+      "measurement": "evidence/171-feed-exercise.json"
     }
   }
 }
