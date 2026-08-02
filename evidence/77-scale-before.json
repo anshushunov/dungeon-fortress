@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "issue": 77,
+  "checkpoint": "1 — the frame before, and the target number derived rather than fitted",
+  "note": "PNGs land under .artifacts/evidence/77-before/ per Resolve-EvidenceOutputRoot and are not committed, per AGENTS.md's rule against committing large derived files. This file records the reproduction commands, the image hashes and the canonical checksums copied from the manifest capture-evidence.ps1 itself wrote (.artifacts/evidence/77-before/manifest.json), not retyped.",
+  "decision": {
+    "source": "docs/product/ROADMAP.md, gate log, 2026-08-01: spike #142, owner picked 170 % of the previous body size — 61.8 px at tile 40 px, read off the spike scene's own drawSizePx at --scale 170. 100 % rejected outright, 200 % rejected as too large.",
+    "tuning": "Visual body size is presentation tuning under ADR 0010: no ADR required, and the grid, the canonical snapshot and the command vocabulary are untouched."
+  },
+
+  "derivation": {
+    "claim": "61.8 px is a consequence of '170 % of the previous size', not a number typed into the code.",
+    "constants": {
+      "ReferenceTileSize": 22.0,
+      "ReferenceGoblinDrawSize": 20.0,
+      "source": "src/DungeonFortress.Presentation/CameraView.cs — the pre-#77 pair"
+    },
+    "steps": [
+      "WorldVisualScale(tileSize) = tileSize / ReferenceTileSize; at tile 40 that is 40 / 22 = 1.8181818181818181.",
+      "Before #77: GoblinDrawSize(40) = ReferenceGoblinDrawSize * WorldVisualScale(40) = 20 * 40 / 22 = 800 / 22 = 36.363636363636363 px — the 36.4 px the gate log names.",
+      "The owner's decision is a factor on that size: BodyVisualScale = 170 / 100 = 1.7.",
+      "After #77: GoblinDrawSize(40) = 20 * 1.7 * 40 / 22 = 34 * 40 / 22 = 1360 / 22 = 61.81818181818182 px, which rounds to the 61.8 px of the gate log.",
+      "Equivalent restatement, and the one the code is written in: 170 % of a 20-reference-pixel body is a 34-reference-pixel body on the same 22 px reference grid, scaled by the same WorldVisualScale as every other world primitive. Nothing about the grid, the cell or the foot pivot moves."
+    ],
+    "expectedAfter": {
+      "tile32": 49.454545454545453,
+      "tile40": 61.81818181818182,
+      "tile48": 74.18181818181819,
+      "note": "Tile size stays a free parameter in the ADR 0008 32-48 range; 61.8 px is the value at the shipped default of 40."
+    },
+    "ratioCheck": "61.81818181818182 / 36.363636363636363 = 1.7 exactly in double arithmetic, so the 'after' number carries the decision rather than an independent constant."
+  },
+
+  "before": {
+    "commit": "547c658c4ba6268b092194797bf6c696fa929142",
+    "commitSubject": "Evidence: capture spec for #77 before/after body-scale frames",
+    "sourceDirty": false,
+    "note": "That commit is main at ac0e4b5 plus evidence/77-scale-frames.json and nothing else. It stays on branch agent/77-body-scale-170, so the capture's recorded source state is a commit that still exists.",
+    "spec": "evidence/77-scale-frames.json",
+    "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\capture-evidence.ps1 -SpecPath evidence/77-scale-frames.json -OutputRoot \"evidence/77-before\" -GodotPath \"<godot 4.7.1 console>\"",
+    "measuredBodySize": {
+      "goblinWorldSizePx": 36.36363636363636,
+      "reportedBy": "view.goblinWorldSize in each run's own godot_graybox_screenshot event",
+      "tileSize": 40
+    },
+    "captures": [
+      {
+        "name": "77-scale-rooms",
+        "imagePath": ".artifacts/evidence/77-before/77-scale-rooms.png",
+        "imageSha256": "dc1f8eac40534fa1c03220512a015cf1b8b2e299b99ac083fcee0f5b49442c4f",
+        "canonicalChecksum": "3fae9df7ad170481dd2295d6793227b0a9eb6cb10538d879b709dbc19db034e8",
+        "byteForByteRepeat": true,
+        "goblinScreenSizePx": 36.36363636363636,
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture baseline -ScreenshotTicks 190 -TileSize 40 -CameraZoom 1 -CameraPosition '560,320' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/77-before/77-scale-rooms.png",
+        "reading": "Ordinary economy frame at the shipped tile size and 1x. Bodies sit well inside their 40 px cells with floor visible all round them."
+      },
+      {
+        "name": "77-scale-raid",
+        "imagePath": ".artifacts/evidence/77-before/77-scale-raid.png",
+        "imageSha256": "2511e4763d8c7806c6de9f0a0ef19acfc9ced44742ada985ec3a043d1af611cb",
+        "canonicalChecksum": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70",
+        "byteForByteRepeat": true,
+        "goblinScreenSizePx": 36.36363636363636,
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture prepared -ScreenshotTicks 1670 -TileSize 40 -CameraZoom 1 -CameraPosition '720,400' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/77-before/77-scale-raid.png",
+        "reading": "Wave 2 of the prepared raid: crew and raiders packed at the watch post — the crowding case spike #142 judged the scale on. Every body is a small figure with a visible gap of floor and grid on all four sides."
+      },
+      {
+        "name": "77-scale-raid-detail",
+        "imagePath": ".artifacts/evidence/77-before/77-scale-raid-detail.png",
+        "imageSha256": "eba178d4ed378c693e8d9fb59359dbbe32f9a5d5c5c9b24ee12b41d09eb909e0",
+        "canonicalChecksum": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70",
+        "byteForByteRepeat": true,
+        "goblinScreenSizePx": 72.72727272727272,
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -Fixture prepared -ScreenshotTicks 1670 -TileSize 40 -CameraZoom 2 -CameraPosition '720,400' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/77-before/77-scale-raid-detail.png",
+        "reading": "The same tick at the deepest zoom, which is where the source resolution of the art is spent: 72.7 screen px drawn from the 96 px v1 sheet. It is captured before the change because 170 % takes this number past 96 (see sourceResolution below)."
+      }
+    ]
+  },
+
+  "sourceResolution": {
+    "finding": "At 170 % the deepest zoom asks the connected art for more pixels than it has. 61.81818181818182 * 2.0 = 123.63636363636364 screen px, and the pack the runtime loads today (goblin_*_v1.png) is 96x96.",
+    "beforeThisChange": "72.72727272727272 px drawn from a 96 px source — below it, which is what CameraViewTests.Existing_goblin_art_stays_readable_across_the_selected_zoom_range and the goblin bound in scripts/verify.ps1 were written against.",
+    "afterTheNextSubtask": "The v2 pack already in main (docs/art/goblin-v2-provenance.md) is 272x192 and was authored for exactly this 61.8 px canvas height, so 123.6 px is inside it again. Connecting v2 is the next vertical subtask of #77 and is a non-goal here; until it lands, the 2x view magnifies the v1 sheet by 123.63636363636364 / 96 = 1.2879 with LinearWithMipmaps filtering. 1x, 0.75x and 0.5x — every zoom the game starts at — stay below the source.",
+    "handled": "The check is not deleted: it is restated against the source the scale was authored for and against the pack in use, so it still fails if the drawn size leaves that band. See evidence/77-scale-after.json."
+  }
+}
