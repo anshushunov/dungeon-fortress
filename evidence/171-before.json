@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "issue": 171,
+  "when": "2026-08-02, before the edit",
+  "what": "The channel of Issue #171 re-measured on the current origin/main, not copied from the tree of Issue #129. Two commands are used and both are recorded: the batch runner that produces the whole nine-cell matrix, and the new report of PrototypeMemoryCostTests that says what memory of place refused, to whom it belonged and how old it was.",
+  "tree": {
+    "branch": "agent/171-memory-of-place-cost",
+    "baseCommit": "ac0e4b5",
+    "note": "`ac0e4b5` is the head of `origin/main` at the moment of measurement; the working tree at this checkpoint adds one test file and changes no simulation code."
+  },
+  "whyItIsRemeasured": "The table in the Issue was taken on the tree of #129 against `74af087`. That is evidence about a moment, not about the current tree: the invariants of 13.4 were re-grounded and the tests re-written after it, and `PrototypeScenarioTests` is green on `main` today while it was red then. Every figure below was produced by running the command named beside it on this tree.",
+  "greenBeforeTheEdit": {
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release  /  dotnet test tests/DungeonFortress.Presentation.Tests -c Release",
+    "simulation": "275 of 275 passed",
+    "presentation": "488 of 488 passed",
+    "reading": "The defect this Issue is about is not a red check. It is a party the checks accept."
+  },
+  "matrix": {
+    "command": "dotnet build DungeonFortress.sln -c Release; dotnet tests/DungeonFortress.Scenarios/bin/Release/net8.0/DungeonFortress.Scenarios.dll --evaluate-prototype --repository-root . --output .artifacts/171-main-batch.json",
+    "readWith": "jq -r '.Runs[] | [.Scenario, (.Seed|tostring), .Metrics.Session.Outcome, (.Metrics.Session.EndTick|tostring), (.Metrics.Session.Score|tostring), (.Metrics.Economy.MealsProduced|tostring), (.Metrics.Creatures.AverageSatiety|tostring), (.Metrics.Explainability.ReasonCodeOccurrences.refused_place_of_panic//0|tostring), (.Metrics.Explainability.ReasonCodeOccurrences.waiting_input_missing//0|tostring)] | @tsv' .artifacts/171-main-batch.json",
+    "note": "`refused_place_of_panic` here is the canonical Sum(Repeats) of the reason code, the same figure the contract table quotes.",
+    "cells": [
+      {"fixture": "baseline", "seed": 20260726, "outcome": "raided", "endTick": 2405, "score": 758, "mealsProduced": 99, "averageSatiety": 32, "refusedPlaceOfPanic": 187, "refusedPlaceOfWound": 0, "waitingInputMissing": 380, "mealsStolen": 40, "defendersDowned": 3, "wavesRepelled": 1},
+      {"fixture": "baseline", "seed": 20260727, "outcome": "raided", "endTick": 2421, "score": 831, "mealsProduced": 108, "averageSatiety": 56, "refusedPlaceOfPanic": 0, "refusedPlaceOfWound": 0, "waitingInputMissing": 157, "mealsStolen": 45, "defendersDowned": 2, "wavesRepelled": 2},
+      {"fixture": "baseline", "seed": 20260728, "outcome": "fallen", "endTick": 2299, "score": -223, "mealsProduced": 75, "averageSatiety": 1, "refusedPlaceOfPanic": 412, "refusedPlaceOfWound": 0, "waitingInputMissing": 1053, "mealsStolen": 31, "defendersDowned": 1, "wavesRepelled": 1},
+      {"fixture": "prepared", "seed": 20260726, "outcome": "raided", "endTick": 2423, "score": 796, "mealsProduced": 99, "averageSatiety": 46, "refusedPlaceOfPanic": 2, "refusedPlaceOfWound": 3, "waitingInputMissing": 141, "mealsStolen": 38, "defendersDowned": 5, "wavesRepelled": 2},
+      {"fixture": "prepared", "seed": 20260727, "outcome": "raided", "endTick": 2409, "score": 803, "mealsProduced": 84, "averageSatiety": 16, "refusedPlaceOfPanic": 31, "refusedPlaceOfWound": 1, "waitingInputMissing": 94, "mealsStolen": 33, "defendersDowned": 3, "wavesRepelled": 2},
+      {"fixture": "prepared", "seed": 20260728, "outcome": "raided", "endTick": 2408, "score": 927, "mealsProduced": 93, "averageSatiety": 40, "refusedPlaceOfPanic": 1, "refusedPlaceOfWound": 2, "waitingInputMissing": 165, "mealsStolen": 19, "defendersDowned": 4, "wavesRepelled": 2},
+      {"fixture": "neglected", "seed": 20260726, "outcome": "fallen", "endTick": 614, "score": 0, "mealsProduced": 0, "averageSatiety": 2, "refusedPlaceOfPanic": 0, "refusedPlaceOfWound": 0, "waitingInputMissing": 900, "note": "falls before the first wave; no memory is ever written, so this Issue cannot move it"},
+      {"fixture": "neglected", "seed": 20260727, "outcome": "fallen", "endTick": 594, "score": 0, "mealsProduced": 0, "averageSatiety": 2, "refusedPlaceOfPanic": 0, "refusedPlaceOfWound": 0, "waitingInputMissing": 900},
+      {"fixture": "neglected", "seed": 20260728, "outcome": "fallen", "endTick": 659, "score": 0, "mealsProduced": 0, "averageSatiety": 0, "refusedPlaceOfPanic": 0, "refusedPlaceOfWound": 0, "waitingInputMissing": 869}
+    ],
+    "comparisonWithTheIssue": "The three headline figures of the Issue reproduce exactly on this tree: baseline/20260728 is `fallen` at 2299 with 412 refusals, 75 meals produced and an average satiety of 1. baseline/20260726 also reproduces at 187 refusals. Nothing had to be adjusted."
+  },
+  "price": {
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeMemoryCostTests\" --logger \"console;verbosity=detailed\"",
+    "harness": "tests/DungeonFortress.Simulation.Tests/PrototypeMemoryCostTests.cs, added by this checkpoint and asserting nothing yet",
+    "cells": [
+      {"fixture": "baseline", "seed": 20260726, "outcome": "raided", "refusals": 187, "refusingCreatures": 2, "onFoodChain": 187, "longestUnbrokenStreakOfOneCreature": 126, "oldestMemoryActedOn": 322, "kinds": {"Cook": 169, "Haul": 18}, "tiles": {"(14,7)": 167, "(10,7)": 18, "(15,7)": 2}},
+      {"fixture": "baseline", "seed": 20260727, "outcome": "raided", "refusals": 0, "refusingCreatures": 0, "onFoodChain": 0, "longestUnbrokenStreakOfOneCreature": 0, "oldestMemoryActedOn": 0, "kinds": {}, "tiles": {}},
+      {"fixture": "baseline", "seed": 20260728, "outcome": "fallen", "refusals": 412, "refusingCreatures": 3, "onFoodChain": 412, "longestUnbrokenStreakOfOneCreature": 213, "oldestMemoryActedOn": 256, "kinds": {"Haul": 311, "Cook": 101}, "tiles": {"(11,7)": 301, "(14,7)": 95, "(15,7)": 16}},
+      {"fixture": "prepared", "seed": 20260726, "outcome": "raided", "refusals": 5, "refusingCreatures": 3, "onFoodChain": 3, "longestUnbrokenStreakOfOneCreature": 1, "oldestMemoryActedOn": 123, "kinds": {"Cook": 3, "Watch": 2}, "tiles": {"(14,7)": 3, "(23,12)": 2}},
+      {"fixture": "prepared", "seed": 20260727, "outcome": "raided", "refusals": 32, "refusingCreatures": 5, "onFoodChain": 1, "longestUnbrokenStreakOfOneCreature": 14, "oldestMemoryActedOn": 420, "kinds": {"Watch": 31, "Cook": 1}, "tiles": {"(22,12)": 18, "(23,12)": 13, "(15,7)": 1}},
+      {"fixture": "prepared", "seed": 20260728, "outcome": "raided", "refusals": 3, "refusingCreatures": 2, "onFoodChain": 0, "longestUnbrokenStreakOfOneCreature": 1, "oldestMemoryActedOn": 237, "kinds": {"Watch": 3}, "tiles": {"(22,12)": 3}}
+    ]
+  },
+  "whereTheMemoriesLand": {
+    "command": "a throwaway probe walking the same six parties and printing every memory as it is written; the probe file was deleted after the measurement and its useful half is now the permanent report above",
+    "map": "PrototypeMap paints kitchen x9..12 and larder x13..16, both y6..8. The raiders' road runs along y=7 from the gate at x=26 westwards.",
+    "baseline/20260728": [
+      "t1323 #4 (26,7) panic", "t1664 #2 (24,8)", "t1668 #3 (23,7)", "t1671 #4 (21,7)",
+      "t1677 #8 (20,7)", "t1683 #1 (19,7)", "t1688 #7 (18,7)", "t1694 #6 (17,7)",
+      "t1700 #0 (16,7)", "t1702 #5 (17,6)", "t2010 #3 (24,7)", "t2011 #8 (24,6) wound",
+      "t2023 #4 (14,7)", "t2025 #2 (14,6)", "t2040 #6 (16,7)", "t2043 #1 (14,6)"
+    ],
+    "reading": "Four of the sixteen memories of this party are written on larder tiles themselves — (14,7), (14,6) twice and (16,7) — and four more within two tiles of the larder's east edge. That is the change Issue #129 made: before it, defenders queued behind one another on the road and broke there."
+  },
+  "theDisproportion": {
+    "whereTheCodeTakesThePrice": "PrototypeWorld.AvoidedPlace, called from the last arm of PrototypeWorld.CollectPairs. The arm removes the (creature, job) pair from the matching whenever the job's first tile is within PrototypeTuning.MemoryAvoidRadius = 4 Manhattan steps of any tile the creature remembers. Nothing else in the simulation reads a remembered place.",
+    "twoThingsAreUnbounded": [
+      {
+        "name": "reach",
+        "statement": "A radius of 4 Manhattan steps is a diamond of 41 tiles. The kitchen and the larder together are 24 tiles, and from (14,7) the rule reaches every larder tile and all of the kitchen but its west column. One panic on one larder tile therefore takes the whole food chain away from that creature, not the corner of the room it happened in.",
+        "measuredOnThisTree": "baseline/20260728: creature #4 wrote (14,7) at t2023 and from t2067 refused Haul at (11,7), a kitchen tile three steps away, 301 times. baseline/20260726: creature #7 wrote (14,7) at t2060 and refused work at (10,7), four steps away.",
+        "whyTheGroundForFourIsStale": "The comment on PrototypeTuning.MemoryAvoidRadius records that a radius of 2 «never fired at all» and that four was needed because «the raiders' road runs three to four tiles east of the larder, so that is where defenders meet them and where memories are written, and there is no work on it to refuse». That measurement was taken before Issue #129. After it, memories are written on the work tiles themselves, so the reason four was chosen no longer describes the map it was chosen for."
+      },
+      {
+        "name": "duration",
+        "statement": "A remembered place refuses work for the rest of the party. Nothing in the simulation ages it: the only way a place stops refusing is being pushed out by T.memory_places_max = 3, and a creature that only ever breaks twice keeps both places to the end.",
+        "measuredOnThisTree": "The oldest memory still refusing work is 420 ticks old (prepared/20260727), 322 on baseline/20260726 and 256 on baseline/20260728. A wave arrives every 350 ticks, so a memory outlives the wave that wrote it and goes on refusing through the quiet window that the party is supposed to use to feed itself.",
+        "shapeOfTheCost": "The longest unbroken run of refusals by one creature is 213 ticks (baseline/20260728, creature #4, t2067..t2279) and 126 on baseline/20260726. A creature that refuses on two hundred consecutive ticks has not made a different choice; it has been removed from the domain."
+      }
+    ],
+    "whyItEndsTheParty": "The two multiply. On baseline/20260728 three creatures — #1, #4, #7 — hold a memory on or beside the larder, and between them refuse 412 times, every one of those refusals on a kitchen or larder tile. Meals produced fall to 75 against 99-108 on the cells where the food chain survives, average satiety ends at 1, and `waiting_input_missing` — a hungry creature finding no meal in the larder — is recorded 1053 times against 94-380 elsewhere. The domain falls at t2299, before its fourth wave arrives at t2350, having lost 1 defender and 31 meals to the raiders it beat."
+  },
+  "whatIsNotTheCause": {
+    "theRefusalItself": "The rule that a refusal is only recorded when memory changed what the creature put first (Issue #125) is working: on baseline/20260728 every one of the 412 refusals is a Cook or a Haul on a food-chain tile, which is precisely the work those creatures would otherwise have done.",
+    "combat": "This party's fight went better, not worse. It loses 1 defender and 31 meals; the same seed on `prepared` loses 4 and 19 over a whole extra wave.",
+    "theApproachRuleOf129": "Out of scope by the owner's decision. It is what puts the defenders on the larder; what happens after they break there is this Issue."
+  }
+}
