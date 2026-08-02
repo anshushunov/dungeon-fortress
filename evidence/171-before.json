@@ -37,7 +37,6 @@
     "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeMemoryCostTests\" --logger \"console;verbosity=detailed\"",
     "harness": "tests/DungeonFortress.Simulation.Tests/PrototypeMemoryCostTests.cs, added by this checkpoint and asserting nothing yet",
     "sample": "six parties — `baseline` and `prepared` on the three seeds. Not the fifteen cells above: `neglected` writes no memory at all, and the two causal pairs are outside this harness. Every refusal count in this file is over these six.",
-    "whatThisListIs": "The nine cells of the seed matrix. The six causal-pair cells of the same run are recorded next to their after values in evidence/171-after.json, key `matrix.everyCellOfFifteen`, rather than duplicated here.",
     "cells": [
       {"fixture": "baseline", "seed": 20260726, "outcome": "raided", "refusals": 187, "refusingCreatures": 2, "onFoodChain": 187, "longestUnbrokenStreakOfOneCreature": 126, "oldestMemoryActedOn": 322, "kinds": {"Cook": 169, "Haul": 18}, "tiles": {"(14,7)": 167, "(10,7)": 18, "(15,7)": 2}},
       {"fixture": "baseline", "seed": 20260727, "outcome": "raided", "refusals": 0, "refusingCreatures": 0, "onFoodChain": 0, "longestUnbrokenStreakOfOneCreature": 0, "oldestMemoryActedOn": 0, "kinds": {}, "tiles": {}},

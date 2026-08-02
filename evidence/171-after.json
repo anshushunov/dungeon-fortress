@@ -121,8 +121,8 @@
     "test": "DungeonFortress.Presentation.Tests.DomainFeedTests.The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it",
     "file": "tests/DungeonFortress.Presentation.Tests/DomainFeedTests.cs — held by Issue #77 when this was first found, reassigned to this task in writing by the coordinator afterwards",
     "message": "only 2 of the 3 lines of this feed show something other than that creature's newest entry",
-    "whatStillHolds": "The rule the test is named for. Every line of the feed is still the worst thing that happened to that creature — asserted, and now over 864 lines of the sampled matrix instead of three.",
-    "whatActuallyFailed": "The clause below it was fitted to one window: `baseline` on its own seed at tick 2400, required to be a window in which all three lines differ from their creature's newest entry. Measured over the sampled matrix, such a window happens 33.9% of the time on `main` and 35.8% here, so the old check demanded that one particular tick be one in three.",
+    "whatStillHolds": "The rule the test is named for. Every line of the feed is still the worst thing that happened to that creature — asserted, and now over 864 lines of the sampled windows of the six parties instead of three.",
+    "whatActuallyFailed": "The clause below it was fitted to one window: `baseline` on its own seed at tick 2400, required to be a window in which all three lines differ from their creature's newest entry. Measured over the sampled windows of the six parties, such a window happens 33.9% of the time on `main` and 35.8% here, so the old check demanded that one particular tick be one in three.",
     "theExerciseDidNotWeaken": "41.0% of lines on `main` against 42.0% here. The first hypothesis of this branch — that the game got better and the difference thinned — was refuted by the measurement.",
     "measurement": "evidence/171-feed-exercise.json"
   },

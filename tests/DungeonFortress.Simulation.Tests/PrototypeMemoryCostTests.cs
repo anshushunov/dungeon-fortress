@@ -105,6 +105,7 @@ public sealed class PrototypeMemoryCostTests(ITestOutputHelper output)
     /// fixtures that reach a wave must come out of every seed alive; `neglected`
     /// is not here because it falls before the first wave, writes no memory at
     /// all and is the fixture whose falling is the point.
+    /// </para>
     ///
     /// <para>
     /// Six parties and not the fifteen cells of the seed matrix of 13.4: the two
@@ -112,7 +113,6 @@ public sealed class PrototypeMemoryCostTests(ITestOutputHelper output)
     /// by this class is over the six. Named because one change set must not use
     /// the word `matrix` for two different denominators — found by the independent
     /// review of PR #178.
-    /// </para>
     /// </para>
     ///
     /// <para>
