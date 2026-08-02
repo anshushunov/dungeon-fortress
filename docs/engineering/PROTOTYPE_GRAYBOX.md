@@ -1656,8 +1656,10 @@ the cause: a body 42 % wider adds none of them, and the 1.29 px the canvas rose
 adds all of them.
 
 `combat → flinch` raises the head 3.2–3.5 px of a 47.97 px silhouette at tile 40
-(the alpha bbox says 4.83, but the topmost row of `flinch` is a five-column
-sliver). It was accepted as the recoil doing its job — registering `flinch` by its
+when the top is asked at ten columns or more; at five columns it is 4.51 px, and
+the alpha bbox says 4.83 because the topmost row of `flinch` is a sliver — three
+columns at the `alpha > 32` threshold this method uses, five if any non-zero alpha
+counts. It was accepted as the recoil doing its job — registering `flinch` by its
 head would hold the head still and move the feet — and the timing question belongs
 to the feedback loop that will play it. `evidence/77-pack-head-jump.json`.
 
