@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "issue": 197,
+  "pr": 194,
+  "checkpoint": "Круг доработки после вердикта ВОЗВРАТ по PR #194 — один мутант на ключевую ветку каждого из трёх скриптов (критерий готовности 1)",
+  "rule": "Ключевая ветка скрипта подменяется на committed зелёном состоянии, и его собственный тест обязан упасть с ненулевым кодом. Мутант, который скрипт переживает зелёным, означает, что ветка не защищена ничем и любая будущая правка сломает её молча.",
+  "runAgainst": {
+    "commit": "3f6b26c",
+    "commitSubject": "Слияние origin/main в chore/agent-tooling",
+    "branch": "chore/agent-tooling",
+    "hygiene": "Каждый мутант применялся к закоммиченному состоянию и снимался git checkout сразу после прогона, поэтому откат мутанта не мог снести саму правку. Между мутантами git status --short пуст.",
+    "rerun": "После коммита 1a6b567 (check-claimed-sha256 перестал падать на битом evidence/*.json) мутант m1 прогнан заново на 1a6b567 и снова убит: exit 1, то же сообщение."
+  },
+  "history": {
+    "reviewFinding": "Независимый review PR #194 показал, что мутант m1 ВЫЖИВАЛ: тест давал exit 0. Мутанты m2 и m3 review уже убивал; здесь они воспроизведены на новом состоянии.",
+    "cause": "В тесте не было ни одного случая со статусом working-copy-only. Второй случай назывался crlf-trap, но утверждал mismatch, а mismatch одинаково наступает при обеих ориентациях сверки.",
+    "fix": "Коммит eefb7d4 — тест собирает настоящий капкан: .gitattributes с eol=lf плюс CRLF в рабочей копии."
+  },
+  "mutants": [
+    {
+      "id": "m1",
+      "script": "scripts/check-claimed-sha256.ps1",
+      "keyBranch": "сверка заявленной суммы с git-блобом, а не с рабочей копией — ветка, ради которой скрипт существует",
+      "edit": "В Add-Claim (строки 96-101) сравнения переставлены местами при сохранении меток: первым проверяется $workingHash и результат называется blob-match, вторым $blobHash и результат называется working-copy-only. Скрипт начинает делать ровно то, ради отказа от чего написан.",
+      "test": "scripts/test-check-claimed-sha256.ps1",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-check-claimed-sha256.ps1",
+      "resultBeforeThisRound": "exit 0, {\"event\":\"check_claimed_sha256_test\",\"status\":\"ok\",...} — МУТАНТ ВЫЖИВАЛ",
+      "resultAfterThisRound": "exit 1, \"Working-copy hash of a tracked file was not flagged as working-copy-only\"",
+      "killedBy": "Случай working-copy-only.json: файл crlf.txt отслеживается, блоб LF (e9024f1a07d29d52ad3aa5e1a18e94db1f3a9fd32b89e39d47c472cd99071e13), рабочая копия CRLF (6612d9c94c2da8d2544e1188348fc7baf717ffff1bacde51929a166404a41ffc). Заявлен хеш рабочей копии. Оригинал даёт status working-copy-only и exit 1; мутант называет ту же сумму blob-match и выходит с 0.",
+      "killed": true
+    },
+    {
+      "id": "m2",
+      "script": "scripts/check-base-stale.ps1",
+      "keyBranch": "подсчёт отставания от origin/main через merge-base",
+      "edit": "$behindCount = [int]($behindResult.Lines[-1]) заменено на $behindCount = 0 — отставание всегда считается нулевым.",
+      "test": "scripts/test-check-base-stale.ps1",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-check-base-stale.ps1",
+      "resultAfterThisRound": "exit 1, \"Stale base was not reported stale. exit=0 output={\\\"event\\\":\\\"base_stale_check\\\",\\\"status\\\":\\\"fresh\\\"...\"",
+      "killedBy": "Третий случай теста: origin/main переводится вперёд локального HEAD, ожидается status stale, behind 1 и exit 1.",
+      "killed": true
+    },
+    {
+      "id": "m3",
+      "script": "scripts/search-codex-sessions.ps1",
+      "keyBranch": "фильтр строк по искомой подстроке",
+      "edit": "Условие if ($line.IndexOf($Query, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue } заменено на if ($false) { continue } — фильтрация отключена, хитом становится любая строка.",
+      "test": "scripts/test-search-codex-sessions.ps1",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-search-codex-sessions.ps1",
+      "resultAfterThisRound": "exit 1, \"No-hit quiet run should exit 1, got 0.\"",
+      "killedBy": "Случай -Query \"this-string-does-not-exist\" -Quiet: при отключённом фильтре запрос без совпадений всё равно находит строки и выходит с 0.",
+      "killed": true
+    }
+  ],
+  "greenBaseline": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage scripts",
+    "note": "Все три теста подключены в стадию scripts и проходят в общей очереди; числа прогона — в теле PR #194."
+  },
+  "knownLimitation": {
+    "scope": "Не входит в этот круг и уходит отдельной задачей (Issue #197, раздел «Известное ограничение»).",
+    "what": "Сканирование docs/ в check-claimed-sha256.ps1 требует хеш и путь в одной строке Markdown.",
+    "measured": "На дереве этого PR после слияния origin/main: без -IncludeDocs 43 claims, с -IncludeDocs 47 claims, blob-match 0 в обоих случаях. Четыре добавленных claim'а — docs/art/PROVENANCE_VERIFIABILITY.md строки 159-162 (имена исходных PNG вне Git). Главный claim Issue #179 — scripts/art/remove_chroma_key.py, путь на строке 164, сумма на строке 166 — не находится, хотя сама сумма верна: git cat-file blob HEAD:scripts/art/remove_chroma_key.py | sha256sum даёт 3f7b9b14ad5c90f37618bc1c16a039a2076abca12ddc41b3ae470e2b1cad6c0e, ровно то, что заявлено."
+  }
+}

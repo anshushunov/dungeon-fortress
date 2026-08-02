@@ -32,6 +32,9 @@ $verifyStagesTestScript = Join-Path $repoRoot "scripts\test-verify-stages.ps1"
 $temporaryRootTestScript = Join-Path $repoRoot "scripts\test-temporary-root.ps1"
 $screenshotOutputPathTestScript = Join-Path $repoRoot "scripts\test-screenshot-output-path.ps1"
 $evidenceToolsTestScript = Join-Path $repoRoot "scripts\test-evidence-tools.ps1"
+$claimedSha256TestScript = Join-Path $repoRoot "scripts\test-check-claimed-sha256.ps1"
+$codexSessionsSearchTestScript = Join-Path $repoRoot "scripts\test-search-codex-sessions.ps1"
+$baseStaleTestScript = Join-Path $repoRoot "scripts\test-check-base-stale.ps1"
 $githubAuthToolsTestScript = Join-Path $repoRoot "scripts\test-github-auth-tools.ps1"
 $goblinImportTestScript = Join-Path $repoRoot "scripts\test-goblin-sprite-import.ps1"
 $ivanMcpConfigTestScript = Join-Path $repoRoot "scripts\test-ivan-mcp-config.ps1"
@@ -282,6 +285,15 @@ $stageCatalog = [ordered]@{
             )
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $evidenceToolsTestScript
+            )
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $claimedSha256TestScript
+            )
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $codexSessionsSearchTestScript
+            )
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $baseStaleTestScript
             )
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $githubAuthToolsTestScript
