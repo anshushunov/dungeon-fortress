@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "issue": 171,
+  "when": "2026-08-02, after the edit",
+  "what": "The same two commands as evidence/171-before.json, run on the same tree with the two new bounds in place, next to the sweep that chose their values. Nothing here is copied from the before file; every figure was produced by the command printed beside it.",
+  "twoDenominatorsAndWhichIsWhich": {
+    "why": "This file uses two different samples and the word `matrix` would name both, so it names neither. Corrected after the independent review of PR #178 found the same word standing for 15 cells and for 6 inside one change set.",
+    "fifteenCells": "`matrix` and `everyCellOfFifteen` below: the batch runner PrototypeEvaluation drives three fixtures x three seeds plus two causal pairs x three. Outcomes, scores and the before/after table are read here.",
+    "sixParties": "`price`, `sweep` and `isTheSliceStillObservable`: PrototypeMemoryCostTests walks `baseline` and `prepared` x three seeds. Every count of refusals in this file — including 253 and 639 — is over these six parties and not over the fifteen cells.",
+    "whatTheSixDoNotCover": "`neglected` writes no memory at all, so it can hold none of these counts. `prepared-ration-zero` and `prepared-watch-zero` are outside the sample and are not counted — and one of them demonstrably moved: prepared-ration-zero/20260728 goes 902 -> 947, so refusals were bound there too and neither 253 nor 639 includes them.",
+    "whatIsStillSound": "The before/after comparison. Both halves were taken on the same six parties with the same command, so both are understated by the same cells; nothing is being compared across samples."
+  },
+  "tree": {
+    "branch": "agent/171-memory-of-place-cost",
+    "baseCommit": "ac0e4b5",
+    "note": "The commit that carries the simulation change is the one this file is committed with; the branch head is described in prose rather than named, as Issue #106 asks."
+  },
+  "theEdit": {
+    "where": "PrototypeWorld.AvoidedPlace — the only place in the simulation that reads a remembered place, and therefore the only place memory of place can cost the domain anything.",
+    "statement": "A remembered place refuses work as before, with two bounds added and the reach left alone. (1) It stops refusing T.memory_avoid_ticks after it was written; the place is still remembered, still in canonical state and still on the panel, and what has run out is the avoidance rather than the memory. (2) A creature whose satiety is below T.memory_yields_satiety does not refuse at all: hunger outranks what it remembers, and it takes the work.",
+    "whatDidNotChange": [
+      "what is remembered, by whom and where: Remember is untouched, so memory stays personal by construction (ADR 0018)",
+      "the reach: T.memory_avoid_radius stays 4 — see the sweep below for why shrinking it was rejected by measurement",
+      "the truthfulness of a refusal (Issue #125): a creature that yields to hunger records no refusal, because it did not refuse. Every refusal still names the work memory actually took away",
+      "the snapshot: no field, section or schema version moved; PrototypeSnapshotShapeTests is green",
+      "the command vocabulary (ADR 0005): both bounds are rules of behaviour, not orders",
+      "determinism: the same seed still gives the same checksum twice, and a different seed a different one"
+    ],
+    "values": {
+      "T.memory_avoid_ticks": {
+        "value": 200,
+        "why": "Shorter than WaveIntervalTicks = 350, so a fright never outlives the quiet window the party has to feed itself in, and it cannot compound wave over wave. 300 was measured and leaves the cost in place: baseline/20260728 ends at satiety 22 with 241 refusals against 39 and 122 at 200."
+      },
+      "T.memory_yields_satiety": {
+        "value": 30,
+        "why": "Exactly EatThreshold, the point at which the same creature already drops what it is doing to go and eat. The rule adds no new moment to the simulation: at the moment hunger already overrides what a creature is doing, it overrides what it is refusing too. 20 was measured and is too late — baseline/20260728 survives it but ends at satiety 13, because a creature that yields at 20 yields after the larder is empty."
+      }
+    }
+  },
+  "sweep": {
+    "command": "for each pair of values: edit the two constants in src/DungeonFortress.Simulation/PrototypeTuning.cs, then `dotnet build DungeonFortress.sln -c Release` and `dotnet test tests/DungeonFortress.Simulation.Tests -c Release --no-build --filter \"FullyQualifiedName~PrototypeMemoryCostTests\" --logger \"console;verbosity=detailed\"`. The report of that class prints one line per cell; the driver script lived in .artifacts and is not committed.",
+    "columns": "outcome of baseline/20260728 | its meals produced | its average satiety at the end | refusals over the three `baseline` parties | over the three `prepared` parties | longest unbroken refusal streak of one creature",
+    "reach": {
+      "question": "Does shrinking T.memory_avoid_radius fix it? The comment that chose 4 was written before Issue #129 and describes a map where memories land on the raiders' road; after #129 they land on the larder, so the ground for 4 is stale and the question had to be asked again.",
+      "rows": [
+        {"radius": 4, "avoidTicks": "none", "yieldsSatiety": "none", "cell": "fallen", "meals": 75, "satiety": 1, "refusalsBaseline": 599, "refusalsPrepared": 40, "longestStreak": 213, "note": "this is `main`"},
+        {"radius": 3, "avoidTicks": "none", "yieldsSatiety": "none", "cell": "raided", "meals": 81, "satiety": 8, "refusalsBaseline": 671, "refusalsPrepared": 19, "longestStreak": 155},
+        {"radius": 2, "avoidTicks": "none", "yieldsSatiety": "none", "cell": "raided", "meals": 87, "satiety": 30, "refusalsBaseline": 107, "refusalsPrepared": 5, "longestStreak": 87},
+        {"radius": 1, "avoidTicks": "none", "yieldsSatiety": "none", "cell": "raided", "meals": 93, "satiety": 8, "refusalsBaseline": 103, "refusalsPrepared": 2, "longestStreak": 87}
+      ],
+      "answer": "It fixes the fall and pays for it with the evidence that memory exists. On `prepared` the memories land near the gate and the only work within reach of them is the watch post at (22,12) and (23,12); shrink the radius and `prepared` falls from 40 refusals over its three seeds to 5 at radius 2 and 2 at radius 1, under the floor of 10 that PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next holds each fixture to. Radius is what makes the slice observable on `prepared` at all. Rejected: it buys the price of memory with the proof that memory is there.",
+      "keptAsAFinding": "That `prepared` only shows the mechanic because of reach — that no memory on that fixture lands on a work tile at all — is a property of the fixture, not of this Issue. It is named here so the next person does not rediscover it as a surprise."
+    },
+    "theTwoBoundsThatWereKept": {
+      "rows": [
+        {"radius": 4, "avoidTicks": 200, "yieldsSatiety": "none", "cell": "fallen", "meals": 75, "satiety": 1, "refusalsBaseline": 417, "refusalsPrepared": 35, "longestStreak": 157, "reading": "ageing alone does not fix it"},
+        {"radius": 4, "avoidTicks": 100, "yieldsSatiety": "none", "cell": "raided", "meals": 96, "satiety": 36, "refusalsBaseline": 202, "refusalsPrepared": 32, "longestStreak": 59, "reading": "ageing alone fixes it only if it is short enough to cut the mechanic in half"},
+        {"radius": 4, "avoidTicks": "none", "yieldsSatiety": 30, "cell": "raided", "meals": 81, "satiety": 22, "refusalsBaseline": 619, "refusalsPrepared": 39, "longestStreak": 114, "reading": "hunger alone fixes the fall and leaves the party paying 619 refusals for it"},
+        {"radius": 4, "avoidTicks": "none", "yieldsSatiety": 20, "cell": "raided", "meals": 81, "satiety": 13, "refusalsBaseline": 650, "refusalsPrepared": 39, "longestStreak": 184, "reading": "yielding at 20 is yielding after the larder is empty"},
+        {"radius": 4, "avoidTicks": 300, "yieldsSatiety": 30, "cell": "raided", "meals": 81, "satiety": 22, "refusalsBaseline": 352, "refusalsPrepared": 38, "longestStreak": 87},
+        {"radius": 4, "avoidTicks": 200, "yieldsSatiety": 30, "cell": "raided", "meals": 90, "satiety": 39, "refusalsBaseline": 219, "refusalsPrepared": 34, "longestStreak": 87, "reading": "shipped"}
+      ],
+      "why both": "Neither bound is redundant and the table says so on its own row. Ageing at 200 alone leaves the domain dead; hunger alone leaves it alive and paying 619 refusals with one creature standing still for 114 consecutive ticks. Together the party lives, the price falls to 219 refusals and 87 ticks, and the mechanic is still on the panel 253 times over the six parties this class walks."
+    }
+  },
+  "matrix": {
+    "command": "dotnet build DungeonFortress.sln -c Release; dotnet tests/DungeonFortress.Scenarios/bin/Release/net8.0/DungeonFortress.Scenarios.dll --evaluate-prototype --repository-root . --output .artifacts/171-after-batch.json",
+    "readWith": "jq -r '.Runs[] | [.Scenario, (.Seed|tostring), .Metrics.Session.Outcome, (.Metrics.Session.Score|tostring), (.Metrics.Economy.MealsProduced|tostring), (.Metrics.Creatures.AverageSatiety|tostring), (.Metrics.Explainability.ReasonCodeOccurrences.refused_place_of_panic//0|tostring), (.Metrics.Explainability.ReasonCodeOccurrences.waiting_input_missing//0|tostring), (.Metrics.Session.MealsStolen|tostring)] | @tsv' .artifacts/171-after-batch.json",
+    "everyCellOfFifteen": [
+      {"cell": "baseline/20260726", "outcome": ["raided", "raided"], "score": [758, 704], "mealsProduced": [99, 114], "averageSatiety": [32, 38], "refusedPlaceOfPanic": [187, 97], "waitingInputMissing": [380, 606], "mealsStolen": [40, 54], "defendersDowned": [3, 3], "defendersFled": [21, 19], "raidersDowned": [8, 7], "verdict": "worse by 54"},
+      {"cell": "baseline/20260727", "outcome": ["raided", "raided"], "score": [831, 831], "mealsProduced": [108, 108], "averageSatiety": [56, 56], "refusedPlaceOfPanic": [0, 0], "waitingInputMissing": [157, 157], "mealsStolen": [45, 45], "verdict": "identical: no memory ever refused anything on this cell, so there was nothing for the bounds to bind"},
+      {"cell": "baseline/20260728", "outcome": ["fallen", "raided"], "score": [-223, 795], "mealsProduced": [75, 90], "averageSatiety": [1, 39], "refusedPlaceOfPanic": [412, 122], "waitingInputMissing": [1053, 790], "mealsStolen": [31, 37], "defendersDowned": [1, 1], "defendersFled": [15, 19], "raidersDowned": [7, 7], "wavesResolved": [3, 4], "verdict": "the defect, closed: +1018"},
+      {"cell": "prepared/20260726", "outcome": ["raided", "raided"], "score": [796, 796], "verdict": "identical"},
+      {"cell": "prepared/20260727", "outcome": ["raided", "raided"], "score": [803, 803], "mealsProduced": [84, 84], "refusedPlaceOfPanic": [31, 28], "verdict": "identical in outcome and score; three refusals fewer, all of them Watch at the gate, and nothing downstream of them moved"},
+      {"cell": "prepared/20260728", "outcome": ["raided", "raided"], "score": [927, 947], "mealsProduced": [93, 96], "averageSatiety": [40, 36], "mealsStolen": [19, 17], "defendersDowned": [4, 3], "verdict": "better by 20"},
+      {"cell": "neglected/20260726, /20260727, /20260728", "outcome": ["fallen", "fallen"], "score": [0, 0], "verdict": "identical on all three seeds. This fixture falls before the first wave, so it never writes a memory and this Issue cannot reach it"},
+      {"cell": "prepared-ration-zero/20260726", "score": [796, 796], "verdict": "identical"},
+      {"cell": "prepared-ration-zero/20260727", "score": [878, 878], "verdict": "identical"},
+      {"cell": "prepared-ration-zero/20260728", "score": [902, 947], "mealsStolen": [26, 17], "verdict": "better by 45"},
+      {"cell": "prepared-watch-zero/20260726", "score": [840, 840], "verdict": "identical"},
+      {"cell": "prepared-watch-zero/20260727", "score": [736, 736], "verdict": "identical"},
+      {"cell": "prepared-watch-zero/20260728", "score": [792, 792], "verdict": "identical"}
+    ],
+    "summary": "Four cells of fifteen moved. One is the defect, two improved, one got worse; eleven are byte-identical."
+  },
+  "whatGotWorse": {
+    "cell": "baseline/20260726",
+    "score": "758 -> 704, a loss of 54",
+    "decomposition": {
+      "formula": "score = band + 60*wavesRepelled + 10*survivors + 2*mealsKept - 5*mealsStolen - 8*defendersLost (contract 10.8)",
+      "terms": "band 1000 unchanged, wavesRepelled 1 unchanged, mealsKept 0 unchanged; meals stolen 40 -> 54 is -70; defenders lost 24 -> 22 is +16. -70 + 16 = -54, and the residual is zero.",
+      "command": "the two batch files above, read with the jq line in `matrix.readWith` extended with `.Metrics.Session.DefendersFled` and `.Metrics.Session.MealsLeft`"
+    },
+    "cause": "The domain feeds itself, so there is more in the larder to take. Meals produced rise 99 -> 114 and average satiety 32 -> 38 on the same cell, and a raider carries out three portions a visit. This is the price of the fix stated plainly: a domain that eats is a richer target than a domain that starves, and the score charges it for that.",
+    "isItAcceptable": "It is 54 points out of 758 on one cell, against 1018 on the cell the Issue is about, and it does not move the band, the invariants or the ranking of the two plans. Named rather than netted off."
+  },
+  "invariants": {
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release",
+    "result": "280 of 280 green, including PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix on all three seeds and Preparation_outscores_its_absence_over_the_matrix.",
+    "whatChangedUnderneathThatTest": {
+      "before": "prepared 2526 against baseline 1366, per-seed gaps +38, -28 and +1150. The docstring of the test records that 1150 of the 1160 came from baseline/20260728 — 'the party that wins its fights and starves, defect #171' — and asks for the clause to be rechecked when #171 closes.",
+      "after": "prepared 2546 against baseline 2330 over the three seeds of each, per-seed gaps +92, -28 and +152. The margin is now spread over the three seeds instead of resting on one dead party, which is what the clause was waiting for.",
+      "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Preparation_outscores_its_absence_over_the_matrix\" --logger \"console;verbosity=detailed\""
+    }
+  },
+  "isTheSliceStillObservable": {
+    "criterion": "Issue #171, criterion 2: a creature that panicked still refuses work there, and the refusals are not concentrated on one creature.",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeMemoryCostTests\" --logger \"console;verbosity=detailed\"",
+    "perCell": [
+      {"cell": "baseline/20260726", "refusals": [187, 97], "refusingCreatures": [2, 2], "longestStreak": [126, 48], "oldestMemoryActedOn": [322, 174]},
+      {"cell": "baseline/20260727", "refusals": [0, 0], "refusingCreatures": [0, 0], "note": "no memory is ever acted on here, before or after"},
+      {"cell": "baseline/20260728", "refusals": [412, 122], "refusingCreatures": [3, 4], "longestStreak": [213, 87], "oldestMemoryActedOn": [256, 157]},
+      {"cell": "prepared/20260726", "refusals": [5, 5], "refusingCreatures": [3, 3], "longestStreak": [1, 1]},
+      {"cell": "prepared/20260727", "refusals": [32, 28], "refusingCreatures": [5, 4], "longestStreak": [14, 13]},
+      {"cell": "prepared/20260728", "refusals": [3, 1], "refusingCreatures": [2, 1], "longestStreak": [1, 1]}
+    ],
+    "reading": "253 refusals survive over the six parties of `baseline` and `prepared` against 639 before, spread over up to four creatures a party instead of three, and on the cell the defect lives on the count of refusing creatures goes up rather than down: 3 -> 4. Nothing was zeroed. The floors PrototypeMemoryTests holds each fixture to — ten refusals over its three seeds, five with the counterfactual probe — are met with 219 on `baseline` and 34 on `prepared`.",
+    "alsoMeasured": "A hungry creature taking work it would otherwise refuse is not a theory: PrototypeMemoryCostTests.A_creature_going_hungry_takes_the_work_it_would_otherwise_refuse counts the ticks it happens on and fails if the answer is zero."
+  },
+  "whatWentRedAndWasRepairedInASecondRound": {
+    "test": "DungeonFortress.Presentation.Tests.DomainFeedTests.The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it",
+    "file": "tests/DungeonFortress.Presentation.Tests/DomainFeedTests.cs — held by Issue #77 when this was first found, reassigned to this task in writing by the coordinator afterwards",
+    "message": "only 2 of the 3 lines of this feed show something other than that creature's newest entry",
+    "whatStillHolds": "The rule the test is named for. Every line of the feed is still the worst thing that happened to that creature — asserted, and now over 864 lines of the sampled windows of the six parties instead of three.",
+    "whatActuallyFailed": "The clause below it was fitted to one window: `baseline` on its own seed at tick 2400, required to be a window in which all three lines differ from their creature's newest entry. Measured over the sampled windows of the six parties, such a window happens 33.9% of the time on `main` and 35.8% here, so the old check demanded that one particular tick be one in three.",
+    "theExerciseDidNotWeaken": "41.0% of lines on `main` against 42.0% here. The first hypothesis of this branch — that the game got better and the difference thinned — was refuted by the measurement.",
+    "measurement": "evidence/171-feed-exercise.json"
+  },
+  "determinism": {
+    "command": "the evaluation runner above runs every cell twice and refuses to write a report if the two checksums differ; `powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\verify.ps1 -Stage sim,load`",
+    "result": "15 of 15 cells reported repeatIdentical; the sim and load stages are green. The snapshot did not move, so the schema version stays 3 by the rules of docs/engineering/PROTOTYPE_HEADLESS.md, and no row is owed to its table of shape changes."
+  },
+  "verification": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\verify.ps1 -TemporaryRoot C:/dftmp -GodotPath <godot console>",
+    "result": "ok, scope full, stagesNotRun []",
+    "stages": "scripts, build, tests, mcp, sim, load, godot, ui, screenshots — all green",
+    "counts": "Simulation 280 of 280, Presentation 489 of 489, domain MCP 8 of 8",
+    "goldenUi": "all three committed frames match. They are captured at ticks 190, 336 and 950, before the first wave at 1300, so no memory exists yet on any of them and this change cannot reach them.",
+    "checksums": {
+      "deterministic": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+      "changedSeed": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
+      "load": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+      "viewInvariant": "7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead"
+    },
+    "theRunBeforeThisOne": {
+      "result": "error at stage `tests`",
+      "reason": "DomainFeedTests.The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it, at a moment when the file belonged to Issue #77 and could not be touched from here. The coordinator reassigned that one file to this task; the check was measured and repaired, and this run is the re-run of the same full verification rather than a second one.",
+      "measurement": "evidence/171-feed-exercise.json"
+    }
+  }
+}

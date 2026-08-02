@@ -176,8 +176,83 @@ public static class PrototypeTuning
     // "the part of the room" is closer to "the room". That is the price of the
     // mechanic being observable at all on this map, and it is named rather than
     // hidden.
+    //
+    // Issue #171: the measurement above was taken before Issue #129, and the map
+    // it describes is not the map any more. The approach rule puts defenders on
+    // the tiles around a raider instead of behind one another, a raider stands at
+    // the larder, and so memories are now written on the larder itself — four of
+    // the sixteen on baseline/20260728, with four more within two tiles of it
+    // (evidence/171-before.json). "There is no work on the road to refuse" was
+    // the whole reason four was needed, and it has stopped being true.
+    //
+    // At four the reach is a diamond of 41 tiles. From (14,7) it covers every
+    // larder tile and all of the kitchen but its west column, so one broken nerve
+    // on one larder tile takes the whole food chain away from that creature —
+    // measured as 301 refusals of a haul at (11,7), three steps away, by a
+    // creature that remembers (14,7).
+    //
+    // And four stays, because shrinking it was tried against the whole matrix and
+    // it buys the wrong thing. At three the domain stops falling but still ends
+    // baseline/20260728 at satiety 8 with 459 refusals; at two it ends at 30, and
+    // `prepared` — the fixture where memories land near the gate and the only work
+    // in reach is the watch post — falls from 40 refusals over its three seeds to
+    // 5, below the floor `PrototypeMemoryTests` holds the slice to. Reach is what
+    // makes the mechanic observable on `prepared` at all, so spending it to fix
+    // `baseline` would pay for the price of memory with the evidence that memory
+    // exists. The two bounds below are the ones that cost nothing of that: they
+    // are about how long the price lasts and how much of it the domain can be made
+    // to pay, not about how far it reaches. Every figure in this paragraph is in
+    // evidence/171-after.json, section `sweep`.
     public const int MemoryPlacesMax = 3;
     public const int MemoryAvoidRadius = 4;
+
+    // How long one memory goes on refusing work, in ticks since it was written.
+    // The second half of the price of Issue #171, and the one that had no value
+    // at all before it: a remembered place refused work for the rest of the
+    // party, and the only thing that could ever stop it was being pushed out by
+    // MemoryPlacesMax.
+    //
+    // The place itself is not forgotten when this runs out. What ages is the
+    // avoidance, not the memory: the creature still carries the tile, the panel
+    // still lists it and the player can still read what happened there. That is
+    // the distinction ADR 0018 asks each following slice to make when it says
+    // memory "живёт дольше одного тика и одной волны, поэтому каждый следующий
+    // слайс обязан объяснять, что с ней происходит".
+    //
+    // Two hundred, and the number has a shape rather than a taste: it is shorter
+    // than WaveIntervalTicks = 350, so a fright never outlives the quiet window
+    // the party is supposed to use to feed itself, and by the time the next wave
+    // arrives the creature is working there again. Longer values were measured on
+    // the matrix and leave the cost in place — at 300, baseline/20260728 still
+    // ends at satiety 22 with 241 refusals against 39 and 122 here.
+    public const int MemoryAvoidTicks = 200;
+
+    // The satiety at which memory stops refusing work at all. Below it a creature
+    // is too hungry to be choosy and takes the job it would otherwise have walked
+    // away from.
+    //
+    // This is the other half of the price of Issue #171 and the one that bounds
+    // it rather than shortening it: whatever memory costs the domain, it may not
+    // cost it its life. Without this bound the two dimensions above multiply into
+    // a party that wins every fight and starves, because the tiles a nerve breaks
+    // on after Issue #129 are the tiles the food chain runs through, and a
+    // creature standing still with an empty larder in front of it is not making a
+    // different choice.
+    //
+    // Thirty is EatThreshold: exactly the point at which the same creature already
+    // drops everything to go and eat. The rule therefore adds no new moment to the
+    // simulation — it says that at the moment hunger already overrides what a
+    // creature was doing, it overrides what it was refusing as well. Twenty was
+    // tried and is too late: baseline/20260728 survives it but ends at satiety 13,
+    // because a creature that only yields at 20 yields after the larder is already
+    // empty.
+    //
+    // What it deliberately does not do is make the refusal untrue. A creature that
+    // yields records no refusal, so nothing in the log claims a decision that did
+    // not happen; the truthfulness rule of Issue #125 is untouched. And it is not
+    // a rule about the map: it never asks what stands on the tile, only what the
+    // creature has left.
+    public const int MemoryYieldsSatiety = 30;
 
     public const ulong DefaultSeed = 20_260_726UL;
 
