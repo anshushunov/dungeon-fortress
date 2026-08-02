@@ -1550,14 +1550,43 @@ committed golden screenshots: the portability reasons in
 [Golden UI state](#golden-ui-state) still apply.
 
 The selected 40 px tile scales world-space primitives from the previous 22 px
-grid instead of leaving their silhouettes behind at the old size. The 96×96
-goblin source is drawn at 36.36 world pixels: 18.18 screen pixels in the `0.5`
-overview and 72.73 at `2×`, still below its source resolution. The pure camera
-test pins both bounds and the Godot stage publishes and checks overview, base and
-detail sizes. This keeps the 1120×640 ownership map available in the overview
-without making creatures less readable than before. Runtime mipmaps plus
-`LinearWithMipmaps` keep the same source usable below 1×; no new art-direction
-decision is hidden in the camera slice.
+grid instead of leaving their silhouettes behind at the old size. That is
+`CameraView.WorldVisualScale`, and it answers only «how do the authored 22 px
+proportions land on this grid».
+
+How large a creature is against that grid is a second, separate question, and
+its answer is the owner's: `CameraView.BodyVisualScale = 1.70`, chosen on
+2026-08-01 from spike [#142](https://github.com/anshushunov/dungeon-fortress/issues/142)
+by clicking through the sizes in a live scene (gate log in
+[`ROADMAP.md`](../product/ROADMAP.md); 100 % was rejected outright, 200 % as too
+large). A body is therefore drawn at `20 × 1.70 × tile / 22` world pixels —
+**61.82 px at the shipped 40 px tile**, 49.45 at 32 and 74.18 at 48 — which is
+30.91 screen pixels in the `0.5` overview and 123.64 at `2×`. Visual body size is
+presentation tuning under [ADR 0010](../decisions/0010-contract-invariants-and-tuning.md):
+it reaches no canonical state, and the before/after captures in
+`evidence/77-scale-before.json` and `evidence/77-scale-after.json` record the same
+checksum on both sides of the change.
+
+Two source resolutions bound those numbers, and only one of them is satisfied
+today. The runtime loads the 96×96 `goblin_*_v1` sheet, which every zoom a run can
+start at still stays inside; `2×` asks for 123.64 px from it, i.e. 1.29× more than
+it holds. The 272×192 v2 pack already in `main`
+([`goblin-v2-provenance.md`](../art/goblin-v2-provenance.md)) was authored for
+exactly this 61.8 px canvas height, so connecting it — the next step of Issue #77 —
+puts the deepest zoom back inside the source. The pure camera test pins both
+bounds and the Godot stage publishes and checks overview, base and detail sizes.
+Runtime mipmaps plus `LinearWithMipmaps` keep the source usable below `1×`.
+
+`CameraView.GoblinDrawRect` says where that square goes: centred on the render
+centre, the rule the adapter has always drawn by. At 170 % a centred square costs
+something measurable, recorded here rather than left to be rediscovered — the v1
+sheet's last opaque row is 92 of 96, so the drawn feet sink from 16.67 px below
+the render centre to 28.33 px and land just outside the 40 px cell the body stands
+on. Anchoring the square on the old foot line instead holds the feet still, which
+is what the spike's own scene did, but makes a body 43.6 px tall above its centre —
+enough for a head to reach a room outline drawn above the depth pass in 2 measured
+positions of the shipped map, undoing part of Issue #156. The choice belongs with
+the pack switch, which has to replace the square with a 17:12 rectangle anyway.
 
 ## Readability pass
 
