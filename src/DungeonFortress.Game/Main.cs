@@ -2043,7 +2043,7 @@ public partial class Main : Node2D
         foreach (var (text, size, color) in new (string Text, int Size, string Color)[]
                  {
                      ("LEGEND", 9, "#cbd5e1"),
-                     ("teal crew / red-ring goblin / bar = HP / white X = downed", 8, "#cbd5e1"),
+                      ("teal ring = crew / red ring = raider / bar = HP / white X = downed", 8, "#cbd5e1"),
                      // Issue #52. It replaces the quarters' rest rule rather than
                      // joining it: the panel column is under the same overflow
                      // guard as everything else, and the rest rule now sits on the
@@ -3566,11 +3566,22 @@ public partial class Main : Node2D
         // The body and its carried item hang off the interpolated point supplied
         // to Y-order. Informational affordances are projected in a later pass so
         // wall volume can occlude the body without erasing its state.
-        var color = DefenderColor(creature);
-        // The generated character states serve both factions; the outline is the
-        // stable team cue (teal crew, red-raider ring).
-        DrawCircle(center, ScaleWorld(9), color);
         DrawGoblin(center, CrewSpriteKey(creature));
+        // Issue #177: the filled circle that used to sit here was entirely
+        // covered by the v2 sprite at 170 % body scale (61.8 px canvas). The
+        // team cue is now a stroke ring drawn AFTER the sprite so wall volume
+        // can still occlude everything together, yet the ring stays visible on
+        // top: GoblinDrawWidth/2 ≈ 43.8 px at tile 40; ScaleWorld(27) ≈ 49.1 px
+        // radius leaves a clear gap around every pose in the pack's opaque
+        // envelope (columns 26..268, rows 20..187).
+        DrawArc(
+            center,
+            ScaleWorld(27),
+            0,
+            Mathf.Tau,
+            24,
+            new Color("#14b8a6"),
+            ScaleWorld(2));
         if (creature.Carrying is ResourceKind.Stone)
         {
             // Stone rides as a rimmed grey square, the same shape a stockpile pip
@@ -3597,8 +3608,18 @@ public partial class Main : Node2D
 
     private void DrawRaider(PrototypeRaiderSnapshot raider, Vector2 center)
     {
-        DrawCircle(center, ScaleWorld(9), new Color("#7f1d1d"));
         DrawGoblin(center, RaiderSpriteKey(raider));
+        // Issue #177: same fix as DrawCreature — the pre-sprite filled circle
+        // was occluded at 170 % body scale. Red stroke ring drawn after the
+        // sprite so it stays visible above wall volume too.
+        DrawArc(
+            center,
+            ScaleWorld(27),
+            0,
+            Mathf.Tau,
+            24,
+            new Color("#dc2626"),
+            ScaleWorld(2));
     }
 
     private void DrawBodyInformationOverlays()
@@ -5335,7 +5356,7 @@ public partial class Main : Node2D
 
     private string RaidLegend() =>
         "BATTLE LEGEND\n" +
-        "teal = crew  •  red ring = raider\n" +
+        "teal ring = crew  •  red ring = raider\n" +
         "bar = HP  •  white X = DOWNED\n" +
         "dot: green work, amber combat,\n" +
         "gray downed, pink fled";

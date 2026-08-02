@@ -1676,14 +1676,17 @@ creature has fatigue at least 50 and a bunk is free. Its empty early-economy
 state is expected by the Prototype 1 contract, not a routing failure. The map
 labels it as `QUARTERS • REST`, and selecting it repeats this condition.
 
-During a raid, teal circles are crew and red-ring goblins are raiders. HP bars
-appear under both. Crew dots show working (green), fighting (amber), fled
-(pink), or downed (gray); a white X is a downed body. The battle legend is in
-the side panel and selected-creature inspection states `ALIVE`, `DOWNED`, or
-`FLED` with HP. Crew and raider sprites are exploratory generated art with
-provenance in [`goblin-v2-provenance.md`](../art/goblin-v2-provenance.md) — one
-pack for both sides, with the existing teal/red outline telling them apart; they
-are not a commitment to production art direction. The retired v1 sheet and its
+During a raid, teal ring outlines are crew and red ring outlines are raiders
+(Issue #177: the filled circles that preceded them were occluded under v2 at
+170 % body scale; they became stroke rings drawn after the sprite so wall
+volume occludes everything together while the cue stays on top). HP bars appear
+under both. Crew dots show working (green), fighting (amber), fled (pink), or
+downed (gray); a white X is a downed body. The battle legend is in the side
+panel and selected-creature inspection states `ALIVE`, `DOWNED`, or `FLED` with
+HP. Crew and raider sprites are exploratory generated art with provenance in
+[`goblin-v2-provenance.md`](../art/goblin-v2-provenance.md) — one pack for both
+sides, with teal/red stroke rings telling them apart; they are not a commitment
+to production art direction. The retired v1 sheet and its
 [`goblin-v1-provenance.md`](../art/goblin-v1-provenance.md) stay in the
 repository as the record of what the pack replaced.
 
