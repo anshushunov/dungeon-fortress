@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "issue": 77,
+  "checkpoint": "5 — the head jump between combat and flinch, measured after the pack was connected, and the decision about it",
+  "note": "Independent review of PR #176 raised this before the pack was connected, from the source canvases: the top of the alpha bbox is y = 39 in combat and y = 24 in flinch while both share the last opaque row y = 187, so the silhouette grows 149 -> 164 rows. The requirement on this subtask was to measure what that becomes on screen and then either accept it with a stated reason or open an Issue — not to pass it over.",
+
+  "measurement": {
+    "command": "python -c \"from PIL import Image; from pathlib import Path; base=Path('src/DungeonFortress.Game/assets/generated/goblins')\\nfor s in ['combat','windup','flinch']:\\n    a=Image.open(base/f'goblin_{s}_v2.png').getchannel('A'); px=a.load()\\n    w=[sum(1 for x in range(272) if px[x,y]>32) for y in range(192)]\\n    print(s, [next(y for y in range(192) if w[y]>=t) for t in (1,5,10,20,30)])\"",
+    "method": "The first canvas row at which the silhouette is at least N columns wide, for five values of N. One row alone can be a spear tip, and the review's figure was taken from the alpha bbox, which is exactly that case: the topmost row of flinch is a sliver while the topmost row of combat is not. Widths differ by threshold and both are recorded: at alpha > 0 the flinch row is 5 columns (x 113..118) against 28 for combat (x 144..174); at the alpha > 32 threshold this method itself uses it is 3 columns (x 116..118) against 17 (x 151..167). Corrected 2026-08-02 by the coordinator after the independent review of PR #185 measured the threshold the method declares; the first wording quoted the alpha > 0 figure next to an alpha > 32 method. Asking the same question at several widths separates a sliver from the head.",
+    "firstRowAtLeastNColumnsWide": [
+      {"n": 1, "combat": 39, "windup": 30, "flinch": 24, "combatMinusFlinchRows": 15},
+      {"n": 5, "combat": 39, "windup": 30, "flinch": 25, "combatMinusFlinchRows": 14},
+      {"n": 10, "combat": 39, "windup": 30, "flinch": 29, "combatMinusFlinchRows": 10},
+      {"n": 20, "combat": 41, "windup": 30, "flinch": 30, "combatMinusFlinchRows": 11},
+      {"n": 30, "combat": 41, "windup": 32, "flinch": 31, "combatMinusFlinchRows": 10}
+    ],
+    "onScreen": {
+      "canvasHeightPx": {"tile32": 49.454545454545453, "tile40": 61.81818181818182, "tile48": 74.18181818181819},
+      "pixelsPerCanvasRowAtTile40": 0.32196969696969696,
+      "bboxJumpPx": {"tile32": 3.8636, "tile40": 4.8295, "tile48": 5.7955, "tile40AtZoom2": 9.6591},
+      "massJumpPx": {"tile40": "3.22 to 3.54 when the top is asked at ten columns or more; 4.51 at five columns and 4.83 at one, where the flinch row is still a sliver. The narrow range covers N>=10 only, and the N=5 row of the table above is not inside it"},
+      "silhouetteHeightPxAtTile40": {"combat": 47.973, "windup": 50.871, "flinch": 52.803},
+      "relativeGrowth": "164 / 149 = 1.1007, i.e. the flinch silhouette is 10.1 % taller than the combat one",
+      "shareOfTheDrawnBody": "the mass-level rise is 3.2 px of a 48.0 px combat silhouette — 6.7 %, and 5.2 % of the 61.8 px canvas"
+    },
+    "feetDidNotMove": {
+      "supportCentreX": {"combat": 135.5, "windup": 136.0, "flinch": 135.5},
+      "lastOpaqueRow": {"combat": 187, "windup": 187, "flinch": 187},
+      "reading": "The three poses share their support row and their support centre to within 0.5 source px, which is 0.16 px of drawn width. Nothing about this finding is the feet moving; the whole of it is at the top of the figure."
+    }
+  },
+
+  "decision": {
+    "verdict": "Accepted, and the timing question handed to the subtask that owns it.",
+    "reasons": [
+      "It is the pose doing its job, not an artefact of registration. Rendered side by side at the runtime canvas height, flinch is a creature thrown backwards: the torso leans, the spear swings across, and the head goes back and therefore up. A recoil that did not raise the head would be a creature being hit without moving.",
+      "The size is small against the thing it happens on: 3.2-3.5 px of head mass on a 47.97 px silhouette at the shipped tile, 6.7 %, when the top is asked at ten columns or more. At five columns it is 4.51 px, which is inside neither that range nor the bbox figure. The 4.83 px the review quoted is the alpha bbox, and the topmost row of flinch is a sliver three columns wide at this method's own alpha > 32, so that figure overstates the head by 1.3-1.6 px against the ten-column reading.",
+      "The alternative would cost the guarantee this subtask exists for. Registering flinch by its head instead of by its support zone would hold the head still and move the feet — the pack is registered on the support zone precisely so that a creature does not slide along the ground when its pose changes, and that is the rule the previous subtask spent a review round establishing.",
+      "Whether it reads as a recoil or as a pop is decided by something this subtask does not own. Nothing here plays the transition: the adapter passes BodyActionPhase.None and the pose never changes to flinch at all. How long flinch is held, what else moves during it and whether anything cushions the change are the third subtask's decisions, and this measurement is what it can check its own result against."
+    ],
+    "handedForward": "The third subtask should look at combat -> flinch -> combat in motion and, if the head reads as a jump rather than a recoil, fix it in the timing of the feedback loop and not in the pack. If it turns out that no timing makes it read, that is the point at which this becomes an Issue against the art, with this measurement as its «before».",
+    "notAnIssueBecause": "An Issue here would say «the flinch pose raises the head by 3.2 px», which is a description of a recoil and not of a defect. It is recorded instead, in the PR body and here, so that nobody has to rediscover the number."
+  },
+
+  "contactSheet": {
+    "path": ".artifacts/77-head-jump.png",
+    "committed": false,
+    "command": "python -c \"from PIL import Image, ImageDraw; from pathlib import Path; base=Path('src/DungeonFortress.Game/assets/generated/goblins'); states=['combat','windup','flinch','combat']; scale=4; W=int(round(87.575757575*scale)); H=int(round(61.818181818*scale)); gap=6; sheet=Image.new('RGBA',(len(states)*(W+gap)-gap,H+40),(38,36,46,255)); d=ImageDraw.Draw(sheet); [ (sheet.alpha_composite(Image.open(base/f'goblin_{s}_v2.png').convert('RGBA').resize((W,H),Image.Resampling.LANCZOS),(i*(W+gap),20)), d.text((i*(W+gap)+4,4),s,fill=(220,220,230,255))) for i,s in enumerate(states)]; d.line([(0,20+int(round(H*188/192))),(sheet.width,20+int(round(H*188/192)))],fill=(255,90,90,180)); sheet.save('.artifacts/77-head-jump.png')\"",
+    "reading": "combat, windup, flinch and combat again at four times the runtime canvas size, with the pack's support row drawn across all four. The feet sit on that line in every pose; the flinch figure is visibly leaning back rather than standing taller."
+  },
+
+  "next": "Checkpoint 6 — the document, the frames after, and one full run of scripts/verify.ps1."
+}

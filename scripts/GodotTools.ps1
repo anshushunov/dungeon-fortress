@@ -478,7 +478,11 @@ function Assert-GoblinSpriteDiagnostics {
     $loaded = @($result.loadedSpriteStates)
     $missing = @($result.missingSpriteStates)
     $fallbacks = [int]$result.fallbackSpriteDraws
-    $required = @("idle", "work", "combat", "downed")
+    # Six since Issue #77 connected the v2 pack. The list is the one
+    # DungeonFortress.Presentation.BodySprites.States declares; a pose the
+    # adapter can choose but did not load is a missing texture in a frame, so
+    # this is the check that both ends agree.
+    $required = @("idle", "work", "combat", "windup", "flinch", "downed")
     $missingRequired = @($required | Where-Object { $_ -notin $loaded })
     if ($missingRequired.Count -gt 0 -or $missing.Count -gt 0 -or $fallbacks -ne 0) {
         throw "Goblin sprite diagnostics failed: loaded=[$($loaded -join ',')], missing=[$($missing -join ',')], fallbackSpriteDraws=$fallbacks."

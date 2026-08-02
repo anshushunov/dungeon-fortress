@@ -203,7 +203,7 @@ public sealed class RoomBorderDepthTests
     public void No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible(int tileSize)
     {
         var crossings = Measure(tileSize, Arrangement.Today);
-        Assert.True(crossings.Count == 0, Payload(tileSize, crossings));
+        Assert.True(crossings.Count == 0, Payload(tileSize, Arrangement.Today, crossings));
     }
 
     /// <summary>
@@ -221,13 +221,22 @@ public sealed class RoomBorderDepthTests
     /// The rooms are named as well as counted, because a count alone would stay
     /// green if the defect moved to two other rooms.
     /// </para>
+    ///
+    /// <para>
+    /// It is swept with the body of its own time as well as the draw order of its
+    /// own time — see <see cref="PreIssue77BodyReferenceSize"/>. Issue #77 took
+    /// bodies to 170 %, and a bigger rectangle catches more of the same lines: the
+    /// same sweep with today's body returns 622. Both numbers describe the pre-#156
+    /// defect and neither is wrong, but only the one measured with the body of 2026
+    /// -08-01 is the number the issue's evidence quotes.
+    /// </para>
     /// </summary>
     [Theory]
     [MemberData(nameof(TileSizes))]
     public void The_border_used_to_be_drawn_over_every_body_that_stood_on_it(int tileSize)
     {
         var crossings = Measure(tileSize, Arrangement.BeforeIssue156);
-        var payload = Payload(tileSize, crossings);
+        var payload = Payload(tileSize, Arrangement.BeforeIssue156, crossings);
 
         Assert.True(crossings.Count == 226, payload);
         Assert.Equal(
@@ -256,12 +265,18 @@ public sealed class RoomBorderDepthTests
     /// that are drawn after any body whose sprite can reach it at all.
     ///
     /// <para>
-    /// The reach is arithmetic rather than a sweep. A body's sprite reaches at most
-    /// half of <see cref="CameraView.GoblinDrawSize"/> below its own render centre,
-    /// so the southernmost centre from which a body can touch the stroke is the
-    /// stroke's lower edge plus that half — and
-    /// <see cref="InFrontOfEverybodyTouching"/> keeps only walls anchored south of
-    /// that point, which are therefore drawn after every one of those bodies.
+    /// The reach is arithmetic rather than a sweep. What decides it is how far a
+    /// body reaches <em>upwards</em>, not downwards: since #77 the canvas stands on
+    /// <see cref="CameraView.GoblinFootLine"/> and grows up, and the pixels inside
+    /// it reach 37.42 px above the render centre and 16.67 below at tile 40 — the
+    /// lower bound being the foot line itself, because the pack's last opaque row
+    /// and its support row are the same row. The
+    /// southernmost centre from which a body can touch the stroke is therefore the
+    /// stroke's lower edge plus that upward reach, and
+    /// <see cref="InFrontOfEverybodyTouching"/> takes it from
+    /// <see cref="CameraView.GoblinOpaqueRect"/> rather than restating the rule —
+    /// half of <see cref="CameraView.GoblinDrawSize"/> was correct while the square
+    /// was centred and would silently understate the reach now.
     /// </para>
     /// </summary>
     [Theory]
@@ -585,6 +600,41 @@ public sealed class RoomBorderDepthTests
         FirstRoundOf156,
     }
 
+    /// <summary>
+    /// The body a measurement sweeps with, in reference pixels before
+    /// <see cref="CameraView.WorldVisualScale"/>. 20 is what
+    /// <see cref="CameraView.GoblinDrawSize"/> was built from before Issue #77 took
+    /// bodies to <see cref="CameraView.BodyVisualScale"/> — 170 % — and a "before"
+    /// column is measured with the body of its own time, exactly as
+    /// <see cref="Arrangement.BeforeIssue156"/> is measured with the draw order of
+    /// its own time. Measured with today's body the same sweep returns 622 rather
+    /// than the 226 the issue, the documentation and <c>evidence/156-before.json</c>
+    /// all quote, and that number would then be a moving target for every future
+    /// change of visual scale.
+    /// </summary>
+    private const double PreIssue77BodyReferenceSize = 20.0;
+
+    /// <summary>
+    /// The drawn body an arrangement is swept with: today's for today, and the one
+    /// of its own time for a historical column.
+    /// </summary>
+    private static double BodyDrawSize(int tileSize, Arrangement arrangement) =>
+        arrangement == Arrangement.Today
+            ? CameraView.GoblinDrawSize(tileSize)
+            : PreIssue77BodyReferenceSize * CameraView.WorldVisualScale(tileSize);
+
+    /// <summary>
+    /// The rectangle a body's sprite occupies at <paramref name="centre"/>. Today's
+    /// comes from production geometry rather than a copy of it; a historical column
+    /// is the square the adapter drew then — <see cref="PreIssue77BodyReferenceSize"/>
+    /// reference pixels, centred on the render point, which was the placement rule
+    /// of that time as much as the size was.
+    /// </summary>
+    private static ViewRect BodyRect(ViewPoint centre, int tileSize, Arrangement arrangement) =>
+        arrangement == Arrangement.Today
+            ? CameraView.GoblinOpaqueRect(centre, tileSize)
+            : Square(centre, BodyDrawSize(tileSize, arrangement));
+
     /// <param name="Room">The room whose outline this stroke belongs to.</param>
     /// <param name="Side">Which side of its cell the stroke faces.</param>
     /// <param name="Cell">The room cell the stroke was drawn for.</param>
@@ -651,7 +701,7 @@ public sealed class RoomBorderDepthTests
         var rock = state.Map.RockTiles.ToHashSet();
         var scale = CameraView.WorldVisualScale(tileSize);
         var half = RoomGeometry.BorderStrokeHalfWidth * scale;
-        var bodies = BodyPositions(rock, tileSize);
+        var bodies = BodyPositions(rock, tileSize, arrangement);
         var walls = Walls(rock, tileSize);
 
         var crossings = new List<Crossing>();
@@ -803,24 +853,39 @@ public sealed class RoomBorderDepthTests
     /// that could touch <paramref name="stroke"/> — not just of the bodies that
     /// happen to be standing somewhere today.
     ///
-    /// A body's sprite reaches half of <see cref="CameraView.GoblinDrawSize"/>
-    /// below its own render centre, so the southernmost centre from which anybody
-    /// can touch the stroke is its lower edge plus that half. A wall anchored south
-    /// of that point is drawn after every one of those bodies, whatever they are
-    /// doing and wherever between two cells the interpolation has them.
+    /// What decides whether a body standing south of a stroke can still touch it
+    /// is how far its sprite reaches <em>above</em> its own render centre, so that
+    /// is what the southernmost touching centre is measured with — and it is taken
+    /// from <see cref="CameraView.GoblinOpaqueRect"/> rather than restated, because
+    /// Issue #77 made the two differ: a creature's pixels reach 37.42 px up and
+    /// 16.67 down at tile 40, where before the drawn square reached the same 18.18
+    /// either way. A wall anchored south of that point is drawn after every one of
+    /// those bodies, whatever they are doing and wherever between two cells the
+    /// interpolation has them.
+    ///
+    /// <para>
+    /// The comparison is deliberately strict where the renderer's own tie-break is
+    /// not: <see cref="WorldRenderOrder"/> puts a wall last at an equal anchor on
+    /// purpose — «at the exact crossing depth the wall still occludes the body» —
+    /// so this check refuses shelter from one wall the frame does in fact draw
+    /// over the body. That is the conservative direction and it costs nothing on
+    /// the shipped map, measured in <c>evidence/77-pack-geometry.json</c>.
+    /// </para>
     /// </summary>
     private static IReadOnlyList<ViewRect> InFrontOfEverybodyTouching(
         ViewRect stroke,
         IReadOnlyList<Wall> walls,
         int tileSize)
     {
-        var southernmost = stroke.Y + stroke.Height + (CameraView.GoblinDrawSize(tileSize) / 2.0);
+        var reachAbove = -CameraView.GoblinOpaqueRect(new ViewPoint(0, 0), tileSize).Y;
+        var southernmost = stroke.Y + stroke.Height + reachAbove;
         return walls
             .Where(wall => wall.Anchor > southernmost)
             .SelectMany(wall => wall.Bands)
             .Where(band => Overlap(band, stroke) is not null)
             .ToArray();
     }
+
 
     /// <param name="Name">The cell, or the step, this position is.</param>
     /// <param name="Rect">The rectangle the sprite is drawn into.</param>
@@ -833,17 +898,36 @@ public sealed class RoomBorderDepthTests
     /// between two of them: a body's render centre is interpolated, so it spends
     /// most of its life between two cells rather than on one.
     ///
-    /// The rectangle is <see cref="CameraView.GoblinDrawSize"/> square, which is
-    /// what <c>Main.DrawGoblin</c> draws the sprite into and is wider than the
-    /// coloured disc underneath it. Using the drawn rectangle rather than the
-    /// sprite's opaque pixels overstates the body, which is the safe direction for
-    /// a check that has to find lines crossing it.
+    /// The rectangle comes from production geometry for today's arrangement —
+    /// <see cref="CameraView.GoblinOpaqueRect"/> — and from the body of its own
+    /// time for a historical column (<see cref="BodyRect"/>).
+    ///
+    /// <para>
+    /// <b>The opaque box and not the drawn canvas, since Issue #77 connected the v2
+    /// pack.</b> Until then the two were nearly the same rectangle: the v1 sheet was
+    /// a tight 96x96 crop of one pose. The v2 canvas is a 272x192 frame shared by
+    /// six poses and sized for the widest of them, so <c>idle</c> fills 116 of its
+    /// 272 columns and every state leaves 20 of 192 rows empty at the top. Asked
+    /// against that canvas, «can this line land on a body» stops meaning «on a
+    /// creature» and starts meaning «on the padding around one».
+    /// </para>
+    ///
+    /// <para>
+    /// This is a change of unit and not a relaxation, and the numbers say which:
+    /// the box reaches 37.424242 px above the render centre, which is the same
+    /// figure to the last binary place as the v1 pack's opaque bounds gave, and
+    /// 42.82 px sideways against v1's 27.05 — 58 % stricter.
+    /// <see cref="CameraViewTests.The_pixels_a_creature_can_occupy_did_not_rise_when_the_canvas_did"/>
+    /// is where those two are measured against each other. Against the canvas
+    /// instead, this sweep reports 2 crossings at every tile size — see
+    /// <c>evidence/77-pack-geometry.json</c>, which keeps both columns.
+    /// </para>
     /// </summary>
     private static IReadOnlyList<BodyPosition> BodyPositions(
         IReadOnlySet<GridPoint> rock,
-        int tileSize)
+        int tileSize,
+        Arrangement arrangement)
     {
-        var size = CameraView.GoblinDrawSize(tileSize);
         var positions = new List<BodyPosition>();
         var steps = new[] { new GridPoint(1, 0), new GridPoint(0, 1) };
         for (var y = 0; y < PrototypeTuning.MapHeight; y++)
@@ -857,7 +941,10 @@ public sealed class RoomBorderDepthTests
                 }
 
                 var centre = CameraView.CellCenter(cell, tileSize);
-                positions.Add(new BodyPosition($"{x},{y}", Square(centre, size), centre.Y));
+                positions.Add(new BodyPosition(
+                    $"{x},{y}",
+                    BodyRect(centre, tileSize, arrangement),
+                    centre.Y));
                 foreach (var step in steps)
                 {
                     var next = new GridPoint(x + step.X, y + step.Y);
@@ -872,7 +959,7 @@ public sealed class RoomBorderDepthTests
                     var middle = new ViewPoint((centre.X + far.X) / 2.0, (centre.Y + far.Y) / 2.0);
                     positions.Add(new BodyPosition(
                         $"{x},{y}->{next.X},{next.Y}",
-                        Square(middle, size),
+                        BodyRect(middle, tileSize, arrangement),
                         middle.Y));
                 }
             }
@@ -903,13 +990,17 @@ public sealed class RoomBorderDepthTests
     private static string Whitespace(string text) =>
         string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
-    private static string Payload(int tileSize, IReadOnlyList<Crossing> crossings) =>
+    private static string Payload(
+        int tileSize,
+        Arrangement arrangement,
+        IReadOnlyList<Crossing> crossings) =>
         JsonSerializer.Serialize(
             new
             {
                 tileSize,
+                arrangement = arrangement.ToString(),
                 scale = CameraView.WorldVisualScale(tileSize),
-                bodyDrawSize = CameraView.GoblinDrawSize(tileSize),
+                bodyDrawSize = BodyDrawSize(tileSize, arrangement),
                 crossingCount = crossings.Count,
                 rooms = crossings.Select(row => row.Room).Distinct().OrderBy(
                     name => name,

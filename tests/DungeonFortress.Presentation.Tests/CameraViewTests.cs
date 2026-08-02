@@ -106,16 +106,448 @@ public sealed class CameraViewTests
         Assert.True(frame.VisibleWorldSize.Height >= map.Height);
     }
 
+    /// <summary>
+    /// The owner's decision of 2026-08-01 on spike #142, in the only units it
+    /// can be checked in: 61.8 px of body at the shipped 40 px tile.
+    ///
+    /// <para>
+    /// The expectation is written as the whole number the gate log names, not as
+    /// <c>ReferenceGoblinDrawSize * CameraView.BodyVisualScale * …</c>. Derived
+    /// from the constant it guards, it would move with any edit of that constant
+    /// and prove nothing; written out, changing 1.70 to anything else turns this
+    /// test red.
+    /// </para>
+    /// </summary>
     [Fact]
-    public void Existing_goblin_art_stays_readable_across_the_selected_zoom_range()
+    public void A_body_is_drawn_at_the_owner_selected_170_percent_of_its_previous_size()
     {
+        // 1360 / 22: 20 reference px of body, taken to 170 %, carried onto the
+        // 40 px grid by the same 40/22 every other world primitive uses.
+        Assert.Equal(1360.0 / 22.0, CameraView.GoblinDrawSize(40), 12);
+        Assert.Equal(61.8, CameraView.GoblinDrawSize(40), 1);
+
+        // The same decision restated as the ratio it was made as. 800/22 is the
+        // pre-#77 size the gate log calls 36.4 px, and it is spelled out here
+        // rather than recovered from CameraView for the same reason as above.
+        Assert.Equal(800.0 / 22.0, 36.36, 2);
+        Assert.Equal(1.70, CameraView.GoblinDrawSize(40) / (800.0 / 22.0), 12);
+
+        // Tile size stays a free parameter of ADR 0008: the factor applies at
+        // every grid in the supported range, and only the grid changes the answer.
+        Assert.Equal(1.70, CameraView.GoblinDrawSize(32) / (20.0 * 32.0 / 22.0), 12);
+        Assert.Equal(1.70, CameraView.GoblinDrawSize(48) / (20.0 * 48.0 / 22.0), 12);
+        Assert.Equal(49.45, CameraView.GoblinDrawSize(32), 2);
+        Assert.Equal(74.18, CameraView.GoblinDrawSize(48), 2);
+    }
+
+    /// <summary>
+    /// The grid and the cell are the same pixels they were before Issue #77, and
+    /// the sprite is still centred horizontally on the render point. What the
+    /// change moves is the size of the body — not the world, and not the ground
+    /// the body stands on, which the next test measures.
+    /// </summary>
+    [Fact]
+    public void Growing_the_body_moves_neither_the_grid_nor_the_cell_a_body_belongs_to()
+    {
+        var cell = new GridPoint(14, 8);
+
+        foreach (var tileSize in new[] { 32, 40, 48 })
+        {
+            var centre = CameraView.CellCenter(cell, tileSize);
+
+            // The grid: unchanged, and not a function of how large a body is.
+            Assert.Equal(
+                new ViewPoint((cell.X + 0.5) * tileSize, (cell.Y + 0.5) * tileSize),
+                centre);
+            Assert.Equal(cell, CameraView.WorldToCell(centre, tileSize));
+            Assert.Equal(tileSize / 22.0, CameraView.WorldVisualScale(tileSize));
+
+            var drawn = CameraView.GoblinDrawRect(centre, tileSize);
+
+            Assert.Equal(centre.X, drawn.Center.X, 12);
+            Assert.Equal(CameraView.GoblinDrawSize(tileSize), drawn.Height, 12);
+            Assert.Equal(CameraView.GoblinDrawWidth(tileSize), drawn.Width, 12);
+        }
+    }
+
+    /// <summary>
+    /// The shape the connected pack is drawn in: 17:12, which is what
+    /// <c>goblin_*_v2.png</c> is — 272x192 in all six states, re-measured for this
+    /// change and recorded in <c>evidence/77-pack-before.json</c>.
+    ///
+    /// <para>
+    /// The height is the one thing that does not move. It is
+    /// <see cref="CameraView.GoblinDrawSize"/>, still the owner's 61.8 px at the
+    /// shipped tile, because that is the canvas height the pack was authored for;
+    /// the width is what the square was wrong about. Both ends are stated: the
+    /// ratio, so that a body cannot be stretched, and the width in pixels at each
+    /// tile size, so that the ratio cannot be right about a wrong body.
+    /// </para>
+    ///
+    /// <para>
+    /// 17/12 is written out rather than read from
+    /// <see cref="CameraView.SpriteCanvasAspect"/>, for the same reason
+    /// <see cref="A_body_is_drawn_at_the_owner_selected_170_percent_of_its_previous_size"/>
+    /// writes out 1360/22: derived from the constant it guards, it would follow
+    /// that constant anywhere and hold nothing.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_body_is_drawn_in_the_seventeen_by_twelve_canvas_the_pack_was_authored_on()
+    {
+        Assert.Equal(272.0 / 192.0, CameraView.SpriteCanvasAspect, 12);
+        Assert.Equal(17.0 / 12.0, CameraView.SpriteCanvasAspect, 12);
+
+        foreach (var tileSize in new[] { 32, 40, 48 })
+        {
+            var centre = CameraView.CellCenter(new GridPoint(14, 8), tileSize);
+            var drawn = CameraView.GoblinDrawRect(centre, tileSize);
+
+            Assert.Equal(17.0 / 12.0, drawn.Width / drawn.Height, 12);
+            Assert.NotEqual(drawn.Width, drawn.Height);
+        }
+
+        // The canvas is wider than it is tall, and the height is untouched: the
+        // pack is connected at the size the owner picked, not at a new one.
+        Assert.Equal(61.818182, CameraView.GoblinDrawSize(40), 6);
+        Assert.Equal(87.575758, CameraView.GoblinDrawWidth(40), 6);
+        Assert.Equal(70.060606, CameraView.GoblinDrawWidth(32), 6);
+        Assert.Equal(105.090909, CameraView.GoblinDrawWidth(48), 6);
+
+        // 87.55 is what docs/art/goblin-v2-provenance.md quotes, and it is 61.8
+        // times 17/12 — the document's own rounding of the height carried through.
+        // The code carries the ratio rather than that number, so the two agree to
+        // the precision the document states and no further: the difference is
+        // 0.026 px, which is where 61.8 stops being 61.81818.
+        Assert.InRange(CameraView.GoblinDrawWidth(40), 87.55, 87.6);
+    }
+
+    /// <summary>
+    /// The body grows upward out of the ground it stands on: at 170 % the drawn
+    /// feet are on exactly the pixel they were on before Issue #77, at every tile
+    /// size, and the whole of the growth goes up.
+    ///
+    /// <para>
+    /// <b>«Where the feet are» is asked of two different packs, and that is the
+    /// whole of this test.</b> The old body was a v1 sprite, whose last opaque row
+    /// is 91 of 96 — content 92/96 down, read off all four PNGs rather than
+    /// assumed. The body drawn today is a v2 sprite, whose last opaque row is 187
+    /// of 192 in all six states — content 188/192 down, re-measured for this change
+    /// and recorded in <c>evidence/77-pack-before.json</c>. So the two sides of the
+    /// equation carry different fractions on purpose: each pack's own.
+    /// </para>
+    ///
+    /// <para>
+    /// Both are written out rather than read from
+    /// <see cref="CameraView.SpriteSupportFraction"/>. Taken from the constant, the
+    /// test would follow it to any value and would have stayed green through
+    /// exactly the mistake this subtask was warned about: leaving the fraction at
+    /// 92/96 while connecting a 188/192 pack, which draws every creature 1.29 px
+    /// into the ground at the shipped tile.
+    /// </para>
+    ///
+    /// <para>
+    /// The rejected rules are kept here as numbers, because both were measured
+    /// and one of them shipped for a round. A <b>centred</b> canvas would sink the
+    /// feet from 16.67 px below the render centre to 29.62 — 12.95 px, 32 % of a
+    /// 40 px cell, landing outside the cell the body stands on — and it is what
+    /// the first round of Issue #77 shipped. Anchoring the canvas's <b>bottom
+    /// edge</b> instead of the drawn feet is measured by
+    /// <see cref="Anchoring_the_drawn_feet_and_the_canvas_disagree_by_a_measured_amount"/>;
+    /// with the v1 pack the two rules were 1.06 px apart, and with this one they
+    /// are 0.23.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_drawn_feet_do_not_move_when_the_body_grows()
+    {
+        // Each pack's own last opaque row, as a fraction of its own canvas height.
+        const double v1Support = 92.0 / 96.0;
+        const double v2Support = 188.0 / 192.0;
+
+        foreach (var tileSize in new[] { 32, 40, 48 })
+        {
+            var centre = CameraView.CellCenter(new GridPoint(14, 8), tileSize);
+            var sizeBefore = 20.0 * tileSize / 22.0;
+
+            // Where the feet were: the pre-#77 v1 square, centred, 92/96 down.
+            var before = (sizeBefore * v1Support) - (sizeBefore / 2.0);
+
+            // Where they are: the v2 canvas as it is placed today, 188/192 down.
+            var drawn = CameraView.GoblinDrawRect(centre, tileSize);
+            var after = drawn.Y + (drawn.Height * v2Support) - centre.Y;
+
+            Assert.Equal(before, after, 12);
+            Assert.Equal(before, CameraView.GoblinFootLine(tileSize), 12);
+
+            // Inside the cell, as they were: half a cell is tileSize/2.
+            Assert.True(after < tileSize / 2.0);
+
+            // And the growth goes upward: the canvas top rises by everything the
+            // drawn canvas gained, less the part of it that is below the feet.
+            var gained = CameraView.GoblinDrawSize(tileSize) - sizeBefore;
+            var topBefore = centre.Y - (sizeBefore / 2.0);
+            var tailBefore = sizeBefore * (1.0 - v1Support);
+            var tailAfter = CameraView.GoblinDrawSize(tileSize) * (1.0 - v2Support);
+
+            Assert.Equal(gained + tailBefore - tailAfter, topBefore - drawn.Y, 12);
+        }
+    }
+
+    /// <summary>
+    /// <b>The creature did not move up; its canvas did.</b> This is the number that
+    /// separates the two, and the whole of the argument for measuring Issue #156's
+    /// sweep against <see cref="CameraView.GoblinOpaqueRect"/> rather than against
+    /// the drawn canvas.
+    ///
+    /// <para>
+    /// The v1 sheet's body filled 84 of its 96 rows; the v2 canvas fills 168 of
+    /// 192. Both are 0.875, which is not a coincidence — the pack was authored for
+    /// it (<c>docs/art/goblin-v2-provenance.md</c>: «the body fills 168 of the 192
+    /// rows»). So the topmost pixel any creature can have is in exactly the same
+    /// place before and after, to the last binary place, while the canvas above it
+    /// grew from 5.15 px of transparent header to 6.44.
+    /// </para>
+    ///
+    /// <para>
+    /// Sideways the honest answer is the opposite one and it is stated here too:
+    /// 27.05 px each way with v1 against 42.82 with v2, because <c>combat</c> and
+    /// <c>windup</c> hold a spear out. Any check that models a body by this
+    /// rectangle therefore became 58 % <em>stricter</em> horizontally and did not
+    /// move at all vertically — which is why the change of model is a change of
+    /// unit and not a relaxation.
+    /// </para>
+    ///
+    /// <para>
+    /// The v1 numbers are written out, because the pack they were measured on is
+    /// no longer loaded and a comparison against art nobody can re-read has to
+    /// carry its own evidence: alpha bounds <c>x 6..89, y 8..91</c> over the four
+    /// v1 states, against <c>x 26..268, y 20..187</c> over the six v2 states.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_pixels_a_creature_can_occupy_did_not_rise_when_the_canvas_did()
+    {
+        const double v1Canvas = 96.0;
+        const double v1Support = 92.0 / 96.0;
+        const double v1OpaqueTop = 8.0;
+        const double v1OpaqueLeft = 6.0;
+        const double v1OpaqueRight = 90.0;
+
+        foreach (var tileSize in new[] { 32, 40, 48 })
+        {
+            var centre = CameraView.CellCenter(new GridPoint(14, 8), tileSize);
+            var drawn = CameraView.GoblinDrawSize(tileSize);
+
+            // The v1 pack as it would have been drawn today: same height, square,
+            // feet on the same line, and its own alpha bounds.
+            var v1CanvasTop = centre.Y + CameraView.GoblinFootLine(tileSize) - (drawn * v1Support);
+            var v1OpaqueReach = centre.Y - (v1CanvasTop + (drawn * (v1OpaqueTop / v1Canvas)));
+
+            var opaque = CameraView.GoblinOpaqueRect(centre, tileSize);
+            var v2OpaqueReach = centre.Y - opaque.Y;
+
+            Assert.Equal(v1OpaqueReach, v2OpaqueReach, 12);
+
+            // And the canvas above those pixels really did grow, or the equality
+            // above would be saying that nothing happened.
+            var canvas = CameraView.GoblinDrawRect(centre, tileSize);
+            Assert.True(centre.Y - canvas.Y > v2OpaqueReach);
+
+            // Sideways: strictly wider than the pack it replaced.
+            var v1HalfWidth = Math.Max(
+                (drawn / 2.0) - (drawn * (v1OpaqueLeft / v1Canvas)),
+                (drawn * (v1OpaqueRight / v1Canvas)) - (drawn / 2.0));
+            var v2HalfWidth = Math.Max(centre.X - opaque.X, opaque.X + opaque.Width - centre.X);
+            Assert.True(v2HalfWidth > v1HalfWidth);
+        }
+
+        Assert.Equal(37.424242, CameraView.CellCenter(new GridPoint(14, 8), 40).Y -
+            CameraView.GoblinOpaqueRect(CameraView.CellCenter(new GridPoint(14, 8), 40), 40).Y, 6);
+        Assert.Equal(42.821970, CameraView.GoblinDrawWidth(40) *
+            ((CameraView.SpriteOpaqueRight - (CameraView.SpriteCanvasWidth / 2.0)) /
+                CameraView.SpriteCanvasWidth), 6);
+
+        // The opaque box is inside the canvas on every side, which is what makes it
+        // a narrowing of the same rectangle rather than a different one.
+        var probe = CameraView.CellCenter(new GridPoint(14, 8), 40);
+        var box = CameraView.GoblinOpaqueRect(probe, 40);
+        var frame = CameraView.GoblinDrawRect(probe, 40);
+        Assert.True(box.X >= frame.X);
+        Assert.True(box.Y >= frame.Y);
+        Assert.True(box.X + box.Width <= frame.X + frame.Width);
+        Assert.True(box.Y + box.Height <= frame.Y + frame.Height);
+
+        // The feet stay in the box: the pack's support row is inside its own
+        // opaque bounds, so a check that uses the box still sees a body on the
+        // ground it stands on.
+        Assert.Equal(
+            probe.Y + CameraView.GoblinFootLine(40),
+            frame.Y + (frame.Height * CameraView.SpriteSupportFraction),
+            12);
+        Assert.True(box.Y + box.Height >= probe.Y + CameraView.GoblinFootLine(40));
+    }
+
+    /// <summary>
+    /// The ground under a creature is not a property of the creature's art, and
+    /// this is the check that says so in numbers.
+    ///
+    /// <para>
+    /// <see cref="CameraView.GoblinFootLine"/> was one expression with
+    /// <see cref="CameraView.SpriteSupportFraction"/> while the game had one pack.
+    /// Connecting the second one separates them: had the foot line followed the
+    /// pack, it would have moved from 16.667 px below the render centre to 17.424
+    /// — every creature in the game standing 0.758 px lower than the day before,
+    /// at the shipped tile, because a canvas grew a shorter transparent tail.
+    /// </para>
+    ///
+    /// <para>
+    /// The rejected number is computed here rather than quoted, so that it stays
+    /// the answer to «what if the foot line had followed the pack» even if the
+    /// pack changes again.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_ground_a_body_stands_on_did_not_move_with_the_pack()
+    {
+        foreach (var tileSize in new[] { 32, 40, 48 })
+        {
+            var reference = 20.0 * tileSize / 22.0;
+            var followedThePack = reference * (CameraView.SpriteSupportFraction - 0.5);
+
+            Assert.Equal(reference * ((92.0 / 96.0) - 0.5), CameraView.GoblinFootLine(tileSize), 12);
+            Assert.True(
+                followedThePack > CameraView.GoblinFootLine(tileSize),
+                "the v2 pack leaves less transparent tail than v1, so a foot line " +
+                "built from it would sit lower — if this stops being true the " +
+                "arithmetic below is measuring nothing.");
+        }
+
+        Assert.Equal(16.666667, CameraView.GoblinFootLine(40), 6);
+        Assert.Equal(
+            0.757576,
+            (20.0 * 40.0 / 22.0 * (CameraView.SpriteSupportFraction - 0.5)) -
+                CameraView.GoblinFootLine(40),
+            6);
+    }
+
+    /// <summary>
+    /// The two numbers that separate this placement rule from the one it was
+    /// confused with, at the shipped tile size: how far a body reaches above its
+    /// render centre, and by how much the two rules disagree.
+    ///
+    /// <para>
+    /// <b>The gap between them is a property of the pack, and connecting v2
+    /// shrank it and turned it round.</b> With the v1 pack, anchoring the drawn
+    /// feet reached 42.58 px and anchoring the canvas reached 43.64 — the canvas
+    /// rule 1.06 px higher, because a transparent tail of 4/96 grew with the
+    /// square. The v2 canvas leaves 4/192, so the same two rules now reach 43.86
+    /// and 43.64, and it is the <em>feet</em> rule that reaches 0.23 px higher.
+    /// </para>
+    ///
+    /// <para>
+    /// That the difference has become small is not an argument that it stopped
+    /// mattering. The rule is chosen by what it holds still — the drawn feet, at
+    /// 0.000000 px, which
+    /// <see cref="The_drawn_feet_do_not_move_when_the_body_grows"/> measures —
+    /// and not by how far the two candidate rules happen to be apart on the pack
+    /// of the day.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Anchoring_the_drawn_feet_and_the_canvas_disagree_by_a_measured_amount()
+    {
+        var centre = CameraView.CellCenter(new GridPoint(14, 8), 40);
+        var drawn = CameraView.GoblinDrawRect(centre, 40);
+
+        // This rule: the drawn feet held on their line.
+        Assert.Equal(43.863636, centre.Y - drawn.Y, 6);
+        Assert.Equal(17.954545, drawn.Y + drawn.Height - centre.Y, 6);
+
+        // The rule it was confused with: the canvas's bottom edge held on the old
+        // canvas's bottom edge, which is half the pre-#77 body below the centre.
+        var canvasAnchored = CameraView.GoblinDrawSize(40) - (20.0 * 40.0 / 22.0 / 2.0);
+
+        Assert.Equal(43.636364, canvasAnchored, 6);
+        Assert.Equal(0.227273, (centre.Y - drawn.Y) - canvasAnchored, 6);
+
+        // And the reason to prefer this one, restated as the cost of the other:
+        // anchoring the canvas puts the drawn feet 0.23 px below their line.
+        Assert.Equal(
+            0.227273,
+            (CameraView.GoblinDrawSize(40) * CameraView.SpriteSupportFraction) -
+                canvasAnchored - CameraView.GoblinFootLine(40),
+            6);
+    }
+
+    /// <summary>
+    /// What the chosen scale asks of the art, at both ends of the zoom range.
+    ///
+    /// <para>
+    /// The bound this test used to carry was «the 2x view must not upscale the
+    /// 96 px source». At 170 % that stopped holding for the v1 pack — 61.8 x 2 =
+    /// 123.6 px against 96 — and the body-scale subtask split it rather than
+    /// deleting it: every zoom the game starts at inside the pack in use, and the
+    /// deepest zoom pinned against the pack the scale was authored for. This
+    /// subtask connected that pack, so the two halves close back into one: 123.6
+    /// px now come out of a 192-row canvas, at 0.64 of its height, and no zoom in
+    /// the range magnifies the source at all.
+    /// </para>
+    ///
+    /// <para>
+    /// The old sheet's 96 px stays here as the number the range is not measured
+    /// against any more, because «the deepest zoom is inside the source» is a
+    /// claim that was false for a while and is true again, and a check that
+    /// forgets it was ever false cannot say which pack it is describing.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_selected_scale_states_what_it_asks_of_the_art_at_both_ends_of_the_zoom_range()
+    {
+        const double v1SourcePixels = 96.0;
+        const double connectedCanvasPixels = 192.0;
+
         var worldSize = CameraView.GoblinDrawSize(CameraView.DefaultTileSize);
         var overviewPixels = worldSize * CameraView.ZoomLevels[0];
         var detailPixels = worldSize * CameraView.ZoomLevels[^1];
 
-        Assert.InRange(overviewPixels, 18, 20);
-        Assert.InRange(detailPixels, 72, 73);
-        Assert.True(detailPixels < 96, "The 2x view must not upscale the 96px source.");
+        Assert.InRange(overviewPixels, 30, 31);
+        Assert.InRange(detailPixels, 123, 124);
+
+        // The connected pack really is the one these numbers are about.
+        Assert.Equal(connectedCanvasPixels, CameraView.SpriteCanvasHeight);
+        Assert.Equal("v2", BodySprites.PackVersion);
+
+        // Overview no longer shrinks a body below the 18 px it used to bottom
+        // out at, which was the readability floor of the old scale.
+        Assert.True(
+            overviewPixels > 18,
+            "The 0.5x overview must not make a body smaller than it was before Issue #77.");
+
+        // Every zoom in the range, deepest included, takes fewer pixels than the
+        // connected canvas has. This is the whole of what connecting v2 buys.
+        foreach (var zoom in CameraView.ZoomLevels)
+        {
+            Assert.True(
+                worldSize * zoom < connectedCanvasPixels,
+                $"Zoom {zoom} draws {worldSize * zoom} px of canvas height from a " +
+                $"{connectedCanvasPixels} px source.");
+        }
+
+        // The width has the same headroom, and it is asked separately because the
+        // canvas is not square: 175.2 px at 2x from 272 source columns.
+        var detailWidth = CameraView.GoblinDrawWidth(CameraView.DefaultTileSize) *
+            CameraView.ZoomLevels[^1];
+        Assert.InRange(detailWidth, 175, 176);
+        Assert.True(detailWidth < CameraView.SpriteCanvasWidth);
+
+        // And the number the range used to be measured against, kept as the
+        // statement of what changed: the deepest zoom is past the old sheet.
+        Assert.True(
+            detailPixels > v1SourcePixels,
+            "The 2x view asks for more than the retired 96 px v1 sheet held, which " +
+            "is why the pack was connected.");
+        Assert.Equal(1.2879, detailPixels / v1SourcePixels, 4);
     }
 
     [Fact]

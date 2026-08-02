@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "issue": 77,
+  "checkpoint": "4 — the checks are shown to be able to fail",
+  "note": "Run against the committed state b9aeda9 («Проход #156 перемерян под пак v2…»), i.e. after the checked state was committed, not before it. Each mutant was written into the working tree, measured, and restored from the string it replaced; `git status --porcelain` is empty afterwards and the restored tree is green at 517 passed.",
+  "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --nologo -v q",
+  "baseline": {"passed": 517, "failed": 0},
+  "required": "Rule 21 asks for two by the brief's own naming: one on the support fraction and one on the aspect ratio. They are M1 and M2. The other four are here because each one is a mistake somebody could actually make in this file, and a mutant that nothing catches is the only kind worth adding.",
+
+  "mutants": [
+    {
+      "name": "M1 — the support fraction is left at the v1 pack's",
+      "where": "src/DungeonFortress.Presentation/CameraView.cs",
+      "change": "SpriteSupportRows = 188.0 -> 184.0, i.e. SpriteSupportFraction back to 92/96",
+      "why": "The required mutant, and the exact mistake the previous subtask's docstring warned this one about: connect a 188/192 pack and forget the number that says where its feet are. It is silent — every creature is drawn 1.29 px into the ground at tile 40, all at once, and no frame looks broken.",
+      "result": "FAILED: 4 of 517 — CameraViewTests.The_drawn_feet_do_not_move_when_the_body_grows (the drawn feet leave their line, which is the whole guarantee), The_ground_a_body_stands_on_did_not_move_with_the_pack (the two fractions stop differing, so the test that separates them has nothing to separate), Anchoring_the_drawn_feet_and_the_canvas_disagree_by_a_measured_amount (the 0.227 px gap goes back to 1.06), The_pixels_a_creature_can_occupy_did_not_rise_when_the_canvas_did (the opaque reach stops matching v1's)."
+    },
+    {
+      "name": "M2 — the rectangle goes back to a square",
+      "where": "src/DungeonFortress.Presentation/CameraView.cs",
+      "change": "SpriteCanvasWidth = 272.0 -> 192.0, i.e. SpriteCanvasAspect back to 1",
+      "why": "The second required mutant. Undoing the shape is the same class of error as undoing the scale, and it is easy to reach by accident because the height keeps its old name and value.",
+      "result": "FAILED: 3 of 517 — CameraViewTests.A_body_is_drawn_in_the_seventeen_by_twelve_canvas_the_pack_was_authored_on (the ratio is 1 against the pinned 17/12, and the width falls from 87.58 to 61.82 px), The_selected_scale_states_what_it_asks_of_the_art_at_both_ends_of_the_zoom_range (the width at 2x drops out of the pinned 175-176 px band), The_pixels_a_creature_can_occupy_did_not_rise_when_the_canvas_did (the opaque envelope stops being wider sideways than v1's, which is the claim that the pack really is drawn wider)."
+    },
+    {
+      "name": "M3 — the ground line follows the pack again",
+      "where": "src/DungeonFortress.Presentation/CameraView.cs",
+      "change": "GoblinFootLine uses SpriteSupportFraction instead of GroundLineSupportFraction",
+      "why": "The interesting wrong version rather than an obviously broken one, and the state the file was actually in before this change: one expression served both meanings while there was only one pack. It looks like a simplification and moves the ground under every creature in the game by 0.757576 px at tile 40.",
+      "result": "FAILED: the same 4 tests as M1. The two mutants are different edits with the same consequence, which is the point: the guarantee is «the feet do not move», and both ways of losing it are caught."
+    },
+    {
+      "name": "M4 — the opaque envelope is widened back to the canvas",
+      "where": "src/DungeonFortress.Presentation/CameraView.cs",
+      "change": "SpriteOpaqueTop = 20.0 -> 0.0",
+      "why": "The measurement Issue #156's sweep now leans on. If the envelope can be quietly opened back up to the canvas without anything noticing, then choosing it over the canvas was a preference rather than a measurement.",
+      "result": "FAILED: 7 of 517 — CameraViewTests.The_pixels_a_creature_can_occupy_did_not_rise_when_the_canvas_did, and both halves of the #156 sweep at all three tile sizes: RoomBorderDepthTests.No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible and No_body_anywhere_can_reach_a_stroke_the_wall_in_front_does_not_cover. Those six are the 2 crossings of evidence/77-pack-geometry.json coming back, which is the same finding measured from the other end."
+    },
+    {
+      "name": "M5 — the connected pack goes back to v1",
+      "where": "src/DungeonFortress.Presentation/BodySprites.cs",
+      "change": "PackVersion = \"v2\" -> \"v1\"",
+      "why": "The change this whole subtask is, in one string. It would not even fail at runtime in an obvious way for four of the six states — the v1 files are still in the repository — so `windup` and `flinch` would go missing and the other four would be drawn from a 96 px sheet into a 17:12 rectangle.",
+      "result": "FAILED: 2 of 517 — BodySpriteTests.The_connected_pack_is_v2_and_the_file_names_say_so (every file name reverts, and the .NET tree stops naming the shipped pack), CameraViewTests.The_selected_scale_states_what_it_asks_of_the_art_at_both_ends_of_the_zoom_range (the zoom range is stated against the connected pack, so it notices which one that is). Beyond the suite, scripts/test-goblin-sprite-import.ps1 would then look for goblin_*_v2.png in a fresh import cache built from v1 files."
+    },
+    {
+      "name": "M6 — a blow stops choosing its own pose",
+      "where": "src/DungeonFortress.Presentation/BodySprites.cs",
+      "change": "BodySprites.PhaseKey returns null for Windup and Flinch",
+      "why": "The seam the third subtask starts from. Nothing in the shipped adapter passes a phase today, so this mutant is invisible in every frame the game currently draws — which is exactly why it needs a check of its own rather than a note saying the seam exists.",
+      "result": "FAILED: 3 of 517 — BodySpriteTests.A_blow_being_shown_chooses_the_pose_drawn_for_it for both phases, and Every_pose_the_view_can_choose_is_a_state_the_runtime_loads, which notices that two of the six loaded states have become unreachable."
+    }
+  ],
+
+  "restored": {
+    "gitStatus": "clean",
+    "rerun": {"passed": 517, "failed": 0}
+  },
+
+  "next": "Checkpoint 5 — the head jump between combat and flinch, measured after connecting and either accepted with a reason or turned into an Issue."
+}

@@ -43,6 +43,16 @@ $env:DOTNET_CLI_HOME = Join-Path $artifactsRoot "dotnet-home"
 $env:DOTNET_NOLOGO = "1"
 $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = "1"
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
+# A run-local DOTNET_CLI_HOME makes the .NET CLI append "<CLI_HOME>\.dotnet\tools"
+# to the *user's* PATH on its first launch under that home, and
+# DOTNET_SKIP_FIRST_TIME_EXPERIENCE does not prevent it. Measured 2026-08-02 on a
+# two-armed experiment: a fresh CLI home plus `dotnet new console` added one PATH
+# entry with the skip flag alone and none with the variable below, which also
+# left the tools directory uncreated. Every worktree and every temporary run has
+# its own artifacts root, so the entries accumulate and never point at a
+# directory that still exists: 135 such tails were removed from the owner's PATH
+# that day, out of 145 entries and 13302 characters.
+$env:DOTNET_ADD_GLOBAL_TOOLS_TO_PATH = "0"
 
 function Invoke-Checked {
     param(
@@ -613,14 +623,46 @@ $stageCatalog = [ordered]@{
                 [double]$viewEvents["base"].view.visibleWorldSize[1]) {
                 throw "A larger frame did not expose more world at the same zoom."
             }
+            # The body is drawn at the owner's 170 % since Issue #77, so these are
+            # the old numbers times 1.7: 30.9 px in the overview, 61.8 at 1x and
+            # 92.7 in the detail case, which is zoom 1.5. The floor moves with the
+            # decision: an overview body used to bottom out at 18.2 px and now may
+            # not drop below 30.
+            #
+            # The ceiling is the source the run is drawing from, and it moved with
+            # the pack rather than with the decision. It was 96 while the runtime
+            # loaded the square v1 sheet; the second subtask of #77 connected the
+            # 272x192 v2 pack the scale was authored for, so it is 192 — and the
+            # zoom this stage does not visit, 2x at 123.6 px, is inside it again
+            # instead of magnifying a 96 px source by 1.29.
+            # CameraViewTests.The_selected_scale_states_what_it_asks_of_the_art_at_
+            # both_ends_of_the_zoom_range is where the whole range is stated.
+            #
+            # The width is checked too, and separately: the ceiling above says
+            # nothing about the shape, so a run that drew the 17:12 canvas as a
+            # square would pass every bound here. 17/12 is the pack's own aspect
+            # ratio (docs/art/goblin-v2-provenance.md).
             $overviewGoblinPixels = [double]$viewEvents["overview-shifted"].view.goblinScreenSize
             $baseGoblinPixels = [double]$viewEvents["base"].view.goblinScreenSize
             $detailGoblinPixels = [double]$viewEvents["detail-scaled-ui"].view.goblinScreenSize
-            if ($overviewGoblinPixels -lt 18 -or
+            if ($overviewGoblinPixels -lt 30 -or
                 $baseGoblinPixels -le $overviewGoblinPixels -or
                 $detailGoblinPixels -le $baseGoblinPixels -or
-                $detailGoblinPixels -ge 96) {
+                $detailGoblinPixels -ge 192) {
                 throw "Tile-relative goblin art is not readable across overview, base and detail views."
+            }
+
+            foreach ($viewCaseName in $viewEvents.Keys) {
+                $caseView = $viewEvents[$viewCaseName].view
+                $caseHeight = [double]$caseView.goblinScreenSize
+                $caseWidth = [double]$caseView.goblinScreenWidth
+                if ($caseHeight -le 0 -or
+                    [Math]::Abs(($caseWidth / $caseHeight) - (17.0 / 12.0)) -gt 1e-9) {
+                    throw (
+                        "View case '$viewCaseName' draws a body $caseWidth x $caseHeight px, " +
+                        "which is not the 17:12 canvas the connected creature pack was drawn on."
+                    )
+                }
             }
 
             # HUD text is measured in the same spirit as the goblin above: the

@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "issue": 77,
+  "checkpoint": "3 — Issue #156's sweep re-measured under the connected pack, and the proof that the simulation did not notice",
+  "note": "Every number below was produced by running the suite in this worktree. The four columns of the crossing table were produced by editing RoomBorderDepthTests.BodyRect and InFrontOfEverybodyTouching in the working tree, measuring, and reverting with `git checkout -- tests/DungeonFortress.Presentation.Tests/RoomBorderDepthTests.cs`; the restored tree is green and is what is committed.",
+  "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --nologo --filter \"FullyQualifiedName~RoomBorderDepthTests\"",
+
+  "whatChangedGeometrically": {
+    "widthAtTile40": {"before": 61.81818181818182, "after": 87.57575757575758, "growth": "+41.7 %"},
+    "heightAtTile40": {"before": 61.81818181818182, "after": 61.81818181818182, "growth": "0 %"},
+    "canvasReachAboveCentreAtTile40": {"before": 42.57575757575758, "after": 43.86363636363636, "growth": "+1.2879 px"},
+    "canvasReachBelowCentreAtTile40": {"before": 19.242424242424242, "after": 17.954545454545453},
+    "footLineAtTile40": {"before": 16.666666666666668, "after": 16.666666666666668, "growth": "0 px — the load-bearing one"}
+  },
+
+  "crossings": {
+    "claim": "The sweep of Issue #156 — every stroke drawn above the depth pass against every position a body can be in — re-measured for the connected pack, in four columns, at all three tile sizes of ADR 0008.",
+    "columns": [
+      {
+        "name": "shipped before this change",
+        "body": "v1 canvas, square, 92/96 support",
+        "model": "drawn canvas rectangle",
+        "crossings": {"32": 0, "40": 0, "48": 0},
+        "universalClaim": "passes"
+      },
+      {
+        "name": "connected pack, body still modelled as the drawn canvas",
+        "body": "v2 canvas, 17:12, 188/192 support",
+        "model": "drawn canvas rectangle",
+        "crossings": {"32": 2, "40": 2, "48": 2},
+        "universalClaim": "fails at quarters@19,2 South, cell 19,5",
+        "where": [
+          {"room": "quarters@19,2", "side": "South", "cell": "20,5", "body": "21,6->21,7", "overlapPx2": {"32": 13.84022, "40": 21.625344, "48": 31.140496}},
+          {"room": "quarters@19,2", "side": "South", "cell": "21,5", "body": "21,6->21,7", "overlapPx2": {"32": 0.661157, "40": 1.033058, "48": 1.487603}}
+        ]
+      },
+      {
+        "name": "the width alone",
+        "body": "square canvas (SpriteCanvasWidth forced to 192), 188/192 support",
+        "model": "drawn canvas rectangle",
+        "crossings": {"32": 2, "40": 2, "48": 2},
+        "reading": "The same two crossings, in the same place. Widening the body by 42 % contributes none of them: what does is the 1.2879 px the canvas rose when the support fraction moved."
+      },
+      {
+        "name": "the support fraction alone",
+        "body": "v2 canvas, 17:12, support forced back to 184/192 = 92/96",
+        "model": "drawn canvas rectangle",
+        "crossings": {"32": 0, "40": 0, "48": 0},
+        "reading": "The other half of the same probe, from the other side: with the old vertical placement and a body 42 % wider, nothing crosses. Between the two columns the cause is named rather than guessed."
+      },
+      {
+        "name": "shipped by this change",
+        "body": "v2 canvas, 17:12, 188/192 support",
+        "model": "measured opaque envelope, CameraView.GoblinOpaqueRect",
+        "crossings": {"32": 0, "40": 0, "48": 0},
+        "universalClaim": "passes"
+      }
+    ],
+    "historicalColumnUnchanged": {
+      "arrangement": "BeforeIssue156 — the whole border drawn after the depth pass, swept with the body of its own time",
+      "crossings": {"32": 226, "40": 226, "48": 226},
+      "rooms": ["farm@1,1", "kitchen@9,6", "larder@13,6", "quarters@19,2"],
+      "reading": "The number Issue #156, its documentation and evidence/156-before.json all quote is untouched, because that column is measured with the pre-#77 body and the draw order of its own time. If it had moved, this change would have rewritten somebody else's evidence."
+    }
+  },
+
+  "theModelChange": {
+    "what": "For Arrangement.Today, RoomBorderDepthTests now models a body by CameraView.GoblinOpaqueRect — the union of the six states' alpha bounds inside the drawn canvas — instead of by the whole drawn canvas.",
+    "why": "The canvas stopped being a description of a creature. v1 was a 96x96 tight crop of one pose; v2 is a 272x192 frame shared by six and sized for the widest of them. `idle` fills 116 of its 272 columns, and every state leaves the top 20 of 192 rows empty. The 2 crossings above are entirely inside that empty header: the overlap is at most 0.909 px of body travel at tile 40, against 6.44 px of guaranteed-transparent canvas above the highest pixel any pose has.",
+    "whyItIsNotARelaxation": {
+      "vertical": "The highest opaque pixel a creature can have is 37.42424242424243 px above the render centre with the v1 pack and 37.42424242424242 px with v2 — equal to the last binary place. Not a coincidence: the v1 body filled 84 of 96 rows and the v2 body fills 168 of 192, and both are 0.875, which docs/art/goblin-v2-provenance.md says was authored on purpose. Vertically the check holds exactly the pixels it always held.",
+      "horizontal": "27.045454545454547 px each way with v1 against 42.821969696969695 with v2 — the check became 58 % stricter sideways, because combat and windup hold a spear out.",
+      "held": "CameraViewTests.The_pixels_a_creature_can_occupy_did_not_rise_when_the_canvas_did measures both of those against each other, with the v1 alpha bounds written out because the pack they came from is no longer loaded.",
+      "envelopeIsInsideTheCanvas": "GoblinOpaqueRect is a sub-rectangle of GoblinDrawRect on all four sides, and its bottom edge is the foot line itself, because the pack's last opaque row and its support row are the same row."
+    },
+    "measuredAlphaBounds": {
+      "v1": {"states": 4, "canvas": [96, 96], "unionBbox": [6, 8, 90, 92]},
+      "v2": {"states": 6, "canvas": [272, 192], "unionBbox": [26, 20, 269, 188]},
+      "command": "python -c \"from PIL import Image; from pathlib import Path; base=Path('src/DungeonFortress.Game/assets/generated/goblins'); [print(s, Image.open(base/f'goblin_{s}_{v}.png').getchannel('A').getbbox()) for v,ss in [('v1',['idle','work','combat','downed']),('v2',['idle','work','combat','windup','flinch','downed'])] for s in ss]\"",
+      "note": "Pillow bounds are [left, top, right, bottom) — right and bottom exclusive."
+    }
+  },
+
+  "aSecondFindingLeftAlone": {
+    "what": "RoomBorderDepthTests asks for shelter from walls with `wall.Anchor > body.AnchorY`, strictly. WorldRenderOrder puts a wall last at an equal anchor on purpose — «at the exact crossing depth the wall still occludes the body», held by WorldRenderOrderTests.Body_on_same_cell_as_a_structure_is_drawn_in_front_of_it — so the check refuses shelter from one wall the frame does in fact draw over the body.",
+    "measured": "Reading the rule from WorldRenderOrder instead of restating it also removes the 2 crossings of column 2 on its own. It was tried and then dropped: the unit correction alone is sufficient, and the strict comparison is the conservative side of a check whose whole job is to find lines landing on creatures.",
+    "left": "Unchanged. Recorded here so that the disagreement is a known conservative one rather than an unnoticed one."
+  },
+
+  "simulationDidNotNotice": {
+    "claim": "Nothing this change touches reaches canonical state, so the checksum, the replay and the command vocabulary cannot depend on it (ADR 0010, ADR 0011).",
+    "beforeCommit": "18afe514b1eddb6170de2eeaaad4e5e20a0045a1",
+    "afterCommit": "9a6a2bddb6a64ab2473dd971b89ef930c7856192",
+    "checksums": [
+      {"capture": "77-scale-rooms", "fixture": "baseline", "tick": 190, "before": "3fae9df7ad170481dd2295d6793227b0a9eb6cb10538d879b709dbc19db034e8", "after": "3fae9df7ad170481dd2295d6793227b0a9eb6cb10538d879b709dbc19db034e8", "equal": true},
+      {"capture": "77-scale-raid", "fixture": "prepared", "tick": 1670, "before": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70", "after": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70", "equal": true},
+      {"capture": "77-scale-raid-detail", "fixture": "prepared", "tick": 1670, "before": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70", "after": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70", "equal": true}
+    ],
+    "theFrameWithNoBodyInIt": {
+      "capture": "77-scale-raid-detail",
+      "beforeImageSha256": "eba178d4ed378c693e8d9fb59359dbbe32f9a5d5c5c9b24ee12b41d09eb909e0",
+      "afterImageSha256": "eba178d4ed378c693e8d9fb59359dbbe32f9a5d5c5c9b24ee12b41d09eb909e0",
+      "identical": true,
+      "reading": "Fifth consecutive round for this frame. At 2x over this stretch of the map there is no body in shot, so it is walls, floor, room outlines, grid and HUD alone — and none of them moved by a pixel while the pack, the aspect ratio and the support fraction all changed. The change is confined to bodies, measured rather than asserted."
+    },
+    "theTwoFramesWithBodies": [
+      {"capture": "77-scale-rooms", "beforeImageSha256": "c735e8fb211b98de7a7e48514d58b283692906b83fbb11ac8c4a933dd8f70838", "afterImageSha256": "39ec5c49585a48c8000d7d92e8f04ad7fc87e0fc41faab2e39e3bb62bfea9555"},
+      {"capture": "77-scale-raid", "beforeImageSha256": "6d75e41d7fae179555d191febadd90cd24314ced5a554ffb51c497f32cd3edd0", "afterImageSha256": "84a366803af6a3cd777c652878b1f67eaa94ba52c0add2e1d8e29e0f2eb7369b"}
+    ],
+    "spriteDiagnostics": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-game.ps1 -GodotPath \"<godot 4.7.1 console>\" -Fixture baseline -ScreenshotTicks 190 -TileSize 40 -CameraZoom 1 -CameraPosition '560,320' -UiScale 1 -FrameSize 1280x720 -ScreenshotPath evidence/77-pack-probe/probe.png",
+      "loadedSpriteStates": ["idle", "work", "combat", "windup", "flinch", "downed"],
+      "missingSpriteStates": [],
+      "fallbackSpriteDraws": 0,
+      "textureFilter": "LinearWithMipmaps",
+      "spriteMipmaps": true,
+      "reading": "All six states of the v2 pack import and generate mipmaps at 272x192; no body fell back to the placeholder circle."
+    },
+    "sourceHeadroomRestored": {
+      "canvasHeightPx": 192,
+      "canvasWidthPx": 272,
+      "deepestZoomHeightPx": 123.63636363636363,
+      "deepestZoomWidthPx": 175.15151515151516,
+      "beforeThisChange": "123.64 px drawn from a 96 px source — magnification 1.2879 with LinearWithMipmaps filtering",
+      "afterThisChange": "123.64 px of 192 and 175.15 px of 272 — 0.64 of the source in both directions, so no zoom in the declared range magnifies the art any more",
+      "reportedBy": "view.goblinScreenSize and view.goblinScreenWidth in the 77-scale-raid-detail run's own godot_graybox_screenshot event"
+    }
+  },
+
+  "next": "Checkpoint 4 — the mutants, run against the committed state."
+}

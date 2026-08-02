@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "issue": 77,
+  "checkpoint": "1 — the pack's numbers re-measured with this task's own command, and the frame before the pack is connected",
+  "note": "Second vertical subtask of Issue #77: connect the v2 creature pack. The branch is agent/77-goblin-pack-v2, based on agent/77-body-scale-170 (bb43700) and not on main, because it continues that subtask and goes to main paired with it. PNGs land under .artifacts/evidence/77-pack-before/ per Resolve-EvidenceOutputRoot and are not committed. Hashes and checksums are copied from the manifest capture-evidence.ps1 itself wrote (.artifacts/evidence/77-pack-before/manifest.json), not retyped.",
+
+  "entryCondition": {
+    "claim": "The base branch predates the pack it is supposed to connect, and that was found by measuring rather than by reading.",
+    "found": "At bb43700 the flinch PNG measured alpha bbox (29, 24, 211, 188) — the pre-#165 flinch without the spear, which docs/art/goblin-v2-provenance.md lists as the struck-through row of its placement table. Issue #165 landed in main as 2b837c0 after agent/77-body-scale-170 was cut.",
+    "action": "origin/main merged into this branch as the first commit of the task (merge 18afe51 of 2b837c0). The merge is clean — git merge-tree --write-tree origin/main HEAD returned a tree with no conflicts before it was taken — and it brings two commits: #165 (the flinch PNG only) and #171 (simulation: memory of place pays in time and need).",
+    "assetsUntouched": "src/DungeonFortress.Game/assets/** is read-only for this task. The new flinch arrives as somebody else's merged commit; nothing here edits a PNG.",
+    "afterTheMerge": "The same measurement returns (26, 24, 211, 188), which is the current row of the provenance table."
+  },
+
+  "packMeasurement": {
+    "claim": "The numbers this task builds on are re-measured here rather than copied from the brief. They agree with docs/art/goblin-v2-provenance.md.",
+    "command": "python -c \"from PIL import Image; from pathlib import Path; base=Path('src/DungeonFortress.Game/assets/generated/goblins')\\nfor s in ['idle','work','combat','windup','flinch','downed']:\\n    im=Image.open(base/f'goblin_{s}_v2.png').convert('RGBA'); a=im.getchannel('A'); px=a.load(); bbox=a.getbbox()\\n    xs=[x for y in range(172,188) for x in range(im.width) if px[x,y]>32]\\n    print(s, im.mode, im.width, im.height, bbox, bbox[3]-1, bbox[1], (min(xs)+max(xs))/2, bbox[3]-bbox[1])\"",
+    "commandNote": "Method taken from the provenance document's own verification commands 1-4: alpha channel via Pillow, support zone 172 <= y <= 187, support centre over pixels with alpha > 32. Run from the root of this worktree with Python 3.12.10 and Pillow.",
+    "states": [
+      {"state": "idle", "mode": "RGBA", "size": [272, 192], "alphaBbox": [75, 20, 191, 188], "lastOpaqueRow": 187, "topOpaqueRow": 20, "supportCentreX": 135.5, "silhouetteRows": 168},
+      {"state": "work", "mode": "RGBA", "size": [272, 192], "alphaBbox": [85, 37, 263, 188], "lastOpaqueRow": 187, "topOpaqueRow": 37, "supportCentreX": 136.0, "silhouetteRows": 151},
+      {"state": "combat", "mode": "RGBA", "size": [272, 192], "alphaBbox": [81, 39, 269, 188], "lastOpaqueRow": 187, "topOpaqueRow": 39, "supportCentreX": 135.5, "silhouetteRows": 149},
+      {"state": "windup", "mode": "RGBA", "size": [272, 192], "alphaBbox": [30, 30, 216, 188], "lastOpaqueRow": 187, "topOpaqueRow": 30, "supportCentreX": 136.0, "silhouetteRows": 158},
+      {"state": "flinch", "mode": "RGBA", "size": [272, 192], "alphaBbox": [26, 24, 211, 188], "lastOpaqueRow": 187, "topOpaqueRow": 24, "supportCentreX": 135.5, "silhouetteRows": 164},
+      {"state": "downed", "mode": "RGBA", "size": [272, 192], "alphaBbox": [43, 104, 231, 188], "lastOpaqueRow": 187, "topOpaqueRow": 104, "supportCentreX": 135.5, "silhouetteRows": 84}
+    ],
+    "agreed": [
+      "All six states are RGBA 272x192 — aspect ratio 272/192 = 17/12 exactly.",
+      "All six end on the same last opaque row y = 187, i.e. the exclusive alpha bound is 188 of 192 rows.",
+      "The support centre is 135.5 for four states and 136.0 for work and windup; the spread is 0.5 px on a 272 px canvas, which is the figure the provenance document states.",
+      "Every canvas edge column and row is fully transparent (verification command 5 of the provenance document, re-run here with the same result)."
+    ]
+  },
+
+  "derivation": {
+    "claim": "The two numbers this subtask puts into the code follow from the canvas, and neither is typed in.",
+    "supportFraction": {
+      "expression": "(lastOpaqueRow + 1) / canvasHeight = 188 / 192",
+      "value": 0.9791666666666666,
+      "replaces": "92 / 96 = 0.9583333333333334, the v1 pack's fraction",
+      "whyItMatters": "GoblinFootLine is ReferenceGoblinDrawSize * WorldVisualScale * (SpriteSupportFraction - 0.5). Left at 92/96 with a 188/192 pack, the drawn feet land 20 * (40/22) * (188/192 - 92/96) = 0.3788 px below the ground at tile 40, and the whole sprite with them. Small, silent, and wrong on every creature at once."
+    },
+    "canvasAspect": {
+      "expression": "canvasWidth / canvasHeight = 272 / 192 = 17 / 12",
+      "value": 1.4166666666666667,
+      "drawnWidthAtTile40": "GoblinDrawSize(40) * 17 / 12 = 61.81818181818182 * 1.4166666666666667 = 87.57575757575758 px",
+      "note": "The brief quotes 87.55 px, which is the provenance document's rounding of the same quantity (61.8 * 17/12 = 87.55). The code carries the ratio, so the exact value is 87.575757575757578 and the difference is only how many digits 61.8 was quoted to.",
+      "heightUnchanged": "61.81818181818182 px at tile 40 — GoblinDrawSize keeps its meaning as the canvas height, which is what the pack was authored against (docs/art/goblin-v2-provenance.md: «prepared for a 61.8 px canvas height»)."
+    }
+  },
+
+  "before": {
+    "commit": "18afe514b1eddb6170de2eeaaad4e5e20a0045a1",
+    "commitSubject": "Merge origin/main: пак v2 с копьём во flinch (#165) — условие входа подзадачи (#77)",
+    "sourceDirty": false,
+    "spec": "evidence/77-scale-frames.json",
+    "specNote": "The same three captures the body-scale subtask used, deliberately: the «after» of that subtask and the «before» of this one have to be the same frame, or the pair of subtasks cannot be read as one change.",
+    "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\capture-evidence.ps1 -SpecPath evidence/77-scale-frames.json -OutputRoot \"evidence/77-pack-before\" -GodotPath \"C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe\"",
+    "engine": "Godot 4.7.1.stable.mono, OpenGL compatibility renderer, textureFilter LinearWithMipmaps",
+    "loadedSpriteStates": ["idle", "work", "combat", "downed"],
+    "loadedPack": "goblin_{state}_v1.png — 96x96",
+    "measuredBodySize": {
+      "goblinWorldSizePx": 61.81818181818181,
+      "reportedBy": "view.goblinWorldSize in each run's own godot_graybox_screenshot event",
+      "tileSize": 40
+    },
+    "captures": [
+      {
+        "name": "77-scale-rooms",
+        "imagePath": ".artifacts/evidence/77-pack-before/77-scale-rooms.png",
+        "imageSha256": "c735e8fb211b98de7a7e48514d58b283692906b83fbb11ac8c4a933dd8f70838",
+        "canonicalChecksum": "3fae9df7ad170481dd2295d6793227b0a9eb6cb10538d879b709dbc19db034e8",
+        "byteForByteRepeat": true,
+        "goblinScreenSizePx": 61.81818181818181,
+        "reading": "The economy frame at the shipped tile size and 1x, with bodies at the owner's 170 % drawn as squares from the 96 px v1 sheet."
+      },
+      {
+        "name": "77-scale-raid",
+        "imagePath": ".artifacts/evidence/77-pack-before/77-scale-raid.png",
+        "imageSha256": "6d75e41d7fae179555d191febadd90cd24314ced5a554ffb51c497f32cd3edd0",
+        "canonicalChecksum": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70",
+        "byteForByteRepeat": true,
+        "goblinScreenSizePx": 61.81818181818181,
+        "reading": "Wave 2 of the prepared raid, the crowding case the scale was chosen on. This is the frame the widened rectangle has to be judged against: bodies here stand next to each other."
+      },
+      {
+        "name": "77-scale-raid-detail",
+        "imagePath": ".artifacts/evidence/77-pack-before/77-scale-raid-detail.png",
+        "imageSha256": "eba178d4ed378c693e8d9fb59359dbbe32f9a5d5c5c9b24ee12b41d09eb909e0",
+        "canonicalChecksum": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70",
+        "byteForByteRepeat": true,
+        "goblinScreenSizePx": 123.63636363636363,
+        "reading": "The deepest zoom, and the frame with no body in it. 123.64 screen px are being magnified out of a 96 px source here — magnification 1.2879, which is exactly what connecting the pack removes."
+      }
+    ],
+    "identicalToTheScaleSubtasksAfter": {
+      "claim": "All three «before» images and both checksums come out byte-for-byte identical to evidence/77-scale-after.json, even though origin/main was merged in between.",
+      "77-scale-rooms": "c735e8fb... == c735e8fb...",
+      "77-scale-raid": "6d75e41d... == 6d75e41d...",
+      "77-scale-raid-detail": "eba178d4... == eba178d4... (fourth consecutive round for this frame)",
+      "checksums": "3fae9df7... and 5708432701... unchanged",
+      "meaning": "Issue #171's simulation change does not reach these two fixtures at these ticks, so the merge adds no confound: anything that moves from here on is this subtask's own doing."
+    }
+  },
+
+  "next": "Checkpoint 2 — load the v2 pack with all six states, make GoblinDrawRect a 17:12 rectangle, and move SpriteSupportFraction to 188/192 together with the test that holds it."
+}

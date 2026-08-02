@@ -1217,9 +1217,10 @@ The result includes fixture, seed, tick, canonical checksum, PNG path,
 the actual and requested frame, world viewport, tile size, camera position,
 camera node position, zoom, visible world size, UI scale, texture filtering and
 whether the goblin sprites have mipmaps. It also reports the goblin's world-space
-and resulting screen-space draw size, so readability at a chosen view can be
-checked without estimating pixels from a screenshot. Visual smoke requires all
-four goblin states, mipmaps and zero fallback draws. The path must be relative and is always
+and resulting screen-space draw size — height and width both, since Issue #77
+connected a 17:12 pack — so readability and the drawn shape at a chosen view can
+be checked without estimating pixels from a screenshot. Visual smoke requires all
+**six** goblin states, mipmaps and zero fallback draws. The path must be relative and is always
 resolved below `.artifacts/`; rooted and traversal paths are rejected. Do not
 commit the image. `--smoke` and
 `--visible-smoke` continue to report structured runtime diagnostics for
@@ -1550,14 +1551,117 @@ committed golden screenshots: the portability reasons in
 [Golden UI state](#golden-ui-state) still apply.
 
 The selected 40 px tile scales world-space primitives from the previous 22 px
-grid instead of leaving their silhouettes behind at the old size. The 96×96
-goblin source is drawn at 36.36 world pixels: 18.18 screen pixels in the `0.5`
-overview and 72.73 at `2×`, still below its source resolution. The pure camera
-test pins both bounds and the Godot stage publishes and checks overview, base and
-detail sizes. This keeps the 1120×640 ownership map available in the overview
-without making creatures less readable than before. Runtime mipmaps plus
-`LinearWithMipmaps` keep the same source usable below 1×; no new art-direction
-decision is hidden in the camera slice.
+grid instead of leaving their silhouettes behind at the old size. That is
+`CameraView.WorldVisualScale`, and it answers only «how do the authored 22 px
+proportions land on this grid».
+
+How large a creature is against that grid is a second, separate question, and
+its answer is the owner's: `CameraView.BodyVisualScale = 1.70`, chosen on
+2026-08-01 from spike [#142](https://github.com/anshushunov/dungeon-fortress/issues/142)
+by clicking through the sizes in a live scene (gate log in
+[`ROADMAP.md`](../product/ROADMAP.md); 100 % was rejected outright, 200 % as too
+large). A body is therefore drawn at `20 × 1.70 × tile / 22` world pixels —
+**61.82 px at the shipped 40 px tile**, 49.45 at 32 and 74.18 at 48 — which is
+30.91 screen pixels in the `0.5` overview and 123.64 at `2×`. Visual body size is
+presentation tuning under [ADR 0010](../decisions/0010-contract-invariants-and-tuning.md):
+it reaches no canonical state, and the before/after captures in
+`evidence/77-scale-before.json` and `evidence/77-scale-after.json` record the same
+checksum on both sides of the change.
+
+The runtime draws the **272×192 v2 creature pack**
+([`goblin-v2-provenance.md`](../art/goblin-v2-provenance.md)), which was authored
+for exactly this 61.8 px canvas height, and every zoom in the declared range is
+inside it: `2×` takes 123.64 px of canvas height from 192 source rows and 175.15
+px of width from 272 columns, 0.64 of the source in both directions. Until the
+second subtask of Issue #77 connected it the runtime loaded the 96×96
+`goblin_*_v1` sheet and `2×` magnified it 1.29×; that number is kept in the pure
+camera test as the statement of what changed. The Godot stage publishes and checks
+overview, base and detail sizes, and now the width beside the height, because a
+run reporting only the height cannot be asked whether the canvas is drawn in the
+shape it was authored in. Runtime mipmaps plus `LinearWithMipmaps` keep the source
+usable below `1×`.
+
+Six states, not four: `idle`, `work`, `combat`, `windup`, `flinch`, `downed`.
+Which pose a body is drawn in is `DungeonFortress.Presentation.BodySprites`, so it
+has cases that are checked without starting the engine, and the adapter only hangs
+the returned texture on a rectangle. `windup` and `flinch` are loaded and
+reachable, and both call sites pass `BodyActionPhase.None`: **nothing in the
+snapshot says when a creature is drawing back or being struck.** What it does say
+is nearby and not the same thing — `LastDecision` carries `combat_attack` with the
+tick the blow *landed* on, a defender that is hit and survives records nothing, and
+a raider has no decision field at all. The subtask that makes a blow readable
+decides where the phase comes from.
+
+### The rectangle, and where it stands
+
+A body is drawn into a **17:12 rectangle**, because 272/192 is. The height is the
+61.82 px above; the width follows from the canvas — `61.82 × 17/12 = 87.58` px at
+tile 40 — rather than being written down. The pack's provenance quotes 87.55,
+which is the same quantity from a 61.8 px height rounded to one decimal.
+
+`CameraView.GoblinDrawRect` says where it goes: **a body grows upward out of the
+ground it stands on.** It is centred horizontally on the render point, which is
+what puts the pack's own support centre there — that centre was placed at canvas
+`x = 135.5` in four states and `136.0` in the other two, i.e. within 0.5 of a
+source pixel, or 0.16 px of drawn width. Vertically it stands on
+`CameraView.GoblinFootLine` — 16.67 px below the render centre at tile 40, which
+is where the feet of the authored 20-reference-pixel body landed long before Issue
+#77 — so the drawn feet move by exactly 0.000000 px at every tile size, and the
+body reaches 43.86 px above its centre instead of 18.18. This is also the rule
+spike #142's own scene used, so it is the picture the owner was judging when he
+chose 170 %.
+
+«Where the feet are» is a property of the sprite pack and is named as one:
+`CameraView.SpriteSupportFraction` = 188/192, because every v2 state's last opaque
+row is 187 of 192. It moved with the pack — the v1 sheet's was 92/96 — and leaving
+it behind would have drawn every creature 1.29 px into the ground at once, without
+any frame looking broken.
+
+**Where the ground is, is not a property of the pack**, and connecting the second
+one is what separated the two. `GoblinFootLine` was built from
+`SpriteSupportFraction` while the game had a single pack; had it stayed that way,
+the ground under every creature would have dropped 0.76 px at tile 40 the moment a
+canvas grew a shorter transparent tail. It is now stated with the v1 measurement
+that produced it, which cannot change again.
+
+The first round of this change shipped a **centred** square instead, which sank
+the feet from 16.67 px below the render centre to 28.33 — 11.67 px, 29 % of a
+cell, landing outside the cell the body stands on. It was accepted because growing
+upward was thought to undo part of Issue #156. Re-measurement after review of PR
+#176 found that cost belongs to a *different* rule, about a pixel away: anchoring
+the canvas's **bottom edge** where the old square's was lifted the feet by 1.06 px
+and added 2 crossings. With the v2 pack the two rules are 0.23 px apart and it is
+the feet rule that reaches higher — the gap between them was always the pack's
+transparent tail, and the tail went from 4/96 of the canvas to 4/192.
+
+### The canvas is not the creature
+
+The v2 canvas is a frame shared by six poses and sized for the widest of them, so
+it describes a creature much less well than the v1 crop did: `idle` fills 116 of
+its 272 columns, and **every** state leaves the top 20 of 192 rows empty.
+`CameraView.GoblinOpaqueRect` is the union of the six states' alpha bounds inside
+that canvas — columns 26–268, rows 20–187 — and it is what Issue #156's sweep now
+models a body with.
+
+That distinction is load-bearing and it is a change of unit rather than a
+relaxation, in two numbers. Vertically the highest pixel a creature can have is
+**37.424242 px** above its render centre with the v1 pack and **37.424242 px**
+with v2 — equal to the last binary place, because the body fills 0.875 of the
+canvas in both. Horizontally it is 27.05 px each way with v1 against **42.82**
+with v2, since `combat` and `windup` hold a spear out, so the sweep became 58 %
+stricter sideways. Measured against the canvas instead, the same sweep reports 2
+crossings at every tile size, all of them inside the empty header —
+`evidence/77-pack-geometry.json` keeps both columns and the two probes that name
+the cause: a body 42 % wider adds none of them, and the 1.29 px the canvas rose
+adds all of them.
+
+`combat → flinch` raises the head 3.2–3.5 px of a 47.97 px silhouette at tile 40
+when the top is asked at ten columns or more; at five columns it is 4.51 px, and
+the alpha bbox says 4.83 because the topmost row of `flinch` is a sliver — three
+columns at the `alpha > 32` threshold this method uses, five if any non-zero alpha
+counts. It was accepted as the recoil doing its job — registering `flinch` by its
+head would hold the head still and move the feet — and the timing question belongs
+to the feedback loop that will play it. `evidence/77-pack-head-jump.json`.
 
 ## Readability pass
 
@@ -1576,9 +1680,12 @@ During a raid, teal circles are crew and red-ring goblins are raiders. HP bars
 appear under both. Crew dots show working (green), fighting (amber), fled
 (pink), or downed (gray); a white X is a downed body. The battle legend is in
 the side panel and selected-creature inspection states `ALIVE`, `DOWNED`, or
-`FLED` with HP. Crew and raider sprites are exploratory generated art with provenance in
-[`goblin-v1-provenance.md`](../art/goblin-v1-provenance.md); they are not a
-commitment to production art direction.
+`FLED` with HP. Crew and raider sprites are exploratory generated art with
+provenance in [`goblin-v2-provenance.md`](../art/goblin-v2-provenance.md) — one
+pack for both sides, with the existing teal/red outline telling them apart; they
+are not a commitment to production art direction. The retired v1 sheet and its
+[`goblin-v1-provenance.md`](../art/goblin-v1-provenance.md) stay in the
+repository as the record of what the pack replaced.
 
 ## Boundary
 
