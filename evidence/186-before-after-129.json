@@ -14,18 +14,18 @@
     {
       "column": "beforeTree",
       "commit": "c5aa31b",
-      "what": "the last commit of `main` before the merge of #129 (`15bab1b`). Differs from `main` by #129, #171, #165, the creature pack of #77, #190, #179, #191 and #197.",
+      "what": "the last commit of `main` before the merge of #129 (`15bab1b`). Differs from `main` by #129, #171, #165, the creature pack of #77, #190, #179, #191, #197 and #173.",
       "howTheHarnessGotThere": "a detached worktree at c5aa31b with the harness file copied in, never committed and removed afterwards. It compiles unchanged: it touches only public API that #129 did not move."
     },
     {
       "column": "mutant",
-      "commit": "b58d9a1",
+      "commit": "ec40e8f",
       "what": "`main` with `ActCombatant` reading `var destination = target.Position;` instead of `var destination = ApproachTile(creature, target);` — the approach rule of #129 and nothing else.",
       "runner": ".artifacts/measure-186.py, which applies the replacement, runs the report and puts the file back in a finally block."
     },
     {
       "column": "main",
-      "commit": "b58d9a1",
+      "commit": "ec40e8f",
       "what": "the tree the owner played on 2026-08-02, plus the harness."
     }
   ],
@@ -108,7 +108,7 @@
   ],
   "whereTheTwoBeforeColumnsDisagree": {
     "what": "baseline/20260726 (13 refused steps on the before tree, 1 on the mutant) and baseline/20260728 (55 against 32).",
-    "why": "Everything between c5aa31b and b58d9a1 that is not #129, which for the simulation means #171: T.memory_avoid_ticks and T.memory_yields_satiety. Both act only while a memory is live, and memories are written in a fight, so they move the post-combat windows and leave the control windows untouched — which is exactly what the identical background columns show (342 on both, to the last step).",
+    "why": "Everything between c5aa31b and ec40e8f that is not #129, which for the simulation means #171: T.memory_avoid_ticks and T.memory_yields_satiety. Both act only while a memory is live, and memories are written in a fight, so they move the post-combat windows and leave the control windows untouched — which is exactly what the identical background columns show (342 on both, to the last step).",
     "howMuch": "372 against 407 refused steps over the matrix, 9 %. Both are less than half of the 782 on `main`, so the conclusion does not depend on which of the two is read as the before column."
   }
 }

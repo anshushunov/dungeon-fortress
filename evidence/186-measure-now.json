@@ -13,7 +13,7 @@
   },
   "tree": {
     "branch": "agent/186-post-combat-dispersal",
-    "baseCommit": "b58d9a1",
+    "baseCommit": "ec40e8f",
     "note": "The base commit is on `main` and survives squash; the branch head is not, so it is described in prose instead (Issue #106). No file of the simulation is changed by this branch — only the test project gained the harness below."
   },
   "howItWasMeasured": {
