@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 3,
+  "issue": 186,
+  "when": "2026-08-03, run on the committed tree after the second round of rework",
+  "what": "One mutant per half of what this branch adds, not one for the change as a whole. A check that only reddens when everything is reverted proves one half is covered and says nothing about the other.",
+  "whatChangedInVersion3": {
+    "found": "Independent review built a mutant for each of the two corrections the first round of rework made and both were green: 5 of 5 passing with `detourWithABody` back at 728 and with `byNoDestination` back at 0.",
+    "why": "The only check reading those counters compared their ratio against a floor of 1.5, and 1.5 lies under all three variants at once — 1.86 correct, 1.95 with the reach of a yield reverted, 2.12 with the comparison reverted. A floor chosen below every variant cannot tell the variants apart, and this is the measured instance of that rather than a maxim.",
+    "fixed": "Two assertions on the counters themselves rather than on their ratio — `byNoDestination > 0` and `detourWithABody < shortDetour` — and two mutants, R1 and R2, that revert exactly those two corrections.",
+    "alsoCorrected": "The declared composition. Version 2 said four halves; by the logic of this file's own whatChangedInVersion2 there are six, because each of the two corrections carries its own counter and each moves a number published in the contract. The two that were missing are now present."
+  },
+  "whatTheHalvesAre": [
+    "the control window is real — it ends before the domain stops working, so the ticks after a fight are compared against work and not against the muster",
+    "the window is real — post-combat windows exist, contain refused steps, and the cohort in them is the group that was in the fight",
+    "the way round is real — it is searched for with bodies treated as walls, so a 'detour' is a different route and not the blind one re-derived",
+    "the discrimination is real — a creature standing on a destination it is walking to is one no yield may move",
+    "the reach of a yield is real — a creature with no destination at all is one a yield **may** move, so it belongs on the yield's side",
+    "the comparison is real — the two mechanisms are counted on the refused steps a body stood in the way of, and only on those"
+  ],
+  "howToReproduce": {
+    "runner": ".artifacts/mutate-186.py — applies each replacement to one file, runs the checks, records the result and puts the file back in a finally block. The last run is the shipped tree, so the output ends with the state the branch carries.",
+    "command": "python .artifacts/mutate-186.py",
+    "checks": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypePostCombatDispersalTests\" --logger \"console;verbosity=normal\"",
+    "baseline": "5 of 5 green on the shipped tree, run last, after every mutation was put back."
+  },
+  "mutants": [
+    {
+      "name": "S1a-refused-step-goes-unrecorded",
+      "half": "the window is real: a refused step is what the measurement reads",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "edit": "Move stops calling RecordMovementBlocked when the next tile carries a body; the step is still refused and the world behaves the same, only the canonical log stops saying so",
+      "result": "red: 1 of 5 failed",
+      "failing": ["Walking_round_reaches_more_of_the_clinch_than_a_yield_could"],
+      "reading": "`Of the refused steps a body stood in the way of, a way round reached 87 and a yield could have cleared 71 — a ratio of 1,23, where one and a half is the floor.` The sample collapses and the ordering with it."
+    },
+    {
+      "name": "S1b-move-ignores-bodies",
+      "half": "the window is real: a step is refused because a body stands on the tile",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "edit": "Move drops the occupancy refusal entirely",
+      "result": "red: 5 of 5 failed",
+      "failing": [
+        "A_refused_step_after_a_fight_usually_had_a_way_round_it",
+        "Report_post_combat_dispersal_over_the_seed_matrix",
+        "The_control_window_ends_before_the_domain_stops_working",
+        "The_matrix_still_produces_post_combat_windows_to_measure",
+        "Walking_round_reaches_more_of_the_clinch_than_a_yield_could"
+      ],
+      "reading": "Red, and by throwing rather than by counting: without the refusal two creatures share a tile and PlanTrafficActions, which builds a dictionary keyed by position, fails on the duplicate — `An item with the same key has already been added. Key: GridPoint { X = 5, Y = 7 }`. Reported as it happened. This mutant breaks the no-overlap invariant of 4.1 rather than the measurement, which is why S1a exists beside it."
+    },
+    {
+      "name": "S2-approach-rule-reverted",
+      "half": "the checks are about the jam, not about the approach rule of #129",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "edit": "ActCombatant goes back to `var destination = target.Position;` — the mutant of evidence/129-mutations.json",
+      "result": "GREEN — and this is the intended result, reported rather than papered over",
+      "failing": [],
+      "reading": "The checks state what the mechanism is, and the mechanism is the same before and after #129: 372 refused steps instead of 782, detour share 0.930 instead of 0.931, a way round reaching 284 against a yield's 138 on the comparable set. If this mutant reddened them, they would be checks about the approach rule, and the approach rule already has its own in PrototypeCombatApproachTests. The size of the clinch, which #129 does move, is measured in evidence/186-before-after-129.json and deliberately asserted nowhere: it is a corridor of six runs, and 13.4 says corridors are not requirements."
+    },
+    {
+      "name": "H1-cohort-read-after-resolve",
+      "half": "the cohort is the fighters of the tick before the wave resolved",
+      "file": "tests/DungeonFortress.Simulation.Tests/PrototypePostCombatDispersalTests.cs",
+      "edit": "the cohort is read from the snapshot of the tick the wave ended on instead of the one before it",
+      "result": "red: 4 of 5 failed",
+      "failing": [
+        "A_refused_step_after_a_fight_usually_had_a_way_round_it",
+        "The_control_window_ends_before_the_domain_stops_working",
+        "The_matrix_still_produces_post_combat_windows_to_measure",
+        "Walking_round_reaches_more_of_the_clinch_than_a_yield_could"
+      ],
+      "reading": "`Only 0 wave(s) over the matrix ended while the party was still alive`. ResolveWave has already turned every fighter into Waiting by the time that snapshot is taken, so the cohort is empty and there is nothing to measure. This is the one line of the harness on which the whole measurement stands."
+    },
+    {
+      "name": "H2-way-round-ignores-bodies",
+      "half": "the way round is searched for with bodies treated as walls",
+      "file": "tests/DungeonFortress.Simulation.Tests/PrototypePostCombatDispersalTests.cs",
+      "edit": "the second search drops its `bodies` argument, so it re-derives the route the simulation already walks",
+      "result": "red: 1 of 5 failed",
+      "failing": ["A_refused_step_after_a_fight_usually_had_a_way_round_it"],
+      "reading": "`Only 0 of 782 ways round were strictly longer than the route the simulation walks with its eyes shut`. The detour share goes to a perfect 1.000 and means nothing at all, which is exactly the failure the first half of that check cannot see: it is a floor, and this mutant raises the number."
+    },
+    {
+      "name": "H3-arrived-blocker-counts-as-yieldable",
+      "half": "a creature standing on a destination it is walking to is one no yield may move",
+      "file": "tests/DungeonFortress.Simulation.Tests/PrototypePostCombatDispersalTests.cs",
+      "edit": "the clause `blockerTarget == blocker.Position` becomes `blockerTarget == default`, so the 290 refused steps blocked by a creature that has arrived fall into the eligible class instead",
+      "result": "red: 1 of 5 failed",
+      "failing": ["Walking_round_reaches_more_of_the_clinch_than_a_yield_could"],
+      "reading": "`a way round reached 639 refused steps and a yield could have cleared 634 — a ratio of 1,01`. Drop the one clause of CanYield that says a working creature is not a creature you may shove, and the reach of a yield nearly doubles."
+    },
+    {
+      "name": "H4-control-window-back-inside-the-muster",
+      "half": "the control window ends before the domain stops working",
+      "file": "tests/DungeonFortress.Simulation.Tests/PrototypePostCombatDispersalTests.cs",
+      "edit": "Background walks `[arriveTick - 60, arriveTick)` again instead of `[arriveTick - lead - 60, arriveTick - lead)` — the defect independent review found",
+      "result": "red: 1 of 5 failed",
+      "failing": ["The_control_window_ends_before_the_domain_stops_working"],
+      "reading": "`prepared/20260726 wave 1: the control window ends on tick 1300, and the muster for that wave starts on 1240.` This mutant was green on its first run, and the reason is worth keeping: the check then compared the window the code *declared* against the muster, and the mutant only moved the loop bounds. Background now reports the tick the loop actually walked to, so the check reads the walk rather than the arithmetic. Independent review then broke the reader of `lead` itself — the case where the declared and the walked bounds move together — and that is caught by the second assertion of the same check, which requires the matrix to contain a muster at all."
+    },
+    {
+      "name": "R1-yield-reach-back-to-the-first-version",
+      "half": "a creature with no destination at all is one a yield may move",
+      "file": "tests/DungeonFortress.Simulation.Tests/PrototypePostCombatDispersalTests.cs",
+      "edit": "the pattern goes back to `is not { } blockerTarget || blockerTarget == blocker.Position`, so a blocker with no destination falls into the class a yield may not touch — the first version of this harness",
+      "result": "red: 1 of 5 failed",
+      "failing": ["Walking_round_reaches_more_of_the_clinch_than_a_yield_could"],
+      "reading": "`No refused step over the whole matrix was blocked by a creature with no destination at all.` byArrived goes back to 307, byNoDestination to 0, the reach of a yield to 327 and the ratio to 1.95. Green before this round: the ratio check has a floor of 1.5 and 1.95 clears it. Found by independent review, which built exactly this mutant."
+    },
+    {
+      "name": "R2-comparison-back-to-unlike-sets",
+      "half": "the two mechanisms are compared on the refused steps a body stood in the way of",
+      "file": "tests/DungeonFortress.Simulation.Tests/PrototypePostCombatDispersalTests.cs",
+      "edit": "the guard `if (!nextTileWasFree)` becomes always true, so the comparable count takes every short detour again — the first version of this harness",
+      "result": "red: 1 of 5 failed",
+      "failing": ["Walking_round_reaches_more_of_the_clinch_than_a_yield_could"],
+      "reading": "`A way round reached 728 refused steps in all and 728 of the ones a body stood in the way of, and the two are the same number.` detourWithABody goes back to 728 and the ratio to 2.12. Green before this round, for the same reason as R1. Found by independent review, which built exactly this mutant."
+    }
+  ],
+  "summary": {
+    "halves": 6,
+    "mutants": 9,
+    "red": 8,
+    "greenAndReported": 1
+  },
+  "whatThisRoundIsAnInstanceOf": "A floor chosen below every variant of a comparison stops telling the variants apart. The floor of 1.5 was legitimate on its own terms — it had to come down from two, because the corrected measurement of 1.86 would otherwise have reddened, and it stayed above the one the conclusion needs — but it was then the only thing reading two counters, and both could be reverted under it. The counters are now asserted directly. Named here rather than turned into a maxim: it is what happened to this file.",
+  "whatIsNotCovered": {
+    "what": "The eligibility rule the harness applies is a rebuild of PrototypeWorld.CanYield from published state, not a call into it.",
+    "consequence": "A mutant of CanYield itself leaves every count here unmoved. The two would only be pinned together by exporting CanYield, which would make the measurement unable to disagree with the code it measures — the same reason PrototypeCombatApproachTests restates the target rule instead of calling it. The model also cannot carry the clause `TrafficTarget is null`, because that field is not in the snapshot; that gap is in DEBT_LEDGER.md rather than here.",
+    "howItIsBoundedInstead": "The number is used as the reach of a yield in one direction only, and the conclusion of evidence/186-mechanism.json is stated with the smallest ratio any correction so far has produced: 639 against 344."
+  }
+}
