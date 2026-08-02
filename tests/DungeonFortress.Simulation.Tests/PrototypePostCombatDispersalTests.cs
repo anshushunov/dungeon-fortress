@@ -40,11 +40,12 @@ namespace DungeonFortress.Simulation.Tests;
 /// </list>
 ///
 /// <para><b>What it is compared against.</b> The same cohort, the same number of
-/// ticks, taken immediately **before** the wave arrived — a stretch of the same
-/// party with the same creatures doing ordinary work in the same dungeon. That
-/// is what makes "толчея" a claim rather than an impression: the post-combat
-/// window is only interesting if it differs from the peacetime one, and the ratio
-/// is reported instead of asserted because it is a property of six runs (13.4).</para>
+/// ticks, taken before the wave arrived **and before the domain stops working for
+/// it** — see <see cref="Background"/> for why the second half of that sentence
+/// is load-bearing. That is what makes "толчея" a claim rather than an
+/// impression: the post-combat window is only interesting if it differs from the
+/// peacetime one, and the ratio is reported instead of asserted because it is a
+/// property of six runs (13.4).</para>
 ///
 /// <para><b>Where the numbers come from.</b> Blocked steps are read from the
 /// canonical event log by <c>LastTick</c>, the way
@@ -203,20 +204,35 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     /// is not in this comparison because it is not a way of clearing a refused
     /// step at all: it decides how many creatures end the fight in one place, and
     /// that is measured in <c>evidence/186-before-after-129.json</c> instead.
+    ///
+    /// <para><b>The two are compared on the refused steps a body was standing in
+    /// the way of, and only on those.</b> A step refused with its next tile empty
+    /// at the end of the tick was refused by the arbitration itself — the mover
+    /// lost the contest for the tile, or the tile was booked for somebody else's
+    /// yield — so no yield of anybody's could have cleared it, and putting it on
+    /// the other side of the comparison compares unlike sets. The first version
+    /// of this check did exactly that: a way round counted over all 782 refused
+    /// steps against a yield counted only over the ones with a blocker, which
+    /// flattered the first side by 89. Found by independent review of Issue #186,
+    /// and the correction is why the floor below is one and a half rather than
+    /// two.</para>
     /// </summary>
     [Fact]
     public void Walking_round_reaches_more_of_the_clinch_than_a_yield_could()
     {
-        var detoured = Matrix.Sum(party => party.Measured.Sum(wave => wave.BlockedWithAShortDetour));
+        var detoured = Matrix.Sum(
+            party => party.Measured.Sum(wave => wave.BlockedWithABodyInTheWayAndAWayRound));
         var yieldable = Matrix.Sum(
             party => party.Measured.Sum(wave => wave.BlockedAYieldCouldHaveCleared));
 
         Assert.True(
-            detoured > yieldable * 2,
-            $"A way round reached {detoured} refused steps after a fight and a yield could have " +
-            $"cleared {yieldable}. Issue #186 named the pathfinder as the mechanism because the " +
-            "first number was more than twice the second; if that stops being so, the naming has " +
-            $"to be taken again.{Environment.NewLine}{Detail()}");
+            detoured * 2 >= yieldable * 3,
+            $"Of the refused steps a body stood in the way of, a way round reached {detoured} and " +
+            $"a yield could have cleared {yieldable} — a ratio of " +
+            $"{(yieldable == 0 ? double.PositiveInfinity : (double)detoured / yieldable):F2}, " +
+            "where one and a half is the floor. Issue #186 named the pathfinder as the mechanism " +
+            "on the strength of this ratio; below the floor the naming has to be taken again." +
+            $"{Environment.NewLine}{Detail()}");
     }
 
     /// <summary>
@@ -273,12 +289,14 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
             $"byCannotAct={waves.Sum(wave => wave.BlockedByACreatureThatCannotAct)} " +
             $"byUrgent={waves.Sum(wave => wave.BlockedByAnUrgentCreature)} " +
             $"byArrived={waves.Sum(wave => wave.BlockedByACreatureAtItsDestination)} " +
+            $"byNoDestination={waves.Sum(wave => wave.BlockedByACreatureWithNoDestination)} " +
             $"byEligible={waves.Sum(wave => wave.BlockedByACreatureEligibleToYield)} " +
             $"standingStill={waves.Sum(wave => wave.StandingStillCreatureTicks)} " +
             $"idleAndStill={waves.Sum(wave => wave.IdleAndStillCreatureTicks)} " +
             $"cohortTicks={waves.Sum(wave => wave.CohortSize * wave.ObservedTicks)} " +
             $"longerWayRound={waves.Sum(wave => wave.BlockedWithAStrictlyLongerWayRound)} " +
-            $"yieldCouldClear={waves.Sum(wave => wave.BlockedAYieldCouldHaveCleared)}");
+            $"yieldCouldClear={waves.Sum(wave => wave.BlockedAYieldCouldHaveCleared)} " +
+            $"detourWithABody={waves.Sum(wave => wave.BlockedWithABodyInTheWayAndAWayRound)}");
     }
 
     private static double Ratio(int numerator, int denominator) =>
@@ -297,6 +315,7 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     {
         var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
         var blockedPerTick = new Dictionary<int, List<int>>();
+        var musterLeadPerTick = new Dictionary<int, int>();
         var waves = new List<WaveMeasurement>();
         var open = new List<WaveWindow>();
         var closed = new List<WaveWindow>();
@@ -337,6 +356,7 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
             }
 
             blockedPerTick[acted] = blockedNow;
+            musterLeadPerTick[acted] = current.Rules.GetValueOrDefault("muster_lead_ticks");
 
             // A wave that resolved on this tick opens a window. Its cohort is
             // read from the previous snapshot, because ResolveWave has already
@@ -367,7 +387,7 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
                     current.Creatures
                         .Where(creature => cohort.Contains(creature.Id))
                         .ToDictionary(creature => creature.Id, creature => creature.Position),
-                    Background(blockedPerTick, cohort, wave.ArriveTick)));
+                    Background(blockedPerTick, musterLeadPerTick, cohort, wave.ArriveTick)));
             }
 
             foreach (var window in open)
@@ -404,16 +424,35 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
 
     /// <summary>
     /// The peacetime control: the same creatures over the same number of ticks,
-    /// ending on the tick before the wave walked in.
+    /// ending where the domain stops working.
+    ///
+    /// The window is pushed back by <c>muster_lead_ticks</c>, and that is a
+    /// correction rather than a nicety. <c>PrototypeWorld.IsMusterActive</c> is
+    /// true from <c>arriveTick - muster_lead_ticks</c> onwards, and this control
+    /// used to be the <see cref="DispersalWindow"/> ticks ending at
+    /// <c>arriveTick</c>. On <c>prepared</c>, whose journal sets the lead to 60
+    /// on tick 880, and with a window of exactly 60, the two intervals coincided
+    /// tick for tick: the "peacetime" the fight was being compared against was
+    /// the muster, when the whole domain drops its work and walks into a Watch
+    /// zone of ten tiles. It carried 532 of the 737 refused steps of the old
+    /// control and turned the answer round — 782 against 737 became 782 against
+    /// 526. Found by independent review of Issue #186; the numbers are in the
+    /// pull request and in <c>evidence/186-measure-now.json</c>.
+    ///
+    /// Only the lead is subtracted, and no more: <c>baseline</c> sets no lead, so
+    /// its control does not move at all, and <c>prepared</c> is compared against
+    /// the quiet stretch that ends exactly where its muster begins.
     /// </summary>
     private static (int ClinchTicks, int BlockedCreatureTicks) Background(
         IReadOnlyDictionary<int, List<int>> blockedPerTick,
+        IReadOnlyDictionary<int, int> musterLeadPerTick,
         IReadOnlyCollection<int> cohort,
         int arriveTick)
     {
         var clinch = 0;
         var blocked = 0;
-        for (var tick = arriveTick - DispersalWindow; tick < arriveTick; tick++)
+        var lead = musterLeadPerTick.GetValueOrDefault(arriveTick - 1);
+        for (var tick = arriveTick - lead - DispersalWindow; tick < arriveTick - lead; tick++)
         {
             if (!blockedPerTick.TryGetValue(tick, out var blockedThen))
             {
@@ -460,6 +499,8 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
         private int _blockerCannotAct;
         private int _blockerUrgent;
         private int _blockerAtItsDestination;
+        private int _blockerWithNoDestination;
+        private int _shortDetourWithABodyInTheWay;
         private int _blockerEligibleToYield;
         private int _standingStill;
         private int _detourStrictlyLonger;
@@ -569,10 +610,12 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
                 // the same map with the same (north, east, south, west) tie-break
                 // — because the snapshot publishes the destination of a refused
                 // step but not the tile it was refused onto.
+                var nextTileWasFree = false;
                 var next = NextStep(creature.Position, destination, walls);
                 if (next is not { } step || step == creature.Position)
                 {
                     _nextStepFree++;
+                    nextTileWasFree = true;
                 }
                 else if (!occupants.TryGetValue(step, out var blocker))
                 {
@@ -580,6 +623,7 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
                     // was refused by the arbitration itself: the creature lost the
                     // contest for the tile or the tile was booked for a yield.
                     _nextStepFree++;
+                    nextTileWasFree = true;
                 }
                 else if (blocker.Mode is CreatureMode.Fighting or CreatureMode.Downed)
                 {
@@ -589,14 +633,35 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
                 {
                     _blockerUrgent++;
                 }
-                else if (Destination(snapshot, blocker) is not { } blockerTarget ||
+                else if (Destination(snapshot, blocker) is { } blockerTarget &&
                          blockerTarget == blocker.Position)
                 {
                     _blockerAtItsDestination++;
                 }
                 else
                 {
-                    _blockerEligibleToYield++;
+                    // Everything left may be told to step aside, and that
+                    // includes a creature with no destination at all. The last
+                    // clause of PrototypeWorld.CanYield is
+                    // `PrimaryDestination(creature) != creature.Position`, and
+                    // PrimaryDestination hands back a `GridPoint?` over a
+                    // `readonly record struct`: for a creature with no job, no
+                    // meal and no muster it is null, and `null != position` lifts
+                    // to true. The first version of this harness read that clause
+                    // as "no destination means it has arrived" and put 17 refused
+                    // steps in the bucket a yield may not touch, which moved the
+                    // reach of a yield down rather than up. Found by independent
+                    // review of Issue #186 and counted here rather than corrected
+                    // in silence.
+                    if (Destination(snapshot, blocker) is null)
+                    {
+                        _blockerWithNoDestination++;
+                    }
+                    else
+                    {
+                        _blockerEligibleToYield++;
+                    }
+
                     if (Neighbors(blocker.Position).Any(tile =>
                             InBounds(tile) && !walls.Contains(tile) && !bodies.Contains(tile)))
                     {
@@ -618,6 +683,16 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
                 if (blind is null || seeing.Value <= blind.Value + DetourSlack)
                 {
                     _shortDetour++;
+                    if (!nextTileWasFree)
+                    {
+                        // The same count over the refused steps a yield can even
+                        // be compared on: the ones where somebody was standing on
+                        // the tile. A step refused with the tile empty was
+                        // refused by the arbitration itself, and counting it as
+                        // reachable by a way round while it belongs to nobody's
+                        // yield compares unlike sets.
+                        _shortDetourWithABodyInTheWay++;
+                    }
                 }
 
                 if (blind is { } direct && seeing.Value > direct)
@@ -664,11 +739,13 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
                 _blockerCannotAct,
                 _blockerUrgent,
                 _blockerAtItsDestination,
+                _blockerWithNoDestination,
                 _blockerEligibleToYield,
                 _standingStill,
                 _idleAndStill,
                 _detourStrictlyLonger,
-                _couldHaveBeenYielded);
+                _couldHaveBeenYielded,
+                _shortDetourWithABodyInTheWay);
         }
     }
 
@@ -762,11 +839,30 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
             _headingFor[destination] = _headingFor.GetValueOrDefault(destination) + 1;
         }
 
+        /// <summary>
+        /// Modes are counted over everybody standing still; last decisions only
+        /// over the ones in <see cref="CreatureMode.Waiting"/>, because that is
+        /// the group the conclusion about them is drawn about. Mixing the two let
+        /// a histogram over 1989 creature-ticks be read as an explanation of 1121
+        /// of them — found by independent review of Issue #186.
+        ///
+        /// <c>LastDecision</c> is the last decision this creature took, not a
+        /// decision it took on this tick: for a creature that decided nothing
+        /// here the reason below is several ticks old. It is still the right
+        /// thing to count — a creature that has stopped deciding is one whose
+        /// last decision is still standing — but it reads the past, and that is
+        /// named rather than left to be discovered.
+        /// </summary>
         public void CountStandingStill(PrototypeCreatureSnapshot creature)
         {
+            _standingStillModes[creature.Mode] = _standingStillModes.GetValueOrDefault(creature.Mode) + 1;
+            if (creature.Mode != CreatureMode.Waiting)
+            {
+                return;
+            }
+
             var reason = creature.LastDecision.ReasonCode;
             _standingStillReasons[reason] = _standingStillReasons.GetValueOrDefault(reason) + 1;
-            _standingStillModes[creature.Mode] = _standingStillModes.GetValueOrDefault(creature.Mode) + 1;
         }
 
         public override string ToString()
@@ -786,7 +882,9 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
                     $"  ({tile.Key.X},{tile.Key.Y}) {tile.Value}");
             }
 
-            report.AppendLine("what an ex-combatant that neither walked nor was refused was doing:");
+            report.AppendLine(
+                "what an ex-combatant that neither walked nor was refused was doing (modes over " +
+                "all of them, last decisions over the ones in Waiting only):");
             foreach (var mode in _standingStillModes.OrderByDescending(pair => pair.Value))
             {
                 report.AppendLine(CultureInfo.InvariantCulture, $"  {mode.Key} {mode.Value}");
@@ -916,11 +1014,13 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
         int BlockedByACreatureThatCannotAct,
         int BlockedByAnUrgentCreature,
         int BlockedByACreatureAtItsDestination,
+        int BlockedByACreatureWithNoDestination,
         int BlockedByACreatureEligibleToYield,
         int StandingStillCreatureTicks,
         int IdleAndStillCreatureTicks,
         int BlockedWithAStrictlyLongerWayRound,
-        int BlockedAYieldCouldHaveCleared)
+        int BlockedAYieldCouldHaveCleared,
+        int BlockedWithABodyInTheWayAndAWayRound)
     {
         public override string ToString() =>
             string.Create(
@@ -935,6 +1035,7 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
                 $"idleAndStill={IdleAndStillCreatureTicks} " +
                 $"longerWayRound={BlockedWithAStrictlyLongerWayRound} " +
                 $"yieldCouldClear={BlockedAYieldCouldHaveCleared} " +
+                $"detourWithABody={BlockedWithABodyInTheWayAndAWayRound} " +
                 $"withDestination={BlockedWithDestination} shortDetour={BlockedWithAShortDetour} " +
                 $"walledIn={BlockedWithNoRouteAtAll} noYield={BlockedWithNoYieldOnTheTick} " +
                 $"sharing={BlockedSharingADestination} yieldsToCohort={YieldsToTheCohort} " +
@@ -943,6 +1044,7 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
                 $"byCannotAct={BlockedByACreatureThatCannotAct} " +
                 $"byUrgent={BlockedByAnUrgentCreature} " +
                 $"byArrived={BlockedByACreatureAtItsDestination} " +
+                $"byNoDestination={BlockedByACreatureWithNoDestination} " +
                 $"byEligible={BlockedByACreatureEligibleToYield}");
     }
 
