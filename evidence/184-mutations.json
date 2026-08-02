@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "issue": 184,
   "checkpoint": "4 — the checks red on demand, one mutant per independent part of the cure",
-  "commitUnderMutation": "243b8ab",
+  "commitUnderMutation": "the cure commit: 243b8ab as measured, 558c193 after the rebase onto origin/main 19013ae — same tree, the rebase only moved the parent",
   "note": "Every mutation was applied to the committed tree, run, and reverted with `git checkout -- <file>`. The control run on the unmutated tree is at the end; without it the red runs below prove nothing.",
   "checkCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-godot-output-guard.ps1",
 
