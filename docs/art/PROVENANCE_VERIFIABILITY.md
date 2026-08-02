@@ -113,3 +113,29 @@ git ls-tree -r --name-only origin/main | rg -i "chroma|\.py$"
 Выбор «в Git» отклонён: он требует добавить крупные производные файлы вопреки
 правилам репозитория и не нужен для проверяемости — контрольная сумма даёт то же
 «источник тот самый» при меньшей цене.
+
+## Скрипт пост-обработки
+
+`remove_chroma_key.py` восстановлен в `scripts/art/remove_chroma_key.py` как
+**точная копия** хелпера imagegen, которым пост-обработка выполнялась. Скрипт
+побайтово совпадает с оригиналом: `Get-FileHash -Algorithm SHA256
+scripts/art/remove_chroma_key.py` даёт `7e512369...` — тот же, что у файла
+`C:\Users\User\.codex\skills\.system\imagegen\scripts\remove_chroma_key.py`
+(измерено 2026-08-02, `evidence/179-analysis.json`).
+
+Происхождение скрипта: хелпер skills `imagegen` Codex (поставляется вместе с
+Codex, лицензия Apache-2.0 в `LICENSE.txt` рядом). Восстановлен не «эквивалент»,
+а именно тот файл, потому что он воспроизводит записанные числа дословно, —
+проверка шага «chroma key» теперь исполнима по репозиторию без допущений.
+
+Скрипт исполним из корня репозитория:
+
+```powershell
+python scripts/art/remove_chroma_key.py --input <источник> --out <alpha.png> `
+  --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill
+```
+
+Проверка на реальном источнике пака v2 (измерено 2026-08-02): `Key color:
+#fb03f9; Transparent pixels: 1254108/1572864; Partially transparent pixels:
+12954/1572864` — дословно числа provenance. Источник flinch даёт
+`1196694/1572736` и `6883/1572736` — дословно числа записи #165.
