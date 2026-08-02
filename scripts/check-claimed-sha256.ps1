@@ -176,7 +176,7 @@ function Add-DocClaims {
             if (-not $hashMatch.Success) {
                 continue
             }
-            $pathMatch = [regex]::Match($line, '`([A-Za-z0-9_./\\-]+\.(png|py|json|ps1|md|cs))`')
+            $pathMatch = [regex]::Match($line, '`([A-Za-z0-9_./\\-]+\.[A-Za-z0-9]{1,5})`')
             if (-not $pathMatch.Success) {
                 continue
             }
@@ -209,6 +209,8 @@ if (-not $Quiet) {
 
 $mismatches = @($script:claims | Where-Object { $_.status -eq "mismatch" })
 $workingOnly = @($script:claims | Where-Object { $_.status -eq "working-copy-only" })
+$blobMatches = @($script:claims | Where-Object { $_.status -eq "blob-match" })
+$untracked = @($script:claims | Where-Object { $_.status -in @("untracked", "untracked-working-match") })
 
 if ($mismatches.Count -gt 0 -or $workingOnly.Count -gt 0) {
     if (-not $Quiet) {
@@ -219,6 +221,7 @@ if ($mismatches.Count -gt 0 -or $workingOnly.Count -gt 0) {
 }
 
 if (-not $Quiet) {
-    Write-Host ("OK: {0} claims checked, all match the committed blob" -f $script:claims.Count)
+    Write-Host ("OK: {0} blob-match, {1} untracked/working-copy, {2} claims total" -f `
+        $blobMatches.Count, $untracked.Count, $script:claims.Count)
 }
 exit 0
