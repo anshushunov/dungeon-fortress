@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "issue": 184,
+  "checkpoint": "2 — the cause switched on and off on demand",
+  "baseCommit": "5713c47",
+
+  "cause": {
+    "oneLine": "Godot creates a shader-cache directory with CreateDirectoryW, which it prefixes with \\\\?\\ and which therefore has no MAX_PATH limit, and enters it with SetCurrentDirectoryW, which it does not prefix and which does. Past 254 characters the directory can be created but never entered again, so `if (d->change_dir(base_sha256) != OK) { Error err = d->make_dir(base_sha256); ERR_FAIL_COND(err != OK); }` in ShaderGLES3::initialize takes the make_dir branch on an existing directory, gets ERR_ALREADY_EXISTS, and prints one `Condition \"err != OK\" is true` per shader class.",
+    "whyTheFirstRunIsSilent": "On a cold cache make_dir really does create the directory and returns OK. Only the second and later processes find it there. That is the whole of `место плавает`: the noise lands on whichever engine process is the first to meet a cache its predecessor built.",
+    "whyFourteen": "Fourteen is the number of GLES3 shader classes this project's renderer initializes, listed by `ls` on a real profile: CanvasOcclusionShaderGLES3, CanvasSdfShaderGLES3, CanvasShaderGLES3, CopyShaderGLES3, CubemapFilterShaderGLES3, FeedShaderGLES3, GlowShaderGLES3, ParticlesCopyShaderGLES3, ParticlesShaderGLES3, PostShaderGLES3, SceneShaderGLES3, SkeletonShaderGLES3, SkyShaderGLES3, TexBlitShaderGLES3. The reporter saw fourteen because in that profile all fourteen paths were over the cap."
+  },
+
+  "controlledSwitch": {
+    "what": "The same single capture through scripts/run-game.ps1 — baseline, tick 1, tile 40, zoom 0.5, camera 560,320, UI scale 1, frame 1280x720 — run three times against a Godot runtime profile whose path length is the only thing that changes. Each arm starts from a purged, cold profile.",
+    "probe": ".artifacts/probe-184-sweep.ps1 (not committed; it is a throwaway harness, the numbers below are its output)",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .artifacts/probe-184-sweep.ps1 -GodotPath \"C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe\" -PadLength <N> -Runs 3",
+    "predictionRule": "number of shader-cache directories whose real path is 255 characters or longer",
+    "arms": [
+      {
+        "appDataLength": 90,
+        "realShaderCacheDirLengths": [253, 251, 251, 247, 247, 246, 245, 244, 243, 242, 242, 242, 242, 241],
+        "predictedFailingClasses": 0,
+        "observedShaderErrorsPerRun": [0, 0, 0]
+      },
+      {
+        "appDataLength": 92,
+        "realShaderCacheDirLengths": [255, 253, 253, 249, 249, 248, 247, 246, 245, 244, 244, 244, 244, 243],
+        "predictedFailingClasses": 1,
+        "observedShaderErrorsPerRun": [0, 1, 1]
+      },
+      {
+        "appDataLength": 94,
+        "realShaderCacheDirLengths": [257, 255, 255, 251, 251, 250, 249, 248, 247, 246, 246, 246, 246, 245],
+        "predictedFailingClasses": 3,
+        "observedShaderErrorsPerRun": [0, 3, 3]
+      },
+      {
+        "appDataLength": 99,
+        "realShaderCacheDirLengths": [262, 260, 260, 256, 256, 255, 254, 253, 252, 251, 251, 251, 251, 250],
+        "predictedFailingClasses": 6,
+        "observedShaderErrorsPerRun": [0, 6, 6]
+      },
+      {
+        "appDataLength": 105,
+        "realShaderCacheDirLengths": [268, 266, 266, 262, 262, 261, 260, 259, 258, 257, 257, 257, 257, 256],
+        "predictedFailingClasses": 14,
+        "observedShaderErrorsPerRun": [0, 14, 14]
+      },
+      {
+        "appDataLength": 110,
+        "realShaderCacheDirLengths": [273, 271, 271, 267, 267, 266, 265, 264, 263, 262, 262, 262, 262, 261],
+        "predictedFailingClasses": 14,
+        "observedShaderErrorsPerRun": [0, 14, 14]
+      }
+    ],
+    "reading": "Prediction equals observation at every arm, including the two intermediate counts nobody would guess. The last silent length is 254 and the first noisy one is 255, so the cap on this machine is 254 characters for a shader-cache directory. The 110-character arm is the reporter's own profile length and reproduces their fourteen lines exactly."
+  },
+
+  "sameThingThroughTheStage": {
+    "what": "The screenshots stage itself, unchanged, with the only difference being a long -TemporaryRoot.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -Stage screenshots -GodotPath \"<godot console>\" -TemporaryRoot \"C:\\Users\\User\\AppData\\Local\\Temp\\pxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"",
+    "runsRepeated": 2,
+    "exitCode": 1,
+    "shaderGles3LinesPerRun": [14, 14],
+    "verificationResult": "{\"event\":\"verification_result\",\"status\":\"error\",\"scope\":\"partial\",\"failedPhase\":\"stage\",\"failedStage\":\"screenshots\",\"stagesExecuted\":[],\"stagesNotRun\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\"],\"reason\":\"Godot emitted 14 unexpected ERROR line(s).\"}",
+    "positionOfTheNoiseInRun1": "First capture clean (.artifacts/stage-long-1.log lines 39-43: engine banner, OpenGL line, {\"event\":\"godot_process_guard\",\"status\":\"ok\"}), second capture noisy (lines 44-76). That is the reporter's first run, character for character.",
+    "sameStageWithAShortRoot": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -Stage screenshots -GodotPath \"<godot console>\" -TemporaryRoot \"C:\\Users\\User\\AppData\\Local\\Temp\"",
+      "exitCode": 0,
+      "shaderGles3Lines": 0
+    }
+  },
+
+  "checkedAndRejected": [
+    {
+      "hypothesis": "The Windows CreateDirectory limit of 248 characters, which is what docs/engineering/ENVIRONMENT_SETUP.md has said about this exact error since PR #5.",
+      "howChecked": "Nine single-process arms of the sweep above, from 246 to 312 characters of shader-cache path, each on a cold profile.",
+      "result": "Every one of them created its cache and exited with zero engine errors. Godot 4.7.1 prefixes CreateDirectoryW with \\\\?\\, so 248 is not a limit it can hit. HKLM\\SYSTEM\\CurrentControlSet\\Control\\FileSystem\\LongPathsEnabled is 0 on this machine, so this is Godot's prefix and not a machine setting.",
+      "consequence": "The documented explanation is wrong for this engine and is corrected in the same change. It was not harmless: it named a limit that no longer bites and a direction (creation) that is not where the failure is."
+    },
+    {
+      "hypothesis": "Two engine processes sharing a cold cache and racing on make_dir.",
+      "howChecked": ".artifacts/probe-184-race.ps1, three rounds of two simultaneous windowed captures against a purged profile short enough to be silent.",
+      "result": "0 errors in every process of every round."
+    },
+    {
+      "hypothesis": "The three-processes-in-a-row shape of the stage.",
+      "howChecked": "The sweep above uses one process per run.",
+      "result": "One process reproduces it. The shape only decides which process gets the noise."
+    }
+  ],
+
+  "aByproductWorthKnowing": "Remove-Item cannot delete such a profile either — PowerShell 5.1 goes through .NET Framework file APIs, which stop at MAX_PATH. A run that leaves an over-long profile behind leaves it behind permanently unless something long-path aware (robocopy /MIR from an empty directory) removes it. That is why the first pass of this sweep silently kept a warm cache and briefly made the cold arms look noisy."
+}

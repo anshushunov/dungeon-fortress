@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "issue": 184,
+  "checkpoint": "1 — how the screenshots stage starts the engine, next to how run-game.ps1 starts it",
+  "baseCommit": "5713c47",
+  "machine": {
+    "godot": "4.7.1.stable.mono.official.a13da4feb",
+    "gpu": "OpenGL API 3.3.0 NVIDIA 577.09 - Compatibility - NVIDIA GeForce RTX 5060 Laptop GPU",
+    "windowsLongPathsEnabled": {
+      "command": "powershell -NoProfile -Command \"(Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\FileSystem' -Name LongPathsEnabled -ErrorAction SilentlyContinue).LongPathsEnabled\"",
+      "output": "0"
+    },
+    "agentShellTemp": {
+      "command": "powershell -NoProfile -Command \"[IO.Path]::GetTempPath()\"",
+      "output": "C:\\WINDOWS\\TEMP\\"
+    }
+  },
+
+  "howTheComparisonWasMade": {
+    "command": "rg -n \"Initialize-GodotRuntimeEnvironment|Resolve-VerificationTemporaryRoot|Initialize-VerificationTemporaryRoot|DUNGEON_FORTRESS_TEMP\" scripts/",
+    "hits": [
+      "scripts/GodotTools.ps1:151:function Initialize-GodotRuntimeEnvironment {",
+      "scripts/run-game.ps1:134:Initialize-GodotRuntimeEnvironment -RepositoryRoot $repoRoot",
+      "scripts/test-goblin-sprite-import.ps1:53:    Initialize-GodotRuntimeEnvironment -RepositoryRoot $repoRoot",
+      "scripts/update-golden-ui.ps1:44:Initialize-GodotRuntimeEnvironment -RepositoryRoot $repoRoot",
+      "scripts/verify.ps1:251:    Initialize-GodotRuntimeEnvironment -RepositoryRoot $repoRoot",
+      "scripts/verify.ps1:970:    $temporaryRootSelection = Initialize-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot"
+    ],
+    "reading": "Only verify.ps1 calls Initialize-VerificationTemporaryRoot. No other engine-starting script does."
+  },
+
+  "sideBySide": [
+    {
+      "aspect": "process arguments of the capture",
+      "verifyScreenshotsStage": "--path <project> --resolution 1280x720 -- --fixture baseline --screenshot <file> --screenshot-ticks 1 --tile-size 40 --camera-zoom 0.5 --camera-position 560,320 --ui-scale 1 --frame-size 1280x720 (scripts/verify.ps1:786-798)",
+      "runGame": "same set, different order (scripts/run-game.ps1:137-164)",
+      "differs": false
+    },
+    {
+      "aspect": "engine resolution, version assert, NuGet source, tool profile",
+      "verifyScreenshotsStage": "Resolve-GodotExecutable / Assert-GodotVersion / Get-GodotNuGetSource / Initialize-GodotNuGetEnvironment (scripts/verify.ps1:983-988)",
+      "runGame": "the same four calls in the same order (scripts/run-game.ps1:117-122)",
+      "differs": false
+    },
+    {
+      "aspect": "asset import before the run",
+      "verifyScreenshotsStage": "Import-GodotProjectAssets (scripts/verify.ps1:252, via Initialize-EngineRuntime)",
+      "runGame": "Import-GodotProjectAssets (scripts/run-game.ps1:135)",
+      "differs": false
+    },
+    {
+      "aspect": "number of windowed engine processes in a row",
+      "verifyScreenshotsStage": "three (baseline, baseline repeat, prepared raid)",
+      "runGame": "one",
+      "differs": true,
+      "reading": "Real difference, but not the cause: see evidence/184-cause.json, where one process reproduces the noise on its own."
+    },
+    {
+      "aspect": "TEMP/TMP of the engine process",
+      "verifyScreenshotsStage": "overwritten in preflight with the resolved temporary root: $env:TEMP = $candidate; $env:TMP = $candidate (scripts/TemporaryRoot.ps1:238-239), where $candidate comes from -TemporaryRoot, then $env:DUNGEON_FORTRESS_TEMP, then TMP/TEMP (scripts/TemporaryRoot.ps1:24-50)",
+      "runGame": "untouched — run-game.ps1 never dot-sources TemporaryRoot.ps1 and never reads DUNGEON_FORTRESS_TEMP",
+      "differs": true,
+      "reading": "This is the difference. Initialize-GodotRuntimeEnvironment builds the Godot runtime profile as [IO.Path]::GetTempPath() + \\df-godot-<hash of repo root> (scripts/GodotTools.ps1:158-159), and GetTempPath reads TMP first. So the two scripts put user:// — and with it the GLES3 shader cache — in two different directories whenever a temporary-root override is in play."
+    }
+  ],
+
+  "theTwoProfilesOfTheReportedSession": {
+    "note": "Both directories are still on disk from the session that opened this Issue (worktree agent-a6060a8c77c1a0aec, evidence/77-pack-after.json states DUNGEON_FORTRESS_TEMP=.artifacts/tmp). Lengths are read off the filesystem, not computed.",
+    "command": "powershell -NoProfile -Command \"foreach ($r in @('C:\\WINDOWS\\TEMP\\df-godot-630de8b0\\Roaming','C:\\gamedev\\Dungeon fortress\\.claude\\worktrees\\agent-a6060a8c77c1a0aec\\.artifacts\\tmp\\df-godot-630de8b0\\Roaming')) { $cache = (Get-ChildItem -LiteralPath (Join-Path $r 'Godot\\app_userdata') -Directory | Where-Object { $_.Name -like '*deterministic*' }).FullName; $dirs = Get-ChildItem -LiteralPath (Join-Path $cache 'shader_cache') -Directory | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Directory }; $lengths = @($dirs | ForEach-Object { $_.FullName.Length } | Sort-Object -Descending); '{0}  appDataLength={1}  shaderDirs={2}  lengths=[{3}]' -f $r, $r.Length, $lengths.Count, ($lengths -join ',') }\"",
+    "output": [
+      "C:\\WINDOWS\\TEMP\\df-godot-630de8b0\\Roaming  appDataLength=41  shaderDirs=14  lengths=[204,202,202,198,198,197,196,195,194,193,193,193,193,192]",
+      "C:\\gamedev\\Dungeon fortress\\.claude\\worktrees\\agent-a6060a8c77c1a0aec\\.artifacts\\tmp\\df-godot-630de8b0\\Roaming  appDataLength=110  shaderDirs=14  lengths=[273,271,271,267,267,266,265,264,263,262,262,262,262,261]"
+    ],
+    "reading": "The same repository, the same engine, the same fourteen GLES3 shader classes, two profiles 69 characters apart. run-game.ps1 landed in the first (all fourteen cache directories 192-204 characters long, zero engine errors — .artifacts/probe-cold.log of that session). verify.ps1 landed in the second (all fourteen 261-273 characters long, fourteen ERROR lines — .artifacts/verify-probe.log of that session, lines 43-70)."
+  },
+
+  "whatIsNotTheDifference": [
+    {
+      "claim": "The frame the stage asks for.",
+      "refutedBy": "evidence/77-pack-after.json, notTheGameArguments: the same frame through run-game.ps1 gives zero engine errors."
+    },
+    {
+      "claim": "The change under review at the time.",
+      "refutedBy": "evidence/77-pack-after.json, notThisChange: the same failure on the pre-change tree."
+    },
+    {
+      "claim": "Three engine processes in a row rather than one.",
+      "refutedBy": "evidence/184-cause.json: a single run-game.ps1 process reproduces the fourteen lines once its profile is long enough and its cache is warm."
+    }
+  ],
+
+  "openAtThisCheckpoint": "Why a long profile path produces exactly these lines, and why the position of the noise moved between the reporter's three runs. Answered in evidence/184-cause.json."
+}

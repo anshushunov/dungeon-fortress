@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "issue": 184,
+  "checkpoint": "4 — the checks red on demand, one mutant per independent part of the cure (round 2 after the review of PR #199)",
+  "commitUnderMutation": "two rounds: 243b8ab / 558c193 for M1-M5, 2ae5db6 for M6-M7",
+  "note": "Every mutation was applied to the committed tree, run, and reverted with `git checkout -- <file>`. The control run on the unmutated tree is at the end; without it the red runs below prove nothing.",
+  "checkCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-godot-output-guard.ps1",
+  "mutations": [
+    {
+      "id": "M1",
+      "part": "path budget",
+      "what": "The measured limit is neutered: $script:GodotMaximumEnterableDirectoryPathLength = 254 becomes 4096 in scripts/GodotTools.ps1, so no profile is ever refused.",
+      "exitCode": 1,
+      "firstLine": "A profile that made the engine print 1 shader cache errors was accepted, or was refused without naming the count, the engine line and the fix."
+    },
+    {
+      "id": "M2",
+      "part": "path budget",
+      "what": "The limit is moved by one character: 254 becomes 253 in scripts/GodotTools.ps1.",
+      "exitCode": 1,
+      "firstLine": "The shader cache path budget no longer flips between 254 and 255 characters: 254 accepted=False, 255 accepted=False.",
+      "reading": "The boundary is held to the character, not to an order of magnitude. This is the mutation that keeps the guard honest in the direction that costs something: an over-strict budget would refuse runs that work."
+    },
+    {
+      "id": "M5",
+      "part": "path budget",
+      "what": "The model of the path Godot builds is broken: $script:GodotShaderCacheHashLength = 64 becomes 32 in scripts/GodotTools.ps1.",
+      "exitCode": 1,
+      "firstLine": "At APPDATA length 92 the budget says 0 shader classes are unenterable; the machine measured 1 engine error lines.",
+      "reading": "The staircase in the test is the machine's measurement, not the code's own arithmetic restated, so a wrong path model is caught even though the limit itself is untouched."
+    },
+    {
+      "id": "M6",
+      "part": "one way of choosing the temporary directory — order",
+      "round": 2,
+      "what": "The mutant the independent review of PR #199 found surviving: both calls stay in scripts/run-game.ps1 and only their order swaps, so the temporary directory is chosen after Initialize-GodotRuntimeEnvironment has already built the profile from [IO.Path]::GetTempPath().",
+      "survivedBefore": "Yes. The presence-only form of the check reported {\"event\":\"godot_output_guard_test\",\"status\":\"ok\"} on this mutant, which is Issue #184 word for word with both calls present.",
+      "exitCode": 1,
+      "firstLine": "'run-game.ps1' chooses the temporary directory only after it starts the engine. Initialize-GodotRuntimeEnvironment builds the Godot runtime profile from [IO.Path]::GetTempPath(), so a choice made later never reaches the profile and the script is back to ignoring -TemporaryRoot and DUNGEON_FORTRESS_TEMP - the divergence of Issue #184 with both calls still present."
+    },
+    {
+      "id": "M7",
+      "part": "one way of choosing the temporary directory — the exemption",
+      "round": 2,
+      "what": "The one named exemption is widened to everything: `if ($script.Name -ne \"verify.ps1\")` becomes `if ($false)` in scripts/test-godot-output-guard.ps1, so no entry point has its order checked.",
+      "exitCode": 1,
+      "firstLine": "The order of the temporary directory and the engine start is checked in 0 of 4 entry points; every one but verify.ps1 has to be checked.",
+      "reading": "Without this the order check could be switched off by growing the exemption and would still report ok."
+    },
+    {
+      "id": "M3",
+      "part": "one way of choosing the temporary directory",
+      "what": "The difference of Issue #184 is put back: the three lines that resolve the shared temporary root are deleted from scripts/run-game.ps1, so it stops honouring -TemporaryRoot and DUNGEON_FORTRESS_TEMP while verify.ps1 keeps honouring them.",
+      "exitCode": 1,
+      "firstLine": "'run-game.ps1' starts the engine without choosing the temporary directory the shared way. That is the divergence of Issue #184: verify.ps1 honoured -TemporaryRoot and DUNGEON_FORTRESS_TEMP and run-game.ps1 did not, so the same capture ran against two different Godot runtime profiles and only one of them was over the shader cache path limit.",
+      "reading": "This is the mutation the brief asked for by name: return the difference, see the check go red.",
+      "round": "1 and 2 — re-run after the order fix, still red with the same text"
+    },
+    {
+      "id": "M4",
+      "part": "the diagnosis attached to the engine lines",
+      "what": "Get-GodotShaderCachePathDiagnosis stops recognising the lines: its match over the output is replaced with an empty collection in scripts/GodotTools.ps1.",
+      "exitCode": 1,
+      "firstLine": "The GLES3 shader cache lines are reported without naming what they mean, which is the state Issue #184 was opened in."
+    }
+  ],
+  "control": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-godot-output-guard.ps1",
+    "workingTree": "clean (`git status --porcelain` empty)",
+    "output": "{\"event\":\"godot_output_guard_test\",\"status\":\"ok\",\"cleanLines\":3,\"detectedErrorLines\":3,\"exitZeroErrorRejected\":true,\"emptyInvariantRejected\":true,\"mismatchedInvariantRejected\":true,\"shaderCacheStaircaseArms\":6,\"shaderCacheBoundary\":[\"254:True\",\"255:False\"],\"engineEntryPoints\":[\"run-game.ps1\",\"test-goblin-sprite-import.ps1\",\"update-golden-ui.ps1\",\"verify.ps1\"],\"orderCheckedEntryPoints\":[\"run-game.ps1\",\"test-goblin-sprite-import.ps1\",\"update-golden-ui.ps1\"]}"
+  },
+  "theTwoEntryPointsNowAgree": {
+    "why": "A structural check says the scripts choose the directory the same way. This is the behaviour behind it, measured rather than argued.",
+    "stage": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -Stage screenshots -GodotPath \"<godot console>\" -TemporaryRoot \"C:\\Users\\User\\AppData\\Local\\Temp\\pxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"",
+      "exitCode": 1,
+      "said": "The Godot runtime profile is too deep for this engine's shader cache. ... 271 characters; 14 of 14 shader classes are over the limit of 254",
+      "engineErrorLines": 0,
+      "before": "the same command on commit 5713c47 ran the engine and failed with `Godot emitted 14 unexpected ERROR line(s)` (evidence/184-cause.json)"
+    },
+    "control": {
+      "command": "DUNGEON_FORTRESS_TEMP=\"C:\\Users\\User\\AppData\\Local\\Temp\\pxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -GodotPath \"<godot console>\" -Fixture baseline -ScreenshotPath \"184-probe/after.png\" -ScreenshotTicks 1 -TileSize 40 -CameraZoom 0.5 -CameraPosition \"560,320\" -UiScale 1 -FrameSize 1280x720",
+      "said": "The Godot runtime profile is too deep for this engine's shader cache. ... 271 characters; 14 of 14 shader classes are over the limit of 254",
+      "before": "the same command on commit 5713c47 ignored DUNGEON_FORTRESS_TEMP entirely, started the engine from a 41-character profile and reported nothing"
+    },
+    "reading": "Same override, same profile, same sentence, same numbers. The control experiment can no longer disagree with the stage without one of them being changed, and the check above reds when it is."
+  }
+}

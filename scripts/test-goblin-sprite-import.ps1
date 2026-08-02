@@ -1,7 +1,12 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [string]$GodotPath
+    [string]$GodotPath,
+    # Issue #184: every entry point that starts the engine picks the temporary
+    # directory the same way. Run from verify.ps1 this changes nothing, because
+    # the parent has already put its choice in TEMP; run on its own it stops
+    # this script from being the one that disagrees.
+    [string]$TemporaryRoot
 )
 
 Set-StrictMode -Version Latest
@@ -9,6 +14,10 @@ $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "GodotTools.ps1")
 . (Join-Path $PSScriptRoot "TemporaryRoot.ps1")
+
+$temporaryRootSelection = Resolve-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot
+$env:TEMP = ConvertTo-NormalizedRootPath -Path $temporaryRootSelection.Path
+$env:TMP = $env:TEMP
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
