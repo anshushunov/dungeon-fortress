@@ -43,6 +43,16 @@ $env:DOTNET_CLI_HOME = Join-Path $artifactsRoot "dotnet-home"
 $env:DOTNET_NOLOGO = "1"
 $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = "1"
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
+# A run-local DOTNET_CLI_HOME makes the .NET CLI append "<CLI_HOME>\.dotnet\tools"
+# to the *user's* PATH on its first launch under that home, and
+# DOTNET_SKIP_FIRST_TIME_EXPERIENCE does not prevent it. Measured 2026-08-02 on a
+# two-armed experiment: a fresh CLI home plus `dotnet new console` added one PATH
+# entry with the skip flag alone and none with the variable below, which also
+# left the tools directory uncreated. Every worktree and every temporary run has
+# its own artifacts root, so the entries accumulate and never point at a
+# directory that still exists: 135 such tails were removed from the owner's PATH
+# that day, out of 145 entries and 13302 characters.
+$env:DOTNET_ADD_GLOBAL_TOOLS_TO_PATH = "0"
 
 function Invoke-Checked {
     param(
