@@ -1,11 +1,10 @@
 {
   "schemaVersion": 1,
   "issue": 184,
-  "checkpoint": "4 — the checks red on demand, one mutant per independent part of the cure",
-  "commitUnderMutation": "the cure commit: 243b8ab as measured, 558c193 after the rebase onto origin/main 19013ae — same tree, the rebase only moved the parent",
+  "checkpoint": "4 — the checks red on demand, one mutant per independent part of the cure (round 2 after the review of PR #199)",
+  "commitUnderMutation": "two rounds: 243b8ab / 558c193 for M1-M5, 2ae5db6 for M6-M7",
   "note": "Every mutation was applied to the committed tree, run, and reverted with `git checkout -- <file>`. The control run on the unmutated tree is at the end; without it the red runs below prove nothing.",
   "checkCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-godot-output-guard.ps1",
-
   "mutations": [
     {
       "id": "M1",
@@ -31,12 +30,31 @@
       "reading": "The staircase in the test is the machine's measurement, not the code's own arithmetic restated, so a wrong path model is caught even though the limit itself is untouched."
     },
     {
+      "id": "M6",
+      "part": "one way of choosing the temporary directory — order",
+      "round": 2,
+      "what": "The mutant the independent review of PR #199 found surviving: both calls stay in scripts/run-game.ps1 and only their order swaps, so the temporary directory is chosen after Initialize-GodotRuntimeEnvironment has already built the profile from [IO.Path]::GetTempPath().",
+      "survivedBefore": "Yes. The presence-only form of the check reported {\"event\":\"godot_output_guard_test\",\"status\":\"ok\"} on this mutant, which is Issue #184 word for word with both calls present.",
+      "exitCode": 1,
+      "firstLine": "'run-game.ps1' chooses the temporary directory only after it starts the engine. Initialize-GodotRuntimeEnvironment builds the Godot runtime profile from [IO.Path]::GetTempPath(), so a choice made later never reaches the profile and the script is back to ignoring -TemporaryRoot and DUNGEON_FORTRESS_TEMP - the divergence of Issue #184 with both calls still present."
+    },
+    {
+      "id": "M7",
+      "part": "one way of choosing the temporary directory — the exemption",
+      "round": 2,
+      "what": "The one named exemption is widened to everything: `if ($script.Name -ne \"verify.ps1\")` becomes `if ($false)` in scripts/test-godot-output-guard.ps1, so no entry point has its order checked.",
+      "exitCode": 1,
+      "firstLine": "The order of the temporary directory and the engine start is checked in 0 of 4 entry points; every one but verify.ps1 has to be checked.",
+      "reading": "Without this the order check could be switched off by growing the exemption and would still report ok."
+    },
+    {
       "id": "M3",
       "part": "one way of choosing the temporary directory",
       "what": "The difference of Issue #184 is put back: the three lines that resolve the shared temporary root are deleted from scripts/run-game.ps1, so it stops honouring -TemporaryRoot and DUNGEON_FORTRESS_TEMP while verify.ps1 keeps honouring them.",
       "exitCode": 1,
       "firstLine": "'run-game.ps1' starts the engine without choosing the temporary directory the shared way. That is the divergence of Issue #184: verify.ps1 honoured -TemporaryRoot and DUNGEON_FORTRESS_TEMP and run-game.ps1 did not, so the same capture ran against two different Godot runtime profiles and only one of them was over the shader cache path limit.",
-      "reading": "This is the mutation the brief asked for by name: return the difference, see the check go red."
+      "reading": "This is the mutation the brief asked for by name: return the difference, see the check go red.",
+      "round": "1 and 2 — re-run after the order fix, still red with the same text"
     },
     {
       "id": "M4",
@@ -46,13 +64,11 @@
       "firstLine": "The GLES3 shader cache lines are reported without naming what they mean, which is the state Issue #184 was opened in."
     }
   ],
-
   "control": {
     "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-godot-output-guard.ps1",
     "workingTree": "clean (`git status --porcelain` empty)",
-    "output": "{\"event\":\"godot_output_guard_test\",\"status\":\"ok\",\"cleanLines\":3,\"detectedErrorLines\":3,\"exitZeroErrorRejected\":true,\"emptyInvariantRejected\":true,\"mismatchedInvariantRejected\":true,\"shaderCacheStaircaseArms\":6,\"shaderCacheBoundary\":[\"254:True\",\"255:False\"],\"engineEntryPoints\":[\"run-game.ps1\",\"test-goblin-sprite-import.ps1\",\"update-golden-ui.ps1\",\"verify.ps1\"]}"
+    "output": "{\"event\":\"godot_output_guard_test\",\"status\":\"ok\",\"cleanLines\":3,\"detectedErrorLines\":3,\"exitZeroErrorRejected\":true,\"emptyInvariantRejected\":true,\"mismatchedInvariantRejected\":true,\"shaderCacheStaircaseArms\":6,\"shaderCacheBoundary\":[\"254:True\",\"255:False\"],\"engineEntryPoints\":[\"run-game.ps1\",\"test-goblin-sprite-import.ps1\",\"update-golden-ui.ps1\",\"verify.ps1\"],\"orderCheckedEntryPoints\":[\"run-game.ps1\",\"test-goblin-sprite-import.ps1\",\"update-golden-ui.ps1\"]}"
   },
-
   "theTwoEntryPointsNowAgree": {
     "why": "A structural check says the scripts choose the directory the same way. This is the behaviour behind it, measured rather than argued.",
     "stage": {
