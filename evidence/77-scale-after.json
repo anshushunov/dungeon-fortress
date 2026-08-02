@@ -5,8 +5,9 @@
   "note": "Same spec, same commands, same machine as evidence/77-scale-before.json; only the code between them differs. PNGs land under .artifacts/evidence/77-after/ and are not committed. Hashes and checksums are copied from the manifest capture-evidence.ps1 wrote (.artifacts/evidence/77-after/manifest.json).",
 
   "after": {
-    "commit": "238a0726f6fab29039595956c749a9fc9d03946e",
-    "commitSubject": "Где рисуется тело — тоже проверяемо без движка (#77)",
+    "commit": "c8b96284b916ddc85548a9ba1ae0b844a3f13501",
+    "commitSubject": "Мутанты на правило размещения (#77) — the first commit whose tree carries both the 170 % size and the foot-anchored placement",
+    "recapturedBecause": "The two body frames were first taken against the centred square. When re-measurement (see gridAndPivot below) reversed that decision, they stopped describing the branch and were retaken with the same spec and the same commands. The third capture, which has no body in frame, came out byte-identical for the third time running — dc750d0 changed where bodies stand and nothing else.",
     "sourceDirty": false,
     "spec": "evidence/77-scale-frames.json",
     "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\capture-evidence.ps1 -SpecPath evidence/77-scale-frames.json -OutputRoot \"evidence/77-after\" -GodotPath \"<godot 4.7.1 console>\"",
@@ -21,22 +22,24 @@
       {
         "name": "77-scale-rooms",
         "imagePath": ".artifacts/evidence/77-after/77-scale-rooms.png",
-        "imageSha256": "7cb2cbada838c3cc5a67aa28843ce7c116168ab0f8513c84e57198c00e884b45",
+        "imageSha256": "c735e8fb211b98de7a7e48514d58b283692906b83fbb11ac8c4a933dd8f70838",
         "beforeImageSha256": "dc1f8eac40534fa1c03220512a015cf1b8b2e299b99ac083fcee0f5b49442c4f",
+        "centredSquareImageSha256": "7cb2cbada838c3cc5a67aa28843ce7c116168ab0f8513c84e57198c00e884b45",
         "canonicalChecksum": "3fae9df7ad170481dd2295d6793227b0a9eb6cb10538d879b709dbc19db034e8",
         "byteForByteRepeat": true,
         "goblinScreenSizePx": 61.81818181818181,
-        "reading": "The same crew on the same tick. Bodies fill their cells instead of sitting in the middle of them; face, tunic and the tool in hand are readable at 1x, which at 36.4 px they were not."
+        "reading": "The same crew on the same tick. Bodies fill their cells instead of sitting in the middle of them; face, tunic and the tool in hand are readable at 1x, which at 36.4 px they were not. Feet on the same ground as before: the growth went upward."
       },
       {
         "name": "77-scale-raid",
         "imagePath": ".artifacts/evidence/77-after/77-scale-raid.png",
-        "imageSha256": "631a6f0b5a802bd0c4e19481667fbcc78bf39994521efe53f4b44b4241d1b13b",
+        "imageSha256": "6d75e41d7fae179555d191febadd90cd24314ced5a554ffb51c497f32cd3edd0",
         "beforeImageSha256": "2511e4763d8c7806c6de9f0a0ef19acfc9ced44742ada985ec3a043d1af611cb",
+        "centredSquareImageSha256": "631a6f0b5a802bd0c4e19481667fbcc78bf39994521efe53f4b44b4241d1b13b",
         "canonicalChecksum": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70",
         "byteForByteRepeat": true,
         "goblinScreenSizePx": 61.81818181818181,
-        "reading": "The crowding case the scale was chosen on. Fighters at the watch post now stand shoulder to shoulder, with the floor still visible between the rows — the 170-175 % behaviour the gate log describes, in the shipped renderer rather than in the spike scene."
+        "reading": "The crowding case the scale was chosen on. Fighters at the watch post stand shoulder to shoulder with the floor still visible between the rows — the 170-175 % behaviour the gate log describes, in the shipped renderer rather than in the spike scene. Each body stands on its own row and overlaps the row behind it rather than hanging into the row in front, which is what anchoring the feet buys and what the depth pass then sorts."
       },
       {
         "name": "77-scale-raid-detail",
@@ -64,20 +67,30 @@
   },
 
   "gridAndPivot": {
-    "claim": "Acceptance criterion 2: the grid, the cell size and the anchor a body is placed by did not change.",
+    "claim": "Acceptance criterion 2: the grid, the cell size and the ground a body stands on did not change. Only the size of the body did.",
     "measured": [
-      "CameraViewTests.Growing_the_body_moves_neither_the_grid_nor_the_point_a_body_is_placed_by: at tile 32, 40 and 48 the cell centre is still (x+0.5, y+0.5) tiles, WorldToCell round-trips it, WorldVisualScale is still tileSize/22, and CameraView.GoblinDrawRect is still centred on the render centre.",
+      "CameraViewTests.Growing_the_body_moves_neither_the_grid_nor_the_cell_a_body_belongs_to: at tile 32, 40 and 48 the cell centre is still (x+0.5, y+0.5) tiles, WorldToCell round-trips it, WorldVisualScale is still tileSize/22, and the drawn square is still centred horizontally on the render point.",
+      "CameraViewTests.The_drawn_feet_do_not_move_when_the_body_grows: the drawn feet — 92/96 down the canvas — are on exactly the same pixel as before Issue #77 at all three tile sizes, movement 0.000000 px, and the canvas top rises by exactly the gained size times that fraction, so the whole of the growth goes upward.",
+      "RoomBorderDepthTests.No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible: 0 crossings at tile 32, 40 and 48 — a taller body reaches no room outline that the depth pass leaves visible. This is the check that reports 2 under the rejected canvas-edge anchor, so it is known to be able to fail.",
+      "CameraView.GoblinDrawSize(40) is still 61.818182 px: the placement change moved where the body stands, not how big it is.",
       "The 2x capture above: with no body in frame, the after PNG is byte-identical to the before PNG — walls, floor, outlines and grid are literally the same pixels."
     ],
-    "whatDidMove": {
-      "finding": "A centred square grows in all four directions, so the drawn feet sink. Measured, not estimated: in all four v1 states the last opaque row is 92 of 96, so the feet are 92/96 of the way down the square — 16.67 px below the render centre before, 28.33 px after, a drop of 11.67 px, i.e. 29 % of a 40 px cell. Half a cell is 20 px, so the feet cross from inside the cell to just outside it.",
-      "pinnedBy": "CameraViewTests.A_centred_square_lowers_the_drawn_feet_by_a_measured_amount",
+    "howItIsPlaced": {
+      "rule": "The square is centred horizontally on the render point and stands on CameraView.GoblinFootLine below it: 16.666667 px at tile 40, which is where the feet of the authored 20-reference-pixel body landed when that square was centred, i.e. where every creature has stood since long before Issue #77. The body reaches 42.575758 px above the centre and 19.242424 px below it.",
+      "packDependence": "«Where the feet are on the canvas» is CameraView.SpriteSupportFraction = 92/96, named as a constant because it belongs to the sprite pack, not to the camera: every v1 state's last opaque row is 91 of 96 (alpha bounds read off the PNGs: y 8..91, 20..91, 8..91, 47..91). The v2 pack's support zone is 172 <= y <= 187 of 192 rows, so the subtask that connects it must move this constant with it or every creature will stand about a pixel off the ground.",
+      "whyThisRule": "It is what spike #142's own scene did — spikes/142-scale-spike/creature_visual.gd: «position is the creature's feet… the pivot never moves when scale_multiplier changes the draw size» — so it is the picture the owner was looking at when he chose 170 %. Bringing main to it is not a new decision; it is the removal of a divergence from one already taken.",
+      "pinnedBy": "CameraViewTests.The_drawn_feet_do_not_move_when_the_body_grows and CameraViewTests.Anchoring_the_drawn_feet_reaches_a_pixel_lower_than_anchoring_the_canvas; the mutants are in evidence/77-scale-mutation.json under placementMutants."
+    },
+    "whatTheFirstRoundShipped": {
+      "finding": "The first round of this change used a centred square, which grows in all four directions and sinks the drawn feet from 16.666667 px below the render centre to 28.333333 — 11.666667 px, 29 % of a 40 px cell — putting them outside the cell the body stands on. Half a cell is 20 px, so the feet crossed from inside the cell to outside it.",
+      "whyItWasTaken": "Because growing upward was believed to cost 2 Issue #156 crossings. That cost was real but belonged to a different rule, one pixel away (see theAlternative below). The choice was therefore made between the right option and a misattributed price, which independent review of PR #176 exposed and the coordinator reversed.",
+      "stillMeasured": "The numbers above are kept in the docstring of CameraViewTests.The_drawn_feet_do_not_move_when_the_body_grows rather than deleted: a measurement that cost a round is worth keeping even once the branch it described is gone.",
       "theAlternative": {
         "correctedAfterReviewOfPR176": "This entry first said that anchoring the square on the old foot line «holds the feet exactly still» and costs 2 Issue #156 crossings. Those are two different rules, and the sentence married the words of one to the measurement of the other. Independent review found the ~1 px discrepancy; both rules were then re-measured here from scratch before anything was rewritten.",
         "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .artifacts/anchors.ps1 for the geometry, and `dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible\"` with CameraView.GoblinDrawRect temporarily set to each rule in turn, at tile 40 unless stated",
         "sharedFacts": "Body 36.363636 px before and 61.818182 px after; the v1 sheet's last opaque row is 92 of 96 in all four states, so the drawn feet are 92/96 of the way down the square and the remaining 4/96 is transparent padding that scales with it. Before the change the feet were 16.666667 px below the render centre.",
         "ruleA_anchorTheDrawnFeet": {
-          "whatItIs": "Hold the drawn feet on the line they were on — the rule spike #142's own scene used (spikes/142-scale-spike/creature_visual.gd grows the body upward from a pivot at the feet).",
+          "whatItIs": "Hold the drawn feet on the line they were on — the rule spike #142's own scene used (spikes/142-scale-spike/creature_visual.gd grows the body upward from a pivot at the feet). THIS IS THE RULE THE BRANCH NOW SHIPS, as of commit dc750d0.",
           "topAboveCentrePx": 42.575758,
           "bottomBelowCentrePx": 19.242424,
           "feetBelowCentrePx": 16.666667,
@@ -95,9 +108,9 @@
           "issue156Crossings": {"tileSize32": 2, "tileSize40": 2, "tileSize48": 2},
           "crossingDetail": "Both are the same body — mid-step between cells 21,6 and 21,7 — against the south edge of quarters@19,2 at cells 20,5 and 21,5. OverlapPx in the test payload is an AREA, width x height: 4.760331 and 0.495868 at tile 32, 7.438017 and 0.774793 at tile 40, 10.710744 and 1.115702 at tile 48. Spread over a body 61.8 px wide these are slivers, which is why rule A, only 1.06 px lower, clears them entirely."
         },
-        "whatThisChangesAboutTheFork": "The reason recorded for not taking the upward rule — «it undoes part of Issue #156» — holds only for rule B. Rule A, the one that actually keeps the feet where the owner saw them in the spike, costs nothing this sweep can measure. The shipped behaviour is left as it is (a centred square) because that is what this change was reviewed on, but the fork now stands on different ground and is named as such in the handoff."
+        "whatThisChangedAboutTheFork": "The reason recorded for not taking the upward rule — «it undoes part of Issue #156» — holds only for rule B. Rule A costs nothing this sweep can measure and is the picture the owner judged 170 % on. The coordinator reversed the decision on that measurement, and the branch now ships rule A; rule B and the centred square are kept here as measured rejects, not as prose."
       },
-      "notSettledHere": "This change keeps the centred square and leaves the choice where the art that decides it lands: the next subtask of Issue #77 connects the v2 pack and must replace the square with a 17:12 rectangle (87.55 x 61.8 px), which is a placement decision in its own right. Raised in the handoff rather than settled quietly."
+      "whatIsStillNotSettledHere": "The pack is still v1 and the sprite is still drawn into a square. The next subtask of Issue #77 connects the v2 pack and must replace the square with a 17:12 rectangle (87.55 x 61.8 px) and move CameraView.SpriteSupportFraction from 92/96 to the v2 support zone, 188/192. Both are named in the constants' docstrings so that subtask does not have to rediscover them."
     }
   }
 }
