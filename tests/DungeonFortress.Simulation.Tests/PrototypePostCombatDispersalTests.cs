@@ -494,8 +494,15 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
         var clinch = 0;
         var blocked = 0;
         var lead = musterLeadPerTick.GetValueOrDefault(arriveTick - 1);
+        // The end of the window is reported as the loop actually walked it, not
+        // as the arithmetic above says it should have. A window that says one
+        // thing and iterates another is exactly the defect this measurement had
+        // before independent review of Issue #186 found it, so the check that
+        // guards it reads the walk.
+        var walkedTo = arriveTick - lead - DispersalWindow;
         for (var tick = arriveTick - lead - DispersalWindow; tick < arriveTick - lead; tick++)
         {
+            walkedTo = tick + 1;
             if (!blockedPerTick.TryGetValue(tick, out var blockedThen))
             {
                 continue;
@@ -509,7 +516,7 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
             }
         }
 
-        return (clinch, blocked, arriveTick - lead, lead);
+        return (clinch, blocked, walkedTo, lead);
     }
 
     /// <summary>
