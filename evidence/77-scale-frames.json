@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "captures": [
+    {"name": "77-scale-rooms", "fixture": "baseline", "screenshotTicks": 190, "tileSize": 40, "cameraZoom": 1.0, "cameraPosition": "560,320", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "77-scale-raid", "fixture": "prepared", "screenshotTicks": 1670, "tileSize": 40, "cameraZoom": 1.0, "cameraPosition": "720,400", "uiScale": 1.0, "frameSize": "1280x720"},
+    {"name": "77-scale-raid-detail", "fixture": "prepared", "screenshotTicks": 1670, "tileSize": 40, "cameraZoom": 2.0, "cameraPosition": "720,400", "uiScale": 1.0, "frameSize": "1280x720"}
+  ]
+}
