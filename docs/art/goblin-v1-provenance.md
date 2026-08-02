@@ -12,14 +12,40 @@ raider character readability in the Godot projection.
 - Date: 2026-07-27
 - Tool: built-in OpenAI image generation
 - Manual paint/editing: none
-- Source: one 2×2 sheet on a flat magenta background; the large source and
-  intermediate alpha sheet remain outside Git to keep the prototype repository
-  small. The four runtime state PNGs are the project-bound finals.
+- Source: `call_1XyNBeXZYWqooldTTJ6Pn2Gs.png`, 1254×1254 RGB. SHA-256
+  `2d2ed58e9cc01830b6be9ec3f9eca40ea4477b9196761c56665d333a0d09ee93`. Lives on
+  the generating machine at
+  `~/.codex/generated_images/019f9dd3-1365-7a02-82db-0cb8a1b7075f/`; outside Git
+  per the decision recorded in [`PROVENANCE_VERIFIABILITY.md`](PROVENANCE_VERIFIABILITY.md)
+  (Issue #179). The four runtime state PNGs are the project-bound finals.
 - Chroma key: sampled `#f803f6`, processed by `remove_chroma_key.py` with
   auto-key border, soft matte, thresholds `12/220`, and despill.
 - Post-process: each state cropped to non-transparent bounds, resized with
   LANCZOS to fit 84px, bottom-anchored in a transparent 96×96 canvas; no manual
   paint.
+
+## Verifiability (Issue #179, 2026-08-02)
+
+Post-processing steps and their executability from the repo:
+
+1. **Chroma key** — executable. `scripts/art/remove_chroma_key.py` in this repo
+   is a copy of the helper used; content identical, line endings normalized by
+   the repo to LF (SHA-256 of the committed copy `3f7b9b14...`, of the CRLF
+   original on the generating machine `7e512369...`). Run from the
+   repo root on the source with the recorded flags:
+
+   ```powershell
+   python scripts/art/remove_chroma_key.py --input <source.png> --out <alpha.png> `
+     --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill
+   ```
+
+   The helper's own run on the source (measured 2026-08-02) returns
+   `Key color: #f803f6`, matching the sampled value recorded above.
+2. **Crop, LANCZOS resize to 84px, bottom-anchor in 96×96** — not executable
+   from the repo: performed with one-off inline Python/Pillow scripts that were
+   not retained. The result is the committed `goblin_*_v1.png` finals (96×96
+   RGBA), so the outcome is inspectable even though the exact step cannot be
+   re-run.
 
 Exact prompt:
 
