@@ -168,3 +168,172 @@ Exact prompt:
    remain consistent; the short spear is readable in `combat`, `windup`, and
    `flinch`, and the `combat → flinch → combat` transition no longer blinks the
    weapon.
+
+### Reproducible verification commands
+
+Все измерения получены одноразовыми inline Python/Pillow-скриптами, которых нет
+в репозитории. Команды запускаются из корня worktree ветки
+`agent/165-flinch-with-spear`.
+
+#### 1. RGBA 272×192 у всех шести поз
+
+```powershell
+@'
+from PIL import Image
+from pathlib import Path
+
+base = Path("src/DungeonFortress.Game/assets/generated/goblins")
+for state in ["idle", "work", "combat", "windup", "flinch", "downed"]:
+    image = Image.open(base / f"goblin_{state}_v2.png")
+    print(f"{state}: mode={image.mode}, size={image.width}x{image.height}")
+'@ | python -
+```
+
+Ожидаемый результат:
+
+```text
+idle: mode=RGBA, size=272x192
+work: mode=RGBA, size=272x192
+combat: mode=RGBA, size=272x192
+windup: mode=RGBA, size=272x192
+flinch: mode=RGBA, size=272x192
+downed: mode=RGBA, size=272x192
+```
+
+#### 2. Последняя непрозрачная строка `y=187`
+
+```powershell
+@'
+from PIL import Image
+from pathlib import Path
+
+base = Path("src/DungeonFortress.Game/assets/generated/goblins")
+for state in ["idle", "work", "combat", "windup", "flinch", "downed"]:
+    alpha = Image.open(base / f"goblin_{state}_v2.png").getchannel("A")
+    print(f"{state}: last_nontransparent_row={alpha.getbbox()[3] - 1}")
+'@ | python -
+```
+
+Все шесть строк должны содержать `last_nontransparent_row=187`.
+
+#### 3. Alpha bbox flinch `26,24–211,188`
+
+Координаты Pillow имеют вид `[left, top, right, bottom)`, то есть правая и
+нижняя границы исключающие.
+
+```powershell
+@'
+from PIL import Image
+
+alpha = Image.open(
+    "src/DungeonFortress.Game/assets/generated/goblins/goblin_flinch_v2.png"
+).getchannel("A")
+print(alpha.getbbox())
+'@ | python -
+```
+
+Ожидаемый результат:
+
+```text
+(26, 24, 211, 188)
+```
+
+#### 4. Центр опоры `135.5`
+
+Используется метод provenance: `alpha > 32`, support zone
+`172 <= y <= 187`.
+
+```powershell
+@'
+from PIL import Image
+
+image = Image.open(
+    "src/DungeonFortress.Game/assets/generated/goblins/goblin_flinch_v2.png"
+).convert("RGBA")
+alpha = image.getchannel("A")
+pixels = alpha.load()
+
+xs = [
+    x
+    for y in range(172, 188)
+    for x in range(image.width)
+    if pixels[x, y] > 32
+]
+
+print((min(xs) + max(xs)) / 2)
+'@ | python -
+```
+
+Ожидаемый результат:
+
+```text
+135.5
+```
+
+#### 5. Прозрачность всех краёв холста
+
+```powershell
+@'
+from PIL import Image
+from pathlib import Path
+
+base = Path("src/DungeonFortress.Game/assets/generated/goblins")
+for state in ["idle", "work", "combat", "windup", "flinch", "downed"]:
+    image = Image.open(base / f"goblin_{state}_v2.png").convert("RGBA")
+    alpha = image.getchannel("A")
+    pixels = alpha.load()
+    width, height = image.size
+
+    edges = {
+        "top": all(pixels[x, 0] == 0 for x in range(width)),
+        "bottom": all(pixels[x, height - 1] == 0 for x in range(width)),
+        "left": all(pixels[0, y] == 0 for y in range(height)),
+        "right": all(pixels[width - 1, y] == 0 for y in range(height)),
+    }
+    print(f"{state}: {edges}")
+'@ | python -
+```
+
+Для каждой позы ожидаются `True` у `top`, `bottom`, `left` и `right`.
+
+#### 6. Просмотр шести поз при высоте 62 px
+
+Это был **ручной просмотр**, не автоматическое измерение. Контактный лист был
+создан одноразовым inline Python/Pillow-скриптом, которого нет в репозитории, и
+просмотрен через Codex `view_image` в режиме `detail=original`.
+
+```powershell
+@'
+from PIL import Image
+from pathlib import Path
+
+base = Path("src/DungeonFortress.Game/assets/generated/goblins")
+states = ["idle", "work", "combat", "windup", "flinch", "downed"]
+thumb_size = (88, 62)
+gap = 8
+
+sheet = Image.new(
+    "RGBA",
+    (len(states) * thumb_size[0] + (len(states) - 1) * gap, thumb_size[1]),
+    (48, 44, 54, 255),
+)
+
+for index, state in enumerate(states):
+    image = Image.open(base / f"goblin_{state}_v2.png").convert("RGBA")
+    image = image.resize(thumb_size, Image.Resampling.LANCZOS)
+    sheet.alpha_composite(image, (index * (thumb_size[0] + gap), 0))
+
+output = Path("issue165-six-poses-62px.png")
+sheet.save(output, optimize=True)
+print(output.resolve())
+'@ | python -
+```
+
+Формулировка для PR:
+
+> Ручной просмотр шести поз рядом при высоте холста 62 px: проверены сохранение
+> персонажа, палитры, масштаба, базовой линии и направления; копьё остаётся
+> читаемым в `combat`, `windup` и `flinch`. Контактный лист создан приведённым
+> выше одноразовым inline Python/Pillow-скриптом и просмотрен через Codex
+> `view_image(detail=original)`. Внутренняя проверка исполнителя; независимый
+> блочный review не заявляется.
