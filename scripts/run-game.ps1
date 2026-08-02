@@ -106,6 +106,10 @@ $resolvedScreenshotPath = if ([string]::IsNullOrWhiteSpace($ScreenshotPath)) {
 $env:DOTNET_CLI_HOME = Join-Path $artifactsRoot "dotnet-home"
 $env:DOTNET_NOLOGO = "1"
 $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = "1"
+# Изолированный DOTNET_CLI_HOME заставляет .NET CLI дописать
+# <CLI_HOME>\.dotnet\tools в пользовательский PATH при первом запуске, и
+# DOTNET_SKIP_FIRST_TIME_EXPERIENCE этого не предотвращает — измерено 2026-08-02.
+$env:DOTNET_ADD_GLOBAL_TOOLS_TO_PATH = "0"
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
 
 New-Item -ItemType Directory -Force -Path $env:DOTNET_CLI_HOME | Out-Null
