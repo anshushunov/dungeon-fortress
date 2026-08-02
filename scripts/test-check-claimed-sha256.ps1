@@ -185,6 +185,26 @@ try {
     }
     Remove-Item -LiteralPath $missingPathJson -Force
 
+    # A malformed evidence file must be named and must fail the run, but it must
+    # not take the scan down with a stack trace: the remaining files still get
+    # checked.
+    $brokenPath = Join-Path $evidenceDir "broken.json"
+    [IO.File]::WriteAllText($brokenPath, '{ "captures": [ { "path": "tracked.txt", ', $utf8)
+    $stillGoodPath = Join-Path $evidenceDir "still-good.json"
+    [IO.File]::WriteAllText($stillGoodPath, $goodJson, $utf8)
+    $result = Invoke-Checker -Root $gitRoot
+    if ($result.ExitCode -ne 1 -or $result.Output -notmatch '"status":"unparsed"') {
+        throw "A malformed evidence file was not reported as unparsed. Output: $($result.Output)"
+    }
+    if ($result.Output -match "ConvertFrom-Json :") {
+        throw "A malformed evidence file produced a raw exception. Output: $($result.Output)"
+    }
+    if ($result.Output -notmatch '"status":"blob-match"') {
+        throw "The scan did not continue past the malformed file. Output: $($result.Output)"
+    }
+    Remove-Item -LiteralPath $brokenPath -Force
+    Remove-Item -LiteralPath $stillGoodPath -Force
+
     [ordered]@{
         event = "check_claimed_sha256_test"
         status = "ok"
@@ -194,6 +214,7 @@ try {
         mismatchFlagged = $true
         untrackedWorkingAccepted = $true
         missingInformational = $true
+        malformedEvidenceReported = $true
     } | ConvertTo-Json -Compress | Write-Host
 }
 finally {

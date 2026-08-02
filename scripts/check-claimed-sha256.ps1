@@ -18,6 +18,7 @@ $evidenceRoot = Join-Path $RepoRoot "evidence"
 $sha256Regex = "^[0-9a-f]{64}$"
 
 $script:claims = [System.Collections.Generic.List[object]]::new()
+$script:parseErrors = [System.Collections.Generic.List[object]]::new()
 
 function Get-BlobHash {
     param(
@@ -123,7 +124,20 @@ function Add-EvidenceClaims {
     $jsonFiles = Get-ChildItem -LiteralPath $evidenceRoot -Filter "*.json" -File -ErrorAction SilentlyContinue
     foreach ($file in $jsonFiles) {
         $text = [IO.File]::ReadAllText($file.FullName, [Text.Encoding]::UTF8)
-        $node = $text | ConvertFrom-Json
+        # A malformed evidence file is a finding to report, not a reason to die
+        # mid-scan with a stack trace and leave the remaining files unchecked.
+        # It still fails the run: see the exit condition below.
+        $node = $null
+        try {
+            $node = $text | ConvertFrom-Json
+        }
+        catch {
+            $script:parseErrors.Add([pscustomobject]@{
+                claimedFrom = "evidence/" + $file.Name
+                error = $_.Exception.Message
+            })
+            continue
+        }
 
         $stack = [System.Collections.Generic.Stack[object]]::new()
         $stack.Push($node)
@@ -194,6 +208,13 @@ Add-EvidenceClaims
 Add-DocClaims
 
 if (-not $Quiet) {
+    foreach ($e in $script:parseErrors) {
+        [ordered]@{
+            claimedFrom = $e.claimedFrom
+            status = "unparsed"
+            error = $e.error
+        } | ConvertTo-Json -Compress | Write-Host
+    }
     foreach ($c in $script:claims) {
         $line = [ordered]@{
             claimedFrom = $c.claimedFrom
@@ -212,10 +233,11 @@ $workingOnly = @($script:claims | Where-Object { $_.status -eq "working-copy-onl
 $blobMatches = @($script:claims | Where-Object { $_.status -eq "blob-match" })
 $untracked = @($script:claims | Where-Object { $_.status -in @("untracked", "untracked-working-match") })
 
-if ($mismatches.Count -gt 0 -or $workingOnly.Count -gt 0) {
+if ($mismatches.Count -gt 0 -or $workingOnly.Count -gt 0 -or $script:parseErrors.Count -gt 0) {
     if (-not $Quiet) {
         Write-Host ""
-        Write-Host ("MISMATCH: {0}, working-copy-only (CRLF trap): {1}" -f $mismatches.Count, $workingOnly.Count)
+        Write-Host ("MISMATCH: {0}, working-copy-only (CRLF trap): {1}, unparsed evidence files: {2}" -f `
+            $mismatches.Count, $workingOnly.Count, $script:parseErrors.Count)
     }
     exit 1
 }
