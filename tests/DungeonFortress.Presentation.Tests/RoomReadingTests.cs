@@ -317,6 +317,55 @@ public sealed class RoomReadingTests
             StringComparison.Ordinal);
     }
 
+    // ------------------------------------------- the pending-intent window
+
+    /// <summary>
+    /// Issue #130. Painting a zone over an object while paused: the room is
+    /// created by the world only when the tick runs, and the folded membership
+    /// has already cleared the orphan warning, so before the fix the panel said
+    /// nothing about the zone at all. The panel has to name the player's intent.
+    /// </summary>
+    [Fact]
+    public void Painting_a_zone_over_a_post_names_the_intent_while_paused()
+    {
+        var view = View(40, new ZonePaintCommand(40, ZoneKind.TrainingGround, [LeftPost]));
+
+        // The room does not exist yet — the world creates it when the tick runs.
+        Assert.Empty(view.State.Rooms.Where(room => room.Purpose == ZoneKind.TrainingGround));
+        Assert.Contains(
+            "marked as TrainingGround",
+            InspectorText.DescribeRooms(view, LeftPost),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Issue #130. Erasing a zone from under an object while paused: the
+    /// canonical room still holds the cell and the folded membership has already
+    /// released it, so before the fix the panel printed <c>room FARM</c> and
+    /// <c>no room</c> about the same cell at once. It must answer with one
+    /// statement, and the statement has to name the erase.
+    /// </summary>
+    [Fact]
+    public void Erasing_a_zone_from_under_a_bed_names_the_intent_while_paused()
+    {
+        var cell = new GridPoint(2, 1);
+        var view = View(40, new ZoneEraseCommand(40, ZoneKind.Farm, [cell]));
+
+        // The two sources disagree on purpose: the room still holds the cell,
+        // the fold has already released it.
+        Assert.Contains(
+            view.State.Rooms,
+            room => room.Purpose == ZoneKind.Farm && room.Perimeter.Contains(cell));
+        Assert.False(view.IsInZone(ZoneKind.Farm, cell));
+
+        var text = InspectorText.DescribeRooms(view, cell);
+        Assert.False(
+            text.Contains("room FARM", StringComparison.Ordinal) &&
+            text.Contains("no room", StringComparison.Ordinal),
+            "The panel printed room membership and no-room about the same cell at once.");
+        Assert.Contains("marked as erasing Farm", text, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// The inverse of contract table 12.3, derived rather than restated: a second
     /// copy of the table on this side of the seam is a second table to keep in

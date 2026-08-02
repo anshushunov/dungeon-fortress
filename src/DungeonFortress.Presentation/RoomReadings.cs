@@ -257,3 +257,41 @@ public static class RoomObjects
         found.Add(new UnroomedObject(position, kind, purpose));
     }
 }
+
+/// <summary>
+/// An erase accepted on this tick and not applied yet, asked of the projection
+/// the way <see cref="MapProjection.IsPendingZonePaint"/> asks about a paint
+/// (Issue #130).
+///
+/// The mirror exists because the two halves of the panel and the two halves of
+/// the map must read the same fold: <c>InspectorText.DescribeRooms</c> names the
+/// player's intent while it waits, and <c>Main.DrawZoneOutlines</c> draws the
+/// cell being removed. Both read the erase through this type rather than from
+/// the canonical zone, because the canonical zone still holds the cell — the
+/// room only loses it when the tick runs.
+/// </summary>
+public static class PendingZoneMarks
+{
+    /// <summary>
+    /// Whether a zone erase accepted on this tick removes this cell before the
+    /// tick runs. The canonical zone still contains the cell; the fold has
+    /// already taken it out.
+    /// </summary>
+    public static bool IsErasing(MapProjection view, ZoneKind zone, GridPoint cell)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        return view.State.Zones[zone].Contains(cell) && !view.IsInZone(zone, cell);
+    }
+
+    /// <summary>
+    /// The cells of one zone that an erase accepted on this tick removes, in
+    /// the stable order the map draws per-cell marks in.
+    /// </summary>
+    public static IReadOnlyList<GridPoint> Erasures(MapProjection view, ZoneKind zone)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        return [.. view.State.Zones[zone]
+            .Where(cell => !view.IsInZone(zone, cell))
+            .Order()];
+    }
+}

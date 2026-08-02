@@ -207,6 +207,28 @@ public sealed class MapAccentTests
         Assert.Equal(MapAccents.PendingStockpile(waiting, cell), AppliedStockpile(applied, cell));
     }
 
+    /// <summary>
+    /// Issue #130, the map half. An erase accepted while paused has to be
+    /// visible immediately, the mirror of a pending paint. The cells being
+    /// erased are read from the pure fold, so the adapter draws them from the
+    /// same source the panel reads.
+    /// </summary>
+    [Fact]
+    public void A_zone_erased_while_paused_is_reported_until_the_tick_runs()
+    {
+        var farmTile = PresentationFixtures.Baseline(1).Zones[ZoneKind.Farm][0];
+        var (waiting, applied) = Across(40, new ZoneEraseCommand(40, ZoneKind.Farm, [farmTile]));
+
+        // The canonical zone still holds the cell; the fold has already taken it out.
+        Assert.Contains(farmTile, waiting.State.Zones[ZoneKind.Farm]);
+        Assert.Equal([farmTile], PendingZoneMarks.Erasures(waiting, ZoneKind.Farm));
+        Assert.True(PendingZoneMarks.IsErasing(waiting, ZoneKind.Farm, farmTile));
+
+        // The tick that applies the erase leaves nothing waiting.
+        Assert.Empty(PendingZoneMarks.Erasures(applied, ZoneKind.Farm));
+        Assert.False(PendingZoneMarks.IsErasing(applied, ZoneKind.Farm, farmTile));
+    }
+
     [Fact]
     public void A_waiting_stockpile_cell_on_forbidden_ground_reads_as_unreachable()
     {
