@@ -141,13 +141,13 @@ public sealed class CameraViewTests
     }
 
     /// <summary>
-    /// A body grows around the point it stands on. The square <c>DrawGoblin</c>
-    /// draws into is centred on the render centre, so the foot pivot — the cell
-    /// centre a body is placed at — is the same pixel before and after Issue #77,
-    /// and the cell it belongs to is unchanged.
+    /// The grid, the cell and the point a body is placed by are the same pixels
+    /// they were before Issue #77: the sprite's square is still centred on the
+    /// render centre, so what changed is the size of the body and nothing about
+    /// where the world is or where a body is anchored in it.
     /// </summary>
     [Fact]
-    public void Growing_the_body_moves_neither_the_grid_nor_the_point_a_body_stands_on()
+    public void Growing_the_body_moves_neither_the_grid_nor_the_point_a_body_is_placed_by()
     {
         var cell = new GridPoint(14, 8);
 
@@ -155,27 +155,58 @@ public sealed class CameraViewTests
         {
             var centre = CameraView.CellCenter(cell, tileSize);
 
+            // The grid: unchanged, and not a function of how large a body is.
             Assert.Equal(
                 new ViewPoint((cell.X + 0.5) * tileSize, (cell.Y + 0.5) * tileSize),
                 centre);
             Assert.Equal(cell, CameraView.WorldToCell(centre, tileSize));
             Assert.Equal(tileSize / 22.0, CameraView.WorldVisualScale(tileSize));
 
-            // The square Main.DrawGoblin builds — top-left at centre minus half
-            // the draw size, side equal to it — is still centred on that same
-            // point, so the sprite spills equally in all four directions and the
-            // body's anchor does not drift with the scale.
-            var size = CameraView.GoblinDrawSize(tileSize);
-            var drawn = new ViewRect(
-                centre.X - (size / 2.0),
-                centre.Y - (size / 2.0),
-                size,
-                size);
+            // The anchor: the drawn square is centred on the same render point.
+            var drawn = CameraView.GoblinDrawRect(centre, tileSize);
 
-            Assert.Equal(centre, drawn.Center);
-            Assert.Equal(size, drawn.Width);
-            Assert.Equal(size, drawn.Height);
+            Assert.Equal(centre.X, drawn.Center.X, 12);
+            Assert.Equal(centre.Y, drawn.Center.Y, 12);
+            Assert.Equal(CameraView.GoblinDrawSize(tileSize), drawn.Width, 12);
+            Assert.Equal(drawn.Width, drawn.Height);
         }
+    }
+
+    /// <summary>
+    /// What a centred square costs at 170 %, in the numbers rather than in prose:
+    /// the growth is shared between up and down, so the drawn feet end up lower
+    /// than they were and just outside the cell the body stands on.
+    ///
+    /// <para>
+    /// The v1 sheet's last opaque row is 92 of 96 in all four states — measured,
+    /// not assumed — so «where the feet are» is 92/96 of the way down the square.
+    /// This test exists so the number is a fact under test rather than a claim in
+    /// a handoff: the alternative rule, anchoring the square on the old foot line,
+    /// holds the feet still but makes a body 43.6 px tall above its centre, which
+    /// is enough for a head to reach a room outline drawn above the depth pass in
+    /// 2 measured positions of the shipped map (Issue #156's declared exception).
+    /// The next subtask of Issue #77 replaces this square with the v2 pack's 17:12
+    /// rectangle and settles the placement rule then.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_centred_square_lowers_the_drawn_feet_by_a_measured_amount()
+    {
+        const double lastOpaqueRowOfV1 = 92.0 / 96.0;
+        var centre = CameraView.CellCenter(new GridPoint(14, 8), 40);
+
+        var before = (20.0 * 40.0 / 22.0 * lastOpaqueRowOfV1) - (20.0 * 40.0 / 22.0 / 2.0);
+        var drawn = CameraView.GoblinDrawRect(centre, 40);
+        var after = drawn.Y + (drawn.Height * lastOpaqueRowOfV1) - centre.Y;
+
+        Assert.Equal(16.67, before, 2);
+        Assert.Equal(28.33, after, 2);
+        Assert.Equal(11.67, after - before, 2);
+
+        // Half a cell is 20 px: the feet used to be inside the cell and are now
+        // just outside it.
+        Assert.True(before < 20.0);
+        Assert.True(after > 20.0);
     }
 
     /// <summary>

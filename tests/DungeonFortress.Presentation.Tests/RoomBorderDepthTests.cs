@@ -617,6 +617,18 @@ public sealed class RoomBorderDepthTests
             ? CameraView.GoblinDrawSize(tileSize)
             : PreIssue77BodyReferenceSize * CameraView.WorldVisualScale(tileSize);
 
+    /// <summary>
+    /// The rectangle a body's sprite occupies at <paramref name="centre"/>. Today's
+    /// comes from production geometry rather than a copy of it; a historical column
+    /// is the square that geometry drew when the body was
+    /// <see cref="PreIssue77BodyReferenceSize"/> — the same rule, because the foot
+    /// line Issue #77 grows a body out of is half of that very body.
+    /// </summary>
+    private static ViewRect BodyRect(ViewPoint centre, int tileSize, Arrangement arrangement) =>
+        arrangement == Arrangement.Today
+            ? CameraView.GoblinDrawRect(centre, tileSize)
+            : Square(centre, BodyDrawSize(tileSize, arrangement));
+
     /// <param name="Room">The room whose outline this stroke belongs to.</param>
     /// <param name="Side">Which side of its cell the stroke faces.</param>
     /// <param name="Cell">The room cell the stroke was drawn for.</param>
@@ -683,7 +695,7 @@ public sealed class RoomBorderDepthTests
         var rock = state.Map.RockTiles.ToHashSet();
         var scale = CameraView.WorldVisualScale(tileSize);
         var half = RoomGeometry.BorderStrokeHalfWidth * scale;
-        var bodies = BodyPositions(rock, tileSize, BodyDrawSize(tileSize, arrangement));
+        var bodies = BodyPositions(rock, tileSize, arrangement);
         var walls = Walls(rock, tileSize);
 
         var crossings = new List<Crossing>();
@@ -836,10 +848,12 @@ public sealed class RoomBorderDepthTests
     /// happen to be standing somewhere today.
     ///
     /// A body's sprite reaches half of <see cref="CameraView.GoblinDrawSize"/>
-    /// below its own render centre, so the southernmost centre from which anybody
-    /// can touch the stroke is its lower edge plus that half. A wall anchored south
-    /// of that point is drawn after every one of those bodies, whatever they are
-    /// doing and wherever between two cells the interpolation has them.
+    /// below its own render centre — <see cref="CameraView.GoblinDrawRect"/> is a
+    /// square centred on that point, at 170 % as before it — so the southernmost
+    /// centre from which anybody can touch the stroke is its lower edge plus that
+    /// half. A wall anchored south of that point is drawn after every one of those
+    /// bodies, whatever they are doing and wherever between two cells the
+    /// interpolation has them.
     /// </summary>
     private static IReadOnlyList<ViewRect> InFrontOfEverybodyTouching(
         ViewRect stroke,
@@ -865,18 +879,18 @@ public sealed class RoomBorderDepthTests
     /// between two of them: a body's render centre is interpolated, so it spends
     /// most of its life between two cells rather than on one.
     ///
-    /// The rectangle is <paramref name="size"/> square — for today's arrangement
-    /// <see cref="CameraView.GoblinDrawSize"/>, which is what <c>Main.DrawGoblin</c>
-    /// draws the sprite into and is wider than the coloured disc underneath it, and
-    /// for a historical column the body of that column's own time
-    /// (<see cref="BodyDrawSize"/>). Using the drawn rectangle rather than the
-    /// sprite's opaque pixels overstates the body, which is the safe direction for
-    /// a check that has to find lines crossing it.
+    /// The rectangle comes from production geometry for today's arrangement —
+    /// <see cref="CameraView.GoblinDrawRect"/>, which is what <c>Main.DrawGoblin</c>
+    /// draws the sprite into and is wider than the coloured disc underneath it —
+    /// and from the body of its own time for a historical column
+    /// (<see cref="BodyRect"/>). Using the drawn rectangle rather than the sprite's
+    /// opaque pixels overstates the body, which is the safe direction for a check
+    /// that has to find lines crossing it.
     /// </summary>
     private static IReadOnlyList<BodyPosition> BodyPositions(
         IReadOnlySet<GridPoint> rock,
         int tileSize,
-        double size)
+        Arrangement arrangement)
     {
         var positions = new List<BodyPosition>();
         var steps = new[] { new GridPoint(1, 0), new GridPoint(0, 1) };
@@ -891,7 +905,10 @@ public sealed class RoomBorderDepthTests
                 }
 
                 var centre = CameraView.CellCenter(cell, tileSize);
-                positions.Add(new BodyPosition($"{x},{y}", Square(centre, size), centre.Y));
+                positions.Add(new BodyPosition(
+                    $"{x},{y}",
+                    BodyRect(centre, tileSize, arrangement),
+                    centre.Y));
                 foreach (var step in steps)
                 {
                     var next = new GridPoint(x + step.X, y + step.Y);
@@ -906,7 +923,7 @@ public sealed class RoomBorderDepthTests
                     var middle = new ViewPoint((centre.X + far.X) / 2.0, (centre.Y + far.Y) / 2.0);
                     positions.Add(new BodyPosition(
                         $"{x},{y}->{next.X},{next.Y}",
-                        Square(middle, size),
+                        BodyRect(middle, tileSize, arrangement),
                         middle.Y));
                 }
             }

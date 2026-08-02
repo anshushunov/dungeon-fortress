@@ -487,13 +487,47 @@ public static class CameraView
     /// <c>20 * 1.70 * 40 / 22 = 61.81…</c> px.
     ///
     /// <para>
-    /// The foot pivot is untouched: <c>DrawGoblin</c> centres this square on the
-    /// same render point it always did, so a body grows around where it stands
-    /// rather than moving off its cell.
+    /// How large the square is, not where it sits: <see cref="GoblinDrawRect"/>
+    /// places it, on the same render point it always did.
     /// </para>
     /// </summary>
     public static double GoblinDrawSize(int tileSize) =>
         ReferenceGoblinDrawSize * BodyVisualScale * WorldVisualScale(tileSize);
+
+    /// <summary>
+    /// The rectangle a body's sprite is drawn into, for a body whose render
+    /// centre — the interpolated point the depth pass sorts it by — is
+    /// <paramref name="centre"/>. The square is centred on that point, which is
+    /// the rule the adapter has always drawn by; it lives here rather than in
+    /// <c>Main.DrawGoblin</c> so that where a body is drawn can be measured
+    /// without the engine, which Issue #77 is the first change to need.
+    ///
+    /// <para>
+    /// <b>The one thing this rule costs at 170 %, recorded because it is a real
+    /// consequence and not a rounding error.</b> A centred square grows in all
+    /// four directions, so the drawn feet — the v1 sheet's last opaque row, 92 of
+    /// 96 — sink from 16.7 px below the render centre to 28.3 px, i.e. 11.7 px or
+    /// 29 % of a 40 px cell, and land just outside the cell the body stands on.
+    /// Anchoring the square on that foot line instead would hold the feet exactly
+    /// where they were, and it is what spike #142's scene did; it also makes a
+    /// body 43.6 px tall above its centre, which is enough for a head to reach a
+    /// room outline drawn above the depth pass — 2 positions on the shipped map,
+    /// 7.4 px of overlap, measured, and a partial undoing of Issue #156. Choosing
+    /// between those is not this change's to make: the next subtask of Issue #77
+    /// connects the v2 pack and has to replace this square with a 17:12 rectangle
+    /// anyway, and that is where the placement rule is settled, with the art it
+    /// was authored for in front of whoever settles it.
+    /// </para>
+    /// </summary>
+    public static ViewRect GoblinDrawRect(ViewPoint centre, int tileSize)
+    {
+        var size = GoblinDrawSize(tileSize);
+        return new ViewRect(
+            centre.X - (size / 2.0),
+            centre.Y - (size / 2.0),
+            size,
+            size);
+    }
 
     public static ViewSize MapSize(int tileSize)
     {

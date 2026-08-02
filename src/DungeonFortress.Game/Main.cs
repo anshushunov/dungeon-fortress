@@ -5378,13 +5378,14 @@ public partial class Main : Node2D
     {
         if (_goblinSprites.TryGetValue(key, out var sprite))
         {
-            var drawSize = (float)CameraView.GoblinDrawSize(_tileSize);
-            var halfSize = drawSize / 2f;
+            // Where the square goes is CameraView's answer, not this method's,
+            // so that Issue #77's 170 % and the placement it grows by can be
+            // measured without the engine.
             DrawTextureRect(
                 sprite,
-                new Rect2(
-                    center - new Vector2(halfSize, halfSize),
-                    new Vector2(drawSize, drawSize)),
+                ToRect2(CameraView.GoblinDrawRect(
+                    new ViewPoint(center.X, center.Y),
+                    _tileSize)),
                 false);
             return;
         }
