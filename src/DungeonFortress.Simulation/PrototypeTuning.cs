@@ -176,6 +176,20 @@ public static class PrototypeTuning
     // "the part of the room" is closer to "the room". That is the price of the
     // mechanic being observable at all on this map, and it is named rather than
     // hidden.
+    //
+    // Issue #171: the measurement above was taken before Issue #129, and the map
+    // it describes is not the map any more. The approach rule puts defenders on
+    // the tiles around a raider instead of behind one another, a raider stands at
+    // the larder, and so memories are now written on the larder itself — four of
+    // the sixteen on baseline/20260728, with four more within two tiles of it
+    // (evidence/171-before.json). "There is no work on the road to refuse" was
+    // the whole reason four was needed, and it has stopped being true.
+    //
+    // At four the reach is a diamond of 41 tiles. From (14,7) it covers every
+    // larder tile and all of the kitchen but its west column, so one broken nerve
+    // on one larder tile takes the whole food chain away from that creature —
+    // measured as 301 refusals of a haul at (11,7), three steps away, by a
+    // creature that remembers (14,7).
     public const int MemoryPlacesMax = 3;
     public const int MemoryAvoidRadius = 4;
 

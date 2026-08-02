@@ -3121,6 +3121,25 @@ public sealed class PrototypeWorld
     /// memory refuses it. The nearest remembered place wins, and ties go to the
     /// newer memory and then to the tile order, so the answer never depends on
     /// the order the dictionary happens to enumerate in.
+    ///
+    /// <para>
+    /// <b>This method is the whole price of memory of place.</b> Nothing else in
+    /// the simulation reads a remembered place, so whatever a memory costs the
+    /// domain, it costs it here, one (creature, job) pair at a time. The price
+    /// has exactly two dimensions — <b>how far</b> a memory refuses and <b>how
+    /// long</b> it goes on refusing — and today only the first of them is bounded
+    /// by anything. That is the defect of Issue #171, and the analysis with the
+    /// commands it was measured by is in <c>evidence/171-before.json</c>.
+    /// </para>
+    ///
+    /// <para>
+    /// Neither dimension knows what stands on the tile it refuses, and that is
+    /// deliberate: a rule that charged less for a larder tile than for a corridor
+    /// would be a rule about the map rather than about the creature. What has to
+    /// keep the price proportionate is therefore the size of the two dimensions
+    /// themselves — a memory may take away <b>a place for a while</b>, and may
+    /// not take away a room for a party.
+    /// </para>
     /// </summary>
     private static PrototypeRememberedPlace? AvoidedPlace(CreatureState creature, GridPoint target)
     {
