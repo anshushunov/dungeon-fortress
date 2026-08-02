@@ -1,0 +1,85 @@
+# Проверяемость происхождения ассетов
+
+Статус: рабочий документ Issue
+[#179](https://github.com/anshushunov/dungeon-fortress/issues/179) от
+2026-08-01 (запись реестра долга `DEBT_LEDGER.md`: «Понадобится перегенерировать
+пак или доказать, что конкретный PNG получен именно описанной обработкой — и
+окажется, что ни исходника, ни хелпера нет»). Документ ведёт разбор трёх
+существующих provenance (v1, icons, v2), фиксирует решение о хранении
+источников, восстанавливает скрипт пост-обработки и несёт контрольные суммы.
+
+## Разбор 2026-08-02: что именно непроверяемо
+
+Три provenance — `goblin-v1-provenance.md`, `icons-v1-provenance.md`,
+`goblin-v2-provenance.md`. У каждой проверяются два слоя: **происхождение
+источника** (какой файл, и тот ли он) и **процесс** (можно ли повторить шаги
+пост-обработки по репозиторию).
+
+### Общий измеримый дефект
+
+```powershell
+git ls-tree -r --name-only origin/main | rg -i "chroma|\.py$"
+```
+
+До Issue #179 команда даёт пусто (exit 1): в дереве нет ни одного `.py` и ни
+одного упоминания `chroma`. `remove_chroma_key.py`, названный обязательным шагом
+пост-обработки во всех трёх записях, отсутствует. Детерминированную часть —
+шаги chroma key, нарезки, масштабирования и размещения — нельзя ни перезапустить,
+ни проверить.
+
+### goblin-v1-provenance.md
+
+| Что заявлено | Проверяемо? | Команда |
+|---|---|---|
+| Источник: «one 2×2 sheet on a flat magenta background; the large source and intermediate alpha sheet remain outside Git» | Нет. Имя файла не названо, контрольной суммы нет | `git ls-tree -r --name-only origin/main \| rg -i "chroma\|\.py$"` → пусто |
+| Chroma key `#f803f6`, обработан `remove_chroma_key.py` (auto-key border, soft matte, thresholds 12/220, despill) | Нет, скрипта нет в дереве | `rg -n "remove_chroma_key" docs/` → только упоминания в тексте |
+| Пост-процесс: crop, LANCZOS resize до 84px, bottom-anchor в 96×96 | Нет, это одноразовые inline-скрипты вне репозитория | — |
+| Рантайм-финалы: 4 PNG 96×96 RGBA в Git | Да, это закоммиченные финалы | `python -c "from PIL import Image; [print(p, Image.open(p).size) for p in ...]"` |
+
+Итог: непроверяемо **и происхождение источника** (не назван файл, нет суммы), и
+**процесс** (нет скрипта, пострепроцессинг одноразовый).
+
+### icons-v1-provenance.md
+
+| Что заявлено | Проверяемо? | Команда |
+|---|---|---|
+| Источник: `call_4mB0OlBELzdJ6BKBewCnvFu4.png`, 1254×1254, вне Git | Частично: имя есть, контрольной суммы нет | — |
+| Chroma key `#f703f6`, обработан `remove_chroma_key.py` | Нет, скрипта нет | `git ls-tree -r --name-only origin/main \| rg -i "chroma\|\.py$"` → пусто |
+| Пост-процесс: split 4×4, crop, LANCZOS, палитра, hard-matte 96, nearest 48×48; пары cancel | Нет, одноразовые inline-скрипты | — |
+| Рантайм-финалы: 16 PNG 48×48 RGBA в Git | Да | `python -c "from PIL import Image; ..."` |
+
+Итог: процесс непроверяем (нет скрипта), происхождение источника проверяемо
+только по имени, не по байтам.
+
+### goblin-v2-provenance.md
+
+| Что заявлено | Проверяемо? | Команда |
+|---|---|---|
+| Источник пака: `exec-993a3e19-...png`, 1536×1024, вне Git | Частично: имя есть, контрольной суммы нет | — |
+| Источник flinch: `exec-d14b69b4-...png`, 1408×1117, вне Git | Частично: имя есть, контрольной суммы нет | — |
+| Chroma key `#fb03f9`, `remove_chroma_key.py` с флагами `--auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill`; заявлены числа 1,254,108 / 12,954 (пак) и 1,196,694 / 6,883 (flinch) | Нет, скрипта нет; числа записаны, но не воспроизводимы | `git ls-tree -r --name-only origin/main \| rg -i "chroma\|\.py$"` → пусто |
+| Шаги 2–6 (split, crop, components, resize, placement) | Нет, одноразовые inline-скрипты | — |
+| Результат: «Reproducible verification commands» | Да, inline-Python по закоммиченным финалам | секция в документе |
+
+Итог: результат проверяем по финалам, но **процесс** (chroma key и
+пострепроцессинг) — нет, а контрольной суммы нет ни у одного из двух источников.
+
+## Что найдено на машине генерации 2026-08-02
+
+Разбор показал, что и скрипт, и все четыре источника существуют на машине,
+которая их создавала. Это меняет решение: недостающее можно не выдумывать, а
+**восстановить** и предъявить проверяющему.
+
+- Скрипт: `C:\Users\User\.codex\skills\.system\imagegen\scripts\remove_chroma_key.py`
+  (хелпер skills `imagegen` Codex, Apache-2.0). SHA-256 `7e512369...`.
+- Источники — в кэше `C:\Users\User\.codex\generated_images\<сессия>\`:
+  - пак v2: `exec-993a3e19-1b8c-4c8c-93ef-244fb9a3d9d9.png`;
+  - flinch: `exec-d14b69b4-78bb-408e-bd7e-89524e292621.png`;
+  - лист v1: `call_1XyNBeXZYWqooldTTJ6Pn2Gs.png`;
+  - лист icons: `call_4mB0OlBELzdJ6BKBewCnvFu4.png`.
+
+Воспроизведение скриптом на реальных источниках даёт **дословно** числа, записанные
+в provenance v2: 1,254,108 / 12,954 из 1,572,864 и 1,196,694 / 6,883 из 1,572,736,
+а снятая им alpha-пластина пака v2 побайтово совпадает с сохранённой
+промежуточной (`sha256` `bc845f9a...`). Подробности — в
+[`evidence/179-analysis.json`](../../evidence/179-analysis.json).

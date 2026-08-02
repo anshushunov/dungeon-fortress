@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "issue": 179,
+  "when": "2026-08-02, worktree agent/179-provenance, repo C:\\gamedev\\_wt-179",
+  "what": "Разбор непроверяемости происхождения трёх provenance (goblin v1, icons v1, goblin v2): скрипт remove_chroma_key.py отсутствовал в дереве, у источников не было контрольных сумм. Найдены и сам скрипт, и все четыре источника на машине генерации; скрипт проверен на воспроизводимость записанных чисел.",
+  "part": {
+    "script": "C:\\Users\\User\\.codex\\skills\\.system\\imagegen\\scripts\\remove_chroma_key.py",
+    "sourcesCache": "C:\\Users\\User\\.codex\\generated_images\\<session-id>\\",
+    "scriptLicense": "Apache-2.0 (LICENSE.txt рядом со скриптом в skills/.system/imagegen)"
+  },
+  "measurements": [
+    {
+      "id": "tree-no-py-no-chroma",
+      "claim": "До правки в дереве нет ни одного .py и ни одного упоминания chroma",
+      "command": "git ls-tree -r --name-only origin/main | rg -i \"chroma|\\.py$\"",
+      "result": "exit 1, пусто",
+      "takenOn": "2026-08-02"
+    },
+    {
+      "id": "script-exists-on-machine",
+      "claim": "remove_chroma_key.py существует на машине генерации как хелпер imagegen skill Codex",
+      "command": "Get-FileHash -Algorithm SHA256 'C:\\Users\\User\\.codex\\skills\\.system\\imagegen\\scripts\\remove_chroma_key.py'",
+      "resultSha256": "7e51236919203b61d07ddffdc6e0b5f501a28661003f5851f26ffbb64bdec1ea",
+      "note": "Тот же файл вызывался в сессиях Codex 2026-07-26/28 и 2026-08-01/02 с флагами --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill",
+      "takenOn": "2026-08-02"
+    },
+    {
+      "id": "v2-source",
+      "claim": "Источник пака v2 1536x1024 RGB",
+      "command": "python -c \"from PIL import Image; im=Image.open(r'C:\\Users\\User\\.codex\\generated_images\\019fbdfd-2477-7ff0-ac5a-259b2e984de0\\exec-993a3e19-1b8c-4c8c-93ef-244fb9a3d9d9.png'); print(im.mode, im.size)\"",
+      "result": "RGB (1536, 1024)",
+      "sha256": "5173884b71b16c59ab08567fb5ddbefc6997f0de30fc67c1c6fa27093c996b0a",
+      "takenOn": "2026-08-02"
+    },
+    {
+      "id": "flinch-source",
+      "claim": "Источник flinch 1408x1117 RGB",
+      "command": "python -c \"from PIL import Image; im=Image.open(r'C:\\Users\\User\\.codex\\generated_images\\019fc1a1-d585-7732-b36c-a1fa9dcd1390\\exec-d14b69b4-78bb-408e-bd7e-89524e292621.png'); print(im.mode, im.size)\"",
+      "result": "RGB (1408, 1117)",
+      "sha256": "11c09668eca933fa5c1795510a46425781ff5e895bdbc6eba2d0c5bc41781dea",
+      "takenOn": "2026-08-02"
+    },
+    {
+      "id": "v1-source",
+      "claim": "Источник v1 (2x2 лист) 1254x1254 RGB",
+      "command": "python -c \"from PIL import Image; im=Image.open(r'C:\\Users\\User\\.codex\\generated_images\\019f9dd3-1365-7a02-82db-0cb8a1b7075f\\call_1XyNBeXZYWqooldTTJ6Pn2Gs.png'); print(im.mode, im.size)\"",
+      "result": "RGB (1254, 1254)",
+      "sha256": "2d2ed58e9cc01830b6be9ec3f9eca40ea4477b9196761c56665d333a0d09ee93",
+      "takenOn": "2026-08-02"
+    },
+    {
+      "id": "icons-source",
+      "claim": "Источник icons (4x4 лист) 1254x1254 RGB, имя совпадает с записью provenance",
+      "command": "python -c \"from PIL import Image; im=Image.open(r'C:\\Users\\User\\.codex\\generated_images\\019fa9c3-b561-78c1-b512-3ef3211bf5cb\\call_4mB0OlBELzdJ6BKBewCnvFu4.png'); print(im.mode, im.size)\"",
+      "result": "RGB (1254, 1254)",
+      "sha256": "d8ea688c1fdb97ccf2538d99d0fae1442fa201d589b34cc428702914dc10266f",
+      "takenOn": "2026-08-02"
+    },
+    {
+      "id": "v2-repro",
+      "claim": "Скрипт на источнике v2 даёт записанные в provenance числа 1,254,108 полностью прозрачных и 12,954 частично прозрачных из 1,572,864",
+      "command": "python remove_chroma_key.py --input v2-source.png --out v2-alpha.png --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill",
+      "result": "Key color: #fb03f9; Transparent pixels: 1254108/1572864; Partially transparent pixels: 12954/1572864",
+      "matchesProvenance": "да: goblin-v2-provenance.md записывает 1,254,108 / 12,954 из 1,572,864",
+      "takenOn": "2026-08-02"
+    },
+    {
+      "id": "flinch-repro",
+      "claim": "Скрипт на источнике flinch даёт записанные в provenance числа 1,196,694 / 6,883 из 1,572,736",
+      "command": "python remove_chroma_key.py --input flinch-source.png --out flinch-alpha.png --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill",
+      "result": "Key color: #fb03f9; Transparent pixels: 1196694/1572736; Partially transparent pixels: 6883/1572736",
+      "matchesProvenance": "да: goblin-v2-provenance.md (Issue #165) записывает 1,196,694 / 6,883 из 1,572,736",
+      "takenOn": "2026-08-02"
+    },
+    {
+      "id": "v2-alpha-intermediate-byte-identical",
+      "claim": "Снятая скриптом alpha-пластина пака v2 побайтово совпадает с сохранённой промежуточной .artifacts/imagegen/goblin_v2_sheet_alpha.png",
+      "command": "Get-FileHash -Algorithm SHA256 'C:\\WINDOWS\\TEMP\\df179\\v2-alpha.png'; Get-FileHash -Algorithm SHA256 'C:\\gamedev\\Dungeon fortress\\.artifacts\\imagegen\\goblin_v2_sheet_alpha.png'",
+      "result": "оба bc845f9afa3759819b7ec0943d737761583e918ea59609883a141e9b654a1bd9",
+      "takenOn": "2026-08-02"
+    },
+    {
+      "id": "flinch-alpha-bbox",
+      "claim": "bbox альфы flinch совпадает с записью provenance (crop 181,137-1149,995)",
+      "command": "python -c \"from PIL import Image; print(Image.open(r'C:\\WINDOWS\\TEMP\\df179\\flinch-alpha.png').getchannel('A').getbbox())\"",
+      "result": "(181, 137, 1149, 995)",
+      "matchesProvenance": "да: goblin-v2-provenance.md (Issue #165) записывает crop bounds 181,137-1149,995",
+      "takenOn": "2026-08-02"
+    },
+    {
+      "id": "flinch-one-component",
+      "claim": "В источнике flinch после chroma-key один 8-connected компонент (в provenance: zero alpha pixels removed)",
+      "command": "inline numpy BFS 8-connectivity по маске alpha>0",
+      "result": "1",
+      "matchesProvenance": "да: запись #165 утверждает один компонент",
+      "takenOn": "2026-08-02"
+    },
+    {
+      "id": "runtime-png-formats",
+      "claim": "Рантайм-финалы на месте: v1 — 4 PNG 96x96 RGBA, icons — 16 PNG 48x48 RGBA",
+      "command": "python -c \"from PIL import Image; [print(p, Image.open(p).mode, Image.open(p).size) for p in ...]\"",
+      "result": "goblin_*_v1.png RGBA 96x96 (4 шт); icons/*.png RGBA 48x48 (16 шт)",
+      "takenOn": "2026-08-02"
+    }
+  ],
+  "decisions": {
+    "sources": "Источники остаются вне Git; контрольная сумма записана в каждый provenance; причина названа в docs/art/PROVENANCE_VERIFIABILITY.md",
+    "script": "remove_chroma_key.py восстановлен в scripts/art/ как точная копия найденного хелпера",
+    "criterion4": "ни один PNG не изменён — git diff --stat origin/main..HEAD -- '*.png' пуст"
+  }
+}
