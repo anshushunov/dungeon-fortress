@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "issue": 77,
+  "checkpoint": "4 — the checks are shown to be able to fail",
+  "note": "Run against the committed state db7c596 («Кадр «после» и доказательство…»), i.e. after the checked state was committed, not before it. Each mutant was applied to the working tree, measured, and reverted with `git checkout -- src/DungeonFortress.Presentation/CameraView.cs`; the restored tree was re-run and is green at 491 passed.",
+  "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -v q --nologo",
+  "baseline": {"passed": 491, "failed": 0},
+
+  "mutants": [
+    {
+      "name": "the decision is undone",
+      "where": "src/DungeonFortress.Presentation/CameraView.cs",
+      "change": "BodyVisualScale = 1.70 -> 1.00",
+      "why": "The mutant the brief requires: the multiplier that carries the owner's choice. At 1.00 the code is exactly what shipped before this change, so a green suite here would mean the change is not held by anything.",
+      "result": "FAILED: 3 of 491 — CameraViewTests.A_body_is_drawn_at_the_owner_selected_170_percent_of_its_previous_size (the size falls back to 800/22 = 36.36 px against the pinned 1360/22), CameraViewTests.The_selected_scale_states_what_it_asks_of_the_art_at_both_ends_of_the_zoom_range (overview 18.2 px is outside the pinned 30-31 band), CameraViewTests.A_centred_square_lowers_the_drawn_feet_by_a_measured_amount (the feet stop moving at all)."
+    },
+    {
+      "name": "the neighbouring value the owner rejected",
+      "where": "src/DungeonFortress.Presentation/CameraView.cs",
+      "change": "BodyVisualScale = 1.70 -> 1.50",
+      "why": "1.00 is a large step and could be caught by a coarse check. 150 % is the value the gate log names as the one still leaving gaps between fighters in a corridor — the nearest wrong answer, and the one a careless edit is most likely to leave behind.",
+      "result": "FAILED: the same 3 tests. 20 * 1.5 * 40 / 22 = 54.55 px against the pinned 61.82, overview 27.3 px against the 30-31 band."
+    },
+    {
+      "name": "the scale is applied to the world instead of to the body",
+      "where": "src/DungeonFortress.Presentation/CameraView.cs",
+      "change": "WorldVisualScale(tileSize) => tileSize / 22 * BodyVisualScale, and GoblinDrawSize drops its own factor",
+      "why": "The interesting wrong version rather than an obviously broken one: it produces exactly the right body size — 61.82 px at tile 40 — while growing the grid-scaled world with it. If only the body size were pinned, this would pass, and acceptance criterion 2 («the grid and the cell did not change») would be resting on nothing.",
+      "result": "FAILED: 12 of 491. CameraViewTests.Growing_the_body_moves_neither_the_grid_nor_the_point_a_body_is_placed_by and RoomGeometryTests.ReferenceCell_is_the_one_CameraView_scales_by catch the scale itself; RoomBorderDepthTests.The_border_used_to_be_drawn_over_every_body_that_stood_on_it at all three tile sizes and seven WorldRenderGeometryTests cases catch the world primitives that moved with it. The three body-size tests stay green, which is the point of the mutant."
+    }
+  ],
+
+  "restored": {
+    "command": "git checkout -- src/DungeonFortress.Presentation/CameraView.cs && dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -v q --nologo",
+    "result": "491 passed, 0 failed — the tree is back to the committed state and nothing from the mutation round is left in it."
+  }
+}
