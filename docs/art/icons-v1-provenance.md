@@ -15,8 +15,13 @@ draws them at exactly 24×24.
 - Generation parameters: one 4×4 source sheet; no input/reference images and no
   user-selectable size, quality, seed, or transparency parameters were exposed;
   the returned RGB source was 1254×1254
-- Source: `call_4mB0OlBELzdJ6BKBewCnvFu4.png`, retained outside Git with the
-  large source and intermediate alpha/preview files
+- Source: `call_4mB0OlBELzdJ6BKBewCnvFu4.png`, 1254×1254 RGB. SHA-256
+  `d8ea688c1fdb97ccf2538d99d0fae1442fa201d589b34cc428702914dc10266f`. Lives on
+  the generating machine at
+  `~/.codex/generated_images/019fa9c3-b561-78c1-b512-3ef3211bf5cb/`; retained
+  outside Git with the large source and intermediate alpha/preview files per the
+  decision in [`PROVENANCE_VERIFIABILITY.md`](PROVENANCE_VERIFIABILITY.md)
+  (Issue #179).
 - Chroma key: sampled `#f703f6`, processed by `remove_chroma_key.py` with
   auto-key border, soft matte, thresholds `12/220`, and despill
 - Post-process: the sheet was split into its 4×4 cells; each selected cell was
@@ -36,6 +41,28 @@ draws them at exactly 24×24.
   rules, centring every icon on the same canvas, and defining the shared cancel
   slash. All source sheets, scripts, contact sheets, and previews remain outside
   Git.
+
+## Verifiability (Issue #179, 2026-08-02)
+
+Post-processing steps and their executability from the repo:
+
+1. **Chroma key** — executable. `scripts/art/remove_chroma_key.py` in this repo
+   is byte-identical to the helper used (SHA-256 `7e512369...`). Run from the
+   repo root on the source with the recorded flags:
+
+   ```powershell
+   python scripts/art/remove_chroma_key.py --input <source.png> --out <alpha.png> `
+     --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill
+   ```
+
+   The helper's own run on the source (measured 2026-08-02) returns
+   `Key color: #f703f6`, matching the sampled value recorded above.
+2. **Split into 4×4 cells, crop, LANCZOS to 20×20, palette mapping, hard-matte
+   at alpha 96, nearest-neighbour to 48×48; pixel-copy cancel pairs and the
+   shared cancel slash** — not executable from the repo: performed with one-off
+   inline Python/Pillow scripts that were not retained. The result is the
+   committed 16 `icon_*.png` finals (48×48 RGBA), so the outcome is inspectable
+   even though the exact step cannot be re-run.
 
 Exact prompt:
 

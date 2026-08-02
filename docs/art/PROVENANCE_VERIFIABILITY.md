@@ -139,3 +139,26 @@ python scripts/art/remove_chroma_key.py --input <источник> --out <alpha.
 #fb03f9; Transparent pixels: 1254108/1572864; Partially transparent pixels:
 12954/1572864` — дословно числа provenance. Источник flinch даёт
 `1196694/1572736` и `6883/1572736` — дословно числа записи #165.
+
+## Контрольные суммы источников
+
+Проставлены в каждый из трёх provenance (`goblin-v1-provenance.md`,
+`icons-v1-provenance.md`, `goblin-v2-provenance.md`). Команда для всех:
+`Get-FileHash -Algorithm SHA256 <файл>`; значения получены 2026-08-02
+(`evidence/179-analysis.json`).
+
+| Provenance | Источник | Размер | SHA-256 |
+|---|---|---|---|
+| goblin-v2 (пак) | `exec-993a3e19-1b8c-4c8c-93ef-244fb9a3d9d9.png` | 1536×1024 | `5173884b71b16c59ab08567fb5ddbefc6997f0de30fc67c1c6fa27093c996b0a` |
+| goblin-v2 (flinch) | `exec-d14b69b4-78bb-408e-bd7e-89524e292621.png` | 1408×1117 | `11c09668eca933fa5c1795510a46425781ff5e895bdbc6eba2d0c5bc41781dea` |
+| goblin-v1 | `call_1XyNBeXZYWqooldTTJ6Pn2Gs.png` | 1254×1254 | `2d2ed58e9cc01830b6be9ec3f9eca40ea4477b9196761c56665d333a0d09ee93` |
+| icons-v1 | `call_4mB0OlBELzdJ6BKBewCnvFu4.png` | 1254×1254 | `d8ea688c1fdb97ccf2538d99d0fae1442fa201d589b34cc428702914dc10266f` |
+
+Восстановленный скрипт — `scripts/art/remove_chroma_key.py`, SHA-256
+`7e51236919203b61d07ddffdc6e0b5f501a28661003f5851f26ffbb64bdec1ea` (копия,
+проверена побайтово).
+
+Промежуточная alpha-пластина пака v2 (сохранена на машине генерации вне Git):
+`bc845f9afa3759819b7ec0943d737761583e918ea59609883a141e9b654a1bd9` — совпадает с
+результатом восстановленного скрипта, что замыкает «скрипт → записанные числа»
+без допущений.

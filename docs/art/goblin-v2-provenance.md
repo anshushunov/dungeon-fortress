@@ -26,8 +26,12 @@ outline, so no second raider set was generated.
 - Generation parameters exposed by the tool: exact prompt below, one output;
   seed, quality, and requested pixel size were not exposed
 - Generated source: one 3×2 sheet, 1536×1024 PNG, default built-in output
-  `exec-993a3e19-1b8c-4c8c-93ef-244fb9a3d9d9.png`; the large source and
-  intermediate alpha sheet remain outside Git
+  `exec-993a3e19-1b8c-4c8c-93ef-244fb9a3d9d9.png`. SHA-256
+  `5173884b71b16c59ab08567fb5ddbefc6997f0de30fc67c1c6fa27093c996b0a`; lives on
+  the generating machine at
+  `~/.codex/generated_images/019fbdfd-2477-7ff0-ac5a-259b2e984de0/`; the large
+  source and intermediate alpha sheet remain outside Git per the decision in
+  [`PROVENANCE_VERIFIABILITY.md`](PROVENANCE_VERIFIABILITY.md) (Issue #179)
 - Requested chroma key: `#ff00ff`; the border sampler measured the generated
   background as `#fb03f9`
 - Manual paint/editing: none
@@ -136,8 +140,13 @@ remains visibly held throughout `combat → flinch → combat`.
 - Generation parameters exposed by the tool: exact prompt below, one output;
   seed, quality, input fidelity, and requested pixel size were not exposed
 - Generated source: one 1408×1117 PNG, default built-in output
-  `exec-d14b69b4-78bb-408e-bd7e-89524e292621.png`; the large chroma-key source
-  and intermediate alpha image remain outside Git
+  `exec-d14b69b4-78bb-408e-bd7e-89524e292621.png`. SHA-256
+  `11c09668eca933fa5c1795510a46425781ff5e895bdbc6eba2d0c5bc41781dea`; lives on
+  the generating machine at
+  `~/.codex/generated_images/019fc1a1-d585-7732-b36c-a1fa9dcd1390/`; the large
+  chroma-key source and intermediate alpha image remain outside Git per the
+  decision in [`PROVENANCE_VERIFIABILITY.md`](PROVENANCE_VERIFIABILITY.md)
+  (Issue #179)
 - Requested chroma key: `#ff00ff`; the border sampler measured the generated
   background as `#fb03f9`
 - Manual paint/editing: none
@@ -347,3 +356,34 @@ print(output.resolve())
 > выше одноразовым inline Python/Pillow-скриптом и просмотрен через Codex
 > `view_image(detail=original)`. Внутренняя проверка исполнителя; независимый
 > блочный review не заявляется.
+
+## Verifiability (Issue #179, 2026-08-02)
+
+Пост-обработка и её исполнимость по репозиторию. Числа ниже измерены прогоном
+восстановленного скрипта на реальных источниках; команды и хеши — в
+[`evidence/179-analysis.json`](../../evidence/179-analysis.json).
+
+1. **Chroma key** — executable. `scripts/art/remove_chroma_key.py` в этом
+   репозитории побайтово совпадает с использованным хелпером (SHA-256
+   `7e512369...`). Запуск из корня репозитория на источнике пака:
+
+   ```powershell
+   python scripts/art/remove_chroma_key.py --input <v2-source.png> --out <alpha.png> `
+     --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill
+   ```
+
+   Даёт `Key color: #fb03f9; Transparent pixels: 1254108/1572864; Partially
+   transparent pixels: 12954/1572864` — дословно числа раздела «Post-processing»
+   выше, и снятая alpha-пластина побайтово совпадает с сохранённой
+   промежуточной `sha256 bc845f9a...`. Для источника flinch тот же прогон даёт
+   `1196694/1572736` и `6883/1572736` — дословно числа раздела «Issue #165»,
+   а bbox альфы `(181, 137, 1149, 995)` совпадает с записанным crop bounds
+   `181,137–1149,995`; на маске `alpha > 0` ровно один 8-connected компонент.
+2. **Шаги 2–6 (split на 512×512, crop, 8-connected cleanup, LANCZOS resize,
+   placement в 272×192)** — not executable from the repo: выполнялись
+   одноразовыми inline Python/Pillow-скриптами, которые не сохранились.
+   Результат проверяем по закоммиченным финалам и по командам раздела
+   «Reproducible verification commands» выше (RGBA 272×192, последняя строка
+   `y=187`, bbox flinch `26,24–211,188`, центр опоры `135.5`, прозрачные края).
+   Источник происхождения каждого шага привязан к источнику пака или flinch
+   выше, с контрольной суммой, — но сам шаг перезапустить нельзя.
