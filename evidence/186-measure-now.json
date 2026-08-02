@@ -1,13 +1,20 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "issue": 186,
-  "when": "2026-08-02, on origin/main before any edit of this branch",
+  "when": "2026-08-02, taken on origin/main before any edit of this branch; corrected 2026-08-03 after independent review",
   "what": "The size of the post-combat clinch, named as a quantity and taken on the seed matrix. Nobody had measured what the owner's sentence corresponds to, so this file defines the measurement first and reports it second.",
   "theOwnersWords": "Когда все сгрудились после боя — потом не могут некоторое время разойтись и блокируют друг друга.",
+  "whatChangedInVersion2": {
+    "controlWindow": "The control used to be the 60 ticks ending at the wave's arrival. On `prepared` that interval is the muster: its journal sets muster_lead_ticks to 60 on tick 880 and PrototypeWorld.IsMusterActive is true from arriveTick - 60, so the two coincided tick for tick and the 'peacetime' half of the comparison was the one moment of the party when every creature drops its work and walks into a Watch zone of ten tiles. It carried 532 of the 737 refused steps of the old control. The window is now pushed back by muster_lead_ticks: `baseline` sets no lead and does not move at all, `prepared` is compared against the quiet stretch ending where its muster begins. Over the matrix the answer reverses — 782 against 526 rather than 782 against 737, and 154 clinch ticks against 106 rather than 194.",
+    "theBucketAYieldMayNotTouch": "`byArrived` used to hold every refused step whose blocker had no destination it was walking to. That is wrong for a blocker with no destination at all: PrimaryDestination returns a GridPoint? over a readonly record struct, so for a creature with no job, no meal and no muster it is null and the last clause of CanYield, `PrimaryDestination(creature) != creature.Position`, lifts to true — such a creature may be told to step aside. Split: byArrived 290, byNoDestination 17, and the reach of a yield rises from 327 to 344.",
+    "theComparison": "A way round used to be counted over all 782 refused steps and a yield only over the ones with a body in the way. The 93 refused steps whose next tile is empty at the end of the tick belong to the arbitration, not to a body, so they are now excluded from both sides: 639 against 344.",
+    "theHistogramOfStandingStill": "Last decisions used to be counted over all 1989 creature-ticks standing still while the conclusion was drawn about the 1121 in CreatureMode.Waiting. Restricted to Waiting the picture changes: waiting_stock_sufficient 850, refused_zone_unreachable 232, waiting_blocked_by_other 18.",
+    "howItWasFound": "All four by independent review of pull request #198, by measurement rather than by reading. Version 1 of this file is in the history of the branch."
+  },
   "tree": {
     "branch": "agent/186-post-combat-dispersal",
-    "baseCommit": "5713c47",
-    "note": "The base commit is on `main` and survives squash; the branch head is not, so it is described in prose instead (Issue #106). No file of the simulation is changed by this branch at the point these numbers were taken — only the test project gained the harness below."
+    "baseCommit": "19013ae",
+    "note": "The base commit is on `main` and survives squash; the branch head is not, so it is described in prose instead (Issue #106). No file of the simulation is changed by this branch — only the test project gained the harness below."
   },
   "howItWasMeasured": {
     "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_post_combat_dispersal_over_the_seed_matrix\" --logger \"console;verbosity=detailed\"",
@@ -22,57 +29,68 @@
       "clinchTicks": "ticks of the window on which at least two cohort members were refused a step (waiting_blocked_by_other). Two, because one creature waiting for one tile is ordinary traffic",
       "maxBlockedTogether": "the most cohort members refused a step on one tick of one window",
       "blocked": "cohort creature-ticks with a refused step inside the window",
-      "background": "the same counts over the 60 ticks immediately before that wave arrived, for the same creatures. This is the peacetime control",
+      "background": "the same counts over the 60 ticks ending at `arriveTick - muster_lead_ticks`, for the same creatures. This is the control, and the subtraction is what keeps it out of the muster",
       "dispersalDelay": "per cohort member, ticks from EndTick to the first tick it stands somewhere else; 60 if it never does",
       "standingStill": "cohort creature-ticks that neither moved nor were refused a step",
       "idleAndStill": "standingStill restricted to CreatureMode.Waiting — standing with no work rather than standing to do work",
       "shortDetour": "refused steps where a route to the same destination existed within 4 extra steps once every other creature counted as a wall",
+      "detourWithABody": "shortDetour restricted to the refused steps a body was actually standing in the way of. This is the side of the mechanism comparison that is comparable with the reach of a yield",
+      "longerWayRound": "refused steps where that route was strictly longer than the blind one — a different route, not the same one re-derived",
       "walledIn": "refused steps where no such route existed at all",
-      "nextTileFree": "refused steps where the tile the step was for was empty at the end of the tick — the step was refused by the arbitration, not by a body",
-      "byArrived": "refused steps whose next tile was held by a creature standing on its own destination. PrototypeWorld.CanYield refuses to order such a creature aside, so no yield can ever clear these",
-      "byUrgent": "next tile held by a creature with a meal reserved or mustering — CanYield refuses these too unless the block is a proven dependency cycle",
-      "byEligible": "next tile held by a creature CanYield would allow to step aside"
+      "nextTileFree": "refused steps where the tile the step was for was empty at the end of the tick — the step was refused by the arbitration, not by a body, and no yield of anybody's could have cleared it",
+      "byArrived": "refused steps whose next tile was held by a creature standing on its own destination. CanYield refuses to order such a creature aside, so no yield can ever clear these",
+      "byNoDestination": "next tile held by a creature with no destination at all. CanYield allows this one to step aside, because `null != position`",
+      "byUrgent": "next tile held by a creature with a meal reserved or mustering — CanYield refuses these unless the block is a proven dependency cycle",
+      "byEligible": "next tile held by a creature walking somewhere that CanYield would allow to step aside",
+      "yieldCouldClear": "byEligible and byNoDestination, restricted to blockers with an empty tile beside them. The whole of what the yield arbitration could ever buy"
     }
   },
   "matrix": [
     {"fixture": "baseline", "seed": 20260726, "ticks": 2414, "windows": 3, "measured": 2, "clinchTicks": 19, "backgroundClinchTicks": 0, "blocked": 90, "backgroundBlocked": 5},
     {"fixture": "baseline", "seed": 20260727, "ticks": 2422, "windows": 4, "measured": 3, "clinchTicks": 55, "backgroundClinchTicks": 62, "blocked": 336, "backgroundBlocked": 200},
     {"fixture": "baseline", "seed": 20260728, "ticks": 2404, "windows": 2, "measured": 1, "clinchTicks": 0, "backgroundClinchTicks": 0, "blocked": 0, "backgroundBlocked": 0},
-    {"fixture": "prepared", "seed": 20260726, "ticks": 2424, "windows": 3, "measured": 3, "clinchTicks": 20, "backgroundClinchTicks": 39, "blocked": 118, "backgroundBlocked": 172},
-    {"fixture": "prepared", "seed": 20260727, "ticks": 2410, "windows": 2, "measured": 2, "clinchTicks": 36, "backgroundClinchTicks": 32, "blocked": 105, "backgroundBlocked": 106},
-    {"fixture": "prepared", "seed": 20260728, "ticks": 2408, "windows": 2, "measured": 2, "clinchTicks": 24, "backgroundClinchTicks": 61, "blocked": 133, "backgroundBlocked": 254}
+    {"fixture": "prepared", "seed": 20260726, "ticks": 2424, "windows": 3, "measured": 3, "clinchTicks": 20, "backgroundClinchTicks": 10, "blocked": 118, "backgroundBlocked": 99},
+    {"fixture": "prepared", "seed": 20260727, "ticks": 2410, "windows": 2, "measured": 2, "clinchTicks": 36, "backgroundClinchTicks": 12, "blocked": 105, "backgroundBlocked": 124},
+    {"fixture": "prepared", "seed": 20260728, "ticks": 2408, "windows": 2, "measured": 2, "clinchTicks": 24, "backgroundClinchTicks": 22, "blocked": 133, "backgroundBlocked": 98}
   ],
+  "byFixture": {
+    "baseline": {"blocked": 426, "backgroundBlocked": 205, "blockedRatio": 2.08, "clinchTicks": 74, "backgroundClinchTicks": 62, "clinchRatio": 1.19},
+    "prepared": {"blocked": 356, "backgroundBlocked": 321, "blockedRatio": 1.11, "clinchTicks": 80, "backgroundClinchTicks": 44, "clinchRatio": 1.82},
+    "reading": "The two halves of the matrix say the same thing with different force, and neither says the post-combat window is quieter than peacetime. `baseline` has no muster at all, so its control never moved; the old average of 1.06 was that 2.08 pulled down by a `prepared` control that was itself a jam."
+  },
   "windows": [
-    {"fixture": "baseline", "seed": 20260726, "wave": 1, "arrive": 1300, "end": 1335, "outcome": "repelled_costly", "cohort": 7, "observed": 60, "clinchTicks": 0, "background": 0, "blocked": 30, "backgroundBlocked": 5, "maxTogether": 1, "dispersalMax": 60, "dispersalMean": 51, "neverMoved": 6, "standingStill": 350, "idleAndStill": 350, "shortDetour": 30, "walledIn": 0, "noYield": 0, "sharing": 0, "yieldsToCohort": 70, "toLarder": 0, "nextTileFree": 30, "byUrgent": 0, "byArrived": 0, "byEligible": 0},
-    {"fixture": "baseline", "seed": 20260726, "wave": 2, "arrive": 1650, "end": 1722, "outcome": "larder_raided", "cohort": 2, "observed": 60, "clinchTicks": 19, "background": 0, "blocked": 60, "backgroundBlocked": 0, "maxTogether": 2, "dispersalMax": 2, "dispersalMean": 1, "neverMoved": 0, "standingStill": 16, "idleAndStill": 6, "shortDetour": 46, "walledIn": 0, "noYield": 55, "sharing": 0, "yieldsToCohort": 5, "toLarder": 4, "nextTileFree": 9, "byUrgent": 37, "byArrived": 9, "byEligible": 5},
+    {"fixture": "baseline", "seed": 20260726, "wave": 1, "arrive": 1300, "end": 1335, "outcome": "repelled_costly", "cohort": 7, "observed": 60, "controlEnds": 1300, "musterLead": 0, "clinchTicks": 0, "background": 0, "blocked": 30, "backgroundBlocked": 5, "maxTogether": 1, "dispersalMax": 60, "dispersalMean": 51, "neverMoved": 6, "standingStill": 350, "idleAndStill": 350, "shortDetour": 30, "detourWithABody": 0, "longerWayRound": 0, "walledIn": 0, "noYield": 0, "sharing": 0, "yieldsToCohort": 70, "toLarder": 0, "nextTileFree": 30, "byUrgent": 0, "byArrived": 0, "byNoDestination": 0, "byEligible": 0, "yieldCouldClear": 0},
+    {"fixture": "baseline", "seed": 20260726, "wave": 2, "arrive": 1650, "end": 1722, "outcome": "larder_raided", "cohort": 2, "observed": 60, "controlEnds": 1650, "musterLead": 0, "clinchTicks": 19, "background": 0, "blocked": 60, "backgroundBlocked": 0, "maxTogether": 2, "dispersalMax": 2, "dispersalMean": 1, "neverMoved": 0, "standingStill": 16, "idleAndStill": 6, "shortDetour": 46, "detourWithABody": 39, "longerWayRound": 35, "walledIn": 0, "noYield": 55, "sharing": 0, "yieldsToCohort": 5, "toLarder": 4, "nextTileFree": 9, "byUrgent": 37, "byArrived": 4, "byNoDestination": 5, "byEligible": 5, "yieldCouldClear": 10},
     {"fixture": "baseline", "seed": 20260726, "wave": 4, "arrive": 2350, "end": 2413, "outcome": "overrun", "cohort": 3, "observed": 0, "note": "the party ended on the wave's own end tick; left out of every aggregate"},
-    {"fixture": "baseline", "seed": 20260727, "wave": 1, "arrive": 1300, "end": 1322, "outcome": "repelled_clean", "cohort": 9, "observed": 60, "clinchTicks": 53, "background": 24, "blocked": 292, "backgroundBlocked": 81, "maxTogether": 6, "dispersalMax": 2, "dispersalMean": 1, "neverMoved": 0, "standingStill": 158, "idleAndStill": 111, "shortDetour": 290, "walledIn": 0, "noYield": 280, "sharing": 182, "yieldsToCohort": 15, "toLarder": 50, "nextTileFree": 10, "byUrgent": 0, "byArrived": 47, "byEligible": 235},
-    {"fixture": "baseline", "seed": 20260727, "wave": 2, "arrive": 1650, "end": 1705, "outcome": "repelled_costly", "cohort": 5, "observed": 60, "clinchTicks": 2, "background": 38, "blocked": 39, "backgroundBlocked": 119, "maxTogether": 3, "dispersalMax": 21, "dispersalMean": 9, "neverMoved": 0, "standingStill": 172, "idleAndStill": 166, "shortDetour": 18, "walledIn": 20, "noYield": 10, "sharing": 0, "yieldsToCohort": 22, "toLarder": 1, "nextTileFree": 9, "byUrgent": 8, "byArrived": 1, "byEligible": 21},
-    {"fixture": "baseline", "seed": 20260727, "wave": 3, "arrive": 2000, "end": 2071, "outcome": "larder_raided", "cohort": 2, "observed": 60, "clinchTicks": 0, "background": 0, "blocked": 5, "backgroundBlocked": 0, "maxTogether": 1, "dispersalMax": 1, "dispersalMean": 1, "neverMoved": 0, "standingStill": 76, "idleAndStill": 23, "shortDetour": 5, "walledIn": 0, "noYield": 4, "sharing": 0, "yieldsToCohort": 6, "toLarder": 2, "nextTileFree": 4, "byUrgent": 1, "byArrived": 0, "byEligible": 0},
+    {"fixture": "baseline", "seed": 20260727, "wave": 1, "arrive": 1300, "end": 1322, "outcome": "repelled_clean", "cohort": 9, "observed": 60, "controlEnds": 1300, "musterLead": 0, "clinchTicks": 53, "background": 24, "blocked": 292, "backgroundBlocked": 81, "maxTogether": 6, "dispersalMax": 2, "dispersalMean": 1, "neverMoved": 0, "standingStill": 158, "idleAndStill": 111, "shortDetour": 290, "detourWithABody": 281, "longerWayRound": 238, "walledIn": 0, "noYield": 280, "sharing": 182, "yieldsToCohort": 15, "toLarder": 50, "nextTileFree": 10, "byUrgent": 0, "byArrived": 47, "byNoDestination": 0, "byEligible": 235, "yieldCouldClear": 235},
+    {"fixture": "baseline", "seed": 20260727, "wave": 2, "arrive": 1650, "end": 1705, "outcome": "repelled_costly", "cohort": 5, "observed": 60, "controlEnds": 1650, "musterLead": 0, "clinchTicks": 2, "background": 38, "blocked": 39, "backgroundBlocked": 119, "maxTogether": 3, "dispersalMax": 21, "dispersalMean": 9, "neverMoved": 0, "standingStill": 172, "idleAndStill": 166, "shortDetour": 18, "detourWithABody": 10, "longerWayRound": 17, "walledIn": 20, "noYield": 10, "sharing": 0, "yieldsToCohort": 22, "toLarder": 1, "nextTileFree": 9, "byUrgent": 8, "byArrived": 0, "byNoDestination": 1, "byEligible": 21, "yieldCouldClear": 22},
+    {"fixture": "baseline", "seed": 20260727, "wave": 3, "arrive": 2000, "end": 2071, "outcome": "larder_raided", "cohort": 2, "observed": 60, "controlEnds": 2000, "musterLead": 0, "clinchTicks": 0, "background": 0, "blocked": 5, "backgroundBlocked": 0, "maxTogether": 1, "dispersalMax": 1, "dispersalMean": 1, "neverMoved": 0, "standingStill": 76, "idleAndStill": 23, "shortDetour": 5, "detourWithABody": 1, "longerWayRound": 1, "walledIn": 0, "noYield": 4, "sharing": 0, "yieldsToCohort": 6, "toLarder": 2, "nextTileFree": 4, "byUrgent": 1, "byArrived": 0, "byNoDestination": 0, "byEligible": 0, "yieldCouldClear": 0},
     {"fixture": "baseline", "seed": 20260727, "wave": 4, "arrive": 2350, "end": 2421, "outcome": "larder_raided", "cohort": 4, "observed": 0, "note": "the party ended on the wave's own end tick; left out of every aggregate"},
-    {"fixture": "baseline", "seed": 20260728, "wave": 1, "arrive": 1300, "end": 1325, "outcome": "repelled_costly", "cohort": 8, "observed": 60, "clinchTicks": 0, "background": 0, "blocked": 0, "backgroundBlocked": 0, "maxTogether": 0, "dispersalMax": 60, "dispersalMean": 52, "neverMoved": 7, "standingStill": 440, "idleAndStill": 440, "shortDetour": 0, "walledIn": 0, "noYield": 0, "sharing": 0, "yieldsToCohort": 40, "toLarder": 0, "nextTileFree": 0, "byUrgent": 0, "byArrived": 0, "byEligible": 0},
+    {"fixture": "baseline", "seed": 20260728, "wave": 1, "arrive": 1300, "end": 1325, "outcome": "repelled_costly", "cohort": 8, "observed": 60, "controlEnds": 1300, "musterLead": 0, "clinchTicks": 0, "background": 0, "blocked": 0, "backgroundBlocked": 0, "maxTogether": 0, "dispersalMax": 60, "dispersalMean": 52, "neverMoved": 7, "standingStill": 440, "idleAndStill": 440, "shortDetour": 0, "detourWithABody": 0, "longerWayRound": 0, "walledIn": 0, "noYield": 0, "sharing": 0, "yieldsToCohort": 40, "toLarder": 0, "nextTileFree": 0, "byUrgent": 0, "byArrived": 0, "byNoDestination": 0, "byEligible": 0, "yieldCouldClear": 0},
     {"fixture": "baseline", "seed": 20260728, "wave": 4, "arrive": 2350, "end": 2403, "outcome": "overrun", "cohort": 1, "observed": 0, "note": "the party ended on the wave's own end tick; left out of every aggregate"},
-    {"fixture": "prepared", "seed": 20260726, "wave": 1, "arrive": 1300, "end": 1326, "outcome": "repelled_costly", "cohort": 7, "observed": 60, "clinchTicks": 20, "background": 39, "blocked": 68, "backgroundBlocked": 156, "maxTogether": 3, "dispersalMax": 2, "dispersalMean": 1, "neverMoved": 0, "standingStill": 129, "idleAndStill": 10, "shortDetour": 65, "walledIn": 1, "noYield": 61, "sharing": 2, "yieldsToCohort": 7, "toLarder": 16, "nextTileFree": 15, "byUrgent": 1, "byArrived": 34, "byEligible": 18},
-    {"fixture": "prepared", "seed": 20260726, "wave": 2, "arrive": 1650, "end": 1684, "outcome": "repelled_costly", "cohort": 3, "observed": 60, "clinchTicks": 0, "background": 0, "blocked": 50, "backgroundBlocked": 3, "maxTogether": 1, "dispersalMax": 2, "dispersalMean": 1, "neverMoved": 0, "standingStill": 92, "idleAndStill": 1, "shortDetour": 49, "walledIn": 1, "noYield": 47, "sharing": 0, "yieldsToCohort": 6, "toLarder": 0, "nextTileFree": 2, "byUrgent": 0, "byArrived": 47, "byEligible": 1},
-    {"fixture": "prepared", "seed": 20260726, "wave": 3, "arrive": 2000, "end": 2085, "outcome": "larder_raided", "cohort": 1, "observed": 60, "clinchTicks": 0, "background": 0, "blocked": 0, "backgroundBlocked": 13, "maxTogether": 0, "dispersalMax": 1, "dispersalMean": 1, "neverMoved": 0, "standingStill": 45, "idleAndStill": 3, "shortDetour": 0, "walledIn": 0, "noYield": 0, "sharing": 0, "yieldsToCohort": 0, "toLarder": 0, "nextTileFree": 0, "byUrgent": 0, "byArrived": 0, "byEligible": 0},
-    {"fixture": "prepared", "seed": 20260727, "wave": 1, "arrive": 1300, "end": 1339, "outcome": "repelled_costly", "cohort": 6, "observed": 60, "clinchTicks": 36, "background": 32, "blocked": 101, "backgroundBlocked": 79, "maxTogether": 3, "dispersalMax": 2, "dispersalMean": 1, "neverMoved": 0, "standingStill": 135, "idleAndStill": 4, "shortDetour": 98, "walledIn": 0, "noYield": 99, "sharing": 2, "yieldsToCohort": 1, "toLarder": 39, "nextTileFree": 6, "byUrgent": 0, "byArrived": 64, "byEligible": 31},
-    {"fixture": "prepared", "seed": 20260727, "wave": 2, "arrive": 1650, "end": 1700, "outcome": "repelled_costly", "cohort": 1, "observed": 60, "clinchTicks": 0, "background": 0, "blocked": 4, "backgroundBlocked": 27, "maxTogether": 1, "dispersalMax": 1, "dispersalMean": 1, "neverMoved": 0, "standingStill": 42, "idleAndStill": 0, "shortDetour": 2, "walledIn": 2, "noYield": 4, "sharing": 0, "yieldsToCohort": 6, "toLarder": 0, "nextTileFree": 0, "byUrgent": 3, "byArrived": 0, "byEligible": 1},
-    {"fixture": "prepared", "seed": 20260728, "wave": 1, "arrive": 1300, "end": 1332, "outcome": "repelled_costly", "cohort": 6, "observed": 60, "clinchTicks": 9, "background": 10, "blocked": 57, "backgroundBlocked": 44, "maxTogether": 2, "dispersalMax": 1, "dispersalMean": 1, "neverMoved": 0, "standingStill": 202, "idleAndStill": 2, "shortDetour": 50, "walledIn": 0, "noYield": 52, "sharing": 0, "yieldsToCohort": 10, "toLarder": 7, "nextTileFree": 3, "byUrgent": 1, "byArrived": 42, "byEligible": 11},
-    {"fixture": "prepared", "seed": 20260728, "wave": 2, "arrive": 1650, "end": 1687, "outcome": "repelled_costly", "cohort": 6, "observed": 60, "clinchTicks": 15, "background": 51, "blocked": 76, "backgroundBlocked": 210, "maxTogether": 4, "dispersalMax": 2, "dispersalMean": 1, "neverMoved": 0, "standingStill": 132, "idleAndStill": 5, "shortDetour": 75, "walledIn": 0, "noYield": 68, "sharing": 0, "yieldsToCohort": 7, "toLarder": 0, "nextTileFree": 5, "byUrgent": 3, "byArrived": 63, "byEligible": 5}
+    {"fixture": "prepared", "seed": 20260726, "wave": 1, "arrive": 1300, "end": 1326, "outcome": "repelled_costly", "cohort": 7, "observed": 60, "controlEnds": 1240, "musterLead": 60, "clinchTicks": 20, "background": 8, "blocked": 68, "backgroundBlocked": 38, "maxTogether": 3, "dispersalMax": 2, "dispersalMean": 1, "neverMoved": 0, "standingStill": 129, "idleAndStill": 10, "shortDetour": 65, "detourWithABody": 50, "longerWayRound": 49, "walledIn": 1, "noYield": 61, "sharing": 2, "yieldsToCohort": 7, "toLarder": 16, "nextTileFree": 15, "byUrgent": 1, "byArrived": 29, "byNoDestination": 5, "byEligible": 18, "yieldCouldClear": 22},
+    {"fixture": "prepared", "seed": 20260726, "wave": 2, "arrive": 1650, "end": 1684, "outcome": "repelled_costly", "cohort": 3, "observed": 60, "controlEnds": 1590, "musterLead": 60, "clinchTicks": 0, "background": 2, "blocked": 50, "backgroundBlocked": 57, "maxTogether": 1, "dispersalMax": 2, "dispersalMean": 1, "neverMoved": 0, "standingStill": 92, "idleAndStill": 1, "shortDetour": 49, "detourWithABody": 47, "longerWayRound": 47, "walledIn": 1, "noYield": 47, "sharing": 0, "yieldsToCohort": 6, "toLarder": 0, "nextTileFree": 2, "byUrgent": 0, "byArrived": 47, "byNoDestination": 0, "byEligible": 1, "yieldCouldClear": 1},
+    {"fixture": "prepared", "seed": 20260726, "wave": 3, "arrive": 2000, "end": 2085, "outcome": "larder_raided", "cohort": 1, "observed": 60, "controlEnds": 1940, "musterLead": 60, "clinchTicks": 0, "background": 0, "blocked": 0, "backgroundBlocked": 4, "maxTogether": 0, "dispersalMax": 1, "dispersalMean": 1, "neverMoved": 0, "standingStill": 45, "idleAndStill": 3, "shortDetour": 0, "detourWithABody": 0, "longerWayRound": 0, "walledIn": 0, "noYield": 0, "sharing": 0, "yieldsToCohort": 0, "toLarder": 0, "nextTileFree": 0, "byUrgent": 0, "byArrived": 0, "byNoDestination": 0, "byEligible": 0, "yieldCouldClear": 0},
+    {"fixture": "prepared", "seed": 20260727, "wave": 1, "arrive": 1300, "end": 1339, "outcome": "repelled_costly", "cohort": 6, "observed": 60, "controlEnds": 1240, "musterLead": 60, "clinchTicks": 36, "background": 12, "blocked": 101, "backgroundBlocked": 64, "maxTogether": 3, "dispersalMax": 2, "dispersalMean": 1, "neverMoved": 0, "standingStill": 135, "idleAndStill": 4, "shortDetour": 98, "detourWithABody": 92, "longerWayRound": 49, "walledIn": 0, "noYield": 99, "sharing": 2, "yieldsToCohort": 1, "toLarder": 39, "nextTileFree": 6, "byUrgent": 0, "byArrived": 60, "byNoDestination": 4, "byEligible": 31, "yieldCouldClear": 35},
+    {"fixture": "prepared", "seed": 20260727, "wave": 2, "arrive": 1650, "end": 1700, "outcome": "repelled_costly", "cohort": 1, "observed": 60, "controlEnds": 1590, "musterLead": 60, "clinchTicks": 0, "background": 0, "blocked": 4, "backgroundBlocked": 60, "maxTogether": 1, "dispersalMax": 1, "dispersalMean": 1, "neverMoved": 0, "standingStill": 42, "idleAndStill": 0, "shortDetour": 2, "detourWithABody": 2, "longerWayRound": 0, "walledIn": 2, "noYield": 4, "sharing": 0, "yieldsToCohort": 6, "toLarder": 0, "nextTileFree": 0, "byUrgent": 3, "byArrived": 0, "byNoDestination": 0, "byEligible": 1, "yieldCouldClear": 1},
+    {"fixture": "prepared", "seed": 20260728, "wave": 1, "arrive": 1300, "end": 1332, "outcome": "repelled_costly", "cohort": 6, "observed": 60, "controlEnds": 1240, "musterLead": 60, "clinchTicks": 9, "background": 22, "blocked": 57, "backgroundBlocked": 79, "maxTogether": 2, "dispersalMax": 1, "dispersalMean": 1, "neverMoved": 0, "standingStill": 202, "idleAndStill": 2, "shortDetour": 50, "detourWithABody": 47, "longerWayRound": 9, "walledIn": 0, "noYield": 52, "sharing": 0, "yieldsToCohort": 10, "toLarder": 7, "nextTileFree": 3, "byUrgent": 1, "byArrived": 41, "byNoDestination": 1, "byEligible": 11, "yieldCouldClear": 12},
+    {"fixture": "prepared", "seed": 20260728, "wave": 2, "arrive": 1650, "end": 1687, "outcome": "repelled_costly", "cohort": 6, "observed": 60, "controlEnds": 1590, "musterLead": 60, "clinchTicks": 15, "background": 0, "blocked": 76, "backgroundBlocked": 19, "maxTogether": 4, "dispersalMax": 2, "dispersalMean": 1, "neverMoved": 0, "standingStill": 132, "idleAndStill": 5, "shortDetour": 75, "detourWithABody": 70, "longerWayRound": 71, "walledIn": 0, "noYield": 68, "sharing": 0, "yieldsToCohort": 7, "toLarder": 0, "nextTileFree": 5, "byUrgent": 3, "byArrived": 62, "byNoDestination": 1, "byEligible": 5, "yieldCouldClear": 6}
   ],
   "wholeMatrix": {
     "measuredWindows": 13,
     "cohortTicks": 3780,
     "clinchTicks": 154,
-    "backgroundClinchTicks": 194,
-    "clinchRatio": 0.79,
+    "backgroundClinchTicks": 106,
+    "clinchRatio": 1.45,
     "blocked": 782,
-    "backgroundBlocked": 737,
-    "blockedRatio": 1.06,
+    "backgroundBlocked": 526,
+    "blockedRatio": 1.49,
     "maxBlockedTogether": 6,
     "blockedWithDestination": 782,
     "shortDetour": 728,
     "detourShare": 0.931,
+    "detourWithABody": 639,
+    "longerWayRound": 516,
     "walledIn": 24,
     "noYieldOnTheTick": 680,
     "sharingADestination": 186,
@@ -80,8 +98,10 @@
     "nextTileFree": 93,
     "byCannotAct": 0,
     "byUrgent": 54,
-    "byArrived": 307,
+    "byArrived": 290,
+    "byNoDestination": 17,
     "byEligible": 328,
+    "yieldCouldClear": 344,
     "standingStill": 1989,
     "idleAndStill": 1121
   },
@@ -92,44 +112,42 @@
   },
   "whatAnExCombatantThatNeitherWalkedNorWasRefusedWasDoing": {
     "byMode": {"Waiting": 1121, "Working": 693, "Resting": 140, "Eating": 35},
-    "byLastDecision": {
+    "byLastDecisionAmongTheOnesInWaiting": {
       "waiting_stock_sufficient": 850,
-      "waiting_blocked_by_other": 285,
       "refused_zone_unreachable": 232,
-      "chosen_nearest": 200,
-      "chosen_traffic_yield": 163,
-      "chosen_affinity_match": 130,
-      "chosen_tie_break": 58,
-      "refused_rule_reserve": 27,
-      "chosen_only_option": 21,
-      "chosen_need_hunger": 16
-    }
+      "waiting_blocked_by_other": 18,
+      "chosen_nearest": 6,
+      "chosen_traffic_yield": 4,
+      "waiting_input_missing": 3,
+      "refused_rule_reserve": 2
+    },
+    "caveat": "LastDecision is the last decision this creature took, not a decision it took on this tick. For a creature that decided nothing here it is several ticks old. That is still the right thing to count — a creature that has stopped deciding is one whose last decision is still standing — but it reads the past."
   },
   "whatTheNumbersSay": [
     {
-      "claim": "The post-combat window is not, on the matrix as a whole, more blocked than peacetime.",
-      "evidence": "clinchTicks 154 against 194 in the control (ratio 0.79) and 782 refused steps against 737 (ratio 1.06), over 13 measured windows and 3780 cohort creature-ticks.",
-      "reading": "The clinch is not a state the end of a fight creates. It is the dungeon's ordinary traffic, into which the end of a fight drops six to nine creatures at the same doorway at the same moment."
+      "claim": "The ticks after a fight are measurably more blocked than the ticks before one, on both halves of the matrix.",
+      "evidence": "782 refused steps against 526 in the control (1.49) and 154 clinch ticks against 106 (1.45), over 13 measured windows and 3780 cohort creature-ticks. By fixture: `baseline` 426 against 205 (2.08), `prepared` 356 against 321 (1.11); clinch ticks 74 against 62 and 80 against 44 (1.82).",
+      "reading": "The owner's playtest sentence is confirmed by measurement. Version 1 of this file said the opposite — 1.06 and 0.79 — and it said it because the `prepared` control was the muster."
     },
     {
-      "claim": "It is nevertheless real, and its size is a single window rather than an average.",
+      "claim": "The size of it is a single window rather than an average.",
       "evidence": "baseline/20260727 wave 1: 292 refused steps in 60 ticks by a cohort of nine — 54 % of that cohort's creature-ticks — against 81 in the control window of the same nine creatures, a ratio of 3.6. Six of the nine were refused a step on the same tick. clinchTicks 53 of 60.",
-      "reading": "This is the party the owner would have been watching. On the same matrix prepared/20260726 wave 1 goes the other way — 68 refused against 156 in its own control — so the corridor is a property of the run and not of the design (13.4)."
+      "reading": "This is the party the owner would have been watching, and it is now consistent with the `baseline` average of 2.08 rather than standing against a matrix average that pointed the other way."
     },
     {
       "claim": "The larger half of «не могут разойтись» is not blocking at all.",
-      "evidence": "1989 of 3780 cohort creature-ticks (53 %) were spent neither moving nor being refused a step, and 1121 of them (30 % of the window) in CreatureMode.Waiting. The commonest last decision of such a creature is waiting_stock_sufficient, 850 times: there is no work to be had. On baseline/20260728 wave 1 seven of eight ex-combatants never left the tile the fight ended on in 60 ticks, with 0 refused steps in the whole window.",
-      "reading": "Two different pictures produce one complaint. A group that stands because it is jammed and a group that stands because the larder is full look the same from above, and the second is the bigger of the two."
+      "evidence": "1989 of 3780 cohort creature-ticks (53 %) were spent neither moving nor being refused a step, and 1121 of them (30 % of the window) in CreatureMode.Waiting. Among those 1121 the commonest last decision is waiting_stock_sufficient, 850 times — there is no work to be had — and the second is refused_zone_unreachable, 232 times (20.7 %). On baseline/20260728 wave 1 seven of eight ex-combatants never left the tile the fight ended on in 60 ticks, with 0 refused steps in the whole window.",
+      "reading": "Two different pictures produce one complaint. A group that stands because it is jammed and a group that stands because it has nowhere to be look the same from above, and the second is the bigger of the two. It is not one diagnosis either: a fifth of it is a zone the creature cannot reach rather than work that does not exist."
     },
     {
       "claim": "Of the refused steps, almost all had a way round.",
-      "evidence": "728 of 782 (93.1 %) had a route to the same destination within 4 extra steps once every other creature was treated as a wall. Only 24 (3.1 %) had no route at all.",
+      "evidence": "728 of 782 (93.1 %) had a route to the same destination within 4 extra steps once every other creature was treated as a wall, and on 516 of them (66 %) that route was strictly longer than the blind one. Only 24 (3.1 %) had no route at all.",
       "reading": "The creature is not walled in. PrototypeMap.NextStep is a BFS that does not see bodies, so it hands out a step that Move then refuses, and the tile to walk around by is standing empty."
     },
     {
-      "claim": "The yield arbitration cannot clear most of these even in principle.",
-      "evidence": "307 of 782 refused steps (39 %) were blocked by a creature standing on its own destination, which PrototypeWorld.CanYield refuses to order aside; 54 more by a creature with a meal reserved or mustering, which it also refuses. On 680 of 782 (87 %) no chosen_traffic_yield was planned anywhere in the world on that tick.",
-      "reading": "328 refused steps were blocked by somebody who could have been asked to move, so the arbitration is not powerless — but the largest single class is one it is designed never to touch."
+      "claim": "The yield arbitration cannot clear most of these even in principle, and the ceiling is 344 rather than the 327 first published.",
+      "evidence": "290 refused steps (37 %) were blocked by a creature standing on its own destination, which CanYield refuses to order aside, and 54 more (7 %) by a creature with a meal reserved or mustering — 344 (44 %) out of reach of a yield by design. Of the 345 blocked by a creature a yield may move (328 walking somewhere, 17 with no destination at all), 344 had an empty tile beside them. On 680 of 782 ticks (87 %) no chosen_traffic_yield was planned anywhere in the world.",
+      "reading": "A creature with no destination at all may be told to step aside — `PrimaryDestination` is null and the last clause of CanYield lifts to true — and version 1 of this file put 17 such refused steps on the wrong side. The correction moves the ceiling up, not down."
     }
   ]
 }

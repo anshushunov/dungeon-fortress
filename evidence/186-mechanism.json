@@ -1,49 +1,55 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "issue": 186,
-  "when": "2026-08-02",
+  "when": "2026-08-02, corrected 2026-08-03 after independent review",
   "what": "Which of the three candidate mechanisms of Issue #186 produces the post-combat clinch, decided by counting how many refused steps each of them could have prevented, and the decision that follows.",
   "question": "Issue #186, criterion 3: «Назван виновный механизм, и решение о том, чинить его здесь или поднимать #76, принято явно и с числом».",
+  "whatChangedInVersion2": "Two corrections, both found by independent review of pull request #198 and both moving the comparison towards the yield rather than away from it. The reach of a yield is 344 and not 327: a blocker with no destination at all may be told to step aside, because PrimaryDestination is null there and the last clause of CanYield lifts to true. And the two sides are now counted on the same set: the 93 refused steps whose next tile was empty belong to the arbitration rather than to a body, and counting them as reachable by a way round while they are in nobody's yield compared unlike sets. Corrected, the comparison is 639 against 344 and not 728 against 327. The conclusion is unchanged and the margin is smaller, which is the point of naming it.",
   "howItWasMeasured": {
     "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypePostCombatDispersalTests\" --logger \"console;verbosity=detailed\"",
     "harness": "tests/DungeonFortress.Simulation.Tests/PrototypePostCombatDispersalTests.cs. Definitions in evidence/186-measure-now.json.",
-    "sample": "782 refused steps by ex-combatants inside the 60 ticks after a wave ended, over 13 measured windows of the seed matrix, 3780 cohort creature-ticks.",
-    "howTheBlockerIsIdentified": "The tile the refused step was for is not published, so it is recomputed by the simulation's own rule — the same BFS over the same passable tiles, neighbours visited north, east, south, west, first shortest path wins. The eligibility of whoever stands on it is then rebuilt from the snapshot the way PrototypeWorld.CanYield asks it: not Fighting, not Downed, no meal reserved, not mustering, and not already standing on its own destination.",
-    "whatThisCannotSee": "The rebuilt eligibility is a model of CanYield and not CanYield itself: a mutant of the simulation's own CanYield would not move these counts. That is named here rather than left to be discovered — the number is an upper bound on what a yield could buy, computed from published state, and it is used as an upper bound below."
+    "sample": "782 refused steps by ex-combatants inside the 60 ticks after a wave ended, over 13 measured windows of the seed matrix, 3780 cohort creature-ticks. Of them 689 had a body standing on the tile the step was for; the other 93 were refused by the arbitration with the tile empty.",
+    "howTheBlockerIsIdentified": "The tile the refused step was for is not published, so it is recomputed by the simulation's own rule — the same BFS over the same passable tiles, neighbours visited north, east, south, west, first shortest path wins. The eligibility of whoever stands on it is then rebuilt from the snapshot the way PrototypeWorld.CanYield asks it: not Fighting, not Downed, no meal reserved, not mustering, and not standing on a destination it is walking to. A creature with no destination at all is eligible, which is what version 1 of this file got wrong.",
+    "whatThisCannotSee": [
+      "The rebuilt eligibility is a model of CanYield and not CanYield itself: a mutant of the simulation's own CanYield would not move these counts. That is named here rather than left to be discovered.",
+      "The model does not carry the clause `creature.TrafficTarget is null`, because TrafficTarget is not in the snapshot. That omission counts as eligible some blockers that already hold a booking and biases the reach of a yield upwards; its size is not measured, and it is in DEBT_LEDGER.md with the condition for lifting it."
+    ]
   },
   "candidates": [
     {
       "candidate": "the choice of destination after the fight (the approach rule of Issue #129)",
       "reachOfTheFix": "not a way of clearing a refused step at all",
-      "number": "It changes how many creatures are standing in one room when the fight ends, and by how much is in evidence/186-before-after-129.json: refused steps per cohort creature-tick 0.147 -> 0.207 (×1.40), refused steps towards a tile a neighbour wants on the same tick 10 -> 186 (×18.6), most ex-combatants refused a step together on one tick 4 -> 6. What it does not change is the share of refused steps with a way round: 0.916 -> 0.931.",
-      "verdict": "amplifier, not mechanism. Reverting it is a non-goal of the Issue and would not remove the jam, only thin the crowd standing in it."
+      "number": "It changes how many creatures are standing in one room when the fight ends, and by how much is in evidence/186-before-after-129.json: refused steps per cohort creature-tick 0.147 -> 0.207 (×1.40) against a control that moved 0.124 -> 0.139 (×1.12), refused steps towards a tile a neighbour wants on the same tick 10 -> 186 (×18.6), most ex-combatants refused a step together on one tick 4 -> 6. What it does not change is the share of refused steps with a way round: 0.916 -> 0.931.",
+      "verdict": "amplifier, not mechanism. Reverting it is a non-goal of the Issue and would not remove the jam, only thin the crowd standing in it — the ratio to the control was already above one before it (1.19)."
     },
     {
       "candidate": "the yield arbitration (Yield/Clear, contract 4.1)",
-      "reachOfTheFix": "at most 327 of 782 refused steps (41.8 %)",
-      "number": "307 refused steps (39.3 %) were blocked by a creature standing on its own destination, which CanYield refuses to order aside by rule, and 54 more (6.9 %) by a creature with a meal reserved or mustering, which it also refuses unless the block is a proven dependency cycle — 361 (46.2 %) out of reach of a yield by design. Of the 328 blocked by a creature a yield may move, 327 had an empty tile beside them to be moved onto. On 680 of 782 ticks (87.0 %) no chosen_traffic_yield was planned anywhere in the world at all.",
+      "reachOfTheFix": "at most 344 of 782 refused steps (44.0 %)",
+      "number": "290 refused steps (37.1 %) were blocked by a creature standing on a destination it was walking to, which CanYield refuses to order aside by rule, and 54 more (6.9 %) by a creature with a meal reserved or mustering, which it also refuses unless the block is a proven dependency cycle — 344 (44.0 %) out of reach of a yield by design. A further 93 (11.9 %) had nobody on the tile at all and were refused by the arbitration itself, so no yield could clear those either. Of the 345 blocked by a creature a yield may move — 328 walking somewhere and 17 with no destination at all — 344 had an empty tile beside them to be moved onto. On 680 of 782 ticks (87.0 %) no chosen_traffic_yield was planned anywhere in the world.",
       "verdict": "the weakest of the three. Its ceiling is under half the sample, and the largest single class of refused steps is one it is designed never to touch."
     },
     {
       "candidate": "the absence of tile occupancy in pathfinding (Issue #76)",
-      "reachOfTheFix": "728 of 782 refused steps (93.1 %)",
+      "reachOfTheFix": "728 of 782 refused steps (93.1 %), and 639 of the 689 a body was standing in the way of (92.7 %)",
       "number": "On 728 refused steps a route to the same destination existed within 4 extra steps once every other creature counted as a wall, and on 516 of those (66.0 % of the whole sample) that route was strictly longer than the one PrototypeMap.NextStep hands out — a different route, not the same one re-derived. Only 24 refused steps (3.1 %) had no route at all: the creature is almost never walled in, it is standing in front of a tile somebody is on with an empty tile beside it.",
-      "verdict": "the mechanism. A way round reaches 728 refused steps where a yield reaches at most 327 — more than twice as many, which is what PrototypePostCombatDispersalTests.Walking_round_reaches_more_of_the_clinch_than_a_yield_could holds."
+      "verdict": "the mechanism. On the set the two can be compared on, a way round reaches 639 refused steps where a yield reaches at most 344 — a ratio of 1.86, which is what PrototypePostCombatDispersalTests.Walking_round_reaches_more_of_the_clinch_than_a_yield_could holds against a floor of 1.5."
     }
   ],
   "theDecision": {
     "what": "Not fixed here. This raises Issue #76.",
-    "onWhatNumber": "728 against 327: the mechanism that reaches 93.1 % of the refused steps is tile occupancy in the pathfinder, and the Issue names implementing it a non-goal — «не реализовывать занятость клетки в этой задаче: если измерение покажет, что причина там, это поднимает #76». The measurement showed it is there.",
-    "whyNotAPartialFixOfTheArbitrationInstead": "Its ceiling is 41.8 % of the sample and its floor is the 46.2 % it may not touch by rule. Tuning it here would be work against a symptom whose dominant cause is one method away, and it would move the corridors of 13.4 for a gain that the same measurement bounds in advance.",
+    "onWhatNumber": "639 against 344 on the comparable set — 1.86× — and 93.1 % against 44.0 % as shares of the whole sample. The mechanism that reaches nine refused steps in ten is tile occupancy in the pathfinder, and the Issue names implementing it a non-goal: «не реализовывать занятость клетки в этой задаче: если измерение покажет, что причина там, это поднимает #76». The measurement showed it is there.",
+    "howMuchRoomTheConclusionHas": "The order survives every correction found so far. As first published it read 728 against 327 (2.23×); with the reach of a yield corrected, 728 against 344 (2.12×); with both sides on the same set, 639 against 344 (1.86×). Both corrections moved it the same way, which is why the ordering is stated with the smallest of the three and the check holds at 1.5.",
+    "whyNotAPartialFixOfTheArbitrationInstead": "Its ceiling is 44.0 % of the sample and its floor is the 56.0 % it may not touch by rule or has nobody to touch. Tuning it here would be work against a symptom whose dominant cause is one method away, and it would move the corridors of 13.4 for a gain that the same measurement bounds in advance.",
     "whatIssue76HasToAnswerWhenItIsTaken": [
       "a BFS that treats bodies as walls has no route at all on 24 of 782 refused steps, so the rule needs an answer for the enclosed case that is not «stand still forever»",
+      "93 refused steps have nobody on the tile at all: they are the arbitration refusing a step, and occupancy in the pathfinder does not touch them",
       "the yield arbitration stays necessary for exactly those, and its rule about who may be told to step aside does not change",
       "the morale rule of 10.3 counts bodies and not tiles («семеро на одном тайле дают семь»), and raiders assign their position with no occupancy check at all — making a raider hold a tile is a separate decision, already named in evidence/129-before.json"
     ]
   },
   "theOtherHalfOfTheSymptom": {
     "what": "The larger half of what the owner saw is not a clinch and is not Issue #76.",
-    "number": "1989 of 3780 cohort creature-ticks (52.6 %) passed with neither a step nor a refused step; 1121 of them (29.7 % of the window) in CreatureMode.Waiting. The commonest last decision of such a creature is waiting_stock_sufficient, 850 times. On baseline/20260728 wave 1 seven of eight ex-combatants never left the tile the fight ended on in 60 ticks, with 0 refused steps in the whole window. Per cohort-tick this half barely moved with #129: 0.283 before, 0.297 after.",
-    "whyItIsNotDecidedHere": "A creature with no work stands where it is standing, and after a fight that is the middle of the fight. Giving it somewhere to go is new behaviour, not a defect fix: it is a gameplay decision about what an ex-combatant with nothing to do does, and AGENTS.md sends those to the owner. It is named here and returned rather than taken."
+    "number": "1989 of 3780 cohort creature-ticks (52.6 %) passed with neither a step nor a refused step; 1121 of them (29.7 % of the window) in CreatureMode.Waiting. Among those 1121 the commonest last decision is waiting_stock_sufficient, 850 times, and the second is refused_zone_unreachable, 232 times — 20.7 %, so this half is not one diagnosis. On baseline/20260728 wave 1 seven of eight ex-combatants never left the tile the fight ended on in 60 ticks, with 0 refused steps in the whole window. Per cohort-tick this half barely moved with #129: 0.283 before, 0.297 after.",
+    "whyItIsNotDecidedHere": "A creature with no work stands where it is standing, and after a fight that is the middle of the fight. Giving it somewhere to go is new behaviour, not a defect fix: it is a gameplay decision about what an ex-combatant with nothing to do does, and AGENTS.md sends those to the owner. It is named here and returned rather than taken. The 232 refusals of an unreachable zone are a second, smaller question of the same kind and are named next to it rather than folded into it."
   }
 }
