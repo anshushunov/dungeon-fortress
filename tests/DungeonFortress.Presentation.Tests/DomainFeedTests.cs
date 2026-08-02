@@ -274,7 +274,8 @@ public sealed class DomainFeedTests(ITestOutputHelper output)
     /// moment — <c>baseline</c> on its own seed at tick 2400 — and require that
     /// <em>all three</em> lines there differ from their creature's newest entry.
     /// Issue #171 changed the party and that window came out at two of three, so
-    /// the question was measured instead of argued: over the sampled matrix the
+    /// the question was measured instead of argued: over the sampled windows of
+    /// the six parties the
     /// share of lines that are older than their creature's last word is
     /// <b>41.0% before the change and 42.0% after it</b>, and the share of windows
     /// where all three lines are older is 33.9% before and 35.8% after. The
@@ -361,7 +362,7 @@ public sealed class DomainFeedTests(ITestOutputHelper output)
                 $"{older} of {lines} lines of the domain feed ({100.0 * share:0.0}%) show something other than that creature's newest entry, under the one line in {HudText.DomainFeedLines} that makes the difference between 'the worst thing that happened to it' and 'the last thing it did' readable at all. Measured 41.0% before Issue #171 and 42.0% after it."));
         Assert.True(
             windowsWhereEveryLineIsOlder > 0,
-            "no sampled window of the matrix showed a feed in which every line was older than its " +
+            "no sampled window of the six parties showed a feed in which every line was older than its " +
             "creature's newest entry. That is the panel the defect was reported on and it has to " +
             "stay reachable, but it is about one window in three and cannot be demanded of a " +
             "particular tick.");
@@ -593,7 +594,7 @@ public sealed class DomainFeedTests(ITestOutputHelper output)
 
         report.AppendLine(string.Create(
             CultureInfo.InvariantCulture,
-            $"matrix: {overtaken} of {lines} lines ({100.0 * overtaken / lines:0.0}%), {windowsWithAny} of {windows} windows carry at least one ({100.0 * windowsWithAny / windows:0.0}%), {windowsWithAll} of {windows} carry nothing else ({100.0 * windowsWithAll / windows:0.0}%)"));
+            $"six parties: {overtaken} of {lines} lines ({100.0 * overtaken / lines:0.0}%), {windowsWithAny} of {windows} windows carry at least one ({100.0 * windowsWithAny / windows:0.0}%), {windowsWithAll} of {windows} carry nothing else ({100.0 * windowsWithAll / windows:0.0}%)"));
         // What this number is, said once so the check above does not have to argue
         // it: a line counted here is a line on which "the worst thing that happened
         // to it" and "the last thing it did" disagree, so the count is exactly how

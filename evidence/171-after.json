@@ -3,6 +3,13 @@
   "issue": 171,
   "when": "2026-08-02, after the edit",
   "what": "The same two commands as evidence/171-before.json, run on the same tree with the two new bounds in place, next to the sweep that chose their values. Nothing here is copied from the before file; every figure was produced by the command printed beside it.",
+  "twoDenominatorsAndWhichIsWhich": {
+    "why": "This file uses two different samples and the word `matrix` would name both, so it names neither. Corrected after the independent review of PR #178 found the same word standing for 15 cells and for 6 inside one change set.",
+    "fifteenCells": "`matrix` and `everyCellOfFifteen` below: the batch runner PrototypeEvaluation drives three fixtures x three seeds plus two causal pairs x three. Outcomes, scores and the before/after table are read here.",
+    "sixParties": "`price`, `sweep` and `isTheSliceStillObservable`: PrototypeMemoryCostTests walks `baseline` and `prepared` x three seeds. Every count of refusals in this file — including 253 and 639 — is over these six parties and not over the fifteen cells.",
+    "whatTheSixDoNotCover": "`neglected` writes no memory at all, so it can hold none of these counts. `prepared-ration-zero` and `prepared-watch-zero` are outside the sample and are not counted — and one of them demonstrably moved: prepared-ration-zero/20260728 goes 902 -> 947, so refusals were bound there too and neither 253 nor 639 includes them.",
+    "whatIsStillSound": "The before/after comparison. Both halves were taken on the same six parties with the same command, so both are understated by the same cells; nothing is being compared across samples."
+  },
   "tree": {
     "branch": "agent/171-memory-of-place-cost",
     "baseCommit": "ac0e4b5",
@@ -32,7 +39,7 @@
   },
   "sweep": {
     "command": "for each pair of values: edit the two constants in src/DungeonFortress.Simulation/PrototypeTuning.cs, then `dotnet build DungeonFortress.sln -c Release` and `dotnet test tests/DungeonFortress.Simulation.Tests -c Release --no-build --filter \"FullyQualifiedName~PrototypeMemoryCostTests\" --logger \"console;verbosity=detailed\"`. The report of that class prints one line per cell; the driver script lived in .artifacts and is not committed.",
-    "columns": "outcome of baseline/20260728 | its meals produced | its average satiety at the end | refusals over the matrix on `baseline` | on `prepared` | longest unbroken refusal streak of one creature",
+    "columns": "outcome of baseline/20260728 | its meals produced | its average satiety at the end | refusals over the three `baseline` parties | over the three `prepared` parties | longest unbroken refusal streak of one creature",
     "reach": {
       "question": "Does shrinking T.memory_avoid_radius fix it? The comment that chose 4 was written before Issue #129 and describes a map where memories land on the raiders' road; after #129 they land on the larder, so the ground for 4 is stale and the question had to be asked again.",
       "rows": [
@@ -53,7 +60,7 @@
         {"radius": 4, "avoidTicks": 300, "yieldsSatiety": 30, "cell": "raided", "meals": 81, "satiety": 22, "refusalsBaseline": 352, "refusalsPrepared": 38, "longestStreak": 87},
         {"radius": 4, "avoidTicks": 200, "yieldsSatiety": 30, "cell": "raided", "meals": 90, "satiety": 39, "refusalsBaseline": 219, "refusalsPrepared": 34, "longestStreak": 87, "reading": "shipped"}
       ],
-      "why both": "Neither bound is redundant and the table says so on its own row. Ageing at 200 alone leaves the domain dead; hunger alone leaves it alive and paying 619 refusals with one creature standing still for 114 consecutive ticks. Together the party lives, the price falls to 219 refusals and 87 ticks, and the mechanic is still on the panel 253 times over the matrix."
+      "why both": "Neither bound is redundant and the table says so on its own row. Ageing at 200 alone leaves the domain dead; hunger alone leaves it alive and paying 619 refusals with one creature standing still for 114 consecutive ticks. Together the party lives, the price falls to 219 refusals and 87 ticks, and the mechanic is still on the panel 253 times over the six parties this class walks."
     }
   },
   "matrix": {
@@ -92,7 +99,7 @@
     "result": "280 of 280 green, including PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix on all three seeds and Preparation_outscores_its_absence_over_the_matrix.",
     "whatChangedUnderneathThatTest": {
       "before": "prepared 2526 against baseline 1366, per-seed gaps +38, -28 and +1150. The docstring of the test records that 1150 of the 1160 came from baseline/20260728 — 'the party that wins its fights and starves, defect #171' — and asks for the clause to be rechecked when #171 closes.",
-      "after": "prepared 2546 against baseline 2330, per-seed gaps +92, -28 and +152. The margin is now spread over the matrix instead of resting on one dead party, which is what the clause was waiting for.",
+      "after": "prepared 2546 against baseline 2330 over the three seeds of each, per-seed gaps +92, -28 and +152. The margin is now spread over the three seeds instead of resting on one dead party, which is what the clause was waiting for.",
       "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Preparation_outscores_its_absence_over_the_matrix\" --logger \"console;verbosity=detailed\""
     }
   },
@@ -107,7 +114,7 @@
       {"cell": "prepared/20260727", "refusals": [32, 28], "refusingCreatures": [5, 4], "longestStreak": [14, 13]},
       {"cell": "prepared/20260728", "refusals": [3, 1], "refusingCreatures": [2, 1], "longestStreak": [1, 1]}
     ],
-    "reading": "253 refusals survive over the matrix against 639 before, spread over up to four creatures a party instead of three, and on the cell the defect lives on the count of refusing creatures goes up rather than down: 3 -> 4. Nothing was zeroed. The floors PrototypeMemoryTests holds each fixture to — ten refusals over the matrix, five with the counterfactual probe — are met with 219 on `baseline` and 34 on `prepared`.",
+    "reading": "253 refusals survive over the six parties of `baseline` and `prepared` against 639 before, spread over up to four creatures a party instead of three, and on the cell the defect lives on the count of refusing creatures goes up rather than down: 3 -> 4. Nothing was zeroed. The floors PrototypeMemoryTests holds each fixture to — ten refusals over its three seeds, five with the counterfactual probe — are met with 219 on `baseline` and 34 on `prepared`.",
     "alsoMeasured": "A hungry creature taking work it would otherwise refuse is not a theory: PrototypeMemoryCostTests.A_creature_going_hungry_takes_the_work_it_would_otherwise_refuse counts the ticks it happens on and fails if the answer is zero."
   },
   "whatWentRedAndWasRepairedInASecondRound": {

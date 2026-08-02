@@ -12,7 +12,7 @@
   "measurement": {
     "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter \"FullyQualifiedName~Report_how_often_a_line_is_older_than_the_newest_entry\" --logger \"console;verbosity=detailed\"",
     "harness": "DomainFeedTests.Report_how_often_a_line_is_older_than_the_newest_entry, added by this round",
-    "sample": "both fixtures that reach a wave x three seeds of the matrix, the feed read every 50 ticks up to tick 2400 — the same sampling the rest of this file uses. 288 windows and 864 lines on this branch; 286 and 858 on `main`, where baseline/20260728 ends early because it starves.",
+    "sample": "six parties — both fixtures that reach a wave on the three seeds — and not the fifteen cells of the seed matrix of 13.4; the feed read every 50 ticks up to tick 2400 — the same sampling the rest of this file uses. 288 windows and 864 lines on this branch; 286 and 858 on `main`, where baseline/20260728 ends early because it starves.",
     "howMainWasMeasured": "By reverting the two arms of the Issue #171 edit in PrototypeWorld.AvoidedPlace on the working tree, running the same command, and restoring with `git checkout --`. The harness is therefore identical on both sides.",
     "main": {
       "linesOlderThanTheNewest": 352,
@@ -58,10 +58,10 @@
   },
   "theFix": {
     "pathTaken": "The second of the three the coordinator named: the clause was rewritten to rest on the measured quantity. Moving the measured tick was rejected — it would have replaced one fitted window with another fitted window, which is the same defect with a different number.",
-    "ruleUnweakened": "«Every line of the feed is the worst thing that happened to that creature» is now asserted at every sampled window of the matrix — 864 lines against the three it used to check. The check is strictly wider than the one it replaces.",
+    "ruleUnweakened": "«Every line of the feed is the worst thing that happened to that creature» is now asserted at every sampled window of the six parties — 864 lines against the three it used to check. The check is strictly wider than the one it replaces.",
     "exerciseNowAsserted": [
       {
-        "claim": "at least one line in three, over the sampled matrix, is older than its creature's newest entry",
+        "claim": "at least one line in three, over the sampled windows of the six parties, is older than its creature's newest entry",
         "floor": "1.0 / HudText.DomainFeedLines",
         "whyThatNumber": "The panel is three lines. «On an average window at least one of them is not that creature's last word» is the smallest statement under which the difference between the two rules is on the panel to be read, and it is a property of the panel rather than a number read off a run. Measured 41.0% on `main` and 42.0% here.",
         "whyItIsNotSlack": "A feed that handed each creature its newest entry scores 0% on this measure by construction, because the count is exactly the number of lines on which the two rules disagree. The floor is therefore a third of the whole distance to a panel that has stopped making the distinction, not a bound with room cut into it."

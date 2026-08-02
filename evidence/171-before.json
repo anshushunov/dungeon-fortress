@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "issue": 171,
   "when": "2026-08-02, before the edit",
-  "what": "The channel of Issue #171 re-measured on the current origin/main, not copied from the tree of Issue #129. Two commands are used and both are recorded: the batch runner that produces the whole nine-cell matrix, and the new report of PrototypeMemoryCostTests that says what memory of place refused, to whom it belonged and how old it was.",
+  "what": "The channel of Issue #171 re-measured on the current origin/main, not copied from the tree of Issue #129. Two commands are used and both are recorded, and they do not share a denominator, which is why each is named: the batch runner, which drives fifteen runs — the nine cells of the seed matrix plus two causal pairs on three seeds each — and the new report of PrototypeMemoryCostTests, which walks six parties, `baseline` and `prepared` on the same three seeds, and says what memory of place refused, to whom it belonged and how old it was.",
   "tree": {
     "branch": "agent/171-memory-of-place-cost",
     "baseCommit": "ac0e4b5",
@@ -19,6 +19,7 @@
     "command": "dotnet build DungeonFortress.sln -c Release; dotnet tests/DungeonFortress.Scenarios/bin/Release/net8.0/DungeonFortress.Scenarios.dll --evaluate-prototype --repository-root . --output .artifacts/171-main-batch.json",
     "readWith": "jq -r '.Runs[] | [.Scenario, (.Seed|tostring), .Metrics.Session.Outcome, (.Metrics.Session.EndTick|tostring), (.Metrics.Session.Score|tostring), (.Metrics.Economy.MealsProduced|tostring), (.Metrics.Creatures.AverageSatiety|tostring), (.Metrics.Explainability.ReasonCodeOccurrences.refused_place_of_panic//0|tostring), (.Metrics.Explainability.ReasonCodeOccurrences.waiting_input_missing//0|tostring)] | @tsv' .artifacts/171-main-batch.json",
     "note": "`refused_place_of_panic` here is the canonical Sum(Repeats) of the reason code, the same figure the contract table quotes.",
+    "whatThisListIs": "The nine cells of the seed matrix. The six causal-pair cells of the same run are recorded next to their after values in evidence/171-after.json, key `matrix.everyCellOfFifteen`, rather than duplicated here.",
     "cells": [
       {"fixture": "baseline", "seed": 20260726, "outcome": "raided", "endTick": 2405, "score": 758, "mealsProduced": 99, "averageSatiety": 32, "refusedPlaceOfPanic": 187, "refusedPlaceOfWound": 0, "waitingInputMissing": 380, "mealsStolen": 40, "defendersDowned": 3, "wavesRepelled": 1},
       {"fixture": "baseline", "seed": 20260727, "outcome": "raided", "endTick": 2421, "score": 831, "mealsProduced": 108, "averageSatiety": 56, "refusedPlaceOfPanic": 0, "refusedPlaceOfWound": 0, "waitingInputMissing": 157, "mealsStolen": 45, "defendersDowned": 2, "wavesRepelled": 2},
@@ -35,6 +36,8 @@
   "price": {
     "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeMemoryCostTests\" --logger \"console;verbosity=detailed\"",
     "harness": "tests/DungeonFortress.Simulation.Tests/PrototypeMemoryCostTests.cs, added by this checkpoint and asserting nothing yet",
+    "sample": "six parties — `baseline` and `prepared` on the three seeds. Not the fifteen cells above: `neglected` writes no memory at all, and the two causal pairs are outside this harness. Every refusal count in this file is over these six.",
+    "whatThisListIs": "The nine cells of the seed matrix. The six causal-pair cells of the same run are recorded next to their after values in evidence/171-after.json, key `matrix.everyCellOfFifteen`, rather than duplicated here.",
     "cells": [
       {"fixture": "baseline", "seed": 20260726, "outcome": "raided", "refusals": 187, "refusingCreatures": 2, "onFoodChain": 187, "longestUnbrokenStreakOfOneCreature": 126, "oldestMemoryActedOn": 322, "kinds": {"Cook": 169, "Haul": 18}, "tiles": {"(14,7)": 167, "(10,7)": 18, "(15,7)": 2}},
       {"fixture": "baseline", "seed": 20260727, "outcome": "raided", "refusals": 0, "refusingCreatures": 0, "onFoodChain": 0, "longestUnbrokenStreakOfOneCreature": 0, "oldestMemoryActedOn": 0, "kinds": {}, "tiles": {}},

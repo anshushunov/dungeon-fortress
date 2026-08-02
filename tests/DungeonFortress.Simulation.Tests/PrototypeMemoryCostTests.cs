@@ -76,7 +76,7 @@ public sealed class PrototypeMemoryCostTests(ITestOutputHelper output)
     public void Report_what_memory_of_place_costs_the_domain()
     {
         var report = new StringBuilder();
-        foreach (var cell in Matrix())
+        foreach (var cell in SixParties())
         {
             report.AppendLine(CultureInfo.InvariantCulture,
                 $"{cell.Fixture}/{cell.Seed}: {cell.Outcome} at t{cell.EndTick}, score {cell.Score}, " +
@@ -100,11 +100,19 @@ public sealed class PrototypeMemoryCostTests(ITestOutputHelper output)
     /// not end it starving.</b>
     ///
     /// <para>
-    /// It is asserted over the whole matrix rather than on the seed the defect
+    /// It is asserted over all six parties rather than on the seed the defect
     /// was found on, because one seed cannot tell a fix from a coincidence. Both
     /// fixtures that reach a wave must come out of every seed alive; `neglected`
     /// is not here because it falls before the first wave, writes no memory at
     /// all and is the fixture whose falling is the point.
+    ///
+    /// <para>
+    /// Six parties and not the fifteen cells of the seed matrix of 13.4: the two
+    /// causal pairs are outside this sample, and every count printed and asserted
+    /// by this class is over the six. Named because one change set must not use
+    /// the word `matrix` for two different denominators — found by the independent
+    /// review of PR #178.
+    /// </para>
     /// </para>
     ///
     /// <para>
@@ -117,7 +125,7 @@ public sealed class PrototypeMemoryCostTests(ITestOutputHelper output)
     [Fact]
     public void A_party_that_wins_its_fights_does_not_end_it_starving()
     {
-        foreach (var cell in Matrix())
+        foreach (var cell in SixParties())
         {
             Assert.True(
                 cell.Outcome != "fallen",
@@ -143,7 +151,7 @@ public sealed class PrototypeMemoryCostTests(ITestOutputHelper output)
     /// </para>
     ///
     /// <para>
-    /// The bound is 100 and the shipped matrix reaches 87, which is a margin of
+    /// The bound is 100 and the shipped run reaches 87, which is a margin of
     /// thirteen ticks and is named rather than hidden: this is a fitted bound,
     /// and it is worth having only because both halves of the fix cross it on
     /// their own. On <c>main</c> the same figure is 213; with the hunger bound
@@ -155,7 +163,7 @@ public sealed class PrototypeMemoryCostTests(ITestOutputHelper output)
     public void No_creature_is_taken_out_of_the_domain_by_what_it_remembers()
     {
         const int bound = 100;
-        foreach (var cell in Matrix())
+        foreach (var cell in SixParties())
         {
             Assert.True(
                 cell.LongestRefusalStreakOneCreature <= bound,
@@ -191,7 +199,7 @@ public sealed class PrototypeMemoryCostTests(ITestOutputHelper output)
             $"{PrototypeTuning.WaveIntervalTicks} apart. Longer than the interval, a fright " +
             "outlives the quiet window the party has to feed itself in, and frights compound wave " +
             "over wave instead of healing between them.");
-        foreach (var cell in Matrix())
+        foreach (var cell in SixParties())
         {
             Assert.True(
                 cell.OldestMemoryAtRefusal <= PrototypeTuning.MemoryAvoidTicks,
@@ -204,7 +212,7 @@ public sealed class PrototypeMemoryCostTests(ITestOutputHelper output)
     /// <summary>
     /// The second of the two bounds, as its own rule: <b>a creature below
     /// <see cref="PrototypeTuning.MemoryYieldsSatiety"/> never refuses work by
-    /// memory</b>, and over the matrix that actually happens rather than being
+    /// memory</b>, and over the six parties that actually happens rather than being
     /// vacuously true.
     ///
     /// <para>
@@ -274,7 +282,7 @@ public sealed class PrototypeMemoryCostTests(ITestOutputHelper output)
 
         Assert.True(
             yielded > 0,
-            "over the whole matrix no hungry creature ever took work at a place it remembers, so " +
+            "over all six parties no hungry creature ever took work at a place it remembers, so " +
             $"the bound was never reached and this check tested nothing.{Environment.NewLine}{report}");
     }
 
@@ -289,7 +297,14 @@ public sealed class PrototypeMemoryCostTests(ITestOutputHelper output)
                 .ThenBy(pair => pair.Key, StringComparer.Ordinal)
                 .Select(pair => $"{pair.Key}={pair.Value}"));
 
-    private static List<Cell> Matrix()
+    /// <summary>
+    /// The sample every figure of this class is taken on: the two fixtures that
+    /// reach a wave, on the three seeds of the matrix — six parties. It is
+    /// deliberately not called the matrix: that word names the fifteen cells of
+    /// 13.4, and `neglected`, `prepared-ration-zero` and `prepared-watch-zero`
+    /// are not walked here.
+    /// </summary>
+    private static List<Cell> SixParties()
     {
         var cells = new List<Cell>();
         foreach (var fixtureName in Fixtures)
