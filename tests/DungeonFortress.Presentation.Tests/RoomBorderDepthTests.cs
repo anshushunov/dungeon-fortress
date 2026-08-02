@@ -265,12 +265,15 @@ public sealed class RoomBorderDepthTests
     /// that are drawn after any body whose sprite can reach it at all.
     ///
     /// <para>
-    /// The reach is arithmetic rather than a sweep. A body's sprite reaches at most
-    /// half of <see cref="CameraView.GoblinDrawSize"/> below its own render centre,
-    /// so the southernmost centre from which a body can touch the stroke is the
-    /// stroke's lower edge plus that half — and
-    /// <see cref="InFrontOfEverybodyTouching"/> keeps only walls anchored south of
-    /// that point, which are therefore drawn after every one of those bodies.
+    /// The reach is arithmetic rather than a sweep. What decides it is how far a
+    /// body reaches <em>upwards</em>, not downwards: since #77 the square stands on
+    /// <see cref="CameraView.GoblinFootLine"/> and grows up, so it reaches 42.58 px
+    /// above its render centre and 19.24 below at tile 40. The southernmost centre
+    /// from which a body can touch the stroke is therefore the stroke's lower edge
+    /// plus that upward reach, and <see cref="InFrontOfEverybodyTouching"/> takes it
+    /// from <see cref="CameraView.GoblinDrawRect"/> rather than restating the rule —
+    /// half of <see cref="CameraView.GoblinDrawSize"/> was correct while the square
+    /// was centred and would silently understate the reach now.
     /// </para>
     /// </summary>
     [Theory]
