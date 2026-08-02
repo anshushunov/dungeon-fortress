@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "issue": 171,
+  "when": "2026-08-02, after the coordinator reassigned tests/DungeonFortress.Presentation.Tests/DomainFeedTests.cs to this task",
+  "what": "How often the domain feed gives a creature an entry older than the last thing that creature did — measured on `main` and on this branch with one command, because the check that failed measured it at a single tick and could not tell a weakened exercise from a moved one.",
+  "theFailure": {
+    "test": "DomainFeedTests.The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it",
+    "before": "It read one moment — `baseline` on its own seed at tick 2400 — and required that all three lines of the feed differ from their creature's newest entry.",
+    "message": "only 2 of the 3 lines of this feed show something other than that creature's newest entry",
+    "whatNeverFailed": "The rule the test is named for. Every line of the feed was, and still is, the heaviest entry of the creature it belongs to."
+  },
+  "measurement": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter \"FullyQualifiedName~Report_how_often_a_line_is_older_than_the_newest_entry\" --logger \"console;verbosity=detailed\"",
+    "harness": "DomainFeedTests.Report_how_often_a_line_is_older_than_the_newest_entry, added by this round",
+    "sample": "both fixtures that reach a wave x three seeds of the matrix, the feed read every 50 ticks up to tick 2400 — the same sampling the rest of this file uses. 288 windows and 864 lines on this branch; 286 and 858 on `main`, where baseline/20260728 ends early because it starves.",
+    "howMainWasMeasured": "By reverting the two arms of the Issue #171 edit in PrototypeWorld.AvoidedPlace on the working tree, running the same command, and restoring with `git checkout --`. The harness is therefore identical on both sides.",
+    "main": {
+      "linesOlderThanTheNewest": 352,
+      "lines": 858,
+      "shareOfLines": 0.410,
+      "windowsWithAtLeastOne": 129,
+      "windows": 286,
+      "shareOfWindowsWithAtLeastOne": 0.451,
+      "windowsWhereEveryLineIsOlder": 97,
+      "shareOfWindowsWhereEveryLineIsOlder": 0.339,
+      "perCell": [
+        {"cell": "baseline/20260726", "older": 57, "lines": 144, "windows": 48, "withAny": 22, "withAll": 13},
+        {"cell": "baseline/20260727", "older": 62, "lines": 144, "windows": 48, "withAny": 22, "withAll": 19},
+        {"cell": "baseline/20260728", "older": 49, "lines": 138, "windows": 46, "withAny": 20, "withAll": 11},
+        {"cell": "prepared/20260726", "older": 62, "lines": 144, "windows": 48, "withAny": 22, "withAll": 18},
+        {"cell": "prepared/20260727", "older": 63, "lines": 144, "windows": 48, "withAny": 22, "withAll": 19},
+        {"cell": "prepared/20260728", "older": 59, "lines": 144, "windows": 48, "withAny": 21, "withAll": 17}
+      ]
+    },
+    "branch": {
+      "linesOlderThanTheNewest": 363,
+      "lines": 864,
+      "shareOfLines": 0.420,
+      "windowsWithAtLeastOne": 131,
+      "windows": 288,
+      "shareOfWindowsWithAtLeastOne": 0.455,
+      "windowsWhereEveryLineIsOlder": 103,
+      "shareOfWindowsWhereEveryLineIsOlder": 0.358,
+      "perCell": [
+        {"cell": "baseline/20260726", "older": 57, "lines": 144, "windows": 48, "withAny": 22, "withAll": 14},
+        {"cell": "baseline/20260727", "older": 62, "lines": 144, "windows": 48, "withAny": 22, "withAll": 19},
+        {"cell": "baseline/20260728", "older": 61, "lines": 144, "windows": 48, "withAny": 22, "withAll": 17},
+        {"cell": "prepared/20260726", "older": 62, "lines": 144, "windows": 48, "withAny": 22, "withAll": 18},
+        {"cell": "prepared/20260727", "older": 62, "lines": 144, "windows": 48, "withAny": 22, "withAll": 18},
+        {"cell": "prepared/20260728", "older": 59, "lines": 144, "windows": 48, "withAny": 21, "withAll": 17}
+      ]
+    }
+  },
+  "reading": {
+    "answer": "The exercise did not weaken. It is 41.0% of lines before the change and 42.0% after; windows in which every line is older are 33.9% before and 35.8% after. On every measure the branch is level with `main` or very slightly above it, and the only cell that moved materially is baseline/20260728, which improves — 49 of 138 becomes 61 of 144, and it gains the two windows it used to be dead for.",
+    "whatActuallyFailed": "The clause was fitted to one window. A window in which all three lines are older than their creature's last word happens about once in three; the old check demanded that one particular tick of one particular seed be one of them. That is a coin the simulation is free to flip on any change at all, and Issue #171 flipped it.",
+    "soTheHonestAnswerIsNot": "«the game got better and the exercise thinned». That was the hypothesis this round started with, and the measurement refuted it."
+  },
+  "theFix": {
+    "pathTaken": "The second of the three the coordinator named: the clause was rewritten to rest on the measured quantity. Moving the measured tick was rejected — it would have replaced one fitted window with another fitted window, which is the same defect with a different number.",
+    "ruleUnweakened": "«Every line of the feed is the worst thing that happened to that creature» is now asserted at every sampled window of the matrix — 864 lines against the three it used to check. The check is strictly wider than the one it replaces.",
+    "exerciseNowAsserted": [
+      {
+        "claim": "at least one line in three, over the sampled matrix, is older than its creature's newest entry",
+        "floor": "1.0 / HudText.DomainFeedLines",
+        "whyThatNumber": "The panel is three lines. «On an average window at least one of them is not that creature's last word» is the smallest statement under which the difference between the two rules is on the panel to be read, and it is a property of the panel rather than a number read off a run. Measured 41.0% on `main` and 42.0% here.",
+        "whyItIsNotSlack": "A feed that handed each creature its newest entry scores 0% on this measure by construction, because the count is exactly the number of lines on which the two rules disagree. The floor is therefore a third of the whole distance to a panel that has stopped making the distinction, not a bound with room cut into it."
+      },
+      {
+        "claim": "some sampled window still shows a feed in which every line is older",
+        "floor": "greater than zero",
+        "whyThatNumber": "This is the panel the defect of Issue #145 was reported on, and it has to stay reachable. Measured 103 of 288 windows here and 97 of 286 on `main`. Stated as «it happens» rather than «it happens at tick 2400», which is the correction."
+      }
+    ]
+  }
+}
