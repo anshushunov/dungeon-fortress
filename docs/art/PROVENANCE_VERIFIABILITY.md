@@ -75,7 +75,8 @@ git ls-tree -r --name-only origin/main | rg -i "chroma|\.py$"
 **восстановить** и предъявить проверяющему.
 
 - Скрипт: `C:\Users\User\.codex\skills\.system\imagegen\scripts\remove_chroma_key.py`
-  (хелпер skills `imagegen` Codex, Apache-2.0). SHA-256 `7e512369...`.
+  (хелпер skills `imagegen` Codex, Apache-2.0). SHA-256 `7e512369...`
+  (CRLF-оригинал на машине).
 - Источники — в кэше `C:\Users\User\.codex\generated_images\<сессия>\`:
   - пак v2: `exec-993a3e19-1b8c-4c8c-93ef-244fb9a3d9d9.png`;
   - flinch: `exec-d14b69b4-78bb-408e-bd7e-89524e292621.png`;
@@ -121,11 +122,13 @@ git ls-tree -r --name-only origin/main | rg -i "chroma|\.py$"
 ## Скрипт пост-обработки
 
 `remove_chroma_key.py` восстановлен в `scripts/art/remove_chroma_key.py` как
-**точная копия** хелпера imagegen, которым пост-обработка выполнялась. Скрипт
-побайтово совпадает с оригиналом: `Get-FileHash -Algorithm SHA256
-scripts/art/remove_chroma_key.py` даёт `7e512369...` — тот же, что у файла
-`C:\Users\User\.codex\skills\.system\imagegen\scripts\remove_chroma_key.py`
-(измерено 2026-08-02, `evidence/179-analysis.json`).
+копия хелпера imagegen, которым пост-обработка выполнялась. Содержимое совпадает
+с оригиналом; переводы строк нормализованы репозиторием в LF
+(`.gitattributes`: `* text=auto eol=lf`), поэтому SHA-256 коммиченной копии
+`3f7b9b14...` отличается от CRLF-оригинала на машине (`7e512369...`). Различие
+только в переводах строк и не влияет на поведение: прогон коммиченной копии
+воспроизводит записанные числа дословно (измерено 2026-08-02,
+`evidence/179-analysis.json`).
 
 Происхождение скрипта: хелпер skills `imagegen` Codex (поставляется вместе с
 Codex, лицензия Apache-2.0 в `LICENSE.txt` рядом). Восстановлен не «эквивалент»,
@@ -158,9 +161,11 @@ python scripts/art/remove_chroma_key.py --input <источник> --out <alpha.
 | goblin-v1 | `call_1XyNBeXZYWqooldTTJ6Pn2Gs.png` | 1254×1254 | `2d2ed58e9cc01830b6be9ec3f9eca40ea4477b9196761c56665d333a0d09ee93` |
 | icons-v1 | `call_4mB0OlBELzdJ6BKBewCnvFu4.png` | 1254×1254 | `d8ea688c1fdb97ccf2538d99d0fae1442fa201d589b34cc428702914dc10266f` |
 
-Восстановленный скрипт — `scripts/art/remove_chroma_key.py`, SHA-256
-`7e51236919203b61d07ddffdc6e0b5f501a28661003f5851f26ffbb64bdec1ea` (копия,
-проверена побайтово).
+Восстановленный скрипт — `scripts/art/remove_chroma_key.py`. Коммиченная копия
+(LF, репозиторная норма) — SHA-256
+`3f7b9b14ad5c90f37618bc1c16a039a2076abca12ddc41b3ae470e2b1cad6c0e`; CRLF-оригинал
+на машине генерации — `7e51236919203b61d07ddffdc6e0b5f501a28661003f5851f26ffbb64bdec1ea`.
+Содержимое совпадает, отличаются только переводы строк.
 
 Промежуточная alpha-пластина пака v2 (сохранена на машине генерации вне Git):
 `bc845f9afa3759819b7ec0943d737761583e918ea59609883a141e9b654a1bd9` — совпадает с

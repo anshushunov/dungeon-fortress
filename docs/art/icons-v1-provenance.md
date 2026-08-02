@@ -47,7 +47,9 @@ draws them at exactly 24×24.
 Post-processing steps and their executability from the repo:
 
 1. **Chroma key** — executable. `scripts/art/remove_chroma_key.py` in this repo
-   is byte-identical to the helper used (SHA-256 `7e512369...`). Run from the
+   is a copy of the helper used; content identical, line endings normalized by
+   the repo to LF (SHA-256 of the committed copy `3f7b9b14...`, of the CRLF
+   original on the generating machine `7e512369...`). Run from the
    repo root on the source with the recorded flags:
 
    ```powershell

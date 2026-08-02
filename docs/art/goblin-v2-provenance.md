@@ -364,8 +364,10 @@ print(output.resolve())
 [`evidence/179-analysis.json`](../../evidence/179-analysis.json).
 
 1. **Chroma key** — executable. `scripts/art/remove_chroma_key.py` в этом
-   репозитории побайтово совпадает с использованным хелпером (SHA-256
-   `7e512369...`). Запуск из корня репозитория на источнике пака:
+   репозитории — копия использованного хелпера; содержимое совпадает, переводы
+   строк нормализованы репозиторием в LF (SHA-256 коммиченной копии
+   `3f7b9b14...`, CRLF-оригинала на машине генерации `7e512369...`). Запуск из
+   корня репозитория на источнике пака:
 
    ```powershell
    python scripts/art/remove_chroma_key.py --input <v2-source.png> --out <alpha.png> `

@@ -25,6 +25,30 @@
       "takenOn": "2026-08-02"
     },
     {
+      "id": "script-committed-lf",
+      "claim": "Коммиченная копия scripts/art/remove_chroma_key.py хранится с LF-переводами строк (репозиторий: .gitattributes '* text=auto eol=lf'), поэтому её SHA-256 отличается от CRLF-оригинала на машине",
+      "command": "git show HEAD:scripts/art/remove_chroma_key.py | Get-FileHash -Algorithm SHA256",
+      "resultSha256": "3f7b9b14ad5c90f37618bc1c16a039a2076abca12ddc41b3ae470e2b1cad6c0e",
+      "note": "Содержимое совпадает с оригиналом побайтово, кроме переводов строк; это не влияет на поведение — прогон коммиченной копии воспроизводит записанные числа (см. id v2-repro-lf, flinch-repro-lf)",
+      "takenOn": "2026-08-02"
+    },
+    {
+      "id": "v2-repro-lf",
+      "claim": "Коммиченная (LF) копия скрипта на источнике пака v2 даёт записанные числа 1,254,108 / 12,954",
+      "command": "python <committed remove_chroma_key.py> --input v2-source.png --out v2-lf.png --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill --force",
+      "result": "Key color: #fb03f9; Transparent pixels: 1254108/1572864; Partially transparent pixels: 12954/1572864",
+      "matchesProvenance": "да",
+      "takenOn": "2026-08-02"
+    },
+    {
+      "id": "flinch-repro-lf",
+      "claim": "Коммиченная (LF) копия скрипта на источнике flinch даёт записанные числа 1,196,694 / 6,883",
+      "command": "python <committed remove_chroma_key.py> --input flinch-source.png --out flinch-lf.png --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill --force",
+      "result": "Key color: #fb03f9; Transparent pixels: 1196694/1572736; Partially transparent pixels: 6883/1572736",
+      "matchesProvenance": "да",
+      "takenOn": "2026-08-02"
+    },
+    {
       "id": "v2-source",
       "claim": "Источник пака v2 1536x1024 RGB",
       "command": "python -c \"from PIL import Image; im=Image.open(r'C:\\Users\\User\\.codex\\generated_images\\019fbdfd-2477-7ff0-ac5a-259b2e984de0\\exec-993a3e19-1b8c-4c8c-93ef-244fb9a3d9d9.png'); print(im.mode, im.size)\"",
