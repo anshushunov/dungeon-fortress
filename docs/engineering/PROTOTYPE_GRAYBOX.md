@@ -1577,23 +1577,30 @@ puts the deepest zoom back inside the source. The pure camera test pins both
 bounds and the Godot stage publishes and checks overview, base and detail sizes.
 Runtime mipmaps plus `LinearWithMipmaps` keep the source usable below `1×`.
 
-`CameraView.GoblinDrawRect` says where that square goes: centred on the render
-centre, the rule the adapter has always drawn by. At 170 % a centred square costs
-something measurable, recorded here rather than left to be rediscovered — the v1
-sheet's last opaque row is 92 of 96, so the drawn feet sink from 16.67 px below
-the render centre to 28.33 px and land just outside the 40 px cell the body stands
-on. Growing the body upward instead is two rules rather than one, about a pixel
-apart. Anchoring the **drawn feet** on their old line — what the spike's own scene
-did — makes a body 42.58 px tall above its centre, moves the feet by nothing, and
-adds no crossing to the Issue #156 sweep at any tile size. Anchoring the **square's
-bottom edge** where the old square's was makes it 43.64 px, because the sheet's
-transparent 4/96 of padding grows with the square; that variant does not hold the
-feet still either — it lifts them by 1.06 px — and it does add 2 crossings, both
-mid-step between cells 21,6 and 21,7 against the south edge of `quarters@19,2`,
-covering 7.44 and 0.77 square pixels at tile 40. The 43.6 px figure first written
-here belonged to the second rule while the words described the first; independent
-review of PR #176 caught it. The choice belongs with the pack switch, which has to
-replace the square with a 17:12 rectangle anyway.
+`CameraView.GoblinDrawRect` says where that square goes: **a body grows upward out
+of the ground it stands on.** The square is centred horizontally on the render
+point and stands on `CameraView.GoblinFootLine` below it — 16.67 px at tile 40,
+which is where the feet of the authored 20-reference-pixel body landed long before
+Issue #77 — so at 170 % the drawn feet move by exactly 0.000000 px at every tile
+size and the body reaches 42.58 px above its centre instead of 18.18. This is also
+the rule spike #142's own scene used, so it is the picture the owner was judging
+when he chose 170 %.
+
+«Where the feet are» is a property of the sprite pack and is named as one:
+`CameraView.SpriteSupportFraction` = 92/96, because every v1 state's last opaque
+row is 91 of 96 (read off the PNGs). The v2 pack's support zone is
+`172 ≤ y ≤ 187` of 192 rows, so connecting it must move that constant with it.
+
+The first round of this change shipped a **centred** square instead, which sank
+the feet from 16.67 px below the render centre to 28.33 — 11.67 px, 29 % of a
+cell, landing outside the cell the body stands on. It was accepted because growing
+upward was thought to undo part of Issue #156. Re-measurement after review of PR
+#176 found that cost belongs to a *different* rule, about a pixel away: anchoring
+the square's **bottom edge** where the old square's was reaches 43.64 px, lifts the
+feet by 1.06 px (the transparent 4/96 grows with the square) and does add 2
+crossings — both mid-step between cells 21,6 and 21,7 against the south edge of
+`quarters@19,2`, covering 7.44 and 0.77 square pixels at tile 40. Anchoring the
+**drawn feet**, which is the rule above, adds none at 32, 40 or 48.
 
 ## Readability pass
 

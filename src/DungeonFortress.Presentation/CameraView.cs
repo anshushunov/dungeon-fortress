@@ -488,63 +488,96 @@ public static class CameraView
     ///
     /// <para>
     /// How large the square is, not where it sits: <see cref="GoblinDrawRect"/>
-    /// places it, on the same render point it always did.
+    /// places it, standing on the line a body's feet have always been drawn on.
     /// </para>
     /// </summary>
     public static double GoblinDrawSize(int tileSize) =>
         ReferenceGoblinDrawSize * BodyVisualScale * WorldVisualScale(tileSize);
 
     /// <summary>
-    /// The rectangle a body's sprite is drawn into, for a body whose render
-    /// centre — the interpolated point the depth pass sorts it by — is
-    /// <paramref name="centre"/>. The square is centred on that point, which is
-    /// the rule the adapter has always drawn by; it lives here rather than in
-    /// <c>Main.DrawGoblin</c> so that where a body is drawn can be measured
-    /// without the engine, which Issue #77 is the first change to need.
+    /// Where the opaque content of a body's sprite ends, as a fraction of its
+    /// canvas height — i.e. how far down the canvas the creature's feet are.
     ///
     /// <para>
-    /// <b>The one thing this rule costs at 170 %, recorded because it is a real
-    /// consequence and not a rounding error.</b> A centred square grows in all
-    /// four directions, so the drawn feet — the v1 sheet's last opaque row, 92 of
-    /// 96 — sink from 16.7 px below the render centre to 28.3 px, i.e. 11.7 px or
-    /// 29 % of a 40 px cell, and land just outside the cell the body stands on.
-    /// Growing the body upward instead is the alternative, and it is two different
-    /// rules that were at first described as one — the difference between them is
-    /// about a pixel, and it matters:
+    /// <b>This is a property of the sprite pack, not of the camera.</b> Every
+    /// state of the v1 pack the runtime loads today has its last opaque row at 91
+    /// of 96, so its content ends 92/96 of the way down and the remaining 4/96 is
+    /// transparent padding. The v2 pack already in <c>main</c> is authored
+    /// differently — support zone <c>172 &lt;= y &lt;= 187</c> of 192 rows, i.e.
+    /// 188/192 — so the next subtask of Issue #77, which connects it, <b>must</b>
+    /// move this number with the pack. Left behind, it would put every creature
+    /// about a pixel off the ground it stands on, silently.
     /// </para>
     ///
-    /// <list type="bullet">
-    /// <item><b>Anchor the drawn feet</b> on the line they were on: the body
-    /// reaches 42.58 px above the centre and the feet do not move at all. This is
-    /// what spike #142's scene did. Swept for Issue #156's defect, it reports
-    /// <em>no</em> crossings at any of the three tile sizes.</item>
-    /// <item><b>Anchor the square's bottom edge</b> where the old square's bottom
-    /// edge was: the body reaches 43.64 px above the centre — a whole pixel more,
-    /// because the sheet's transparent 4/96 of padding grows with the square — and
-    /// the drawn feet do not stay still either, they <em>rise</em> by 1.06 px. This
-    /// is the variant that undoes part of Issue #156: 2 positions on the shipped
-    /// map, both mid-step between cells 21,6 and 21,7 against the south edge of
-    /// quarters@19,2, covering 7.44 and 0.77 square pixels of the body at tile
-    /// 40.</item>
-    /// </list>
+    /// <para>
+    /// Measured, not assumed: the alpha bounds of all four v1 states were read off
+    /// the PNGs (<c>y 8..91</c>, <c>y 20..91</c>, <c>y 8..91</c>, <c>y 47..91</c>).
+    /// </para>
+    /// </summary>
+    public const double SpriteSupportFraction = 92.0 / 96.0;
+
+    /// <summary>
+    /// The line a body's feet stand on, below its render centre: 16.67 px at the
+    /// shipped 40 px tile.
     ///
     /// <para>
-    /// The 2-crossing measurement was taken on the second of those and was for a
-    /// while written up as if it belonged to the first, which independent review of
-    /// PR #176 caught. Stated correctly: the rule that really holds the feet still
-    /// costs nothing this sweep can find. Choosing is still not this change's to
-    /// do — the next subtask of Issue #77 connects the v2 pack and has to replace
-    /// this square with a 17:12 rectangle anyway, and that is where the placement
-    /// rule is settled, with the art it was authored for in front of whoever
-    /// settles it.
+    /// It is where the feet of the authored 20-reference-pixel body landed back
+    /// when that square was centred on the render point — that is, where every
+    /// creature in this game has stood since long before Issue #77 — and it is
+    /// deliberately free of <see cref="BodyVisualScale"/>. That independence is
+    /// the whole content of the rule: how large a creature is drawn is the owner's
+    /// choice, but which ground it stands on is not, so a body may only grow
+    /// upward out of this line.
+    /// </para>
+    /// </summary>
+    public static double GoblinFootLine(int tileSize) =>
+        ReferenceGoblinDrawSize * WorldVisualScale(tileSize) *
+        (SpriteSupportFraction - 0.5);
+
+    /// <summary>
+    /// The rectangle a body's sprite is drawn into, for a body whose render
+    /// centre — the interpolated point the depth pass sorts it by — is
+    /// <paramref name="centre"/>. Horizontally centred on that point, and standing
+    /// on <see cref="GoblinFootLine"/> below it, so the body grows upward and the
+    /// drawn feet do not move at all: 0.000000 px at every tile size, which
+    /// <c>CameraViewTests</c> measures rather than asserts in prose.
+    ///
+    /// <para>
+    /// This is the rule spike #142's own scene used — <c>creature_visual.gd</c>:
+    /// «<c>position</c> is the creature's feet… the pivot never moves when
+    /// <c>scale_multiplier</c> changes the draw size» — so it is also the picture
+    /// the owner was looking at when he chose 170 %.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Why the first round of Issue #77 shipped a centred square instead, and
+    /// why that was wrong.</b> A centred square grows in all four directions, so
+    /// the drawn feet would sink from 16.67 px below the render centre to 28.33 —
+    /// 11.67 px, 29 % of a 40 px cell — and land outside the cell the body stands
+    /// on. That was accepted because growing upward was believed to undo part of
+    /// Issue #156. Re-measurement after review of PR #176 found the cost belonged
+    /// to a different rule: anchoring the square's <em>bottom edge</em> where the
+    /// old square's bottom edge was reaches 43.64 px above the centre, does
+    /// <em>not</em> hold the feet still either (it lifts them 1.06 px, because the
+    /// transparent 4/96 grows with the square), and adds 2 crossings on the
+    /// shipped map. Anchoring the <em>drawn feet</em>, which is this rule, reaches
+    /// 42.58 px and adds none at any tile size. One rule was measured and the
+    /// other described; the two are about a pixel apart, and that pixel was the
+    /// whole of the argument.
+    /// </para>
+    ///
+    /// <para>
+    /// Still a square, and still the v1 pack: the 17:12 rectangle the v2 pack
+    /// needs is the next subtask of Issue #77.
     /// </para>
     /// </summary>
     public static ViewRect GoblinDrawRect(ViewPoint centre, int tileSize)
     {
         var size = GoblinDrawSize(tileSize);
+        var feet = centre.Y + GoblinFootLine(tileSize);
         return new ViewRect(
             centre.X - (size / 2.0),
-            centre.Y - (size / 2.0),
+            feet - (size * SpriteSupportFraction),
             size,
             size);
     }

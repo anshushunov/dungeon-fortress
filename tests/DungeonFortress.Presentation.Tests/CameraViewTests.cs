@@ -141,13 +141,13 @@ public sealed class CameraViewTests
     }
 
     /// <summary>
-    /// The grid, the cell and the point a body is placed by are the same pixels
-    /// they were before Issue #77: the sprite's square is still centred on the
-    /// render centre, so what changed is the size of the body and nothing about
-    /// where the world is or where a body is anchored in it.
+    /// The grid and the cell are the same pixels they were before Issue #77, and
+    /// the sprite is still centred horizontally on the render point. What the
+    /// change moves is the size of the body — not the world, and not the ground
+    /// the body stands on, which the next test measures.
     /// </summary>
     [Fact]
-    public void Growing_the_body_moves_neither_the_grid_nor_the_point_a_body_is_placed_by()
+    public void Growing_the_body_moves_neither_the_grid_nor_the_cell_a_body_belongs_to()
     {
         var cell = new GridPoint(14, 8);
 
@@ -162,52 +162,87 @@ public sealed class CameraViewTests
             Assert.Equal(cell, CameraView.WorldToCell(centre, tileSize));
             Assert.Equal(tileSize / 22.0, CameraView.WorldVisualScale(tileSize));
 
-            // The anchor: the drawn square is centred on the same render point.
             var drawn = CameraView.GoblinDrawRect(centre, tileSize);
 
             Assert.Equal(centre.X, drawn.Center.X, 12);
-            Assert.Equal(centre.Y, drawn.Center.Y, 12);
             Assert.Equal(CameraView.GoblinDrawSize(tileSize), drawn.Width, 12);
             Assert.Equal(drawn.Width, drawn.Height);
         }
     }
 
     /// <summary>
-    /// What a centred square costs at 170 %, in the numbers rather than in prose:
-    /// the growth is shared between up and down, so the drawn feet end up lower
-    /// than they were and just outside the cell the body stands on.
+    /// The body grows upward out of the ground it stands on: at 170 % the drawn
+    /// feet are on exactly the pixel they were on before Issue #77, at every tile
+    /// size, and the whole of the growth goes up.
     ///
     /// <para>
-    /// The v1 sheet's last opaque row is 92 of 96 in all four states — measured,
-    /// not assumed — so «where the feet are» is 92/96 of the way down the square.
-    /// This test exists so the number is a fact under test rather than a claim in
-    /// a handoff, and the two upward alternatives are named apart for the same
-    /// reason: anchoring the <em>drawn feet</em> makes a body 42.58 px tall above
-    /// its centre, moves the feet by nothing, and adds no Issue #156 crossing,
-    /// while anchoring the <em>square's bottom edge</em> makes it 43.64 px, lifts
-    /// the feet by 1.06 px, and does add 2 of them. The next subtask of Issue #77
-    /// replaces this square with the v2 pack's 17:12 rectangle and settles the
-    /// placement rule then.
+    /// «Where the feet are» is 92/96 of the way down the canvas — the v1 sheet's
+    /// last opaque row, read off all four PNGs rather than assumed, and named in
+    /// <see cref="CameraView.SpriteSupportFraction"/> because it belongs to the
+    /// pack and moves when the pack does.
+    /// </para>
+    ///
+    /// <para>
+    /// The rejected rules are kept here as numbers, because both were measured
+    /// and one of them shipped for a round. A <b>centred</b> square would sink the
+    /// feet from 16.67 px below the render centre to 28.33 — 11.67 px, 29 % of a
+    /// 40 px cell, landing outside the cell the body stands on — and it is what
+    /// the first round of Issue #77 shipped. Anchoring the square's <b>bottom
+    /// edge</b> instead of the drawn feet reaches 43.64 px above the centre rather
+    /// than 42.58, lifts the feet by 1.06 px, and adds 2 Issue #156 crossings on
+    /// the shipped map. The two were confused for one another until review of PR
+    /// #176; the arithmetic below is what tells them apart.
     /// </para>
     /// </summary>
     [Fact]
-    public void A_centred_square_lowers_the_drawn_feet_by_a_measured_amount()
+    public void The_drawn_feet_do_not_move_when_the_body_grows()
     {
-        const double lastOpaqueRowOfV1 = 92.0 / 96.0;
+        foreach (var tileSize in new[] { 32, 40, 48 })
+        {
+            var centre = CameraView.CellCenter(new GridPoint(14, 8), tileSize);
+            var sizeBefore = 20.0 * tileSize / 22.0;
+
+            // Where the feet were: the pre-#77 square, centred, 92/96 down.
+            var before = (sizeBefore * (92.0 / 96.0)) - (sizeBefore / 2.0);
+
+            var drawn = CameraView.GoblinDrawRect(centre, tileSize);
+            var after = drawn.Y + (drawn.Height * (92.0 / 96.0)) - centre.Y;
+
+            Assert.Equal(before, after, 12);
+            Assert.Equal(before, CameraView.GoblinFootLine(tileSize), 12);
+
+            // Inside the cell, as they were: half a cell is tileSize/2.
+            Assert.True(after < tileSize / 2.0);
+
+            // And the growth goes upward: the canvas top rises by exactly what the
+            // body gained, less the transparent tail that stays under the feet.
+            var gained = CameraView.GoblinDrawSize(tileSize) - sizeBefore;
+            var topBefore = centre.Y - (sizeBefore / 2.0);
+
+            Assert.Equal(gained * (92.0 / 96.0), topBefore - drawn.Y, 12);
+        }
+    }
+
+    /// <summary>
+    /// The two numbers that separate this placement rule from the one it was
+    /// confused with, at the shipped tile size: how far a body reaches above its
+    /// render centre, and by how much the two rules disagree.
+    /// </summary>
+    [Fact]
+    public void Anchoring_the_drawn_feet_reaches_a_pixel_lower_than_anchoring_the_canvas()
+    {
         var centre = CameraView.CellCenter(new GridPoint(14, 8), 40);
-
-        var before = (20.0 * 40.0 / 22.0 * lastOpaqueRowOfV1) - (20.0 * 40.0 / 22.0 / 2.0);
         var drawn = CameraView.GoblinDrawRect(centre, 40);
-        var after = drawn.Y + (drawn.Height * lastOpaqueRowOfV1) - centre.Y;
 
-        Assert.Equal(16.67, before, 2);
-        Assert.Equal(28.33, after, 2);
-        Assert.Equal(11.67, after - before, 2);
+        // This rule: the drawn feet held on their line.
+        Assert.Equal(42.575758, centre.Y - drawn.Y, 6);
 
-        // Half a cell is 20 px: the feet used to be inside the cell and are now
-        // just outside it.
-        Assert.True(before < 20.0);
-        Assert.True(after > 20.0);
+        // The rule it was confused with: the canvas's bottom edge held on the old
+        // canvas's bottom edge, which is half the pre-#77 body below the centre.
+        var canvasAnchored = CameraView.GoblinDrawSize(40) - (20.0 * 40.0 / 22.0 / 2.0);
+
+        Assert.Equal(43.636364, canvasAnchored, 6);
+        Assert.Equal(1.060606, canvasAnchored - (centre.Y - drawn.Y), 6);
     }
 
     /// <summary>

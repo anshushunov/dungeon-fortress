@@ -620,9 +620,9 @@ public sealed class RoomBorderDepthTests
     /// <summary>
     /// The rectangle a body's sprite occupies at <paramref name="centre"/>. Today's
     /// comes from production geometry rather than a copy of it; a historical column
-    /// is the square that geometry drew when the body was
-    /// <see cref="PreIssue77BodyReferenceSize"/> — the same rule, because the foot
-    /// line Issue #77 grows a body out of is half of that very body.
+    /// is the square the adapter drew then — <see cref="PreIssue77BodyReferenceSize"/>
+    /// reference pixels, centred on the render point, which was the placement rule
+    /// of that time as much as the size was.
     /// </summary>
     private static ViewRect BodyRect(ViewPoint centre, int tileSize, Arrangement arrangement) =>
         arrangement == Arrangement.Today
@@ -847,20 +847,23 @@ public sealed class RoomBorderDepthTests
     /// that could touch <paramref name="stroke"/> — not just of the bodies that
     /// happen to be standing somewhere today.
     ///
-    /// A body's sprite reaches half of <see cref="CameraView.GoblinDrawSize"/>
-    /// below its own render centre — <see cref="CameraView.GoblinDrawRect"/> is a
-    /// square centred on that point, at 170 % as before it — so the southernmost
-    /// centre from which anybody can touch the stroke is its lower edge plus that
-    /// half. A wall anchored south of that point is drawn after every one of those
-    /// bodies, whatever they are doing and wherever between two cells the
-    /// interpolation has them.
+    /// What decides whether a body standing south of a stroke can still touch it
+    /// is how far its sprite reaches <em>above</em> its own render centre, so that
+    /// is what the southernmost touching centre is measured with — and it is taken
+    /// from <see cref="CameraView.GoblinDrawRect"/> rather than restated, because
+    /// Issue #77 made the two differ: a body reaches 42.58 px up and 19.24 px down
+    /// at tile 40, where before it reached the same 18.18 either way. A wall
+    /// anchored south of that point is drawn after every one of those bodies,
+    /// whatever they are doing and wherever between two cells the interpolation
+    /// has them.
     /// </summary>
     private static IReadOnlyList<ViewRect> InFrontOfEverybodyTouching(
         ViewRect stroke,
         IReadOnlyList<Wall> walls,
         int tileSize)
     {
-        var southernmost = stroke.Y + stroke.Height + (CameraView.GoblinDrawSize(tileSize) / 2.0);
+        var reachAbove = -CameraView.GoblinDrawRect(new ViewPoint(0, 0), tileSize).Y;
+        var southernmost = stroke.Y + stroke.Height + reachAbove;
         return walls
             .Where(wall => wall.Anchor > southernmost)
             .SelectMany(wall => wall.Bands)
