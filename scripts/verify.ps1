@@ -613,34 +613,27 @@ $stageCatalog = [ordered]@{
                 [double]$viewEvents["base"].view.visibleWorldSize[1]) {
                 throw "A larger frame did not expose more world at the same zoom."
             }
-            # The body is drawn at the owner's 170 % since Issue #77, so the sizes
-            # this stage measures are the old ones times 1.7: 30.9 px in the
-            # overview, 61.8 at 1x, 123.6 at 2x. Two source resolutions bound them:
-            #   * 96 px — the v1 sheet the runtime loads today. Every zoom a run can
-            #     start at still takes fewer pixels than it has.
-            #   * 192 px — the canvas height of the v2 pack the 170 % scale was
-            #     authored for (docs/art/goblin-v2-provenance.md, 272x192). Only the
-            #     deepest zoom asks for more than v1 holds, and it stays inside this.
-            # Until the next subtask of #77 connects v2, 2x magnifies the v1 sheet by
-            # 1.29 with LinearWithMipmaps filtering. That is a fact about the pack,
-            # not about the decision, and it is stated rather than hidden.
-            $loadedSourcePixels = 96
-            $authoredCanvasPixels = 192
+            # The body is drawn at the owner's 170 % since Issue #77, so these are
+            # the old numbers times 1.7: 30.9 px in the overview, 61.8 at 1x and
+            # 92.7 in the detail case, which is zoom 1.5. All three still come out
+            # of the 96 px v1 sheet the runtime loads, so the upper bound stays what
+            # it was. The floor moves with the decision: an overview body used to
+            # bottom out at 18.2 px and now may not drop below 30.
+            #
+            # The one zoom that does ask the sheet for more than it has is 2x, which
+            # this stage does not visit and a player can: 123.6 px, i.e. 1.29x
+            # magnification with LinearWithMipmaps filtering, until the next subtask
+            # of #77 connects the 272x192 v2 pack the scale was authored for.
+            # CameraViewTests.The_selected_scale_states_what_it_asks_of_the_art_at_
+            # both_ends_of_the_zoom_range is where that end of the range is stated.
             $overviewGoblinPixels = [double]$viewEvents["overview-shifted"].view.goblinScreenSize
             $baseGoblinPixels = [double]$viewEvents["base"].view.goblinScreenSize
             $detailGoblinPixels = [double]$viewEvents["detail-scaled-ui"].view.goblinScreenSize
             if ($overviewGoblinPixels -lt 30 -or
                 $baseGoblinPixels -le $overviewGoblinPixels -or
                 $detailGoblinPixels -le $baseGoblinPixels -or
-                $detailGoblinPixels -ge $authoredCanvasPixels) {
+                $detailGoblinPixels -ge 96) {
                 throw "Tile-relative goblin art is not readable across overview, base and detail views."
-            }
-            if ($baseGoblinPixels -ge $loadedSourcePixels) {
-                throw (
-                    "At 1x a body is drawn at $baseGoblinPixels px from a " +
-                    "$loadedSourcePixels px source: the zoom the game starts at now " +
-                    "upscales the loaded sprite pack."
-                )
             }
 
             # HUD text is measured in the same spirit as the goblin above: the
