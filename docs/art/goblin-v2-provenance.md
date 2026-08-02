@@ -104,3 +104,67 @@ When #77 connects v2, runtime rendering must preserve the 17:12 canvas with a
 rectangle rather than the current square `drawSize × drawSize`: at 61.8 px
 height the proportional width is 87.55 px. That task also connects the new
 `windup` and `flinch` states.
+
+## Issue #165 — flinch with spear regeneration
+
+The original `goblin_flinch_v2.png` met the pack-level consistency criteria,
+but omitted the short spear held in `combat` and `windup`. For the declared
+hit-feedback consumer in #77, the weapon's disappearance and return would read
+as item blinking. On 2026-08-02 only `flinch` was regenerated so the spear
+remains visibly held throughout `combat → flinch → combat`.
+
+### Reproduction record
+
+- Date: 2026-08-02
+- Tool: Codex built-in OpenAI image generation (`imagegen` skill, built-in
+  edit mode)
+- Model: the built-in tool did not expose an API model identifier; no model
+  name is inferred here
+- Inputs: `goblin_flinch_v2.png` as the edit target, with
+  `goblin_combat_v2.png` and `goblin_windup_v2.png` as character and weapon
+  references
+- Generation parameters exposed by the tool: exact prompt below, one output;
+  seed, quality, input fidelity, and requested pixel size were not exposed
+- Generated source: one 1408×1117 PNG, default built-in output
+  `exec-d14b69b4-78bb-408e-bd7e-89524e292621.png`; the large chroma-key source
+  and intermediate alpha image remain outside Git
+- Requested chroma key: `#ff00ff`; the border sampler measured the generated
+  background as `#fb03f9`
+- Manual paint/editing: none
+
+Exact prompt:
+
+> Use case: precise-object-edit
+> Asset type: 2D top-down three-quarter game character sprite for Dungeon Fortress
+> Input images: Image 1: edit target flinch pose; Image 2: combat pose weapon and character reference; Image 3: windup pose weapon and character reference
+> Primary request: Change only Image 1 by adding the same short spear from Images 2 and 3 into the recoiling goblin's hands. The spear must remain visibly held during the hit reaction and read as continuous motion from windup/combat, not as a different weapon. Preserve the strong backward flinch, facial expression, body pose, character identity, handedness, outfit, palette, chunky pixel-art-inspired rendering, scale, and three-quarter facing direction of Image 1.
+> Scene/backdrop: perfectly flat solid #ff00ff chroma-key background for local background removal, uniform edge to edge, with no shadow, gradient, texture, floor, reflection, or lighting variation.
+> Composition/framing: one isolated full-body goblin with the entire short spear fully visible and generous padding; keep the feet/support point and visual body scale compatible with all six v2 poses. Arrange the spear diagonally across or just in front of the recoiling body as a plausible continuation of the combat/windup weapon motion; it must still be gripped, not flying loose.
+> Color palette: preserve the olive/yellow green skin, dark teal cloth, dark brown leather/boots, warm orange accent, charcoal outline; match the spear's brown shaft, orange binding, and pale metal leaf-shaped point from Images 2 and 3; never use magenta on the subject.
+> Constraints: change only the missing weapon/hand interaction; exactly one goblin and one short spear; no redesign, no new props, no extra limbs, no cropped ears or weapon, no cast/contact shadow, no text, labels, logos, watermark, frame, or scenery.
+
+### Post-processing and verification
+
+1. Removed the generated background with the installed
+   `remove_chroma_key.py` helper using `--auto-key border --soft-matte
+   --transparent-threshold 12 --opaque-threshold 220 --despill`. The helper
+   reported 1,196,694 fully transparent and 6,883 partially transparent pixels
+   out of 1,572,736.
+2. Cropped to the non-zero alpha bounds `181,137–1149,995`, checked all
+   8-connected components on the full `alpha > 0` mask, and retained the
+   largest. The source had one component, so zero alpha pixels were removed.
+3. Resized the cropped sprite from 968×858 to 185×164 with Pillow LANCZOS,
+   preserving the previous flinch height of 164 px and nearly the same width
+   (previously 182 px).
+4. Placed it at `26,24` in a fresh transparent 272×192 RGBA canvas. Using the
+   pack's existing `alpha > 32` support-zone method over `172 <= y <= 187`, the
+   final support center is `x = 135.5`. The final alpha bbox is
+   `26,24–211,188`, the last non-transparent row is `y = 187`, and both outer
+   canvas columns remain transparent.
+5. Saved an optimized PNG. No paint-over, palette replacement, or other manual
+   correction was applied.
+6. Reviewed all six poses side by side at the runtime-equivalent 62 px canvas
+   height. The goblin identity, palette, scale, baseline, and facing direction
+   remain consistent; the short spear is readable in `combat`, `windup`, and
+   `flinch`, and the `combat → flinch → combat` transition no longer blinks the
+   weapon.
