@@ -970,3 +970,58 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
 `Uninstall` не меняет глобальные настройки и user-scope конфиги. Exact pins,
 hashes, лицензии, измерения и принятое исключение security gate находятся в
 `MCP_EVALUATION.md` и ADR 0004.
+
+OpenCode с локальной Qwen через Ollama
+
+Проверенная локальная конфигурация: OpenCode `1.18.11`, Ollama `0.32.5` и
+`qwen3.6:27b` (`Q4_K_M`, tools/thinking/vision). Project-scoped
+`opencode.json` выбирает только provider `ollama`, задаёт модели окно 131 072
+токенов, подключает domain MCP и dev-only Ivan-MCP и требует подтверждения для
+изменений файлов и shell-команд. MCP tools выключены в обычном coding-контексте:
+project-owned domain tools включаются в primary-agent `simulation`, а domain и
+широкие editor tools вместе — в primary-agent `godot`; для Ivan-вызовов также
+требуется подтверждение. Web, subagent, skill и TODO tools тоже выключены как
+необязательные для локального coding loop. Это не только граница риска: полный
+OpenCode tool context в измеренном smoke занял 24 163 входных токена и
+обрабатывался локальной моделью около десяти минут.
+
+Обычный режим отключает длинный reasoning trace (`reasoningEffort: none`),
+потому что на измеренном short smoke модель с включённым thinking сгенерировала
+1 712 скрытых reasoning-токенов со скоростью около 8 токенов/с до двухсловного
+ответа. Primary-agents `deep` и `godot` используют variant `deep` с высоким
+reasoning effort для задач, где эта стоимость оправдана.
+
+OpenCode и coding agents требуют большого контекста. Для Ollama задайте
+пользовательскую переменную и перезапустите приложение Ollama:
+
+```powershell
+[Environment]::SetEnvironmentVariable("OLLAMA_CONTEXT_LENGTH", "131072", "User")
+[Environment]::SetEnvironmentVariable(
+  "GODOT4_CONSOLE",
+  "C:\path\to\Godot_v4.7.1-stable_mono_win64_console.exe",
+  "User")
+```
+
+Абсолютный путь хранится только в пользовательском окружении, не в Git. На
+Windows с запрещёнными PowerShell scripts запускайте npm shim `opencode.cmd`,
+а не `opencode.ps1`:
+
+```powershell
+opencode.cmd
+```
+
+Перед первой сессией соберите domain MCP и отдельно установите/откройте Ivan по
+командам выше. Проверить эффективную конфигурацию можно командами
+`opencode.cmd models ollama` и `opencode.cmd mcp list`.
+
+Перед export и для полного отката удалите только candidate-owned локальную
+установку:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ivan-mcp.ps1 -Action Uninstall
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
+```
+
+`Uninstall` не меняет глобальные настройки и user-scope конфиги. Exact pins,
+hashes, лицензии, измерения и принятое исключение security gate находятся в
+`MCP_EVALUATION.md` и ADR 0004.
