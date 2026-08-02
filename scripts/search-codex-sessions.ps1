@@ -51,39 +51,50 @@ function Add-Hit {
     })
 }
 
+function Get-JsonProperty {
+    param(
+        $Node,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    # Session logs are foreign input: a field may simply be absent, and under
+    # Set-StrictMode a plain $node.field would then throw instead of returning
+    # nothing.
+    if ($null -eq $Node -or $Node -is [string]) {
+        return $null
+    }
+    $property = $Node.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        return $null
+    }
+    return $property.Value
+}
+
 function Get-PayloadSummary {
     param($Payload)
 
-    $type = ""
-    if ($null -ne $Payload) {
-        $type = [string]$Payload.type
-    }
+    $type = [string](Get-JsonProperty -Node $Payload -Name "type")
     if ($type -eq "custom_tool_call") {
-        $name = [string]$Payload.name
-        $input = ""
-        if ($null -ne $Payload.input) {
-            $input = [string]$Payload.input
-        }
+        $name = [string](Get-JsonProperty -Node $Payload -Name "name")
+        $input = [string](Get-JsonProperty -Node $Payload -Name "input")
         return "[tool:$name] $input"
     }
     if ($type -eq "custom_tool_call_output") {
         $texts = @()
-        if ($null -ne $Payload.output) {
-            foreach ($o in $Payload.output) {
-                if ($null -ne $o -and $o.type -eq "input_text") {
-                    $texts += [string]$o.text
-                }
+        foreach ($o in @(Get-JsonProperty -Node $Payload -Name "output")) {
+            if ((Get-JsonProperty -Node $o -Name "type") -eq "input_text") {
+                $texts += [string](Get-JsonProperty -Node $o -Name "text")
             }
         }
         return "[tool-output] " + ($texts -join " ")
     }
     if ($type -eq "message") {
         $texts = @()
-        if ($null -ne $Payload.content) {
-            foreach ($c in $Payload.content) {
-                if ($null -ne $c -and $c.type -eq "input_text") {
-                    $texts += [string]$c.text
-                }
+        foreach ($c in @(Get-JsonProperty -Node $Payload -Name "content")) {
+            if ((Get-JsonProperty -Node $c -Name "type") -eq "input_text") {
+                $texts += [string](Get-JsonProperty -Node $c -Name "text")
             }
         }
         return "[message] " + ($texts -join " ")
@@ -109,13 +120,19 @@ foreach ($file in $jsonlFiles) {
             if ($script:hits.Count -ge $MaxHits) {
                 break
             }
-            $summary = ""
+            # A truncated or otherwise unparsable line is still evidence: it is
+            # reported as it stands and the scan goes on. The tool is meant for
+            # situations where something is already broken.
+            $summary = $line
+            $eventType = "unparsed"
             try {
                 $parsed = $line | ConvertFrom-Json
-                $summary = Get-PayloadSummary -Payload $parsed.payload
+                $eventType = [string](Get-JsonProperty -Node $parsed -Name "type")
+                $summary = Get-PayloadSummary -Payload (Get-JsonProperty -Node $parsed -Name "payload")
             }
             catch {
                 $summary = $line
+                $eventType = "unparsed"
             }
             if ($summary.Length -gt $SnippetChars) {
                 $summary = $summary.Substring(0, $SnippetChars)
@@ -123,7 +140,7 @@ foreach ($file in $jsonlFiles) {
             Add-Hit `
                 -Session $file.Name `
                 -LineNumber $lineNumber `
-                -EventType ([string]$parsed.type) `
+                -EventType $eventType `
                 -Summary $summary
         }
     }

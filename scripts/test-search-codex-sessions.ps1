@@ -62,12 +62,65 @@ try {
         throw "Tool output was not found or not summarized. Output: $toolOutputText"
     }
 
+    # A truncated last line of an active session is plausible, and the tool is
+    # meant for cases where something is already broken. It lives in its own
+    # sessions root so the unparsable line is the very first hit of the run:
+    # that is the case in which the parse result was never assigned.
+    $brokenRoot = Join-Path $testRoot "broken"
+    $brokenDir = Join-Path $brokenRoot "sessions"
+    New-Item -ItemType Directory -Force -Path $brokenDir | Out-Null
+    $brokenPath = Join-Path $brokenDir "rollout-broken.jsonl"
+    $brokenLines = @(
+        '{"timestamp":"2026-08-02T09:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","input":"python remove_chroma_key.py --tru',
+        '{"timestamp":"2026-08-02T09:00:10Z","type":"response_item"}',
+        '{"timestamp":"2026-08-02T09:00:20Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","input":"python remove_chroma_key.py --despill"}}'
+    )
+    [IO.File]::WriteAllLines($brokenPath, $brokenLines, $utf8)
+
+    $outputBroken = @(& powershell `
+        -NoProfile `
+        -ExecutionPolicy Bypass `
+        -File $scriptPath `
+        -Query "remove_chroma_key.py" `
+        -SessionsRoot $brokenRoot `
+        -MaxHits 5 2>&1)
+    $brokenExit = $LASTEXITCODE
+    $brokenText = ($outputBroken | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+    if ($brokenExit -ne 0) {
+        throw "An unparsable JSONL line aborted the scan. exit=$brokenExit output=$brokenText"
+    }
+    if ($brokenText -notmatch '"eventType":"unparsed"') {
+        throw "The unparsable line was not reported as unparsed. Output: $brokenText"
+    }
+    if ($brokenText -notmatch "remove_chroma_key.py --tru") {
+        throw "The unparsable line was not printed as it stands. Output: $brokenText"
+    }
+    if ($brokenText -notmatch "\[tool:exec\]" -or $brokenText -notmatch "remove_chroma_key.py --despill") {
+        throw "The scan did not continue past the unparsable line. Output: $brokenText"
+    }
+
+    # A well-formed line without a payload must not throw under Set-StrictMode.
+    $outputNoPayload = @(& powershell `
+        -NoProfile `
+        -ExecutionPolicy Bypass `
+        -File $scriptPath `
+        -Query "09:00:10" `
+        -SessionsRoot $brokenRoot `
+        -MaxHits 5 2>&1)
+    $noPayloadExit = $LASTEXITCODE
+    $noPayloadText = ($outputNoPayload | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+    if ($noPayloadExit -ne 0 -or $noPayloadText -notmatch '"eventType":"response_item"') {
+        throw "A line without a payload was not handled. exit=$noPayloadExit output=$noPayloadText"
+    }
+
     [ordered]@{
         event = "search_codex_sessions_test"
         status = "ok"
         toolCallFound = $true
         toolOutputFound = $true
         noHitQuietExits1 = $true
+        unparsedLineReported = $true
+        missingPayloadHandled = $true
     } | ConvertTo-Json -Compress | Write-Host
 }
 finally {
