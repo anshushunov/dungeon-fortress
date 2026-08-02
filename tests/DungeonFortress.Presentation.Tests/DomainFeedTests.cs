@@ -263,35 +263,109 @@ public sealed class DomainFeedTests(ITestOutputHelper output)
     /// story groups by kind of decision, and every entry in one such group weighs
     /// the same, so "the representative of a beat" there can be read as "the newest
     /// of that kind" without anybody noticing the difference. Group by creature and
-    /// the difference is the whole panel: at the end of a baseline party the newest
-    /// entry of nearly every creature is somebody in the way, and the entry that
-    /// matters is hundreds of ticks old.
+    /// the difference is the whole panel: through most of a party the newest entry
+    /// of a creature is somebody in the way, and the entry that matters is hundreds
+    /// of ticks old.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Read over the sampled party of three seeds and both fixtures, and that is
+    /// the correction Issue #171 made to this check.</b> It used to read one
+    /// moment — <c>baseline</c> on its own seed at tick 2400 — and require that
+    /// <em>all three</em> lines there differ from their creature's newest entry.
+    /// Issue #171 changed the party and that window came out at two of three, so
+    /// the question was measured instead of argued: over the sampled windows of
+    /// the six parties the
+    /// share of lines that are older than their creature's last word is
+    /// <b>41.0% before the change and 42.0% after it</b>, and the share of windows
+    /// where all three lines are older is 33.9% before and 35.8% after. The
+    /// exercise did not weaken — it never was a property of that tick. A window in
+    /// which all three lines are old news happens about once in three, and the old
+    /// clause demanded one particular window be one of them, which is a coin the
+    /// simulation is free to flip on any change at all.
+    /// </para>
+    ///
+    /// <para>
+    /// So the rule is asserted where it must always hold — every line of every
+    /// sampled window, which is 864 lines instead of three — and the exercise is
+    /// asserted as the quantity it actually is. The floor is a third of the lines:
+    /// the panel is three lines, and "on an average window at least one of them is
+    /// not that creature's last word" is the smallest statement under which the
+    /// difference is on the panel to be read at all. It is a property of the panel
+    /// rather than a number read off a run, and the run is 42.0%; the figure itself
+    /// is printed by
+    /// <see cref="Report_how_often_a_line_is_older_than_the_newest_entry"/> and
+    /// recorded in <c>evidence/171-feed-exercise.json</c>.
     /// </para>
     /// </summary>
     [Fact]
     public void The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it()
     {
-        var state = PresentationFixtures.RunFixture("baseline", MeasuredTicks);
-        var shown = HudText.DomainSelection(state.Events);
-        var overtakenTheNewest = 0;
+        var lines = 0;
+        var older = 0;
+        var windowsWhereEveryLineIsOlder = 0;
 
-        foreach (var @event in shown)
+        foreach (var fixtureName in new[] { "baseline", "prepared" })
         {
-            var mine = state.Events.Where(item => item.CreatureId == @event.CreatureId).ToArray();
-            var best = mine.Max(Rank);
-            Assert.Equal(best, Rank(@event));
-            if (Rank(mine[^1]) != best)
+            foreach (var seed in MatrixSeeds)
             {
-                overtakenTheNewest++;
+                foreach (var (tick, state) in Party(fixtureName, seed, MeasuredTicks))
+                {
+                    var shown = HudText.DomainSelection(state.Events);
+                    if (shown.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    var crew = state.Events.Select(@event => @event.CreatureId).Distinct().Count();
+                    Assert.Equal(Math.Min(HudText.DomainFeedLines, crew), shown.Count);
+
+                    var here = 0;
+                    foreach (var @event in shown)
+                    {
+                        // The rule, and it is not the thing being measured: whatever
+                        // the panel gives a creature is that creature's heaviest
+                        // entry, ties going to the newest. This holds at every one
+                        // of the sampled windows or the feed is showing the player
+                        // something other than what happened.
+                        var mine = state.Events
+                            .Where(item => item.CreatureId == @event.CreatureId)
+                            .ToArray();
+                        Assert.True(
+                            mine.Max(Rank) == Rank(@event),
+                            $"{fixtureName}/{seed} t{tick}: the feed gave " +
+                            $"{HudText.CreatureName(state, @event.CreatureId)} its " +
+                            $"'{@event.ReasonCode}' of t{@event.LastTick}, and the worst thing that " +
+                            $"happened to it is a '{mine.MaxBy(Rank)!.ReasonCode}' of " +
+                            $"t{mine.MaxBy(Rank)!.LastTick}.");
+                        if (IsOlderThanTheNewest(state, @event))
+                        {
+                            here++;
+                        }
+                    }
+
+                    lines += shown.Count;
+                    older += here;
+                    if (here == shown.Count)
+                    {
+                        windowsWhereEveryLineIsOlder++;
+                    }
+                }
             }
         }
 
-        Assert.Equal(HudText.DomainFeedLines, shown.Count);
+        var share = (double)older / lines;
         Assert.True(
-            overtakenTheNewest == shown.Count,
-            $"only {overtakenTheNewest} of the {shown.Count} lines of this feed show something other " +
-            "than that creature's newest entry, so the difference between 'the worst thing that " +
-            "happened to it' and 'the last thing it did' was not on the panel to be read.");
+            share >= 1.0 / HudText.DomainFeedLines,
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{older} of {lines} lines of the domain feed ({100.0 * share:0.0}%) show something other than that creature's newest entry, under the one line in {HudText.DomainFeedLines} that makes the difference between 'the worst thing that happened to it' and 'the last thing it did' readable at all. Measured 41.0% before Issue #171 and 42.0% after it."));
+        Assert.True(
+            windowsWhereEveryLineIsOlder > 0,
+            "no sampled window of the six parties showed a feed in which every line was older than its " +
+            "creature's newest entry. That is the panel the defect was reported on and it has to " +
+            "stay reachable, but it is about one window in three and cannot be demanded of a " +
+            "particular tick.");
     }
 
     /// <summary>
@@ -448,6 +522,101 @@ public sealed class DomainFeedTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// The measurement behind
+    /// <see cref="The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it"/>:
+    /// how often the feed shows a creature something <b>other than</b> that
+    /// creature's newest entry.
+    ///
+    /// <para>
+    /// Printed rather than asserted, and read over the sampled party of three
+    /// seeds and both fixtures rather than at one tick, because one moment cannot
+    /// tell "the difference stopped happening" from "this moment stopped being the
+    /// one it happens at". Issue #171 is what asked the question: bounding the
+    /// price of memory of place changed the party, and with it how much of the
+    /// panel is old news.
+    /// </para>
+    ///
+    /// <para>
+    /// Command:
+    /// <c>dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter
+    /// "FullyQualifiedName~Report_how_often_a_line_is_older_than_the_newest_entry"
+    /// --logger "console;verbosity=detailed"</c>
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Report_how_often_a_line_is_older_than_the_newest_entry()
+    {
+        var report = new StringBuilder();
+        var lines = 0;
+        var overtaken = 0;
+        var windows = 0;
+        var windowsWithAny = 0;
+        var windowsWithAll = 0;
+
+        foreach (var fixtureName in new[] { "baseline", "prepared" })
+        {
+            foreach (var seed in MatrixSeeds)
+            {
+                var here = (Lines: 0, Overtaken: 0, Windows: 0, Any: 0, All: 0);
+                foreach (var (_, state) in Party(fixtureName, seed, MeasuredTicks))
+                {
+                    var shown = HudText.DomainSelection(state.Events);
+                    if (shown.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    var older = shown.Count(@event => IsOlderThanTheNewest(state, @event));
+                    here.Windows++;
+                    here.Lines += shown.Count;
+                    here.Overtaken += older;
+                    if (older > 0)
+                    {
+                        here.Any++;
+                    }
+
+                    if (older == shown.Count)
+                    {
+                        here.All++;
+                    }
+                }
+
+                lines += here.Lines;
+                overtaken += here.Overtaken;
+                windows += here.Windows;
+                windowsWithAny += here.Any;
+                windowsWithAll += here.All;
+                report.AppendLine(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{fixtureName}/{seed}: {here.Overtaken} of {here.Lines} lines older than the creature's newest entry over {here.Windows} windows; {here.Any} windows with at least one, {here.All} with all of them"));
+            }
+        }
+
+        report.AppendLine(string.Create(
+            CultureInfo.InvariantCulture,
+            $"six parties: {overtaken} of {lines} lines ({100.0 * overtaken / lines:0.0}%), {windowsWithAny} of {windows} windows carry at least one ({100.0 * windowsWithAny / windows:0.0}%), {windowsWithAll} of {windows} carry nothing else ({100.0 * windowsWithAll / windows:0.0}%)"));
+        // What this number is, said once so the check above does not have to argue
+        // it: a line counted here is a line on which "the worst thing that happened
+        // to it" and "the last thing it did" disagree, so the count is exactly how
+        // far the shipped rule stands from a feed of newest entries. That feed
+        // scores zero here by construction, which is what makes a floor on this
+        // share a floor on the rule being visible at all rather than a bound with
+        // slack cut into it.
+        output.WriteLine(report.ToString());
+    }
+
+    /// <summary>
+    /// Whether the line this creature was given is an older entry than the last
+    /// thing it did — the single fact the report above and the check below are
+    /// both about.
+    /// </summary>
+    private static bool IsOlderThanTheNewest(PrototypeSnapshot state, PrototypeEvent shown)
+    {
+        var mine = state.Events.Where(item => item.CreatureId == shown.CreatureId).ToArray();
+        return Rank(mine[^1]) != mine.Max(Rank);
+    }
+
+    /// <summary>
     /// What the feed orders by, stated in the test rather than borrowed from the
     /// code: what a decision means to the creature that took it first, when it
     /// happened second.
@@ -466,6 +635,23 @@ public sealed class DomainFeedTests(ITestOutputHelper output)
     private static IEnumerable<(int Tick, PrototypeSnapshot State)> Party(string fixtureName, int ticks)
     {
         var world = new PrototypeWorld(Fixture(fixtureName));
+        for (var tick = 1; tick <= ticks && !world.IsComplete; tick++)
+        {
+            world.Step();
+            if (tick % SampleEvery == 0)
+            {
+                yield return (tick, world.GetSnapshot());
+            }
+        }
+    }
+
+    /// <summary>The same sampled party on a named seed of the matrix.</summary>
+    private static IEnumerable<(int Tick, PrototypeSnapshot State)> Party(
+        string fixtureName,
+        ulong seed,
+        int ticks)
+    {
+        var world = new PrototypeWorld(Fixture(fixtureName) with { Seed = seed });
         for (var tick = 1; tick <= ticks && !world.IsComplete; tick++)
         {
             world.Step();

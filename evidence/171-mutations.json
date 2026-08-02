@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "issue": 171,
+  "when": "2026-08-02, after the change was committed",
+  "what": "Which check reddens when each half of the fix is reverted on its own, and which check reddens when the mechanic the fix bounds is removed altogether. Run on the committed tree so that reverting a mutant restores the shipped state rather than deleting the work, which is the rule the checkpoints of this task set.",
+  "how": {
+    "apply": "edit src/DungeonFortress.Simulation/PrototypeWorld.cs by hand, one arm at a time",
+    "build": "dotnet build DungeonFortress.sln -c Release",
+    "run": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --no-build",
+    "restore": "git checkout -- src/DungeonFortress.Simulation/PrototypeWorld.cs",
+    "shippedBaseline": "280 of 280 green"
+  },
+  "mutants": [
+    {
+      "id": "M1",
+      "half": "duration",
+      "edit": "In PrototypeWorld.AvoidedPlace, drop `CurrentTick - place.Tick <= PrototypeTuning.MemoryAvoidTicks` from the filter, so a remembered place refuses work for the rest of the party again.",
+      "result": "2 of 280 failed",
+      "failed": [
+        {
+          "test": "PrototypeMemoryCostTests.A_memory_stops_refusing_work_before_the_next_wave_arrives",
+          "message": "baseline/20260726: a creature refused work because of a place it had remembered 359 ticks earlier, and avoidance is supposed to run out after 200."
+        },
+        {
+          "test": "PrototypeMemoryCostTests.No_creature_is_taken_out_of_the_domain_by_what_it_remembers",
+          "message": "baseline/20260728: one creature refused work by memory on 114 consecutive ticks, and the bound is 100. Over that party memory refused 507 times, 507 of them on a kitchen or larder tile, and the domain produced 81 meals."
+        }
+      ],
+      "whatStaysGreen": "A_party_that_wins_its_fights_does_not_end_it_starving. With the hunger bound still in place the domain survives this mutant — it just pays 507 refusals for it instead of 122, with one creature standing still for 114 ticks. That is the honest reason the duration half exists and the reason it needs a check of its own: it does not save the party, it bounds what the party is charged."
+    },
+    {
+      "id": "M2",
+      "half": "hunger",
+      "edit": "In PrototypeWorld.AvoidedPlace, drop `creature.Satiety < PrototypeTuning.MemoryYieldsSatiety` from the early return, so a starving creature refuses work again.",
+      "result": "3 of 280 failed",
+      "failed": [
+        {
+          "test": "PrototypeMemoryCostTests.A_party_that_wins_its_fights_does_not_end_it_starving",
+          "message": "baseline/20260728 ended the party as `fallen` at t2299 with a score of -223, having produced 75 meals and finished at an average satiety of 1. Memory of place refused work 356 times, 356 of them on a kitchen or larder tile."
+        },
+        {
+          "test": "PrototypeMemoryCostTests.No_creature_is_taken_out_of_the_domain_by_what_it_remembers",
+          "message": "baseline/20260728: one creature refused work by memory on 157 consecutive ticks, and the bound is 100."
+        },
+        {
+          "test": "PrototypeMemoryCostTests.A_creature_going_hungry_takes_the_work_it_would_otherwise_refuse",
+          "message": "baseline/20260726: on tick 2070 Обух refused work at a place it remembers while its satiety stood at 24, under the 30 at which hunger is supposed to outrank what a creature remembers."
+        }
+      ],
+      "reading": "This is the half that keeps the party alive: with only the 200-tick ageing left, baseline/20260728 falls at exactly the tick and the score it fell at on `main`."
+    },
+    {
+      "id": "M3",
+      "half": "both",
+      "edit": "Both of the above at once, which restores the reading half of memory of place to the state it is in on `main`.",
+      "result": "4 of 280 failed — the union of M1 and M2, with no check surviving both",
+      "failed": [
+        "PrototypeMemoryCostTests.A_party_that_wins_its_fights_does_not_end_it_starving",
+        "PrototypeMemoryCostTests.No_creature_is_taken_out_of_the_domain_by_what_it_remembers",
+        "PrototypeMemoryCostTests.A_memory_stops_refusing_work_before_the_next_wave_arrives",
+        "PrototypeMemoryCostTests.A_creature_going_hungry_takes_the_work_it_would_otherwise_refuse"
+      ],
+      "reading": "The state of `main` fails four of the checks this branch adds, and the rest of the suite is unaffected: 276 of 280 still pass. The change is visible to the tests exactly where it was made and nowhere else."
+    },
+    {
+      "id": "M4",
+      "half": "neither — this one removes the mechanic the fix bounds",
+      "edit": "In PrototypeWorld.CollectPairs, disable the memory arm entirely (`if (false && applyMemory && ...)`), so no remembered place ever refuses anything.",
+      "why": "A fix that bounds a price can accidentally make the mechanic optional, and a suite that would not notice its removal has stopped guarding slice 2. This mutant asks whether it would notice.",
+      "result": "8 of 280 failed",
+      "failed": [
+        "PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next (baseline and prepared)",
+        "PrototypeMemoryTests.A_refusal_by_memory_names_the_work_the_creature_would_have_taken (baseline and prepared)",
+        "PrototypeMemoryTests.A_refusal_the_memory_free_tick_does_not_honour_lost_the_work_to_somebody (baseline and prepared)",
+        "PrototypeMemoryTests.An_idle_creature_that_is_avoiding_a_place_says_so_rather_than_something_else",
+        "PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix (20260728)"
+      ],
+      "reading": "The promise of slice 2 is still held by seven checks after this change, on both fixtures, and the bounds did not quietly retire it. The eighth failure is worth naming on its own: with memory refusing nothing at all, baseline/20260728 breaks an invariant of 13.4 in the other direction. Removing the mechanic is not a safe fallback either.",
+      "notPartOfTheClaim": "PrototypeMemoryCostTests stays green under M4, and it should: it bounds what memory costs, and memory that refuses nothing costs nothing. The two classes guard opposite failures, which is why both are needed."
+    }
+  ],
+  "whatThisDoesNotProve": "Nothing here says the two values are the right values; it says each of the two rules is load-bearing and that removing either is visible. The values were chosen by the sweep in evidence/171-after.json, and that sweep is a measurement, not a check that can redden."
+}
