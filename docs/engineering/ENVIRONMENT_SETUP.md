@@ -79,31 +79,60 @@ NuGet source берётся из `GodotSharp/Tools/nupkgs` выбранной .N
 | Арм | Переменные | Записей в `PATH` |
 |---|---|---|
 | A — как было в скриптах | `DOTNET_CLI_HOME` + `DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1` | **+1** |
-| B — то же плюс guard | и `DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=0` | **+0**, каталог `tools` даже не создаётся |
+| B — то же плюс guard | и `DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=0` | **+0** |
+
+Каталог `<CLI_HOME>\.dotnet\tools` при этом не создаётся **ни в одном** из армов:
+guard влияет только на запись в `PATH`, а запись появляется при отсутствующем
+каталоге. Проверено обоими армами независимого review 2026-08-02.
 
 То есть `DOTNET_SKIP_FIRST_TIME_EXPERIENCE` от этой записи **не защищает** —
 распространённое заблуждение, и скрипты проекта задавали её в шести местах,
 считая вопрос закрытым.
 
 **Правило.** Каждое место, задающее изолированный `DOTNET_CLI_HOME`, задаёт рядом
-`DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=0`. Сегодня таких мест шесть: `verify.ps1`,
-`run-game.ps1`, `evaluate-prototype.ps1`, `update-golden-ui.ps1` и два в
-`ivan-mcp.ps1`. Проверка при добавлении седьмого — `rg -n "DOTNET_CLI_HOME"
+`DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=0`. Проверка — `rg -n "DOTNET_CLI_HOME"
 scripts/` и `rg -n "DOTNET_ADD_GLOBAL_TOOLS_TO_PATH" scripts/` обязаны давать
 одинаковое число попаданий.
+
+**Сегодня они его не дают, и это известное нарушение, а не недосмотр.** Мест с
+`DOTNET_CLI_HOME` шесть — `run-game.ps1`, `evaluate-prototype.ps1`,
+`update-golden-ui.ps1`, два в `ivan-mcp.ps1` и `verify.ps1`, — а guard стоит в
+**пяти**. Не хватает его в `scripts/verify.ps1`, самом часто запускаемом скрипте
+проекта: файл держала параллельная задача подключения пака существ v2, и строка
+уходит туда её коммитом. Дыра закрывается вместе с merge той пары; до тех пор
+`rg` даёт 6 против 5, и это ожидаемо.
 
 **Как убрать уже накопившееся.** Записи безопасно удаляются целиком — каталогов
 нет. Настоящий каталог глобальных инструментов `%USERPROFILE%\.dotnet\tools`
 признака `dotnet-home` не содержит и под фильтр не попадает:
 
 ```powershell
-$raw = (Get-ItemProperty 'HKCU:\Environment' -Name Path).Path
+# DoNotExpandEnvironmentNames обязателен — см. ниже, почему Get-ItemProperty здесь непригоден
+$raw = (Get-Item 'HKCU:\Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames')
 $kept = $raw -split ';' | Where-Object { $_ -ne '' -and $_ -notmatch 'dotnet-home' }
 Set-ItemProperty 'HKCU:\Environment' -Name Path -Value ($kept -join ';') -Type ExpandString
 ```
 
-Тип значения `ExpandString` обязателен: `setx` пишет `REG_SZ` и режет значение на
-1024 символах. Перед правкой снять бэкап — `PATH` восстанавливается только из него.
+**Две ловушки, каждая уничтожает данные молча.**
+
+*Тип.* `setx` пишет `REG_SZ` и режет значение на 1024 символах, поэтому он здесь
+не годится вовсе; `-Type ExpandString` обязателен.
+
+*Содержимое.* `Get-ItemProperty` возвращает **развёрнутое** значение. Обратная
+запись с правильным типом сохранит тип и потеряет содержимое: `%USERPROFILE%\…`,
+`%APPDATA%\npm`, `%JAVA_HOME%\bin` навсегда станут жёсткими путями, и заметить
+это нельзя — на текущей машине они разрешаются в то же самое. Поэтому читать
+**только** через `GetValue(..., 'DoNotExpandEnvironmentNames')`. Найдено
+независимым review 2026-08-02 и доказано на отдельном временном ключе:
+`Get-ItemProperty` вернул `C:\WINDOWS\system32;C:\literal` там, где сырое
+значение — `%SystemRoot%\system32;C:\literal`.
+
+Бэкап снимается **тем же** сырым вызовом. Бэкап, снятый через
+`Get-ItemProperty`, не восстанавливает исходное состояние: он уже развёрнут, и
+отличить по нему «ссылок не было» от «ссылки развернулись» невозможно. Ровно так
+и вышло при первой уборке на машине владельца — исходная форма записей
+пользовательского `PATH` там потеряна, хотя `HKCU` этой машины ссылками
+пользуется (`TEMP`, `TMP`, `GOPATH`).
 
 **Шире правила.** То же относится к любому следу в среде: реестр, глобальные
 конфиги инструментов, домашний каталог. Прогон, который нельзя повторить тысячу
