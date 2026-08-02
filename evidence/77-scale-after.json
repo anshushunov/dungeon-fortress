@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "issue": 77,
+  "checkpoint": "3 — the frame after, and the proof that the simulation did not notice",
+  "note": "Same spec, same commands, same machine as evidence/77-scale-before.json; only the code between them differs. PNGs land under .artifacts/evidence/77-after/ and are not committed. Hashes and checksums are copied from the manifest capture-evidence.ps1 wrote (.artifacts/evidence/77-after/manifest.json).",
+
+  "after": {
+    "commit": "238a0726f6fab29039595956c749a9fc9d03946e",
+    "commitSubject": "Где рисуется тело — тоже проверяемо без движка (#77)",
+    "sourceDirty": false,
+    "spec": "evidence/77-scale-frames.json",
+    "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\capture-evidence.ps1 -SpecPath evidence/77-scale-frames.json -OutputRoot \"evidence/77-after\" -GodotPath \"<godot 4.7.1 console>\"",
+    "measuredBodySize": {
+      "goblinWorldSizePx": 61.81818181818181,
+      "expectedFromTheDecision": 61.81818181818182,
+      "reportedBy": "view.goblinWorldSize in each run's own godot_graybox_screenshot event",
+      "tileSize": 40,
+      "note": "The engine reports the double the same expression produces; the last-place difference against 1360/22 is binary representation, which is why the test compares to 12 decimal places rather than bit-for-bit."
+    },
+    "captures": [
+      {
+        "name": "77-scale-rooms",
+        "imagePath": ".artifacts/evidence/77-after/77-scale-rooms.png",
+        "imageSha256": "7cb2cbada838c3cc5a67aa28843ce7c116168ab0f8513c84e57198c00e884b45",
+        "beforeImageSha256": "dc1f8eac40534fa1c03220512a015cf1b8b2e299b99ac083fcee0f5b49442c4f",
+        "canonicalChecksum": "3fae9df7ad170481dd2295d6793227b0a9eb6cb10538d879b709dbc19db034e8",
+        "byteForByteRepeat": true,
+        "goblinScreenSizePx": 61.81818181818181,
+        "reading": "The same crew on the same tick. Bodies fill their cells instead of sitting in the middle of them; face, tunic and the tool in hand are readable at 1x, which at 36.4 px they were not."
+      },
+      {
+        "name": "77-scale-raid",
+        "imagePath": ".artifacts/evidence/77-after/77-scale-raid.png",
+        "imageSha256": "631a6f0b5a802bd0c4e19481667fbcc78bf39994521efe53f4b44b4241d1b13b",
+        "beforeImageSha256": "2511e4763d8c7806c6de9f0a0ef19acfc9ced44742ada985ec3a043d1af611cb",
+        "canonicalChecksum": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70",
+        "byteForByteRepeat": true,
+        "goblinScreenSizePx": 61.81818181818181,
+        "reading": "The crowding case the scale was chosen on. Fighters at the watch post now stand shoulder to shoulder, with the floor still visible between the rows — the 170-175 % behaviour the gate log describes, in the shipped renderer rather than in the spike scene."
+      },
+      {
+        "name": "77-scale-raid-detail",
+        "imagePath": ".artifacts/evidence/77-after/77-scale-raid-detail.png",
+        "imageSha256": "eba178d4ed378c693e8d9fb59359dbbe32f9a5d5c5c9b24ee12b41d09eb909e0",
+        "beforeImageSha256": "eba178d4ed378c693e8d9fb59359dbbe32f9a5d5c5c9b24ee12b41d09eb909e0",
+        "canonicalChecksum": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70",
+        "byteForByteRepeat": true,
+        "goblinScreenSizePx": 123.63636363636363,
+        "reading": "Byte-for-byte identical to its own «before» — and that is the point it makes. At 2x over this stretch of the map there is no body in frame, so the frame is walls, floor, room outlines, grid and HUD alone: none of them moved by a single pixel. The change is confined to bodies, measured rather than asserted."
+      }
+    ]
+  },
+
+  "simulationDidNotNotice": {
+    "claim": "Acceptance criterion 4 of Issue #77: the canonical checksum is the same before and after.",
+    "method": "Each capture's run publishes its own canonical checksum in the godot_graybox_screenshot event; capture-evidence.ps1 copies it into the manifest. The before and after manifests are compared field by field.",
+    "checksums": [
+      {"capture": "77-scale-rooms", "fixture": "baseline", "tick": 190, "before": "3fae9df7ad170481dd2295d6793227b0a9eb6cb10538d879b709dbc19db034e8", "after": "3fae9df7ad170481dd2295d6793227b0a9eb6cb10538d879b709dbc19db034e8", "equal": true},
+      {"capture": "77-scale-raid", "fixture": "prepared", "tick": 1670, "before": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70", "after": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70", "equal": true},
+      {"capture": "77-scale-raid-detail", "fixture": "prepared", "tick": 1670, "before": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70", "after": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70", "equal": true}
+    ],
+    "whyItCouldNotHaveChanged": "ADR 0011: DungeonFortress.Presentation reads the snapshot and writes nothing back, and it does not reference Godot; the constant added by this change lives there and is consumed only by drawing. The build itself is the guard — canonical state has no way to reach a number the renderer multiplies by.",
+    "alsoCovered": "The godot stage of scripts/verify.ps1 requires one checksum across camera position, zoom, frame size and UI scale, and the sim and load stages replay the command log and compare checksums. Both are in the full run recorded at checkpoint 5."
+  },
+
+  "gridAndPivot": {
+    "claim": "Acceptance criterion 2: the grid, the cell size and the anchor a body is placed by did not change.",
+    "measured": [
+      "CameraViewTests.Growing_the_body_moves_neither_the_grid_nor_the_point_a_body_is_placed_by: at tile 32, 40 and 48 the cell centre is still (x+0.5, y+0.5) tiles, WorldToCell round-trips it, WorldVisualScale is still tileSize/22, and CameraView.GoblinDrawRect is still centred on the render centre.",
+      "The 2x capture above: with no body in frame, the after PNG is byte-identical to the before PNG — walls, floor, outlines and grid are literally the same pixels."
+    ],
+    "whatDidMove": {
+      "finding": "A centred square grows in all four directions, so the drawn feet sink. Measured, not estimated: in all four v1 states the last opaque row is 92 of 96, so the feet are 92/96 of the way down the square — 16.67 px below the render centre before, 28.33 px after, a drop of 11.67 px, i.e. 29 % of a 40 px cell. Half a cell is 20 px, so the feet cross from inside the cell to just outside it.",
+      "pinnedBy": "CameraViewTests.A_centred_square_lowers_the_drawn_feet_by_a_measured_amount",
+      "theAlternative": "Anchoring the square on the old foot line — which is what spike #142's own scene did (spikes/142-scale-spike/creature_visual.gd draws the body growing upward from a pivot at the feet) — holds the feet exactly still. It was implemented and measured rather than argued about: it makes a body 43.6 px tall above its centre, and RoomBorderDepthTests.No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible then reports 2 crossings at every tile size — quarters@19,2 south edge at cells 20,5 and 21,5, against a body mid-step between 21,6 and 21,7, 7.44 px and 0.77 px of overlap. That is a partial undoing of Issue #156 in the one place #156 had to leave an exception.",
+      "notSettledHere": "Neither branch is free, so this change takes the one that breaks no existing invariant and leaves the choice where the art that decides it lands: the next subtask of Issue #77 connects the v2 pack and must replace the square with a 17:12 rectangle (87.55 x 61.8 px), which is a placement decision in its own right. Raised in the handoff rather than settled quietly."
+    }
+  }
+}
