@@ -47,6 +47,14 @@ Exact prompt:
 
 ## Post-processing
 
+**Запись прогона 2026-08-01 (Issue #163). Это протокол того, что было сделано
+тогда, а не описание файлов в их сегодняшнем состоянии.** Поза `flinch`
+перегенерирована 2026-08-02 в рамках [Issue #165](https://github.com/anshushunov/dungeon-fortress/issues/165),
+и её действующие размеры, размещение и альфа-границы — в разделе
+[«Issue #165 — flinch with spear regeneration»](#issue-165--flinch-with-spear-regeneration)
+ниже. Числа этого раздела для `flinch` устарели и оставлены на месте намеренно:
+свидетельство на момент принятия не подновляется.
+
 1. Removed the sheet background with the installed
    `remove_chroma_key.py` helper using `--auto-key border --soft-matte
    --transparent-threshold 12 --opaque-threshold 220 --despill`. The helper
@@ -72,8 +80,9 @@ Exact prompt:
    from `work`; no intended pixels are removed from the other five poses.
 4. Resized the cleaned source cells with Pillow LANCZOS to the same dimensions
    used before the canvas correction: idle 116×168, work 178×151, combat
-   188×149, windup 186×158, flinch 182×164, and downed 188×84. Body height and
-   state scale are therefore unchanged.
+   188×149, windup 186×158, ~~flinch 182×164~~, and downed 188×84. Body height
+   and state scale are therefore unchanged.
+   `flinch` — **185×164 с 2026-08-02**, Issue #165, см. раздел ниже.
 5. Placed each resized state in a fresh transparent 272×192 RGBA canvas
    (aspect ratio 17:12). The support zone is `172 <= y <= 187`; its horizontal
    center is `(min_x + max_x) / 2` over pixels with `alpha > 32`. The target
@@ -86,7 +95,8 @@ Exact prompt:
    | `work` | 85,37 | 136.0 | 85,37–263,188 |
    | `combat` | 81,39 | 135.5 | 81,39–269,188 |
    | `windup` | 30,30 | 136.0 | 30,30–216,188 |
-   | `flinch` | 29,24 | 135.5 | 29,24–211,188 |
+   | ~~`flinch`~~ | ~~29,24~~ | ~~135.5~~ | ~~29,24–211,188~~ |
+   | `flinch` **с 2026-08-02** | 26,24 | 135.5 | 26,24–211,188 |
    | `downed` | 43,104 | 135.5 | 43,104–231,188 |
 
    The final support-center spread is 0.5 px. Every state ends on the same last
