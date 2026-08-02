@@ -120,6 +120,26 @@
   },
   "determinism": {
     "command": "the evaluation runner above runs every cell twice and refuses to write a report if the two checksums differ; `powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\verify.ps1 -Stage sim,load`",
-    "result": "15 of 15 cells reported repeatIdentical; the sim and load stages are green. The snapshot did not move, so the schema version stays 3 by the rules of docs/engineering/PROTOTYPE_HEADLESS.md."
+    "result": "15 of 15 cells reported repeatIdentical; the sim and load stages are green. The snapshot did not move, so the schema version stays 3 by the rules of docs/engineering/PROTOTYPE_HEADLESS.md, and no row is owed to its table of shape changes."
+  },
+  "verification": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\verify.ps1 -TemporaryRoot C:/dftmp -GodotPath <godot console>",
+    "full": {
+      "result": "error at stage `tests`",
+      "reason": "the single presentation failure recorded under `whatIsRedAndWasNotBefore`. `dotnet test` returns 1, the stage throws and the six stages after it never run.",
+      "simulationInThatSameStage": "280 of 280 green"
+    },
+    "remainder": {
+      "command": "the same line with `-Skip tests`",
+      "result": "ok, partial: scripts, build, mcp, sim, load, godot, ui, screenshots all green",
+      "why": "the red stage cannot be repaired from this branch — the file belongs to Issue #77 — so the stages it blocked were run separately rather than left unmeasured. This is the completion of one full run, not a second one.",
+      "goldenUi": "all three committed frames match. They are captured at ticks 190, 336 and 950, before the first wave at 1300, so no memory exists yet on any of them and this change cannot reach them.",
+      "checksums": {
+        "deterministic": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+        "changedSeed": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
+        "load": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+        "viewInvariant": "7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead"
+      }
+    }
   }
 }
