@@ -258,6 +258,22 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     /// flattered the first side by 89. Found by independent review of Issue #186,
     /// and the correction is why the floor below is one and a half rather than
     /// two.</para>
+    ///
+    /// <para><b>One and a half is a floor that was chosen, not a number that was
+    /// derived.</b> The measured ratio is 1.86; the floor sits under it with room,
+    /// and it sits above one, which is what the conclusion actually needs — a way
+    /// round reaching more refused steps than a yield could. Moving it down from
+    /// two was forced (the corrected 1.86 would have reddened a check written for
+    /// the flattered 2.23) and is legitimate for the same reason, but it is a
+    /// choice and is named as one.</para>
+    ///
+    /// <para><b>And a floor chosen below every variant of the comparison stops
+    /// telling the variants apart.</b> That is not a general observation, it is
+    /// what happened here: 1.5 lies under 1.86 (correct), under 1.95 (the
+    /// correction of the yield's reach reverted) and under 2.12 (the correction to
+    /// a comparable set reverted), so a ratio against that floor was blind to
+    /// both. The two assertions below exist because of it and hold the counters
+    /// themselves rather than their ratio.</para>
     /// </summary>
     [Fact]
     public void Walking_round_reaches_more_of_the_clinch_than_a_yield_could()
@@ -266,6 +282,9 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
             party => party.Measured.Sum(wave => wave.BlockedWithABodyInTheWayAndAWayRound));
         var yieldable = Matrix.Sum(
             party => party.Measured.Sum(wave => wave.BlockedAYieldCouldHaveCleared));
+        var everyDetour = Matrix.Sum(party => party.Measured.Sum(wave => wave.BlockedWithAShortDetour));
+        var withNoDestination = Matrix.Sum(
+            party => party.Measured.Sum(wave => wave.BlockedByACreatureWithNoDestination));
 
         Assert.True(
             detoured > 0 && detoured * 2 >= yieldable * 3,
@@ -275,6 +294,29 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
             "where one and a half is the floor. Issue #186 named the pathfinder as the mechanism " +
             "on the strength of this ratio; below the floor the naming has to be taken again." +
             $"{Environment.NewLine}{Detail()}");
+
+        // The reach of a yield counts a blocker with no destination at all on the
+        // yield's side, because the last clause of CanYield lifts to true for it.
+        // Put that class back where the first version of this harness had it and
+        // the ratio moves from 1.86 to 1.95 — over the floor either way, which is
+        // exactly why the class is asserted to exist instead.
+        Assert.True(
+            withNoDestination > 0,
+            "No refused step over the whole matrix was blocked by a creature with no destination " +
+            "at all. Either the class has stopped occurring, or it has been folded back into the " +
+            "one a yield may not touch — and the reach of a yield in the comparison above is then " +
+            $"understated.{Environment.NewLine}{Detail()}");
+
+        // The comparable set has to be smaller than the whole sample, or the
+        // restriction that makes the comparison fair is not restricting anything.
+        // Reverted, this number goes from 639 to 728 and the ratio from 1.86 to
+        // 2.12 — again over the floor, again invisible to the ratio.
+        Assert.True(
+            detoured < everyDetour,
+            $"A way round reached {everyDetour} refused steps in all and {detoured} of the ones a " +
+            "body stood in the way of, and the two are the same number. The comparison above is " +
+            "then counting a way round over every refused step and a yield only over the ones " +
+            $"with a blocker, which compares unlike sets.{Environment.NewLine}{Detail()}");
     }
 
     /// <summary>
