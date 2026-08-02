@@ -351,12 +351,21 @@ public sealed class PrototypeScenarioTests(ITestOutputHelper output)
     /// but it may not end the domain worse off than doing nothing.
     /// </para>
     /// <para>
-    /// What today's margin is made of, named because the number misleads:
-    /// the per-seed gaps are +38, -28 and +1150, so 1150 of the 1160 come from
-    /// baseline/20260728 — the party that wins its fights and starves, defect
-    /// #171. On the two seeds where both parties survive, preparation wins by
-    /// 10 points out of roughly 1600. Measured by the independent review; main
-    /// shows no such concentration. Recheck this clause when #171 closes.
+    /// What the margin is made of, named because the number can mislead. It used
+    /// to mislead: before Issue #171 the per-seed gaps were +38, -28 and +1150,
+    /// so 1150 of the 1160 came from baseline/20260728 — the party that won its
+    /// fights and starved — and on the two seeds where both parties survived
+    /// preparation won by 10 points out of roughly 1600. That was measured by the
+    /// independent review of #129, which asked for the clause to be rechecked
+    /// when #171 closed.
+    /// </para>
+    ///
+    /// <para>
+    /// Rechecked, and it is no longer true: with the price of memory of place
+    /// bounded the gaps are +92, -28 and +152, prepared 2546 against baseline
+    /// 2330, and no single seed carries the claim. The margin is smaller and it
+    /// is spread over the matrix, which is the level 13.4 has always said its
+    /// corridors mean anything at. Figures in <c>evidence/171-after.json</c>.
     /// </para>
     ///
     /// <para>

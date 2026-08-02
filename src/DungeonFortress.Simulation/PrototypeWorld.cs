@@ -3125,28 +3125,46 @@ public sealed class PrototypeWorld
     /// <para>
     /// <b>This method is the whole price of memory of place.</b> Nothing else in
     /// the simulation reads a remembered place, so whatever a memory costs the
-    /// domain, it costs it here, one (creature, job) pair at a time. The price
-    /// has exactly two dimensions — <b>how far</b> a memory refuses and <b>how
-    /// long</b> it goes on refusing — and today only the first of them is bounded
-    /// by anything. That is the defect of Issue #171, and the analysis with the
-    /// commands it was measured by is in <c>evidence/171-before.json</c>.
+    /// domain, it costs it here, one (creature, job) pair at a time. Three tuning
+    /// values bound that price, and Issue #171 is what happened when only the
+    /// first of them existed:
+    /// </para>
+    ///
+    /// <list type="bullet">
+    /// <item><b>how far</b> — <see cref="PrototypeTuning.MemoryAvoidRadius"/>;</item>
+    /// <item><b>how long</b> — <see cref="PrototypeTuning.MemoryAvoidTicks"/>, ticks
+    /// since the place was written. Past it the place is still remembered and still
+    /// on the panel; what has run out is the avoidance, not the memory;</item>
+    /// <item><b>how much</b> — <see cref="PrototypeTuning.MemoryYieldsSatiety"/>. A
+    /// creature going hungry stops refusing altogether, so the price memory can
+    /// take is bounded by what the domain can survive paying.</item>
+    /// </list>
+    ///
+    /// <para>
+    /// None of the three knows what stands on the tile it refuses, and that is
+    /// deliberate: a rule that charged less for a larder tile than for a corridor
+    /// would be a rule about the map rather than about the creature. A memory may
+    /// take away <b>a place, for a while, from a creature that can afford it</b>,
+    /// and may not take away a room for a party. The before-and-after of that
+    /// sentence, with the commands, is in <c>evidence/171-before.json</c> and
+    /// <c>evidence/171-after.json</c>.
     /// </para>
     ///
     /// <para>
-    /// Neither dimension knows what stands on the tile it refuses, and that is
-    /// deliberate: a rule that charged less for a larder tile than for a corridor
-    /// would be a rule about the map rather than about the creature. What has to
-    /// keep the price proportionate is therefore the size of the two dimensions
-    /// themselves — a memory may take away <b>a place for a while</b>, and may
-    /// not take away a room for a party.
+    /// A creature that yields to hunger records no refusal, because it did not
+    /// refuse: the truthfulness rule of Issue #125 — a refusal names work memory
+    /// actually took away — is untouched by both new bounds.
     /// </para>
     /// </summary>
-    private static PrototypeRememberedPlace? AvoidedPlace(CreatureState creature, GridPoint target)
+    private PrototypeRememberedPlace? AvoidedPlace(CreatureState creature, GridPoint target)
     {
-        return creature.RememberedPlaces.Count == 0
+        return creature.RememberedPlaces.Count == 0 ||
+               creature.Satiety < PrototypeTuning.MemoryYieldsSatiety
             ? null
             : creature.RememberedPlaces.Values
-                .Where(place => Manhattan(place.Place, target) <= PrototypeTuning.MemoryAvoidRadius)
+                .Where(place =>
+                    Manhattan(place.Place, target) <= PrototypeTuning.MemoryAvoidRadius &&
+                    CurrentTick - place.Tick <= PrototypeTuning.MemoryAvoidTicks)
                 .OrderBy(place => Manhattan(place.Place, target))
                 .ThenByDescending(place => place.Tick)
                 .ThenBy(place => place.Place)

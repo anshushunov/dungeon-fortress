@@ -95,6 +95,192 @@ public sealed class PrototypeMemoryCostTests(ITestOutputHelper output)
         output.WriteLine(report.ToString());
     }
 
+    /// <summary>
+    /// The claim Issue #171 exists to make: <b>a party that wins its fights does
+    /// not end it starving.</b>
+    ///
+    /// <para>
+    /// It is asserted over the whole matrix rather than on the seed the defect
+    /// was found on, because one seed cannot tell a fix from a coincidence. Both
+    /// fixtures that reach a wave must come out of every seed alive; `neglected`
+    /// is not here because it falls before the first wave, writes no memory at
+    /// all and is the fixture whose falling is the point.
+    /// </para>
+    ///
+    /// <para>
+    /// On <c>main</c> this fails on baseline/20260728: the domain repels the wave
+    /// at the larder, its defenders refuse to work there afterwards, and it falls
+    /// at t2299 of hunger with a score of -223. It also fails with either half of
+    /// the fix reverted on its own — see <c>evidence/171-mutations.json</c>.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_party_that_wins_its_fights_does_not_end_it_starving()
+    {
+        foreach (var cell in Matrix())
+        {
+            Assert.True(
+                cell.Outcome != "fallen",
+                $"{cell.Fixture}/{cell.Seed} ended the party as `fallen` at t{cell.EndTick} with a " +
+                $"score of {cell.Score}, having produced {cell.MealsProduced} meals and finished at " +
+                $"an average satiety of {cell.AverageSatiety}. Memory of place refused work " +
+                $"{cell.Refusals} times, {cell.RefusalsOnFoodChain} of them on a kitchen or larder " +
+                "tile. A fixture that reaches its waves may lose them; it may not win them and then " +
+                "starve because of what its defenders remember (Issue #171).");
+        }
+    }
+
+    /// <summary>
+    /// The shape of the price, and the sentence that separates a decision from a
+    /// casualty: <b>a creature may choose differently because of what it
+    /// remembers; it may not be removed from the domain by it.</b>
+    ///
+    /// <para>
+    /// Measured as the longest unbroken run of ticks on which one creature
+    /// refuses work. A creature that refuses on two hundred consecutive ticks is
+    /// not making a choice — it is standing still for a tenth of the party, and
+    /// the domain has lost a worker without losing a creature.
+    /// </para>
+    ///
+    /// <para>
+    /// The bound is 100 and the shipped matrix reaches 87, which is a margin of
+    /// thirteen ticks and is named rather than hidden: this is a fitted bound,
+    /// and it is worth having only because both halves of the fix cross it on
+    /// their own. On <c>main</c> the same figure is 213; with the hunger bound
+    /// reverted it is 157 and with the ageing reverted 114. The measurements are
+    /// in <c>evidence/171-mutations.json</c>.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void No_creature_is_taken_out_of_the_domain_by_what_it_remembers()
+    {
+        const int bound = 100;
+        foreach (var cell in Matrix())
+        {
+            Assert.True(
+                cell.LongestRefusalStreakOneCreature <= bound,
+                $"{cell.Fixture}/{cell.Seed}: one creature refused work by memory on " +
+                $"{cell.LongestRefusalStreakOneCreature} consecutive ticks, and the bound is " +
+                $"{bound}. Over that party memory refused {cell.Refusals} times, " +
+                $"{cell.RefusalsOnFoodChain} of them on a kitchen or larder tile, and the domain " +
+                $"produced {cell.MealsProduced} meals. A refusal is a different choice; an unbroken " +
+                "run of them is a worker the domain no longer has.");
+        }
+    }
+
+    /// <summary>
+    /// The first of the two bounds, as its own rule: <b>no refusal ever acts on a
+    /// memory older than <see cref="PrototypeTuning.MemoryAvoidTicks"/>.</b>
+    ///
+    /// <para>
+    /// This is an invariant of the rule rather than a measurement of the party —
+    /// the same kind of check, and honest about it for the same reason, as the
+    /// note in contract 5.1 about
+    /// <c>A_refusal_by_memory_names_the_work_the_creature_would_have_taken</c>.
+    /// Its worth is that deleting the ageing arm of <c>AvoidedPlace</c> cannot
+    /// pass it: on <c>main</c> the oldest memory still refusing work is 420 ticks
+    /// old, and with only this half reverted it is 694.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_memory_stops_refusing_work_before_the_next_wave_arrives()
+    {
+        Assert.True(
+            PrototypeTuning.MemoryAvoidTicks < PrototypeTuning.WaveIntervalTicks,
+            $"a memory refuses work for {PrototypeTuning.MemoryAvoidTicks} ticks and waves are " +
+            $"{PrototypeTuning.WaveIntervalTicks} apart. Longer than the interval, a fright " +
+            "outlives the quiet window the party has to feed itself in, and frights compound wave " +
+            "over wave instead of healing between them.");
+        foreach (var cell in Matrix())
+        {
+            Assert.True(
+                cell.OldestMemoryAtRefusal <= PrototypeTuning.MemoryAvoidTicks,
+                $"{cell.Fixture}/{cell.Seed}: a creature refused work because of a place it had " +
+                $"remembered {cell.OldestMemoryAtRefusal} ticks earlier, and avoidance is supposed " +
+                $"to run out after {PrototypeTuning.MemoryAvoidTicks}.");
+        }
+    }
+
+    /// <summary>
+    /// The second of the two bounds, as its own rule: <b>a creature below
+    /// <see cref="PrototypeTuning.MemoryYieldsSatiety"/> never refuses work by
+    /// memory</b>, and over the matrix that actually happens rather than being
+    /// vacuously true.
+    ///
+    /// <para>
+    /// The second half is what makes this a check instead of a tautology: the
+    /// rule only matters if hungry creatures are ever offered work they remember
+    /// a fright at, and the count says how often the domain was saved by it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_creature_going_hungry_takes_the_work_it_would_otherwise_refuse()
+    {
+        var yielded = 0;
+        var report = new StringBuilder();
+        foreach (var fixtureName in Fixtures)
+        {
+            foreach (var seed in MatrixSeeds)
+            {
+                var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
+                var here = 0;
+                // Satiety is read off the snapshot taken *before* the step, because
+                // that is the state the tick decided on: it decays inside the same
+                // tick, so a creature that was at the threshold when it chose is
+                // one point under it by the time the tick is over.
+                var before = world.GetSnapshot();
+                while (!world.IsComplete)
+                {
+                    world.Step();
+                    var state = world.GetSnapshot();
+                    var acted = state.Tick - 1;
+                    foreach (var @event in state.Events)
+                    {
+                        if (@event.LastTick != acted ||
+                            @event.ReasonCode is not ("refused_place_of_panic" or "refused_place_of_wound"))
+                        {
+                            continue;
+                        }
+
+                        var creature = before.Creatures.Single(item => item.Id == @event.CreatureId);
+                        Assert.True(
+                            creature.Satiety >= PrototypeTuning.MemoryYieldsSatiety,
+                            $"{fixtureName}/{seed}: on tick {acted} {creature.Name} refused work at a " +
+                            $"place it remembers while its satiety stood at {creature.Satiety}, under " +
+                            $"the {PrototypeTuning.MemoryYieldsSatiety} at which hunger is supposed to " +
+                            "outrank what a creature remembers.");
+                    }
+
+                    // A creature that is under the threshold, is holding a memory
+                    // and took work anyway: the rule doing its job, counted where
+                    // it happens rather than inferred from the outcome.
+                    here += state.Creatures.Count(creature =>
+                        before.Creatures.Single(item => item.Id == creature.Id).Satiety <
+                            PrototypeTuning.MemoryYieldsSatiety &&
+                        creature.RememberedPlaces.Count > 0 &&
+                        creature.CurrentJobId is not null &&
+                        creature.LastDecision.Tick == acted &&
+                        creature.LastDecision.Target is { } target &&
+                        creature.RememberedPlaces.Any(place =>
+                            Manhattan(place.Place, target) <= PrototypeTuning.MemoryAvoidRadius &&
+                            acted - place.Tick <= PrototypeTuning.MemoryAvoidTicks));
+                    before = state;
+                }
+
+                yielded += here;
+                report.AppendLine(CultureInfo.InvariantCulture, $"{fixtureName}/{seed}: {here}");
+            }
+        }
+
+        Assert.True(
+            yielded > 0,
+            "over the whole matrix no hungry creature ever took work at a place it remembers, so " +
+            $"the bound was never reached and this check tested nothing.{Environment.NewLine}{report}");
+    }
+
+    private static int Manhattan(GridPoint left, GridPoint right) =>
+        Math.Abs(left.X - right.X) + Math.Abs(left.Y - right.Y);
+
     private static string Format(IReadOnlyDictionary<string, int> counts) =>
         counts.Count == 0
             ? "none"
