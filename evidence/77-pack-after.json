@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "issue": 77,
+  "checkpoint": "6 — the frames after the pack is connected, and the verification run",
+  "note": "Same spec, same commands and same machine as evidence/77-pack-before.json; only the code between them differs. PNGs land under .artifacts/evidence/77-pack-after/ and are not committed. Hashes and checksums are copied from the manifest capture-evidence.ps1 wrote (.artifacts/evidence/77-pack-after/manifest.json), not retyped.",
+
+  "after": {
+    "commit": "2b272899b49b84e5050c11140dbf3788e3261f95",
+    "commitSubject": "Документ называет подключённый пак, прямоугольник и разницу холста и существа (#77)",
+    "sourceDirty": false,
+    "spec": "evidence/77-scale-frames.json",
+    "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\capture-evidence.ps1 -SpecPath evidence/77-scale-frames.json -OutputRoot \"evidence/77-pack-after\" -GodotPath \"C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe\"",
+    "engine": "Godot 4.7.1.stable.mono, OpenGL compatibility renderer, textureFilter LinearWithMipmaps",
+    "loadedSpriteStates": ["idle", "work", "combat", "windup", "flinch", "downed"],
+    "loadedPack": "goblin_{state}_v2.png — 272x192",
+    "measuredBodySize": {
+      "goblinWorldSizePx": 61.81818181818181,
+      "goblinWorldWidthPx": 87.57575757575758,
+      "aspect": "87.57575757575758 / 61.81818181818181 = 1.4166666666666667 = 17/12",
+      "reportedBy": "view.goblinWorldSize and view.goblinWorldWidth in each run's own godot_graybox_screenshot event",
+      "tileSize": 40,
+      "note": "The engine reports the doubles the same expressions produce. The width is not a constant anywhere in the code: it is the height times SpriteCanvasAspect, and SpriteCanvasAspect is 272/192."
+    },
+    "captures": [
+      {
+        "name": "77-scale-rooms",
+        "imagePath": ".artifacts/evidence/77-pack-after/77-scale-rooms.png",
+        "imageSha256": "39ec5c49585a48c8000d7d92e8f04ad7fc87e0fc41faab2e39e3bb62bfea9555",
+        "beforeImageSha256": "c735e8fb211b98de7a7e48514d58b283692906b83fbb11ac8c4a933dd8f70838",
+        "canonicalChecksum": "3fae9df7ad170481dd2295d6793227b0a9eb6cb10538d879b709dbc19db034e8",
+        "byteForByteRepeat": true,
+        "goblinScreenSizePx": 61.81818181818181,
+        "goblinScreenWidthPx": 87.57575757575758,
+        "reading": "The same crew on the same tick, now drawn from the v2 pack. The `work` goblins hold a visible pick and swing it; faces, ears, tunic and belt read at 1x, which the v1 sheet's four states did not give at this size. Every body still stands on the same ground: the frame differs from its «before» only where a body is."
+      },
+      {
+        "name": "77-scale-raid",
+        "imagePath": ".artifacts/evidence/77-pack-after/77-scale-raid.png",
+        "imageSha256": "84a366803af6a3cd777c652878b1f67eaa94ba52c0add2e1d8e29e0f2eb7369b",
+        "beforeImageSha256": "6d75e41d7fae179555d191febadd90cd24314ced5a554ffb51c497f32cd3edd0",
+        "canonicalChecksum": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70",
+        "byteForByteRepeat": true,
+        "goblinScreenSizePx": 61.81818181818181,
+        "goblinScreenWidthPx": 87.57575757575758,
+        "reading": "The crowding case the scale was chosen on, and the frame the widened canvas has to be judged against. The fighters at the watch post are packed as before; each body is still separable, and the spears now read as spears. This is the frame the open question about sideways overlap belongs to — see «sidewaysOverlap» below."
+      },
+      {
+        "name": "77-scale-raid-detail",
+        "imagePath": ".artifacts/evidence/77-pack-after/77-scale-raid-detail.png",
+        "imageSha256": "eba178d4ed378c693e8d9fb59359dbbe32f9a5d5c5c9b24ee12b41d09eb909e0",
+        "beforeImageSha256": "eba178d4ed378c693e8d9fb59359dbbe32f9a5d5c5c9b24ee12b41d09eb909e0",
+        "canonicalChecksum": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70",
+        "byteForByteRepeat": true,
+        "goblinScreenSizePx": 123.63636363636363,
+        "goblinScreenWidthPx": 175.15151515151516,
+        "reading": "Byte-for-byte identical to its own «before», for the fifth consecutive round. At 2x over this stretch of the map there is no body in frame, so it is walls, floor, room outlines, grid and HUD alone — and the pack, the aspect ratio, the support fraction and the body model of the #156 sweep all changed between the two captures without moving one pixel of it."
+      }
+    ]
+  },
+
+  "sidewaysOverlap": {
+    "why": "The subtask was told to stop and report if the 17:12 rectangle makes neighbouring bodies overlap each other more than the square did, because that is a balance surface and the owner's decision about scale. It does, and the number is here rather than a verdict.",
+    "measured": "Opaque half-width at tile 40, per pose, from the pack's own alpha bounds: idle 19.64, downed 30.59, windup 34.13, flinch 35.42, work 40.89, combat 42.82 px. The v1 pack's four poses were 23.18, 27.05, 27.05, 27.05. Half a cell is 20 px.",
+    "reading": "An idle creature is still inside its own cell. A working or fighting one is not, and was not before either — 27.05 px already exceeded a half-cell — but the reach grew by half again, because combat and windup hold a spear out and work swings a pick. What overlaps a neighbour is the weapon, not the body: the torso column is roughly the idle silhouette in every pose.",
+    "notMine": "Drawing the canvas as a square instead would squash the pack rather than narrow the creature, so this is not a choice between a wide body and a narrow one. If the crowd stops reading, the lever is the scale — the owner's 170 % — or the art, and neither is this subtask's. 77-scale-raid is the frame to judge it on."
+  },
+
+  "verification": {
+    "presentationTests": {
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -v q --nologo",
+      "result": "517 passed, 0 failed"
+    },
+    "fullRun": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\verify.ps1 -GodotPath \"C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe\"",
+      "temporaryRoot": "DUNGEON_FORTRESS_TEMP=.artifacts/tmp",
+      "stagesGreen": ["scripts", "build", "tests", "mcp", "sim", "load", "godot", "ui"],
+      "stageRed": "screenshots",
+      "reason": "Godot emitted 14 unexpected ERROR line(s) — all of them `Condition \"err != OK\" is true. at: initialize (drivers/gles3/shader_gles3.cpp:802)`, emitted during renderer start-up before the OpenGL device line and before any frame is drawn.",
+      "runs": 3,
+      "whyItWasRerun": "The first run's failure looked transient: its first screenshot process was clean and its repeat emitted the 14 lines. Runs 2 and 3 emitted them on the first process instead, so the position moves but the failure does not.",
+      "notThisChange": {
+        "probe": "src/DungeonFortress.Game/Main.cs and src/DungeonFortress.Presentation/CameraView.cs checked out from 18afe51 (the merge commit, before any code of this subtask) and BodySprites.cs moved aside, then `verify.ps1 -Stage screenshots` run on that tree.",
+        "result": "The identical failure: 14 GLES3 shader-initialize ERROR lines, same guard, same message. The sources were then restored and `git status --porcelain` is empty.",
+        "conclusion": "The stage does not fail because of this change. It fails on this machine on the pre-change tree as well."
+      },
+      "notTheGameArguments": {
+        "probe": "The same screenshot the stage takes — baseline, tick 1, tile 40, zoom 0.5, camera 560,320, UI scale 1, frame 1280x720 — run through scripts/run-game.ps1 instead, both against the shared Godot profile and against an empty one.",
+        "result": "0 engine errors in both cases, exit 0, screenshot written.",
+        "conclusion": "The engine start-up noise belongs to how verify.ps1 launches Godot on this machine, not to the frame the stage asks for."
+      },
+      "whatTheStageWouldHaveChecked": "Its three assertions are independently satisfied elsewhere in this evidence: the baseline frame captured twice byte-for-byte (all three captures above repeat byte-for-byte), Assert-GoblinSpriteDiagnostics (loadedSpriteStates has all six, missingSpriteStates is empty, fallbackSpriteDraws is 0 — reported by the run-game probe on this tree), and the prepared-raid diagnostics (the 77-scale-raid capture). What is missing is the guard's own clean-output claim, not a check about the pack.",
+      "handedUp": "This is an environment finding for the coordination session, not a defect of the change, and it is deliberately not fixed here: the fix would be either to the engine-error guard in scripts/GodotTools.ps1 or to how the stage starts Godot, and loosening a guard so that one's own run goes green is the wrong direction."
+    }
+  },
+
+  "acceptance": {
+    "sixStatesDrawn": "loadedSpriteStates has all six; missingSpriteStates empty; fallbackSpriteDraws 0.",
+    "rectangle": "87.57575757575758 x 61.81818181818181 px at tile 40, ratio 17/12, width derived from SpriteCanvasAspect rather than written down.",
+    "feetDidNotMove": "0.000000 px at tile 32, 40 and 48, with the support fraction now 188/192 — CameraViewTests.The_drawn_feet_do_not_move_when_the_body_grows, which carries both packs' fractions as literals.",
+    "crossings": "0 before, 0 after, with the two the canvas model reports named and their cause isolated by two probes — evidence/77-pack-geometry.json.",
+    "checksum": "identical on both fixtures; the frame with no body in it is byte-identical.",
+    "sourceHeadroom": "123.64 px of 192 rows and 175.15 of 272 columns at 2x — 0.64 of the source, against 1.29x magnification before.",
+    "headJump": "measured and accepted with a stated reason — evidence/77-pack-head-jump.json.",
+    "engineFreeTests": "517 presentation tests, none of which start Godot; the pose choice moved into DungeonFortress.Presentation for exactly this reason.",
+    "mutants": "six, both required ones red — evidence/77-pack-mutation.json."
+  }
+}
