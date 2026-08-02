@@ -143,6 +143,48 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// The control window has to end before the domain stops working, and this is
+    /// the check that says so.
+    ///
+    /// The first version of this file compared the ticks after a fight against
+    /// the <see cref="DispersalWindow"/> ticks ending at the wave's arrival. On
+    /// <c>prepared</c> that interval is the muster to the tile — its journal sets
+    /// <c>muster_lead_ticks</c> to 60 on tick 880 and the window is 60 — so the
+    /// "peacetime" half of the comparison was the one moment of the party when
+    /// every creature drops its work and walks into a Watch zone of ten tiles.
+    /// It carried 532 of the 737 refused steps of that control and reversed the
+    /// answer. Independent review of Issue #186 found it by measurement, and this
+    /// check is what keeps it found: the control now ends where
+    /// <c>PrototypeWorld.IsMusterActive</c> starts, and losing that subtraction
+    /// reddens here rather than quietly returning the wrong ratio.
+    ///
+    /// The second assertion is the sample: a matrix in which nobody ever musters
+    /// would satisfy the first one without exercising it at all.
+    /// </summary>
+    [Fact]
+    public void The_control_window_ends_before_the_domain_stops_working()
+    {
+        foreach (var party in Matrix)
+        {
+            foreach (var wave in party.Measured)
+            {
+                Assert.True(
+                    wave.ControlWindowEndTick <= wave.ArriveTick - wave.MusterLeadTicks,
+                    $"{party.Fixture}/{party.Seed} wave {wave.Number}: the control window ends on " +
+                    $"tick {wave.ControlWindowEndTick}, and the muster for that wave starts on " +
+                    $"{wave.ArriveTick - wave.MusterLeadTicks}. The ticks a fight is being " +
+                    "compared against are the ticks the whole domain spends walking into the " +
+                    $"Watch zone, which is not peacetime.{Environment.NewLine}{Detail()}");
+            }
+        }
+
+        Assert.True(
+            Matrix.Any(party => party.Measured.Any(wave => wave.MusterLeadTicks > 0)),
+            "No wave of the matrix has a muster lead at all, so the rule above was never " +
+            $"exercised.{Environment.NewLine}{Detail()}");
+    }
+
+    /// <summary>
     /// Criterion 3 of Issue #186 as a check rather than a paragraph: of the ticks
     /// an ex-combatant spends refusing a step after the fight, the share on which
     /// a route to the same destination existed with every other body treated as a
@@ -226,7 +268,7 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
             party => party.Measured.Sum(wave => wave.BlockedAYieldCouldHaveCleared));
 
         Assert.True(
-            detoured * 2 >= yieldable * 3,
+            detoured > 0 && detoured * 2 >= yieldable * 3,
             $"Of the refused steps a body stood in the way of, a way round reached {detoured} and " +
             $"a yield could have cleared {yieldable} — a ratio of " +
             $"{(yieldable == 0 ? double.PositiveInfinity : (double)detoured / yieldable):F2}, " +
@@ -443,7 +485,7 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     /// its control does not move at all, and <c>prepared</c> is compared against
     /// the quiet stretch that ends exactly where its muster begins.
     /// </summary>
-    private static (int ClinchTicks, int BlockedCreatureTicks) Background(
+    private static (int ClinchTicks, int BlockedCreatureTicks, int End, int Lead) Background(
         IReadOnlyDictionary<int, List<int>> blockedPerTick,
         IReadOnlyDictionary<int, int> musterLeadPerTick,
         IReadOnlyCollection<int> cohort,
@@ -467,7 +509,7 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
             }
         }
 
-        return (clinch, blocked);
+        return (clinch, blocked, arriveTick - lead, lead);
     }
 
     /// <summary>
@@ -480,7 +522,7 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
         string outcome,
         IReadOnlyList<int> cohort,
         IReadOnlyDictionary<int, GridPoint> positionsAtEnd,
-        (int ClinchTicks, int BlockedCreatureTicks) background)
+        (int ClinchTicks, int BlockedCreatureTicks, int End, int Lead) background)
     {
         private readonly Dictionary<int, int> _firstMove = [];
         private int _observedTicks;
@@ -724,6 +766,8 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
                 _maxTogether,
                 background.ClinchTicks,
                 background.BlockedCreatureTicks,
+                background.End,
+                background.Lead,
                 delays.Length == 0 ? 0 : delays.Max(),
                 delays.Length == 0 ? 0 : delays.Sum() / delays.Length,
                 cohort.Count(id => !_firstMove.ContainsKey(id)),
@@ -999,6 +1043,8 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
         int MaxBlockedTogether,
         int BackgroundClinchTicks,
         int BackgroundBlockedCreatureTicks,
+        int ControlWindowEndTick,
+        int MusterLeadTicks,
         int MaxDispersalDelay,
         int MeanDispersalDelay,
         int NeverMovedInTheWindow,
@@ -1029,6 +1075,7 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
                 $"cohort={CohortSize} observed={ObservedTicks} " +
                 $"clinchTicks={ClinchTicks} background={BackgroundClinchTicks} " +
                 $"blocked={BlockedCreatureTicks} backgroundBlocked={BackgroundBlockedCreatureTicks} " +
+                $"controlEnds={ControlWindowEndTick} musterLead={MusterLeadTicks} " +
                 $"maxTogether={MaxBlockedTogether} " +
                 $"dispersalMax={MaxDispersalDelay} dispersalMean={MeanDispersalDelay} " +
                 $"neverMoved={NeverMovedInTheWindow} standingStill={StandingStillCreatureTicks} " +
