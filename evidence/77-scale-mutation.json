@@ -30,8 +30,29 @@
     }
   ],
 
+  "placementMutants": {
+    "note": "Added after the placement rule was changed to anchor the drawn feet (commit dc750d0). Same protocol: applied to the working tree after the checked state was committed, measured, reverted with `git checkout -- src/DungeonFortress.Presentation/CameraView.cs`, and the restored tree re-run green at 492 passed. The scale mutants above are untouched.",
+    "baseline": {"passed": 492, "failed": 0},
+    "mutants": [
+      {
+        "name": "the anchor forgets which part of the canvas the feet are on",
+        "where": "src/DungeonFortress.Presentation/CameraView.cs, GoblinDrawRect",
+        "change": "top = feet - size * SpriteSupportFraction -> top = feet - size",
+        "why": "This is exactly the rule the first round of Issue #77 confused with this one: it stands the canvas's bottom edge on the foot line instead of the drawn feet. It is about a pixel away, so it is the mutation a careless simplification would actually produce.",
+        "result": "FAILED: 8 of 492 — CameraViewTests.The_drawn_feet_do_not_move_when_the_body_grows (the feet rise by 1.06 px instead of staying still), CameraViewTests.Anchoring_the_drawn_feet_reaches_a_pixel_lower_than_anchoring_the_canvas (the body reaches 43.64 instead of 42.58), RoomBorderDepthTests.No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible at all three tile sizes (the 2 quarters@19,2 crossings come back), and RoomBorderDepthTests.No_body_anywhere_can_reach_a_stroke_the_wall_in_front_does_not_cover at all three."
+      },
+      {
+        "name": "the ground moves with the body",
+        "where": "src/DungeonFortress.Presentation/CameraView.cs, GoblinFootLine",
+        "change": "ReferenceGoblinDrawSize * WorldVisualScale * (fraction - 0.5) -> the same times BodyVisualScale",
+        "why": "The subtle wrong version: the foot line stays a foot line, but starts scaling with the owner's choice of body size — which puts the feet back exactly where the centred square had them, 28.33 px below the render centre. If only «the sprite stands on the foot line» were pinned and not «the foot line does not move», this would pass.",
+        "result": "FAILED: 2 of 492 — the two tests that measure where the feet end up. The Issue #156 sweep stays green, because sinking the feet does not raise the head, which is the point of keeping both kinds of check."
+      }
+    ]
+  },
+
   "restored": {
     "command": "git checkout -- src/DungeonFortress.Presentation/CameraView.cs && dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -v q --nologo",
-    "result": "491 passed, 0 failed — the tree is back to the committed state and nothing from the mutation round is left in it."
+    "result": "491 passed after the scale round and 492 after the placement round, 0 failed both times — the tree is back to the committed state and nothing from either mutation round is left in it."
   }
 }
