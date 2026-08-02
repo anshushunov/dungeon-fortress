@@ -259,6 +259,7 @@ $temporaryRootCommands = @(
     "Initialize-VerificationTemporaryRoot"
 )
 $engineEntryPoints = @()
+$orderCheckedEntryPoints = @()
 foreach ($script in @(Get-ChildItem -LiteralPath $PSScriptRoot -Filter "*.ps1" -File)) {
     $tokens = $null
     $parseErrors = $null
@@ -280,17 +281,11 @@ foreach ($script in @(Get-ChildItem -LiteralPath $PSScriptRoot -Filter "*.ps1" -
         continue
     }
 
-    # Presence, not textual order. Order is a separate question and already has
-    # a separate owner: test-verify-stages.ps1 models the execution order of the
-    # run setup and requires the temporary directory to be settled before the
-    # engine is resolved. Requiring textual order here would only be satisfiable
-    # by moving verify.ps1's memoised prerequisite below its preflight, which
-    # would change nothing about what runs when.
-    $resolvesTemporaryRoot = @($commands | Where-Object {
+    $temporaryRootOffsets = @($commands | Where-Object {
         $_.GetCommandName() -in $temporaryRootCommands
-    }).Count -gt 0
+    } | ForEach-Object { $_.Extent.StartOffset })
 
-    if (-not $resolvesTemporaryRoot) {
+    if ($temporaryRootOffsets.Count -eq 0) {
         throw (
             "'$($script.Name)' starts the engine without choosing the temporary " +
             "directory the shared way. That is the divergence of Issue " +
@@ -301,12 +296,59 @@ foreach ($script in @(Get-ChildItem -LiteralPath $PSScriptRoot -Filter "*.ps1" -
             ($temporaryRootCommands -join " / ") + " before $engineStartCommand.")
     }
 
+    # Order, not only presence. Both calls present in the wrong order is not a
+    # near miss: Initialize-GodotRuntimeEnvironment builds the profile from
+    # [IO.Path]::GetTempPath(), so a choice made after it is made too late and
+    # the script silently goes back to ignoring DUNGEON_FORTRESS_TEMP - which is
+    # Issue #184 word for word. Found by the independent review of PR #199: a
+    # mutant that only swapped the two statements in run-game.ps1 survived the
+    # earlier presence-only form of this check.
+    #
+    # verify.ps1 is the one exemption, and it is named rather than inferred. Its
+    # engine start sits inside a memoised prerequisite defined above the
+    # preflight, so textual order says nothing there; the execution order is
+    # modelled instead by test-verify-stages.ps1, whose preflightSequence begins
+    # with Initialize-VerificationTemporaryRoot. For the three linear scripts no
+    # other check owns the question at all - `rg -n "run-game|update-golden|
+    # goblin-sprite" scripts/test-verify-stages.ps1` finds one comment and
+    # nothing else - so it is owned here.
+    $orderedScripts = @()
+    if ($script.Name -ne "verify.ps1") {
+        $earliestEngineStart = (@($commands | Where-Object {
+            $_.GetCommandName() -eq $engineStartCommand
+        } | ForEach-Object { $_.Extent.StartOffset }) | Measure-Object -Minimum).Minimum
+        $earliestTemporaryRoot = ($temporaryRootOffsets | Measure-Object -Minimum).Minimum
+
+        if ($earliestTemporaryRoot -gt $earliestEngineStart) {
+            throw (
+                "'$($script.Name)' chooses the temporary directory only after it " +
+                "starts the engine. $engineStartCommand builds the Godot runtime " +
+                "profile from [IO.Path]::GetTempPath(), so a choice made later " +
+                "never reaches the profile and the script is back to ignoring " +
+                "-TemporaryRoot and DUNGEON_FORTRESS_TEMP - the divergence of " +
+                "Issue #184 with both calls still present. Move the call to " +
+                ($temporaryRootCommands -join " / ") + " above " +
+                "$engineStartCommand.")
+        }
+
+        $orderedScripts += $script.Name
+    }
+
     $engineEntryPoints += $script.Name
+    $orderCheckedEntryPoints += @($orderedScripts)
 }
 if ($engineEntryPoints.Count -lt 4) {
     throw (
         "Only $($engineEntryPoints.Count) engine entry point(s) were found; the " +
         "check has stopped reaching the scripts it is meant to compare.")
+}
+# The exemption is one file, and it stays one file. Without this the order check
+# could be emptied by exempting everything and would still report ok.
+if ($orderCheckedEntryPoints.Count -ne ($engineEntryPoints.Count - 1)) {
+    throw (
+        "The order of the temporary directory and the engine start is checked " +
+        "in $($orderCheckedEntryPoints.Count) of $($engineEntryPoints.Count) " +
+        "entry points; every one but verify.ps1 has to be checked.")
 }
 
 [ordered]@{
@@ -322,4 +364,5 @@ if ($engineEntryPoints.Count -lt 4) {
         "$($_.LongestPathLength):$($_.Accepted)"
     })
     engineEntryPoints = @($engineEntryPoints)
+    orderCheckedEntryPoints = @($orderCheckedEntryPoints)
 } | ConvertTo-Json -Compress | Write-Host

@@ -172,6 +172,15 @@ function Get-StablePathHash {
 # repository documented for the same message since PR #5 was checked in the same
 # sweep and does not bite on Godot 4.7.1: nine cold-cache arms from 246 to 312
 # characters were silent.
+#
+# Do not "correct" this to 258. Direct P/Invoke probes of SetCurrentDirectoryW
+# without the prefix put the raw Win32 boundary at 258 in, 259 out
+# (ERROR_FILENAME_EXCED_RANGE). The engine stops four characters earlier, and
+# why is not established - DirAccessWindows keeps a current directory of its own
+# between ShaderGLES3::initialize and that call. So this number is calibrated on
+# engine behaviour rather than derived from the API: in the 255-258 band the API
+# works and the engine does not, and raising it brings Issue #184 back. Only a
+# new staircase of engine runs can justify moving it.
 $script:GodotMaximumEnterableDirectoryPathLength = 254
 
 # The GLES3 shader classes this renderer initializes, read off a real profile
