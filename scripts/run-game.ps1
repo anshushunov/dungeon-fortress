@@ -45,13 +45,21 @@ param(
     [Nullable[double]]$UiScale,
     [Alias("WindowSize")]
     [ValidatePattern("^\d{3,5}x\d{3,5}$")]
-    [string]$FrameSize
+    [string]$FrameSize,
+    # Same meaning and same resolution order as in verify.ps1. It is here
+    # because of Issue #184: this script is the control experiment the
+    # screenshots stage is compared against, and until now it was the only
+    # engine entry point that ignored the override, so the two started the
+    # engine with different user:// directories and only one of them met the
+    # shader cache path limit.
+    [string]$TemporaryRoot
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "GodotTools.ps1")
+. (Join-Path $PSScriptRoot "TemporaryRoot.ps1")
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $artifactsRoot = Join-Path $repoRoot ".artifacts"
@@ -102,6 +110,17 @@ $resolvedScreenshotPath = if ([string]::IsNullOrWhiteSpace($ScreenshotPath)) {
 } else {
     Resolve-RepositoryArtifactPath -RepositoryRoot $repoRoot -RelativePath $ScreenshotPath
 }
+
+# Selection only, deliberately not Initialize-VerificationTemporaryRoot. The
+# usability probe there also requires the right to delete, which verification
+# needs and a single visible run does not; demanding it here would refuse this
+# script in exactly the shell where it is most often used as a control. What
+# matters for Issue #184 is that the directory is chosen the same way, because
+# that is what decides where the Godot runtime profile - and with it the GLES3
+# shader cache - ends up.
+$temporaryRootSelection = Resolve-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot
+$env:TEMP = ConvertTo-NormalizedRootPath -Path $temporaryRootSelection.Path
+$env:TMP = $env:TEMP
 
 $env:DOTNET_CLI_HOME = Join-Path $artifactsRoot "dotnet-home"
 $env:DOTNET_NOLOGO = "1"

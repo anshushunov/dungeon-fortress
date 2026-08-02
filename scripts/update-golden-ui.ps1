@@ -1,6 +1,10 @@
 [CmdletBinding()]
 param(
-    [string]$GodotPath
+    [string]$GodotPath,
+    # Issue #184: every entry point that starts the engine picks the temporary
+    # directory the same way, because that directory decides where the Godot
+    # runtime profile and its shader cache end up.
+    [string]$TemporaryRoot
 )
 
 Set-StrictMode -Version Latest
@@ -8,9 +12,14 @@ $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "GodotTools.ps1")
 . (Join-Path $PSScriptRoot "HudVerification.ps1")
+. (Join-Path $PSScriptRoot "TemporaryRoot.ps1")
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $artifactsRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot ".artifacts"))
+
+$temporaryRootSelection = Resolve-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot
+$env:TEMP = ConvertTo-NormalizedRootPath -Path $temporaryRootSelection.Path
+$env:TMP = $env:TEMP
 $gameProjectPath = Join-Path $repoRoot "src\DungeonFortress.Game"
 $gameProjectFile = Join-Path $gameProjectPath "DungeonFortress.Game.csproj"
 

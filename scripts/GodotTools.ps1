@@ -148,20 +148,217 @@ function Get-StablePathHash {
     }
 }
 
+# Issue #184. Godot creates a shader cache directory with CreateDirectoryW,
+# which it prefixes with \\?\ and which therefore ignores MAX_PATH, and enters
+# it with SetCurrentDirectoryW, which it does not prefix and which does not.
+# Past the length below a directory can be created once and never entered
+# again, so `if (d->change_dir(base_sha256) != OK) { Error err =
+# d->make_dir(base_sha256); ERR_FAIL_COND(err != OK); }` in
+# ShaderGLES3::initialize takes the make_dir branch on a directory that is
+# already there, gets ERR_ALREADY_EXISTS and prints
+#
+#   ERROR: Condition "err != OK" is true.
+#      at: initialize (drivers/gles3/shader_gles3.cpp:802)
+#
+# once per shader class - on the second and every later engine process, never
+# on the first, which is the one that created the directories. That asymmetry is
+# why the noise looked like it moved between processes in Issue #184.
+#
+# 254 is measured, not quoted. Six arms of one capture each, on profiles from 90
+# to 110 characters of APPDATA, produced exactly as many error lines as the
+# profile had shader cache directories of 255 characters or more - 0, 1, 3, 6,
+# 14, 14 - and never one below. The arms and their output are
+# evidence/184-cause.json. The 248-character CreateDirectory limit this
+# repository documented for the same message since PR #5 was checked in the same
+# sweep and does not bite on Godot 4.7.1: nine cold-cache arms from 246 to 312
+# characters were silent.
+$script:GodotMaximumEnterableDirectoryPathLength = 254
+
+# The GLES3 shader classes this renderer initializes, read off a real profile
+# with `ls <profile>\Roaming\Godot\app_userdata\<project>\shader_cache`. The
+# list is what lets the refusal below say "3 of 14" rather than "possibly too
+# long". A future engine with more or longer classes makes this check
+# optimistic, never wrong about what it does report - and the output guard still
+# fails on the lines themselves, now with the diagnosis attached.
+$script:GodotGles3ShaderClasses = @(
+    "CanvasOcclusionShaderGLES3",
+    "CanvasSdfShaderGLES3",
+    "CanvasShaderGLES3",
+    "CopyShaderGLES3",
+    "CubemapFilterShaderGLES3",
+    "FeedShaderGLES3",
+    "GlowShaderGLES3",
+    "ParticlesCopyShaderGLES3",
+    "ParticlesShaderGLES3",
+    "PostShaderGLES3",
+    "SceneShaderGLES3",
+    "SkeletonShaderGLES3",
+    "SkyShaderGLES3",
+    "TexBlitShaderGLES3"
+)
+
+# Godot names the per-version cache directory after a SHA-256 in text form.
+$script:GodotShaderCacheHashLength = 64
+
+# The last measurement Initialize-GodotRuntimeEnvironment took, so that a run
+# which still meets the engine lines can name its own numbers instead of a rule.
+$script:GodotRuntimeProfileMeasurement = $null
+
+function Get-GodotUserDirectoryName {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProjectFile
+    )
+
+    if (-not (Test-Path -LiteralPath $ProjectFile -PathType Leaf)) {
+        throw "Cannot measure the Godot runtime profile: no project.godot at '$ProjectFile'."
+    }
+
+    $text = [IO.File]::ReadAllText($ProjectFile)
+    $match = [Regex]::Match($text, '(?m)^\s*config/name\s*=\s*"(?<name>[^"]*)"')
+    if (-not $match.Success) {
+        throw "Cannot measure the Godot runtime profile: '$ProjectFile' declares no config/name."
+    }
+
+    # Windows replaces characters it forbids in a directory name one for one
+    # (OS_Windows::get_user_data_dir goes through get_safe_dir_name), so that
+    # substitution cannot change the length measured here. The name is returned
+    # as written, which for this project is also how it appears on disk.
+    return $match.Groups["name"].Value
+}
+
+function Get-GodotShaderCachePaths {
+    [CmdletBinding()]
+    [OutputType([pscustomobject[]])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$AppDataRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$UserDirectoryName
+    )
+
+    $cacheRoot = Join-Path $AppDataRoot (
+        "Godot\app_userdata\" + $UserDirectoryName + "\shader_cache")
+
+    return @($script:GodotGles3ShaderClasses | ForEach-Object {
+        $path = Join-Path (Join-Path $cacheRoot $_) (
+            "f" * $script:GodotShaderCacheHashLength)
+        [pscustomobject]@{
+            ShaderClass = $_
+            Path = $path
+            Length = $path.Length
+        }
+    })
+}
+
+function Assert-GodotShaderCachePathFits {
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$AppDataRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$UserDirectoryName
+    )
+
+    $paths = @(Get-GodotShaderCachePaths `
+        -AppDataRoot $AppDataRoot `
+        -UserDirectoryName $UserDirectoryName)
+    $longest = @($paths | Sort-Object -Property Length -Descending)[0]
+    $overBudget = @($paths | Where-Object {
+        $_.Length -gt $script:GodotMaximumEnterableDirectoryPathLength
+    })
+
+    $measurement = [pscustomobject]@{
+        AppDataRoot = $AppDataRoot
+        UserDirectoryName = $UserDirectoryName
+        LongestPath = $longest.Path
+        LongestPathLength = $longest.Length
+        MaximumEnterablePathLength = $script:GodotMaximumEnterableDirectoryPathLength
+        Headroom = $script:GodotMaximumEnterableDirectoryPathLength - $longest.Length
+        ShaderClassCount = $paths.Count
+        UnenterableShaderClassCount = $overBudget.Count
+    }
+
+    if ($overBudget.Count -gt 0) {
+        throw @"
+The Godot runtime profile is too deep for this engine's shader cache.
+  profile:  $AppDataRoot
+  user dir: $UserDirectoryName
+  longest:  $($longest.Path)
+            $($longest.Length) characters; $($overBudget.Count) of $($paths.Count) shader classes are over the limit of $($script:GodotMaximumEnterableDirectoryPathLength)
+Godot creates such a directory (CreateDirectoryW with the \\?\ prefix) and then
+cannot enter it again (SetCurrentDirectoryW without one), so the first engine
+process is silent and every later one prints $($overBudget.Count) lines of
+  ERROR: Condition "err != OK" is true.
+     at: initialize (drivers/gles3/shader_gles3.cpp:802)
+The profile lives under the temporary directory, so shorten that one:
+  -TemporaryRoot <short directory outside the worktree>
+  `$env:DUNGEON_FORTRESS_TEMP=<the same directory>
+Measured in evidence/184-cause.json; the rule is in
+docs/engineering/ENVIRONMENT_SETUP.md.
+"@
+    }
+
+    return $measurement
+}
+
 function Initialize-GodotRuntimeEnvironment {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
-        [string]$RepositoryRoot
+        [string]$RepositoryRoot,
+
+        # The project whose user:// directory sets the budget. Defaulted rather
+        # than required so that every existing caller keeps its one-line call:
+        # the game project's name is the longest this repository asks Godot for,
+        # and the isolated sprite-import project's is shorter, so budgeting for
+        # the game project covers both.
+        [string]$ProjectPath
     )
 
     $profileName = "df-godot-" + (Get-StablePathHash -Value $RepositoryRoot)
     $profileRoot = Join-Path ([IO.Path]::GetTempPath()) $profileName
-    $env:APPDATA = Join-Path $profileRoot "Roaming"
+    $appDataRoot = Join-Path $profileRoot "Roaming"
+
+    $resolvedProjectPath = if ([string]::IsNullOrWhiteSpace($ProjectPath)) {
+        Join-Path $RepositoryRoot "src\DungeonFortress.Game"
+    }
+    else {
+        $ProjectPath
+    }
+
+    # Measured before anything is created, because the point is to refuse in one
+    # named line instead of letting the engine print fourteen unnamed ones two
+    # processes later (Issue #184).
+    $measurement = Assert-GodotShaderCachePathFits `
+        -AppDataRoot $appDataRoot `
+        -UserDirectoryName (Get-GodotUserDirectoryName -ProjectFile (
+            Join-Path $resolvedProjectPath "project.godot"))
+    $script:GodotRuntimeProfileMeasurement = $measurement
+
+    $env:APPDATA = $appDataRoot
     $env:LOCALAPPDATA = Join-Path $profileRoot "Local"
 
     New-Item -ItemType Directory -Force -Path $env:APPDATA | Out-Null
     New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA | Out-Null
+
+    # Printed on success as well as measured. Two scripts that start the engine
+    # can now be compared by their own output rather than by reading both of
+    # them, which is how the comparison in Issue #184 had to be made.
+    [ordered]@{
+        event = "godot_runtime_profile"
+        status = "ok"
+        path = $env:APPDATA
+        userDirectory = $measurement.UserDirectoryName
+        longestShaderCachePathLength = $measurement.LongestPathLength
+        maximumEnterablePathLength = $measurement.MaximumEnterablePathLength
+        headroom = $measurement.Headroom
+    } | ConvertTo-Json -Compress | Write-Host
 }
 
 function Import-GodotProjectAssets {
@@ -245,6 +442,45 @@ function Get-GodotErrorLines {
     return $errorLines
 }
 
+function Get-GodotShaderCachePathDiagnosis {
+    [CmdletBinding()]
+    [OutputType([Collections.Specialized.OrderedDictionary])]
+    param(
+        [AllowEmptyCollection()]
+        [object[]]$OutputLines = @()
+    )
+
+    $shaderLines = @($OutputLines | Where-Object {
+        [string]$_ -match "shader_gles3\.cpp"
+    })
+    if ($shaderLines.Count -eq 0) {
+        return $null
+    }
+
+    $diagnosis = [ordered]@{
+        engineErrorClass = "gles3_shader_cache_path"
+        explanation = (
+            "Godot created these shader cache directories once and cannot enter " +
+            "them again: on Windows a directory path over " +
+            "$($script:GodotMaximumEnterableDirectoryPathLength) characters can be " +
+            "created (CreateDirectoryW with the \\?\ prefix) but not entered " +
+            "(SetCurrentDirectoryW without one), so ShaderGLES3::initialize " +
+            "reports ERR_ALREADY_EXISTS once per shader class from the second " +
+            "engine process onwards. Shorten the Godot runtime profile with a " +
+            "shorter -TemporaryRoot or `$env:DUNGEON_FORTRESS_TEMP. Measured in " +
+            "evidence/184-cause.json; rule in docs/engineering/ENVIRONMENT_SETUP.md.")
+    }
+
+    if ($null -ne $script:GodotRuntimeProfileMeasurement) {
+        $measurement = $script:GodotRuntimeProfileMeasurement
+        $diagnosis["runtimeProfile"] = $measurement.AppDataRoot
+        $diagnosis["longestShaderCachePathLength"] = $measurement.LongestPathLength
+        $diagnosis["maximumEnterablePathLength"] = $measurement.MaximumEnterablePathLength
+    }
+
+    return $diagnosis
+}
+
 function Invoke-GodotChecked {
     [CmdletBinding()]
     [OutputType([pscustomobject])]
@@ -272,14 +508,27 @@ function Invoke-GodotChecked {
     $errorLines = @(Get-GodotErrorLines -OutputLines $output)
 
     if ($errorLines.Count -gt 0) {
-        [ordered]@{
+        $report = [ordered]@{
             event = "godot_process_guard"
             status = "error"
             reason = "unexpected_engine_error"
             exitCode = $exitCode
             engineErrorCount = $errorLines.Count
             firstEngineError = $errorLines[0]
-        } | ConvertTo-Json -Compress | Write-Host
+        }
+
+        # The guard still fails, and on the same condition as before. What is
+        # added is the one thing Issue #184 cost three sessions: these
+        # particular lines are unreadable without the Godot source, so when they
+        # appear the run says what they mean and what its own profile measured.
+        $diagnosis = Get-GodotShaderCachePathDiagnosis -OutputLines $output
+        if ($null -ne $diagnosis) {
+            foreach ($key in $diagnosis.Keys) {
+                $report[$key] = $diagnosis[$key]
+            }
+        }
+
+        $report | ConvertTo-Json -Compress | Write-Host
 
         throw "Godot emitted $($errorLines.Count) unexpected ERROR line(s)."
     }

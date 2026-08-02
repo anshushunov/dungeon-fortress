@@ -3,8 +3,10 @@ Set-StrictMode -Version Latest
 # Every verification run needs a temporary directory it can create in, write to
 # and, above all, delete from. Two things live there and neither is optional:
 # the short Godot runtime profile, which has to sit outside the worktree so the
-# shader cache path stays under the Windows CreateDirectory limit, and the
-# isolated project the sprite import test builds and throws away.
+# shader cache path stays inside the length Godot can still enter (254
+# characters, measured in evidence/184-cause.json; the budget itself lives in
+# Assert-GodotShaderCachePathFits in GodotTools.ps1), and the isolated project
+# the sprite import test builds and throws away.
 #
 # Issue #89: in a session whose TEMP pointed at C:\WINDOWS\TEMP the account could
 # create both and delete neither. The run reached stage `godot`, the sprite
@@ -227,8 +229,11 @@ Use one of:
   `$env:$($script:TemporaryRootVariableName)=<the same directory>
   point TMP and TEMP at such a directory
 Keep it short and outside the worktree: the Godot runtime profile is created
-there, and a long path brings back the CreateDirectory limit behind the shader
-cache ERROR recorded in docs/engineering/ENVIRONMENT_SETUP.md.
+there, and past 254 characters the engine can create its shader cache
+directories but never enter them again, which is the ERROR recorded in
+docs/engineering/ENVIRONMENT_SETUP.md. That length is measured before the engine
+starts, so a directory that is usable but too deep is refused by name rather
+than silently.
 "@
     }
 
