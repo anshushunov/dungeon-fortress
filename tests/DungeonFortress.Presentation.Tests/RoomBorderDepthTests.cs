@@ -266,12 +266,15 @@ public sealed class RoomBorderDepthTests
     ///
     /// <para>
     /// The reach is arithmetic rather than a sweep. What decides it is how far a
-    /// body reaches <em>upwards</em>, not downwards: since #77 the square stands on
-    /// <see cref="CameraView.GoblinFootLine"/> and grows up, so it reaches 42.58 px
-    /// above its render centre and 19.24 below at tile 40. The southernmost centre
-    /// from which a body can touch the stroke is therefore the stroke's lower edge
-    /// plus that upward reach, and <see cref="InFrontOfEverybodyTouching"/> takes it
-    /// from <see cref="CameraView.GoblinDrawRect"/> rather than restating the rule —
+    /// body reaches <em>upwards</em>, not downwards: since #77 the canvas stands on
+    /// <see cref="CameraView.GoblinFootLine"/> and grows up, and the pixels inside
+    /// it reach 37.42 px above the render centre and 16.67 below at tile 40 — the
+    /// lower bound being the foot line itself, because the pack's last opaque row
+    /// and its support row are the same row. The
+    /// southernmost centre from which a body can touch the stroke is therefore the
+    /// stroke's lower edge plus that upward reach, and
+    /// <see cref="InFrontOfEverybodyTouching"/> takes it from
+    /// <see cref="CameraView.GoblinOpaqueRect"/> rather than restating the rule —
     /// half of <see cref="CameraView.GoblinDrawSize"/> was correct while the square
     /// was centred and would silently understate the reach now.
     /// </para>
@@ -629,7 +632,7 @@ public sealed class RoomBorderDepthTests
     /// </summary>
     private static ViewRect BodyRect(ViewPoint centre, int tileSize, Arrangement arrangement) =>
         arrangement == Arrangement.Today
-            ? CameraView.GoblinDrawRect(centre, tileSize)
+            ? CameraView.GoblinOpaqueRect(centre, tileSize)
             : Square(centre, BodyDrawSize(tileSize, arrangement));
 
     /// <param name="Room">The room whose outline this stroke belongs to.</param>
@@ -853,19 +856,28 @@ public sealed class RoomBorderDepthTests
     /// What decides whether a body standing south of a stroke can still touch it
     /// is how far its sprite reaches <em>above</em> its own render centre, so that
     /// is what the southernmost touching centre is measured with — and it is taken
-    /// from <see cref="CameraView.GoblinDrawRect"/> rather than restated, because
-    /// Issue #77 made the two differ: a body reaches 42.58 px up and 19.24 px down
-    /// at tile 40, where before it reached the same 18.18 either way. A wall
-    /// anchored south of that point is drawn after every one of those bodies,
-    /// whatever they are doing and wherever between two cells the interpolation
-    /// has them.
+    /// from <see cref="CameraView.GoblinOpaqueRect"/> rather than restated, because
+    /// Issue #77 made the two differ: a creature's pixels reach 37.42 px up and
+    /// 16.67 down at tile 40, where before the drawn square reached the same 18.18
+    /// either way. A wall anchored south of that point is drawn after every one of
+    /// those bodies, whatever they are doing and wherever between two cells the
+    /// interpolation has them.
+    ///
+    /// <para>
+    /// The comparison is deliberately strict where the renderer's own tie-break is
+    /// not: <see cref="WorldRenderOrder"/> puts a wall last at an equal anchor on
+    /// purpose — «at the exact crossing depth the wall still occludes the body» —
+    /// so this check refuses shelter from one wall the frame does in fact draw
+    /// over the body. That is the conservative direction and it costs nothing on
+    /// the shipped map, measured in <c>evidence/77-pack-geometry.json</c>.
+    /// </para>
     /// </summary>
     private static IReadOnlyList<ViewRect> InFrontOfEverybodyTouching(
         ViewRect stroke,
         IReadOnlyList<Wall> walls,
         int tileSize)
     {
-        var reachAbove = -CameraView.GoblinDrawRect(new ViewPoint(0, 0), tileSize).Y;
+        var reachAbove = -CameraView.GoblinOpaqueRect(new ViewPoint(0, 0), tileSize).Y;
         var southernmost = stroke.Y + stroke.Height + reachAbove;
         return walls
             .Where(wall => wall.Anchor > southernmost)
@@ -873,6 +885,7 @@ public sealed class RoomBorderDepthTests
             .Where(band => Overlap(band, stroke) is not null)
             .ToArray();
     }
+
 
     /// <param name="Name">The cell, or the step, this position is.</param>
     /// <param name="Rect">The rectangle the sprite is drawn into.</param>
@@ -886,12 +899,29 @@ public sealed class RoomBorderDepthTests
     /// most of its life between two cells rather than on one.
     ///
     /// The rectangle comes from production geometry for today's arrangement —
-    /// <see cref="CameraView.GoblinDrawRect"/>, which is what <c>Main.DrawGoblin</c>
-    /// draws the sprite into and is wider than the coloured disc underneath it —
-    /// and from the body of its own time for a historical column
-    /// (<see cref="BodyRect"/>). Using the drawn rectangle rather than the sprite's
-    /// opaque pixels overstates the body, which is the safe direction for a check
-    /// that has to find lines crossing it.
+    /// <see cref="CameraView.GoblinOpaqueRect"/> — and from the body of its own
+    /// time for a historical column (<see cref="BodyRect"/>).
+    ///
+    /// <para>
+    /// <b>The opaque box and not the drawn canvas, since Issue #77 connected the v2
+    /// pack.</b> Until then the two were nearly the same rectangle: the v1 sheet was
+    /// a tight 96x96 crop of one pose. The v2 canvas is a 272x192 frame shared by
+    /// six poses and sized for the widest of them, so <c>idle</c> fills 116 of its
+    /// 272 columns and every state leaves 20 of 192 rows empty at the top. Asked
+    /// against that canvas, «can this line land on a body» stops meaning «on a
+    /// creature» and starts meaning «on the padding around one».
+    /// </para>
+    ///
+    /// <para>
+    /// This is a change of unit and not a relaxation, and the numbers say which:
+    /// the box reaches 37.424242 px above the render centre, which is the same
+    /// figure to the last binary place as the v1 pack's opaque bounds gave, and
+    /// 42.82 px sideways against v1's 27.05 — 58 % stricter.
+    /// <see cref="CameraViewTests.The_pixels_a_creature_can_occupy_did_not_rise_when_the_canvas_did"/>
+    /// is where those two are measured against each other. Against the canvas
+    /// instead, this sweep reports 2 crossings at every tile size — see
+    /// <c>evidence/77-pack-geometry.json</c>, which keeps both columns.
+    /// </para>
     /// </summary>
     private static IReadOnlyList<BodyPosition> BodyPositions(
         IReadOnlySet<GridPoint> rock,

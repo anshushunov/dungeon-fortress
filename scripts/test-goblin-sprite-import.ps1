@@ -14,7 +14,9 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $testRoot = Join-Path $temporaryRoot ("dungeon-fortress-sprite-import-" + [Guid]::NewGuid().ToString("N"))
 $sourceAssets = Join-Path $repoRoot "src\DungeonFortress.Game\assets\generated\goblins"
-$requiredStates = @("idle", "work", "combat", "downed")
+# Six states on the v2 pack since Issue #77; the list mirrors
+# DungeonFortress.Presentation.BodySprites.States.
+$requiredStates = @("idle", "work", "combat", "windup", "flinch", "downed")
 
 function Assert-UnderRoot {
     param([string]$Path, [string]$Root)
@@ -33,7 +35,7 @@ try {
     Assert-UnderRoot -Path $testRoot -Root $temporaryRoot
     $testAssets = Join-Path $testRoot "assets\generated\goblins"
     New-Item -ItemType Directory -Force -Path $testAssets | Out-Null
-    Get-ChildItem -LiteralPath $sourceAssets -Filter "goblin_*_v1.png" -File |
+    Get-ChildItem -LiteralPath $sourceAssets -Filter "goblin_*_v2.png" -File |
         Copy-Item -Destination $testAssets
     [IO.File]::WriteAllText((Join-Path $testRoot "project.godot"), @"
 ; Isolated import-only project: no scene or plugins are needed for PNG import.
@@ -54,7 +56,7 @@ config/name="Dungeon Fortress sprite import test"
     $importedNames = @(Get-ChildItem -LiteralPath $importedRoot -Filter "goblin_*" -File -ErrorAction Stop | Select-Object -ExpandProperty Name)
     foreach ($state in $requiredStates) {
         $matchingImports = @($importedNames | Where-Object {
-            $_ -match ("^goblin_" + $state + "_v1\.png-")
+            $_ -match ("^goblin_" + $state + "_v2\.png-")
         })
         if ($matchingImports.Count -eq 0) {
             throw "Godot did not import goblin '$state' into the fresh project cache."

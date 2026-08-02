@@ -479,7 +479,7 @@ public static class CameraView
         ValidateTileSize(tileSize) / ReferenceTileSize;
 
     /// <summary>
-    /// The square a body's sprite is drawn into, in world pixels. Two factors,
+    /// How tall a body's sprite canvas is drawn, in world pixels. Two factors,
     /// each answering its own question: <see cref="WorldVisualScale"/> carries
     /// the authored 22 px proportions onto the selected grid, and
     /// <see cref="BodyVisualScale"/> carries the owner's choice of how large a
@@ -487,34 +487,94 @@ public static class CameraView
     /// <c>20 * 1.70 * 40 / 22 = 61.81…</c> px.
     ///
     /// <para>
-    /// How large the square is, not where it sits: <see cref="GoblinDrawRect"/>
-    /// places it, standing on the line a body's feet have always been drawn on.
+    /// The <em>canvas</em> height, not the body's: the connected pack fills 168
+    /// of its 192 rows in the tallest state, so the creature itself renders at
+    /// about 54.1 px. That is the height
+    /// <c>docs/art/goblin-v2-provenance.md</c> says the pack was drawn for.
+    /// </para>
+    ///
+    /// <para>
+    /// How tall, not how wide and not where: the width follows the pack's canvas
+    /// through <see cref="GoblinDrawWidth"/>, and <see cref="GoblinDrawRect"/>
+    /// places the result standing on the line a body's feet have always been
+    /// drawn on.
     /// </para>
     /// </summary>
     public static double GoblinDrawSize(int tileSize) =>
         ReferenceGoblinDrawSize * BodyVisualScale * WorldVisualScale(tileSize);
+
+    // -----------------------------------------------------------------------
+    // The connected sprite pack, in the three numbers the camera needs from it.
+    //
+    // These are measurements of goblin_{state}_v2.png, not choices. All six
+    // states are RGBA 272x192 and every one of them ends on the same last opaque
+    // row y = 187, so the opaque content ends 188 rows down. Re-measured for
+    // Issue #77 with the method docs/art/goblin-v2-provenance.md states — alpha
+    // channel, support zone 172 <= y <= 187, support centre over alpha > 32 —
+    // and recorded in evidence/77-pack-before.json.
+    //
+    // They live here rather than in the Godot adapter because everything that
+    // follows from them is geometry, and geometry in this project is checked
+    // without starting the engine (ADR 0011).
+    // -----------------------------------------------------------------------
+
+    /// <summary>The width of a state's canvas in the connected pack, in source pixels.</summary>
+    public const double SpriteCanvasWidth = 272.0;
+
+    /// <summary>The height of a state's canvas in the connected pack, in source pixels.</summary>
+    public const double SpriteCanvasHeight = 192.0;
+
+    /// <summary>
+    /// The last opaque row of every state, plus one — i.e. how many rows down the
+    /// canvas the opaque content ends.
+    /// </summary>
+    private const double SpriteSupportRows = 188.0;
+
+    /// <summary>
+    /// The shape of a state's canvas: <c>272 / 192 = 17 / 12</c> exactly.
+    ///
+    /// <para>
+    /// Until Issue #77 connected this pack a body was drawn as a square, because
+    /// the v1 pack was square. Drawing a 17:12 canvas into a square is not a
+    /// smaller mistake than drawing it at the wrong size — it is the same mistake
+    /// with the aspect ratio instead of the scale — so the rectangle is derived
+    /// from the canvas here rather than written out as 87.55 px anywhere.
+    /// </para>
+    /// </summary>
+    public const double SpriteCanvasAspect = SpriteCanvasWidth / SpriteCanvasHeight;
 
     /// <summary>
     /// Where the opaque content of a body's sprite ends, as a fraction of its
     /// canvas height — i.e. how far down the canvas the creature's feet are.
     ///
     /// <para>
-    /// <b>This is a property of the sprite pack, not of the camera.</b> Every
-    /// state of the v1 pack the runtime loads today has its last opaque row at 91
-    /// of 96, so its content ends 92/96 of the way down and the remaining 4/96 is
-    /// transparent padding. The v2 pack already in <c>main</c> is authored
-    /// differently — support zone <c>172 &lt;= y &lt;= 187</c> of 192 rows, i.e.
-    /// 188/192 — so the next subtask of Issue #77, which connects it, <b>must</b>
-    /// move this number with the pack. Left behind, it would put every creature
-    /// about a pixel off the ground it stands on, silently.
+    /// <b>This is a property of the sprite pack, not of the camera</b>, and it
+    /// moved with the pack: the v1 pack ended 92 rows of 96 down, the v2 pack the
+    /// runtime now loads ends 188 of 192 down. What it is used for is
+    /// <em>placement</em> — <see cref="GoblinDrawRect"/> subtracts this much of
+    /// the drawn canvas from the foot line, so that the pixels a player sees as
+    /// feet land on that line. Left at 92/96 with a 188/192 pack, every creature
+    /// would be drawn <c>61.82 * (188/192 - 92/96) = 1.29</c> px into the ground
+    /// at the shipped tile, silently and all at once.
     /// </para>
     ///
     /// <para>
-    /// Measured, not assumed: the alpha bounds of all four v1 states were read off
-    /// the PNGs (<c>y 8..91</c>, <c>y 20..91</c>, <c>y 8..91</c>, <c>y 47..91</c>).
+    /// It is deliberately <b>not</b> what <see cref="GoblinFootLine"/> is built
+    /// from. Where the ground is, is history; how much transparent tail a pack
+    /// leaves under the feet is the pack's business. The two were one expression
+    /// while there was only one pack, and connecting the second one is what tells
+    /// them apart.
     /// </para>
     /// </summary>
-    public const double SpriteSupportFraction = 92.0 / 96.0;
+    public const double SpriteSupportFraction = SpriteSupportRows / SpriteCanvasHeight;
+
+    /// <summary>
+    /// The support fraction of the <b>v1</b> pack, kept because the ground line
+    /// below was measured against it and a measurement does not move when the art
+    /// does. All four v1 states had their last opaque row at 91 of 96, read off
+    /// the PNGs (<c>y 8..91</c>, <c>y 20..91</c>, <c>y 8..91</c>, <c>y 47..91</c>).
+    /// </summary>
+    private const double GroundLineSupportFraction = 92.0 / 96.0;
 
     /// <summary>
     /// The line a body's feet stand on, below its render centre: 16.67 px at the
@@ -529,10 +589,81 @@ public static class CameraView
     /// choice, but which ground it stands on is not, so a body may only grow
     /// upward out of this line.
     /// </para>
+    ///
+    /// <para>
+    /// It is free of <see cref="SpriteSupportFraction"/> for the same reason and
+    /// since the same issue's second subtask. This number was measured off the v1
+    /// pack in the world of 2026-08-01, so it is stated with
+    /// <see cref="GroundLineSupportFraction"/>, which cannot change again. Built
+    /// from the current pack instead it would have moved 0.76 px the moment the
+    /// v2 pack was connected — the ground under every creature in the game
+    /// shifting because a canvas got taller, which is exactly what this rule
+    /// exists to forbid.
+    /// </para>
     /// </summary>
     public static double GoblinFootLine(int tileSize) =>
         ReferenceGoblinDrawSize * WorldVisualScale(tileSize) *
-        (SpriteSupportFraction - 0.5);
+        (GroundLineSupportFraction - 0.5);
+
+    /// <summary>
+    /// How wide a body's sprite canvas is drawn, in world pixels: its drawn height
+    /// in the shape the pack was authored in. 87.58 px at the shipped 40 px tile.
+    /// </summary>
+    public static double GoblinDrawWidth(int tileSize) =>
+        GoblinDrawSize(tileSize) * SpriteCanvasAspect;
+
+    // -----------------------------------------------------------------------
+    // Where a creature can actually have pixels inside that canvas.
+    //
+    // The canvas is a frame shared by six poses and sized for the widest of
+    // them, so it is a poor description of any one creature: `idle` fills 116 of
+    // its 272 columns, `combat` reaches 269 because of the spear, and `downed`
+    // starts 104 rows down. The union of the six alpha bounds is the smallest
+    // box that is guaranteed to contain whatever pose is drawn — columns 26..268
+    // and rows 20..187 inclusive, i.e. the exclusive bounds below.
+    //
+    // Measured, like the canvas above, and recorded with the command in
+    // evidence/77-pack-before.json and evidence/77-pack-geometry.json.
+    // -----------------------------------------------------------------------
+
+    /// <summary>First column any state has an opaque pixel in: <c>flinch</c>.</summary>
+    public const double SpriteOpaqueLeft = 26.0;
+
+    /// <summary>First row any state has an opaque pixel in: <c>idle</c>.</summary>
+    public const double SpriteOpaqueTop = 20.0;
+
+    /// <summary>One past the last column any state reaches: <c>combat</c>'s spear.</summary>
+    public const double SpriteOpaqueRight = 269.0;
+
+    /// <summary>One past the last row, which every state shares.</summary>
+    public const double SpriteOpaqueBottom = 188.0;
+
+    /// <summary>
+    /// The part of <see cref="GoblinDrawRect"/> a creature's own pixels can reach,
+    /// for a body whose render centre is <paramref name="centre"/>.
+    ///
+    /// <para>
+    /// It exists because the canvas stopped being a usable stand-in for the body
+    /// when the pack changed. A check that asks «can this line land on somebody»
+    /// has to mean somebody's pixels, and the two answers now differ by 6.44 px at
+    /// the top of the canvas alone. What the pack did <em>not</em> change is where
+    /// those pixels are: the v1 sheet's body filled 84 of its 96 rows and the v2
+    /// canvas fills 168 of 192 — the same 0.875 — so the highest opaque pixel a
+    /// creature can have is 37.424242 px above its render centre with either pack,
+    /// to the last binary place. Sideways it is a different story and the honest
+    /// one: 27.05 px each way with v1, 42.82 with v2, because <c>combat</c> and
+    /// <c>windup</c> hold a spear out.
+    /// </para>
+    /// </summary>
+    public static ViewRect GoblinOpaqueRect(ViewPoint centre, int tileSize)
+    {
+        var canvas = GoblinDrawRect(centre, tileSize);
+        return new ViewRect(
+            canvas.X + (canvas.Width * (SpriteOpaqueLeft / SpriteCanvasWidth)),
+            canvas.Y + (canvas.Height * (SpriteOpaqueTop / SpriteCanvasHeight)),
+            canvas.Width * ((SpriteOpaqueRight - SpriteOpaqueLeft) / SpriteCanvasWidth),
+            canvas.Height * ((SpriteOpaqueBottom - SpriteOpaqueTop) / SpriteCanvasHeight));
+    }
 
     /// <summary>
     /// The rectangle a body's sprite is drawn into, for a body whose render
@@ -567,19 +698,34 @@ public static class CameraView
     /// </para>
     ///
     /// <para>
-    /// Still a square, and still the v1 pack: the 17:12 rectangle the v2 pack
-    /// needs is the next subtask of Issue #77.
+    /// <b>A 17:12 rectangle since the pack it draws became one.</b> The height is
+    /// <see cref="GoblinDrawSize"/> and the width is <see cref="GoblinDrawWidth"/>
+    /// — 61.82 by 87.58 px at the shipped tile — because the connected canvas is
+    /// 272x192 and a canvas drawn into the wrong shape is a stretched creature.
+    /// Horizontal centring is what puts the pack's own support centre on the
+    /// render point: that centre was placed at canvas <c>x = 135.5</c> in five of
+    /// six states and 136.0 in the other two, i.e. on the canvas centre to within
+    /// 0.5 of a source pixel, which is 0.16 px of the drawn width.
+    /// </para>
+    ///
+    /// <para>
+    /// The vertical placement is unchanged as a rule and changed as a number,
+    /// which is the point: <see cref="SpriteSupportFraction"/> is the pack's, so
+    /// it became 188/192 with the pack, while <see cref="GoblinFootLine"/> is the
+    /// world's and did not move. The body reaches 43.86 px above its render centre
+    /// and 17.95 below at tile 40, against 42.58 and 19.24 with the v1 pack.
     /// </para>
     /// </summary>
     public static ViewRect GoblinDrawRect(ViewPoint centre, int tileSize)
     {
-        var size = GoblinDrawSize(tileSize);
+        var height = GoblinDrawSize(tileSize);
+        var width = GoblinDrawWidth(tileSize);
         var feet = centre.Y + GoblinFootLine(tileSize);
         return new ViewRect(
-            centre.X - (size / 2.0),
-            feet - (size * SpriteSupportFraction),
-            size,
-            size);
+            centre.X - (width / 2.0),
+            feet - (height * SpriteSupportFraction),
+            width,
+            height);
     }
 
     public static ViewSize MapSize(int tileSize)

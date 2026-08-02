@@ -2102,9 +2102,9 @@ public partial class Main : Node2D
     private void LoadGoblinSprites()
     {
         _spritesHaveMipmaps = true;
-        foreach (var state in new[] { "idle", "work", "combat", "downed" })
+        foreach (var state in BodySprites.States)
         {
-            var path = $"res://assets/generated/goblins/goblin_{state}_v1.png";
+            var path = "res://assets/generated/goblins/" + BodySprites.FileName(state);
             if (ResourceLoader.Exists(path) && GD.Load<Texture2D>(path) is { } imported)
             {
                 // Overview zooms sample a sprite below its authored draw size.
@@ -3004,8 +3004,13 @@ public partial class Main : Node2D
                 }
                 : null,
             tileSize = _tileSize,
+            // Height, and width beside it since Issue #77 connected a 17:12 pack:
+            // a run that reports only one of the two cannot be asked whether the
+            // canvas is being drawn in the shape it was authored in.
             goblinWorldSize = CameraView.GoblinDrawSize(_tileSize),
             goblinScreenSize = CameraView.GoblinDrawSize(_tileSize) * _cameraZoom,
+            goblinWorldWidth = CameraView.GoblinDrawWidth(_tileSize),
+            goblinScreenWidth = CameraView.GoblinDrawWidth(_tileSize) * _cameraZoom,
             cameraPosition = new[] { _cameraCenter.X, _cameraCenter.Y },
             cameraNodePosition = cameraNodePosition is { } nodePosition
                 ? new[] { nodePosition.X, nodePosition.Y }
@@ -5358,29 +5363,28 @@ public partial class Main : Node2D
         _ => new Color("#bfdbfe"),
     };
 
-    private static string RaiderSpriteKey(PrototypeRaiderSnapshot raider) => raider.Mode switch
-    {
-        RaiderMode.Downed => "downed",
-        RaiderMode.Raiding when raider.ReturningToGate => "work",
-        RaiderMode.Raiding => "combat",
-        _ => "idle",
-    };
+    // Which pose a body is drawn in is BodySprites' answer, not this file's, for
+    // the same reason as the rectangle below: it has cases, and cases are checked
+    // without starting the engine (ADR 0011).
+    //
+    // Both callers pass BodyActionPhase.None, and that is a statement rather than
+    // a placeholder: the pack's `windup` and `flinch` are loaded and reachable,
+    // but nothing in the snapshot says when a creature is drawing back or being
+    // struck, so nothing here may claim to know. See BodyActionPhase for what the
+    // simulation does say and why it is not the same thing.
+    private static string RaiderSpriteKey(PrototypeRaiderSnapshot raider) =>
+        BodySprites.RaiderKey(raider.Mode, raider.ReturningToGate, BodyActionPhase.None);
 
-    private static string CrewSpriteKey(PrototypeCreatureSnapshot creature) => creature.Mode switch
-    {
-        CreatureMode.Working => "work",
-        CreatureMode.Fighting => "combat",
-        CreatureMode.Downed => "downed",
-        _ => "idle",
-    };
+    private static string CrewSpriteKey(PrototypeCreatureSnapshot creature) =>
+        BodySprites.CrewKey(creature.Mode, BodyActionPhase.None);
 
     private void DrawGoblin(Vector2 center, string key)
     {
         if (_goblinSprites.TryGetValue(key, out var sprite))
         {
-            // Where the square goes is CameraView's answer, not this method's,
-            // so that Issue #77's 170 % and the placement it grows by can be
-            // measured without the engine.
+            // Where the rectangle goes is CameraView's answer, not this method's,
+            // so that Issue #77's 170 %, the placement it grows by and the 17:12
+            // shape of the connected pack can be measured without the engine.
             DrawTextureRect(
                 sprite,
                 ToRect2(CameraView.GoblinDrawRect(
