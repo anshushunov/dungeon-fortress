@@ -203,7 +203,7 @@ public sealed class RoomBorderDepthTests
     public void No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible(int tileSize)
     {
         var crossings = Measure(tileSize, Arrangement.Today);
-        Assert.True(crossings.Count == 0, Payload(tileSize, crossings));
+        Assert.True(crossings.Count == 0, Payload(tileSize, Arrangement.Today, crossings));
     }
 
     /// <summary>
@@ -221,13 +221,22 @@ public sealed class RoomBorderDepthTests
     /// The rooms are named as well as counted, because a count alone would stay
     /// green if the defect moved to two other rooms.
     /// </para>
+    ///
+    /// <para>
+    /// It is swept with the body of its own time as well as the draw order of its
+    /// own time — see <see cref="PreIssue77BodyReferenceSize"/>. Issue #77 took
+    /// bodies to 170 %, and a bigger rectangle catches more of the same lines: the
+    /// same sweep with today's body returns 622. Both numbers describe the pre-#156
+    /// defect and neither is wrong, but only the one measured with the body of 2026
+    /// -08-01 is the number the issue's evidence quotes.
+    /// </para>
     /// </summary>
     [Theory]
     [MemberData(nameof(TileSizes))]
     public void The_border_used_to_be_drawn_over_every_body_that_stood_on_it(int tileSize)
     {
         var crossings = Measure(tileSize, Arrangement.BeforeIssue156);
-        var payload = Payload(tileSize, crossings);
+        var payload = Payload(tileSize, Arrangement.BeforeIssue156, crossings);
 
         Assert.True(crossings.Count == 226, payload);
         Assert.Equal(
@@ -585,6 +594,29 @@ public sealed class RoomBorderDepthTests
         FirstRoundOf156,
     }
 
+    /// <summary>
+    /// The body a measurement sweeps with, in reference pixels before
+    /// <see cref="CameraView.WorldVisualScale"/>. 20 is what
+    /// <see cref="CameraView.GoblinDrawSize"/> was built from before Issue #77 took
+    /// bodies to <see cref="CameraView.BodyVisualScale"/> — 170 % — and a "before"
+    /// column is measured with the body of its own time, exactly as
+    /// <see cref="Arrangement.BeforeIssue156"/> is measured with the draw order of
+    /// its own time. Measured with today's body the same sweep returns 622 rather
+    /// than the 226 the issue, the documentation and <c>evidence/156-before.json</c>
+    /// all quote, and that number would then be a moving target for every future
+    /// change of visual scale.
+    /// </summary>
+    private const double PreIssue77BodyReferenceSize = 20.0;
+
+    /// <summary>
+    /// The drawn body an arrangement is swept with: today's for today, and the one
+    /// of its own time for a historical column.
+    /// </summary>
+    private static double BodyDrawSize(int tileSize, Arrangement arrangement) =>
+        arrangement == Arrangement.Today
+            ? CameraView.GoblinDrawSize(tileSize)
+            : PreIssue77BodyReferenceSize * CameraView.WorldVisualScale(tileSize);
+
     /// <param name="Room">The room whose outline this stroke belongs to.</param>
     /// <param name="Side">Which side of its cell the stroke faces.</param>
     /// <param name="Cell">The room cell the stroke was drawn for.</param>
@@ -651,7 +683,7 @@ public sealed class RoomBorderDepthTests
         var rock = state.Map.RockTiles.ToHashSet();
         var scale = CameraView.WorldVisualScale(tileSize);
         var half = RoomGeometry.BorderStrokeHalfWidth * scale;
-        var bodies = BodyPositions(rock, tileSize);
+        var bodies = BodyPositions(rock, tileSize, BodyDrawSize(tileSize, arrangement));
         var walls = Walls(rock, tileSize);
 
         var crossings = new List<Crossing>();
@@ -833,17 +865,19 @@ public sealed class RoomBorderDepthTests
     /// between two of them: a body's render centre is interpolated, so it spends
     /// most of its life between two cells rather than on one.
     ///
-    /// The rectangle is <see cref="CameraView.GoblinDrawSize"/> square, which is
-    /// what <c>Main.DrawGoblin</c> draws the sprite into and is wider than the
-    /// coloured disc underneath it. Using the drawn rectangle rather than the
+    /// The rectangle is <paramref name="size"/> square — for today's arrangement
+    /// <see cref="CameraView.GoblinDrawSize"/>, which is what <c>Main.DrawGoblin</c>
+    /// draws the sprite into and is wider than the coloured disc underneath it, and
+    /// for a historical column the body of that column's own time
+    /// (<see cref="BodyDrawSize"/>). Using the drawn rectangle rather than the
     /// sprite's opaque pixels overstates the body, which is the safe direction for
     /// a check that has to find lines crossing it.
     /// </summary>
     private static IReadOnlyList<BodyPosition> BodyPositions(
         IReadOnlySet<GridPoint> rock,
-        int tileSize)
+        int tileSize,
+        double size)
     {
-        var size = CameraView.GoblinDrawSize(tileSize);
         var positions = new List<BodyPosition>();
         var steps = new[] { new GridPoint(1, 0), new GridPoint(0, 1) };
         for (var y = 0; y < PrototypeTuning.MapHeight; y++)
@@ -903,13 +937,17 @@ public sealed class RoomBorderDepthTests
     private static string Whitespace(string text) =>
         string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
-    private static string Payload(int tileSize, IReadOnlyList<Crossing> crossings) =>
+    private static string Payload(
+        int tileSize,
+        Arrangement arrangement,
+        IReadOnlyList<Crossing> crossings) =>
         JsonSerializer.Serialize(
             new
             {
                 tileSize,
+                arrangement = arrangement.ToString(),
                 scale = CameraView.WorldVisualScale(tileSize),
-                bodyDrawSize = CameraView.GoblinDrawSize(tileSize),
+                bodyDrawSize = BodyDrawSize(tileSize, arrangement),
                 crossingCount = crossings.Count,
                 rooms = crossings.Select(row => row.Room).Distinct().OrderBy(
                     name => name,

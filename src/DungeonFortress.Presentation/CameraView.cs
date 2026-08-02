@@ -107,6 +107,33 @@ public static class CameraView
 
     private const double ReferenceTileSize = 22.0;
     private const double ReferenceGoblinDrawSize = 20.0;
+
+    /// <summary>
+    /// How large a body is drawn against the world it stands in, as a factor on
+    /// the size bodies had before Issue #77.
+    ///
+    /// <para>
+    /// 1.70 is the owner's decision of 2026-08-01 on spike #142, recorded in the
+    /// gate log of <c>docs/product/ROADMAP.md</c>: he clicked through the sizes
+    /// in a live scene and picked <em>170 % of the previous size</em>. 100 % was
+    /// rejected outright and 200 % as too large; the trade he named is that at
+    /// 150 % fighters in a corridor still have gaps between them and the grid
+    /// shows through, at 170-175 they stand shoulder to shoulder while the floor
+    /// still reads, and at 200 % the floor under a crowd disappears. The choice
+    /// is for the readability of the creature over the readability of the
+    /// formation, and it is reopened if slice 6 «space as a weapon» cannot show
+    /// the mouth of a corridor.
+    /// </para>
+    ///
+    /// <para>
+    /// Written as a factor, not as a new reference size, so that the decision
+    /// stays legible as what it was: 61.8 px at the shipped 40 px tile is
+    /// <c>20 * 1.70 * 40 / 22</c>, not a number anybody fitted. Visual body size
+    /// is presentation tuning under ADR 0010 — it reaches no canonical state, so
+    /// no checksum, replay or command depends on it.
+    /// </para>
+    /// </summary>
+    public const double BodyVisualScale = 1.70;
     private static readonly double[] DiscreteZoomLevels = [0.5, 0.75, 1.0, 1.5, 2.0];
 
     /// <summary>
@@ -451,8 +478,22 @@ public static class CameraView
     public static double WorldVisualScale(int tileSize) =>
         ValidateTileSize(tileSize) / ReferenceTileSize;
 
+    /// <summary>
+    /// The square a body's sprite is drawn into, in world pixels. Two factors,
+    /// each answering its own question: <see cref="WorldVisualScale"/> carries
+    /// the authored 22 px proportions onto the selected grid, and
+    /// <see cref="BodyVisualScale"/> carries the owner's choice of how large a
+    /// creature is against that grid. At the shipped 40 px tile that is
+    /// <c>20 * 1.70 * 40 / 22 = 61.81…</c> px.
+    ///
+    /// <para>
+    /// The foot pivot is untouched: <c>DrawGoblin</c> centres this square on the
+    /// same render point it always did, so a body grows around where it stands
+    /// rather than moving off its cell.
+    /// </para>
+    /// </summary>
     public static double GoblinDrawSize(int tileSize) =>
-        ReferenceGoblinDrawSize * WorldVisualScale(tileSize);
+        ReferenceGoblinDrawSize * BodyVisualScale * WorldVisualScale(tileSize);
 
     public static ViewSize MapSize(int tileSize)
     {

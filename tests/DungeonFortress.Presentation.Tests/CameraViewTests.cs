@@ -106,16 +106,128 @@ public sealed class CameraViewTests
         Assert.True(frame.VisibleWorldSize.Height >= map.Height);
     }
 
+    /// <summary>
+    /// The owner's decision of 2026-08-01 on spike #142, in the only units it
+    /// can be checked in: 61.8 px of body at the shipped 40 px tile.
+    ///
+    /// <para>
+    /// The expectation is written as the whole number the gate log names, not as
+    /// <c>ReferenceGoblinDrawSize * CameraView.BodyVisualScale * …</c>. Derived
+    /// from the constant it guards, it would move with any edit of that constant
+    /// and prove nothing; written out, changing 1.70 to anything else turns this
+    /// test red.
+    /// </para>
+    /// </summary>
     [Fact]
-    public void Existing_goblin_art_stays_readable_across_the_selected_zoom_range()
+    public void A_body_is_drawn_at_the_owner_selected_170_percent_of_its_previous_size()
     {
+        // 1360 / 22: 20 reference px of body, taken to 170 %, carried onto the
+        // 40 px grid by the same 40/22 every other world primitive uses.
+        Assert.Equal(1360.0 / 22.0, CameraView.GoblinDrawSize(40), 12);
+        Assert.Equal(61.8, CameraView.GoblinDrawSize(40), 1);
+
+        // The same decision restated as the ratio it was made as. 800/22 is the
+        // pre-#77 size the gate log calls 36.4 px, and it is spelled out here
+        // rather than recovered from CameraView for the same reason as above.
+        Assert.Equal(800.0 / 22.0, 36.36, 2);
+        Assert.Equal(1.70, CameraView.GoblinDrawSize(40) / (800.0 / 22.0), 12);
+
+        // Tile size stays a free parameter of ADR 0008: the factor applies at
+        // every grid in the supported range, and only the grid changes the answer.
+        Assert.Equal(1.70, CameraView.GoblinDrawSize(32) / (20.0 * 32.0 / 22.0), 12);
+        Assert.Equal(1.70, CameraView.GoblinDrawSize(48) / (20.0 * 48.0 / 22.0), 12);
+        Assert.Equal(49.45, CameraView.GoblinDrawSize(32), 2);
+        Assert.Equal(74.18, CameraView.GoblinDrawSize(48), 2);
+    }
+
+    /// <summary>
+    /// A body grows around the point it stands on. The square <c>DrawGoblin</c>
+    /// draws into is centred on the render centre, so the foot pivot — the cell
+    /// centre a body is placed at — is the same pixel before and after Issue #77,
+    /// and the cell it belongs to is unchanged.
+    /// </summary>
+    [Fact]
+    public void Growing_the_body_moves_neither_the_grid_nor_the_point_a_body_stands_on()
+    {
+        var cell = new GridPoint(14, 8);
+
+        foreach (var tileSize in new[] { 32, 40, 48 })
+        {
+            var centre = CameraView.CellCenter(cell, tileSize);
+
+            Assert.Equal(
+                new ViewPoint((cell.X + 0.5) * tileSize, (cell.Y + 0.5) * tileSize),
+                centre);
+            Assert.Equal(cell, CameraView.WorldToCell(centre, tileSize));
+            Assert.Equal(tileSize / 22.0, CameraView.WorldVisualScale(tileSize));
+
+            // The square Main.DrawGoblin builds — top-left at centre minus half
+            // the draw size, side equal to it — is still centred on that same
+            // point, so the sprite spills equally in all four directions and the
+            // body's anchor does not drift with the scale.
+            var size = CameraView.GoblinDrawSize(tileSize);
+            var drawn = new ViewRect(
+                centre.X - (size / 2.0),
+                centre.Y - (size / 2.0),
+                size,
+                size);
+
+            Assert.Equal(centre, drawn.Center);
+            Assert.Equal(size, drawn.Width);
+            Assert.Equal(size, drawn.Height);
+        }
+    }
+
+    /// <summary>
+    /// What the chosen scale asks of the art, at both ends of the zoom range.
+    ///
+    /// <para>
+    /// The bound this test used to carry was «the 2x view must not upscale the
+    /// 96 px source», and at 170 % it no longer holds for the v1 pack the
+    /// runtime loads: 61.8 x 2 = 123.6 px. That is a fact about the pack, not
+    /// about the decision, and it is the entry condition of the next subtask of
+    /// Issue #77: the v2 pack already in <c>main</c> is 272x192 and was authored
+    /// for exactly this 61.8 px canvas height
+    /// (<c>docs/art/goblin-v2-provenance.md</c>). So the bound is not deleted,
+    /// it is split — every zoom the game actually starts at stays inside the
+    /// pack in use, and the deepest zoom is pinned against the pack the scale
+    /// was authored for.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_selected_scale_states_what_it_asks_of_the_art_at_both_ends_of_the_zoom_range()
+    {
+        const double v1SourcePixels = 96.0;
+        const double v2CanvasPixels = 192.0;
+
         var worldSize = CameraView.GoblinDrawSize(CameraView.DefaultTileSize);
         var overviewPixels = worldSize * CameraView.ZoomLevels[0];
         var detailPixels = worldSize * CameraView.ZoomLevels[^1];
 
-        Assert.InRange(overviewPixels, 18, 20);
-        Assert.InRange(detailPixels, 72, 73);
-        Assert.True(detailPixels < 96, "The 2x view must not upscale the 96px source.");
+        Assert.InRange(overviewPixels, 30, 31);
+        Assert.InRange(detailPixels, 123, 124);
+
+        // Overview no longer shrinks a body below the 18 px it used to bottom
+        // out at, which was the readability floor of the old scale.
+        Assert.True(
+            overviewPixels > 18,
+            "The 0.5x overview must not make a body smaller than it was before Issue #77.");
+
+        // 1x, 0.75x and 0.5x — every zoom a run can start at — still take fewer
+        // pixels than the loaded v1 sheet has.
+        foreach (var zoom in CameraView.ZoomLevels.Where(level => level <= 1.0))
+        {
+            Assert.True(
+                worldSize * zoom < v1SourcePixels,
+                $"Zoom {zoom} draws {worldSize * zoom} px from a {v1SourcePixels} px source.");
+        }
+
+        // Only the deepest zoom asks for more than the v1 sheet holds, and it
+        // stays inside the canvas the 170 % pack was drawn on.
+        Assert.True(detailPixels > v1SourcePixels);
+        Assert.True(
+            detailPixels < v2CanvasPixels,
+            "The 2x view must stay inside the 272x192 canvas the v2 pack was authored on.");
     }
 
     [Fact]
