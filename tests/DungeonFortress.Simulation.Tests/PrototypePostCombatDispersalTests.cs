@@ -165,6 +165,8 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     {
         var blocked = Matrix.Sum(party => party.Measured.Sum(wave => wave.BlockedWithDestination));
         var detoured = Matrix.Sum(party => party.Measured.Sum(wave => wave.BlockedWithAShortDetour));
+        var longer = Matrix.Sum(
+            party => party.Measured.Sum(wave => wave.BlockedWithAStrictlyLongerWayRound));
         var share = (double)detoured / blocked;
 
         Assert.True(
@@ -174,6 +176,47 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
             "creature was treated as a wall. Below a half the clinch is bodies enclosing bodies " +
             "rather than a pathfinder that cannot see them, and the mechanism named in Issue #186 " +
             $"is the wrong one.{Environment.NewLine}{Detail()}");
+
+        // The second half of the same claim, and the one that keeps the first
+        // from passing by accident. If the search for a way round did not treat
+        // bodies as walls it would re-derive the route the simulation already
+        // took: every "detour" would be exactly as long as the blind one and this
+        // count would be zero — a hundred per cent detour share measuring nothing.
+        Assert.True(
+            longer * 5 >= blocked,
+            $"Only {longer} of {blocked} ways round were strictly longer than the route the " +
+            "simulation walks with its eyes shut, where a fifth is the floor. Below it the second " +
+            "search is not seeing the bodies it is supposed to see, and the detour share above is " +
+            $"measuring nothing.{Environment.NewLine}{Detail()}");
+    }
+
+    /// <summary>
+    /// The three candidate mechanisms of Issue #186, decided between by the one
+    /// comparison that can decide between them: how many of the refused steps
+    /// each could have prevented.
+    ///
+    /// Walking round reaches a refused step when a route to the same destination
+    /// exists once bodies count as walls. A yield reaches one when the creature
+    /// standing in the way is one <c>PrototypeWorld.CanYield</c> would allow to
+    /// step aside **and** has an empty tile to step onto — anything less and the
+    /// order cannot be given or cannot be obeyed. The approach rule of Issue #129
+    /// is not in this comparison because it is not a way of clearing a refused
+    /// step at all: it decides how many creatures end the fight in one place, and
+    /// that is measured in <c>evidence/186-before-after-129.json</c> instead.
+    /// </summary>
+    [Fact]
+    public void Walking_round_reaches_more_of_the_clinch_than_a_yield_could()
+    {
+        var detoured = Matrix.Sum(party => party.Measured.Sum(wave => wave.BlockedWithAShortDetour));
+        var yieldable = Matrix.Sum(
+            party => party.Measured.Sum(wave => wave.BlockedAYieldCouldHaveCleared));
+
+        Assert.True(
+            detoured > yieldable * 2,
+            $"A way round reached {detoured} refused steps after a fight and a yield could have " +
+            $"cleared {yieldable}. Issue #186 named the pathfinder as the mechanism because the " +
+            "first number was more than twice the second; if that stops being so, the naming has " +
+            $"to be taken again.{Environment.NewLine}{Detail()}");
     }
 
     /// <summary>
@@ -233,7 +276,9 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
             $"byEligible={waves.Sum(wave => wave.BlockedByACreatureEligibleToYield)} " +
             $"standingStill={waves.Sum(wave => wave.StandingStillCreatureTicks)} " +
             $"idleAndStill={waves.Sum(wave => wave.IdleAndStillCreatureTicks)} " +
-            $"cohortTicks={waves.Sum(wave => wave.CohortSize * wave.ObservedTicks)}");
+            $"cohortTicks={waves.Sum(wave => wave.CohortSize * wave.ObservedTicks)} " +
+            $"longerWayRound={waves.Sum(wave => wave.BlockedWithAStrictlyLongerWayRound)} " +
+            $"yieldCouldClear={waves.Sum(wave => wave.BlockedAYieldCouldHaveCleared)}");
     }
 
     private static double Ratio(int numerator, int denominator) =>
@@ -417,6 +462,8 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
         private int _blockerAtItsDestination;
         private int _blockerEligibleToYield;
         private int _standingStill;
+        private int _detourStrictlyLonger;
+        private int _couldHaveBeenYielded;
         private int _idleAndStill;
 
         public int Number => number;
@@ -550,6 +597,14 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
                 else
                 {
                     _blockerEligibleToYield++;
+                    if (Neighbors(blocker.Position).Any(tile =>
+                            InBounds(tile) && !walls.Contains(tile) && !bodies.Contains(tile)))
+                    {
+                        // The blocker may be told to step aside and has somewhere
+                        // to step. This is the whole of what the yield
+                        // arbitration could ever buy on this tick.
+                        _couldHaveBeenYielded++;
+                    }
                 }
 
                 var blind = Distance(creature.Position, destination, walls, bodies: null);
@@ -563,6 +618,16 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
                 if (blind is null || seeing.Value <= blind.Value + DetourSlack)
                 {
                     _shortDetour++;
+                }
+
+                if (blind is { } direct && seeing.Value > direct)
+                {
+                    // The route round is a different route and costs more than
+                    // the blind one. Counting these apart is what keeps the
+                    // detour number honest: if bodies were left out of the second
+                    // search it would re-derive the first and this count would be
+                    // zero.
+                    _detourStrictlyLonger++;
                 }
             }
         }
@@ -601,7 +666,9 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
                 _blockerAtItsDestination,
                 _blockerEligibleToYield,
                 _standingStill,
-                _idleAndStill);
+                _idleAndStill,
+                _detourStrictlyLonger,
+                _couldHaveBeenYielded);
         }
     }
 
@@ -851,7 +918,9 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
         int BlockedByACreatureAtItsDestination,
         int BlockedByACreatureEligibleToYield,
         int StandingStillCreatureTicks,
-        int IdleAndStillCreatureTicks)
+        int IdleAndStillCreatureTicks,
+        int BlockedWithAStrictlyLongerWayRound,
+        int BlockedAYieldCouldHaveCleared)
     {
         public override string ToString() =>
             string.Create(
@@ -864,6 +933,8 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
                 $"dispersalMax={MaxDispersalDelay} dispersalMean={MeanDispersalDelay} " +
                 $"neverMoved={NeverMovedInTheWindow} standingStill={StandingStillCreatureTicks} " +
                 $"idleAndStill={IdleAndStillCreatureTicks} " +
+                $"longerWayRound={BlockedWithAStrictlyLongerWayRound} " +
+                $"yieldCouldClear={BlockedAYieldCouldHaveCleared} " +
                 $"withDestination={BlockedWithDestination} shortDetour={BlockedWithAShortDetour} " +
                 $"walledIn={BlockedWithNoRouteAtAll} noYield={BlockedWithNoYieldOnTheTick} " +
                 $"sharing={BlockedSharingADestination} yieldsToCohort={YieldsToTheCohort} " +

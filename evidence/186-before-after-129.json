@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "issue": 186,
+  "when": "2026-08-02",
+  "what": "How much of the post-combat clinch the approach rule of Issue #129 is responsible for, separated from the dungeon's ordinary traffic by measurement rather than by argument. The same harness, the same definitions and the same seed matrix on three trees.",
+  "question": "Issue #186, criterion 2: «Вклад правила подхода отделён от фонового трафика измерением, а не рассуждением».",
+  "howItWasMeasured": {
+    "harness": "tests/DungeonFortress.Simulation.Tests/PrototypePostCombatDispersalTests.cs. Definitions are in evidence/186-measure-now.json; nothing in them changed between the three runs.",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypePostCombatDispersalTests\" --logger \"console;verbosity=detailed\"",
+    "whyTwoBeforeColumnsAndNotOne": "The tree before #129 also lacks #171, so a difference between it and `main` is not the approach rule on its own. The mutant column is `main` with the one line of #129 put back to what it was, which is the same isolation evidence/129-mutations.json used for its own before column. The two agree, and where they disagree is named below."
+  },
+  "trees": [
+    {
+      "column": "beforeTree",
+      "commit": "c5aa31b",
+      "what": "the last commit of `main` before the merge of #129 (`15bab1b`). Differs from `main` by #129, #171, #165, the creature pack of #77 and #190.",
+      "howTheHarnessGotThere": "a detached worktree at c5aa31b with the harness file copied in, never committed and removed afterwards. It compiles unchanged: it touches only public API that #129 did not move."
+    },
+    {
+      "column": "mutant",
+      "commit": "5713c47",
+      "what": "`main` with `ActCombatant` reading `var destination = target.Position;` instead of `var destination = ApproachTile(creature, target);` — the approach rule of #129 and nothing else.",
+      "runner": ".artifacts/measure-186.py, which applies the replacement, runs the report and puts the file back in a finally block."
+    },
+    {
+      "column": "main",
+      "commit": "5713c47",
+      "what": "the tree the owner played on 2026-08-02, plus the harness."
+    }
+  ],
+  "wholeMatrix": {
+    "measuredWindows": {"beforeTree": 13, "mutant": 13, "main": 13},
+    "cohortTicks": {"beforeTree": 2760, "mutant": 2760, "main": 3780},
+    "blocked": {"beforeTree": 407, "mutant": 372, "main": 782},
+    "blockedPerCohortTick": {"beforeTree": 0.147, "mutant": 0.135, "main": 0.207},
+    "backgroundBlocked": {"beforeTree": 551, "mutant": 551, "main": 737},
+    "backgroundBlockedPerCohortTick": {"beforeTree": 0.200, "mutant": 0.200, "main": 0.195},
+    "blockedRatioAgainstItsOwnBackground": {"beforeTree": 0.74, "mutant": 0.68, "main": 1.06},
+    "clinchTicks": {"beforeTree": 76, "mutant": 67, "main": 154},
+    "backgroundClinchTicks": {"beforeTree": 173, "mutant": 173, "main": 194},
+    "clinchRatio": {"beforeTree": 0.44, "mutant": 0.39, "main": 0.79},
+    "maxBlockedTogether": {"beforeTree": 4, "mutant": 4, "main": 6},
+    "sharingADestination": {"beforeTree": 10, "mutant": 10, "main": 186},
+    "blockedTowardsTheLarder": {"beforeTree": 118, "mutant": 111, "main": 119},
+    "byArrived": {"beforeTree": 150, "mutant": 147, "main": 307},
+    "byEligible": {"beforeTree": 127, "mutant": 120, "main": 328},
+    "yieldCouldClear": {"beforeTree": 127, "mutant": 120, "main": 327},
+    "shortDetour": {"beforeTree": 373, "mutant": 346, "main": 728},
+    "detourShare": {"beforeTree": 0.916, "mutant": 0.930, "main": 0.931},
+    "strictlyLongerWayRound": {"beforeTree": 178, "mutant": 151, "main": 516},
+    "walledIn": {"beforeTree": 4, "mutant": 2, "main": 24},
+    "standingStill": {"beforeTree": 1603, "mutant": 1627, "main": 1989},
+    "idleAndStill": {"beforeTree": 780, "mutant": 794, "main": 1121},
+    "idleAndStillPerCohortTick": {"beforeTree": 0.283, "mutant": 0.288, "main": 0.297}
+  },
+  "perParty": {
+    "note": "fixture/seed, then blocked and backgroundBlocked over that party's measured windows.",
+    "beforeTree": [
+      {"cell": "baseline/20260726", "ticks": 2404, "measured": 2, "clinchTicks": 0, "blocked": 13, "backgroundBlocked": 1},
+      {"cell": "baseline/20260727", "ticks": 2404, "measured": 3, "clinchTicks": 15, "blocked": 124, "backgroundBlocked": 94},
+      {"cell": "baseline/20260728", "ticks": 2424, "measured": 2, "clinchTicks": 10, "blocked": 55, "backgroundBlocked": 5},
+      {"cell": "prepared/20260726", "ticks": 2406, "measured": 2, "clinchTicks": 6, "blocked": 50, "backgroundBlocked": 200},
+      {"cell": "prepared/20260727", "ticks": 2406, "measured": 2, "clinchTicks": 36, "blocked": 105, "backgroundBlocked": 106},
+      {"cell": "prepared/20260728", "ticks": 2409, "measured": 2, "clinchTicks": 9, "blocked": 60, "backgroundBlocked": 145}
+    ],
+    "mutant": [
+      {"cell": "baseline/20260726", "ticks": 2418, "measured": 2, "clinchTicks": 0, "blocked": 1, "backgroundBlocked": 1},
+      {"cell": "baseline/20260727", "ticks": 2404, "measured": 3, "clinchTicks": 15, "blocked": 124, "backgroundBlocked": 94},
+      {"cell": "baseline/20260728", "ticks": 2418, "measured": 2, "clinchTicks": 1, "blocked": 32, "backgroundBlocked": 5},
+      {"cell": "prepared/20260726", "ticks": 2406, "measured": 2, "clinchTicks": 6, "blocked": 50, "backgroundBlocked": 200},
+      {"cell": "prepared/20260727", "ticks": 2406, "measured": 2, "clinchTicks": 36, "blocked": 105, "backgroundBlocked": 106},
+      {"cell": "prepared/20260728", "ticks": 2409, "measured": 2, "clinchTicks": 9, "blocked": 60, "backgroundBlocked": 145}
+    ],
+    "main": [
+      {"cell": "baseline/20260726", "ticks": 2414, "measured": 2, "clinchTicks": 19, "blocked": 90, "backgroundBlocked": 5},
+      {"cell": "baseline/20260727", "ticks": 2422, "measured": 3, "clinchTicks": 55, "blocked": 336, "backgroundBlocked": 200},
+      {"cell": "baseline/20260728", "ticks": 2404, "measured": 1, "clinchTicks": 0, "blocked": 0, "backgroundBlocked": 0},
+      {"cell": "prepared/20260726", "ticks": 2424, "measured": 3, "clinchTicks": 20, "blocked": 118, "backgroundBlocked": 172},
+      {"cell": "prepared/20260727", "ticks": 2410, "measured": 2, "clinchTicks": 36, "blocked": 105, "backgroundBlocked": 106},
+      {"cell": "prepared/20260728", "ticks": 2408, "measured": 2, "clinchTicks": 24, "blocked": 133, "backgroundBlocked": 254}
+    ]
+  },
+  "whatTheColumnsSay": [
+    {
+      "claim": "The approach rule is what turned the ticks after a fight from the quietest part of the party into the busiest.",
+      "evidence": "Refused steps per ex-combatant creature-tick: 0.147 before #129, 0.207 after — a factor of 1.40. Against its own peacetime control the post-combat window went from 0.74 to 1.06, a factor of 1.43. On the mutant column the same two numbers are 0.135 and 0.68.",
+      "reading": "Before the approach rule the group dispersed **more** freely after a fight than it moved on an ordinary afternoon. After it, it moves no better than the ordinary afternoon and on the loudest cell far worse."
+    },
+    {
+      "claim": "It did not do that by making the dungeon busier. The background did not move.",
+      "evidence": "Refused steps per creature-tick in the control windows: 0.200 before, 0.195 after — a fall of 2 %, against a rise of 40 % in the post-combat windows over the same runs. The control windows of the beforeTree and the mutant are identical to the last step (551 refused, 173 clinch ticks) because no memory of place is still active 60 ticks before a wave: T.memory_avoid_ticks is 200 and T.wave_interval_ticks is 350, which is the reason that constant was chosen (15.5 of the contract).",
+      "reading": "This is the separation Issue #186 asked for. The contribution of #129 is a post-combat contribution and nothing else."
+    },
+    {
+      "claim": "The mechanism it added is one destination for many creatures at once.",
+      "evidence": "Refused steps on which another ex-combatant was refused a step towards the same tile on the same tick: 10 before, 10 on the mutant, 186 after — a factor of eighteen. Ex-combatant creature-ticks inside a window rose with it, 2760 to 3780, and the most ever refused a step together on one tick went from 4 to 6.",
+      "reading": "The rule spreads fighters around the raider during the fight, which is what it was for. The same rule leaves them in one room the moment the raider is gone, and they then leave through the doorways of that room together."
+    },
+    {
+      "claim": "The half of the symptom that is not blocking at all is not the approach rule's doing.",
+      "evidence": "Ex-combatant creature-ticks spent standing still in CreatureMode.Waiting, per cohort-tick: 0.283 before, 0.288 on the mutant, 0.297 after — a rise of 5 % where the blocked half rose 40 %.",
+      "reading": "A creature with no work stands where it happens to be standing, and after a fight that is the middle of the fight. #129 changed where the fight is, not that they stand; the second half of Issue #186's symptom predates it."
+    },
+    {
+      "claim": "What the approach rule did not change is which mechanism refuses the step.",
+      "evidence": "The share of refused steps with a way round: 0.916 before, 0.930 on the mutant, 0.931 after. The share blocked by a creature standing on its own destination: 150/407 before, 307/782 after — 37 % and 39 %.",
+      "reading": "#129 is an amplifier and not the mechanism. It puts more creatures into the same jam; the jam itself is the same jam, and it was already there."
+    }
+  ],
+  "whereTheTwoBeforeColumnsDisagree": {
+    "what": "baseline/20260726 (13 refused steps before the tree, 1 on the mutant) and baseline/20260728 (55 against 32).",
+    "why": "Everything between c5aa31b and 5713c47 that is not #129, which for the simulation means #171: T.memory_avoid_ticks and T.memory_yields_satiety. Both act only while a memory is live, and memories are written in a fight, so they move the post-combat windows and leave the control windows untouched — which is exactly what the identical background columns show.",
+    "howMuch": "372 against 407 refused steps over the matrix, 9 %. Both are less than half of the 782 on `main`, so the conclusion does not depend on which of the two is read as the before column."
+  }
+}
