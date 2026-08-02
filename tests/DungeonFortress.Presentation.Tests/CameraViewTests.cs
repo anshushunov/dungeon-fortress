@@ -181,12 +181,13 @@ public sealed class CameraViewTests
     /// The v1 sheet's last opaque row is 92 of 96 in all four states — measured,
     /// not assumed — so «where the feet are» is 92/96 of the way down the square.
     /// This test exists so the number is a fact under test rather than a claim in
-    /// a handoff: the alternative rule, anchoring the square on the old foot line,
-    /// holds the feet still but makes a body 43.6 px tall above its centre, which
-    /// is enough for a head to reach a room outline drawn above the depth pass in
-    /// 2 measured positions of the shipped map (Issue #156's declared exception).
-    /// The next subtask of Issue #77 replaces this square with the v2 pack's 17:12
-    /// rectangle and settles the placement rule then.
+    /// a handoff, and the two upward alternatives are named apart for the same
+    /// reason: anchoring the <em>drawn feet</em> makes a body 42.58 px tall above
+    /// its centre, moves the feet by nothing, and adds no Issue #156 crossing,
+    /// while anchoring the <em>square's bottom edge</em> makes it 43.64 px, lifts
+    /// the feet by 1.06 px, and does add 2 of them. The next subtask of Issue #77
+    /// replaces this square with the v2 pack's 17:12 rectangle and settles the
+    /// placement rule then.
     /// </para>
     /// </summary>
     [Fact]

@@ -508,15 +508,35 @@ public static class CameraView
     /// four directions, so the drawn feet — the v1 sheet's last opaque row, 92 of
     /// 96 — sink from 16.7 px below the render centre to 28.3 px, i.e. 11.7 px or
     /// 29 % of a 40 px cell, and land just outside the cell the body stands on.
-    /// Anchoring the square on that foot line instead would hold the feet exactly
-    /// where they were, and it is what spike #142's scene did; it also makes a
-    /// body 43.6 px tall above its centre, which is enough for a head to reach a
-    /// room outline drawn above the depth pass — 2 positions on the shipped map,
-    /// 7.4 px of overlap, measured, and a partial undoing of Issue #156. Choosing
-    /// between those is not this change's to make: the next subtask of Issue #77
-    /// connects the v2 pack and has to replace this square with a 17:12 rectangle
-    /// anyway, and that is where the placement rule is settled, with the art it
-    /// was authored for in front of whoever settles it.
+    /// Growing the body upward instead is the alternative, and it is two different
+    /// rules that were at first described as one — the difference between them is
+    /// about a pixel, and it matters:
+    /// </para>
+    ///
+    /// <list type="bullet">
+    /// <item><b>Anchor the drawn feet</b> on the line they were on: the body
+    /// reaches 42.58 px above the centre and the feet do not move at all. This is
+    /// what spike #142's scene did. Swept for Issue #156's defect, it reports
+    /// <em>no</em> crossings at any of the three tile sizes.</item>
+    /// <item><b>Anchor the square's bottom edge</b> where the old square's bottom
+    /// edge was: the body reaches 43.64 px above the centre — a whole pixel more,
+    /// because the sheet's transparent 4/96 of padding grows with the square — and
+    /// the drawn feet do not stay still either, they <em>rise</em> by 1.06 px. This
+    /// is the variant that undoes part of Issue #156: 2 positions on the shipped
+    /// map, both mid-step between cells 21,6 and 21,7 against the south edge of
+    /// quarters@19,2, covering 7.44 and 0.77 square pixels of the body at tile
+    /// 40.</item>
+    /// </list>
+    ///
+    /// <para>
+    /// The 2-crossing measurement was taken on the second of those and was for a
+    /// while written up as if it belonged to the first, which independent review of
+    /// PR #176 caught. Stated correctly: the rule that really holds the feet still
+    /// costs nothing this sweep can find. Choosing is still not this change's to
+    /// do — the next subtask of Issue #77 connects the v2 pack and has to replace
+    /// this square with a 17:12 rectangle anyway, and that is where the placement
+    /// rule is settled, with the art it was authored for in front of whoever
+    /// settles it.
     /// </para>
     /// </summary>
     public static ViewRect GoblinDrawRect(ViewPoint centre, int tileSize)

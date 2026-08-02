@@ -72,8 +72,32 @@
     "whatDidMove": {
       "finding": "A centred square grows in all four directions, so the drawn feet sink. Measured, not estimated: in all four v1 states the last opaque row is 92 of 96, so the feet are 92/96 of the way down the square — 16.67 px below the render centre before, 28.33 px after, a drop of 11.67 px, i.e. 29 % of a 40 px cell. Half a cell is 20 px, so the feet cross from inside the cell to just outside it.",
       "pinnedBy": "CameraViewTests.A_centred_square_lowers_the_drawn_feet_by_a_measured_amount",
-      "theAlternative": "Anchoring the square on the old foot line — which is what spike #142's own scene did (spikes/142-scale-spike/creature_visual.gd draws the body growing upward from a pivot at the feet) — holds the feet exactly still. It was implemented and measured rather than argued about: it makes a body 43.6 px tall above its centre, and RoomBorderDepthTests.No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible then reports 2 crossings at every tile size — quarters@19,2 south edge at cells 20,5 and 21,5, against a body mid-step between 21,6 and 21,7, 7.44 px and 0.77 px of overlap. That is a partial undoing of Issue #156 in the one place #156 had to leave an exception.",
-      "notSettledHere": "Neither branch is free, so this change takes the one that breaks no existing invariant and leaves the choice where the art that decides it lands: the next subtask of Issue #77 connects the v2 pack and must replace the square with a 17:12 rectangle (87.55 x 61.8 px), which is a placement decision in its own right. Raised in the handoff rather than settled quietly."
+      "theAlternative": {
+        "correctedAfterReviewOfPR176": "This entry first said that anchoring the square on the old foot line «holds the feet exactly still» and costs 2 Issue #156 crossings. Those are two different rules, and the sentence married the words of one to the measurement of the other. Independent review found the ~1 px discrepancy; both rules were then re-measured here from scratch before anything was rewritten.",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .artifacts/anchors.ps1 for the geometry, and `dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~No_stroke_above_the_depth_pass_lands_on_a_body_that_is_visible\"` with CameraView.GoblinDrawRect temporarily set to each rule in turn, at tile 40 unless stated",
+        "sharedFacts": "Body 36.363636 px before and 61.818182 px after; the v1 sheet's last opaque row is 92 of 96 in all four states, so the drawn feet are 92/96 of the way down the square and the remaining 4/96 is transparent padding that scales with it. Before the change the feet were 16.666667 px below the render centre.",
+        "ruleA_anchorTheDrawnFeet": {
+          "whatItIs": "Hold the drawn feet on the line they were on — the rule spike #142's own scene used (spikes/142-scale-spike/creature_visual.gd grows the body upward from a pivot at the feet).",
+          "topAboveCentrePx": 42.575758,
+          "bottomBelowCentrePx": 19.242424,
+          "feetBelowCentrePx": 16.666667,
+          "feetMovementPx": 0.0,
+          "issue156Crossings": {"tileSize32": 0, "tileSize40": 0, "tileSize48": 0},
+          "reading": "The feet really do not move, and this sweep finds nothing against it at any tile size."
+        },
+        "ruleB_anchorTheSquaresBottomEdge": {
+          "whatItIs": "Hold the square's bottom edge where the old square's bottom edge was — the rule that was actually implemented and measured when this file was first written.",
+          "topAboveCentrePx": 43.636364,
+          "bottomBelowCentrePx": 18.181818,
+          "feetBelowCentrePx": 15.606061,
+          "feetMovementPx": -1.060606,
+          "feetMovementReading": "negative: the feet RISE by 1.06 px, because the transparent 4/96 of padding under them grows with the square. So this rule does not hold the feet still either.",
+          "issue156Crossings": {"tileSize32": 2, "tileSize40": 2, "tileSize48": 2},
+          "crossingDetail": "Both are the same body — mid-step between cells 21,6 and 21,7 — against the south edge of quarters@19,2 at cells 20,5 and 21,5. OverlapPx in the test payload is an AREA, width x height: 4.760331 and 0.495868 at tile 32, 7.438017 and 0.774793 at tile 40, 10.710744 and 1.115702 at tile 48. Spread over a body 61.8 px wide these are slivers, which is why rule A, only 1.06 px lower, clears them entirely."
+        },
+        "whatThisChangesAboutTheFork": "The reason recorded for not taking the upward rule — «it undoes part of Issue #156» — holds only for rule B. Rule A, the one that actually keeps the feet where the owner saw them in the spike, costs nothing this sweep can measure. The shipped behaviour is left as it is (a centred square) because that is what this change was reviewed on, but the fork now stands on different ground and is named as such in the handoff."
+      },
+      "notSettledHere": "This change keeps the centred square and leaves the choice where the art that decides it lands: the next subtask of Issue #77 connects the v2 pack and must replace the square with a 17:12 rectangle (87.55 x 61.8 px), which is a placement decision in its own right. Raised in the handoff rather than settled quietly."
     }
   }
 }

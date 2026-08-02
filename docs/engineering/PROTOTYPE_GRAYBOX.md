@@ -1582,11 +1582,18 @@ centre, the rule the adapter has always drawn by. At 170 % a centred square cost
 something measurable, recorded here rather than left to be rediscovered — the v1
 sheet's last opaque row is 92 of 96, so the drawn feet sink from 16.67 px below
 the render centre to 28.33 px and land just outside the 40 px cell the body stands
-on. Anchoring the square on the old foot line instead holds the feet still, which
-is what the spike's own scene did, but makes a body 43.6 px tall above its centre —
-enough for a head to reach a room outline drawn above the depth pass in 2 measured
-positions of the shipped map, undoing part of Issue #156. The choice belongs with
-the pack switch, which has to replace the square with a 17:12 rectangle anyway.
+on. Growing the body upward instead is two rules rather than one, about a pixel
+apart. Anchoring the **drawn feet** on their old line — what the spike's own scene
+did — makes a body 42.58 px tall above its centre, moves the feet by nothing, and
+adds no crossing to the Issue #156 sweep at any tile size. Anchoring the **square's
+bottom edge** where the old square's was makes it 43.64 px, because the sheet's
+transparent 4/96 of padding grows with the square; that variant does not hold the
+feet still either — it lifts them by 1.06 px — and it does add 2 crossings, both
+mid-step between cells 21,6 and 21,7 against the south edge of `quarters@19,2`,
+covering 7.44 and 0.77 square pixels at tile 40. The 43.6 px figure first written
+here belonged to the second rule while the words described the first; independent
+review of PR #176 caught it. The choice belongs with the pack switch, which has to
+replace the square with a 17:12 rectangle anyway.
 
 ## Readability pass
 
