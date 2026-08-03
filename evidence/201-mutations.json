@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 2,
+  "issue": 201,
+  "when": "2026-08-03",
+  "rule": "Rule 21: mutants are obligatory for simulation work, one per half of the change. Each was applied to the committed state dc0db7a and reverted with `git checkout -- <file>` immediately after the run; `git status --short` was empty between runs.",
+  "howToReproduce": "Apply the `edit` below to the named file, run the `command`, observe `red`; then `git checkout -- <file>`.",
+  "mutants": [
+    {
+      "id": "m1",
+      "half": "the trigger: a creature that came out of a fight is marked as off duty",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "edit": "in ResolveWave, replace `creature.LeftTheFight = true;` with `creature.LeftTheFight = false;`",
+      "replacement": "creature.LeftTheFight = false; // MUTANT m1",
+      "command": "dotnet test tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj --filter \"FullyQualifiedName~PrototypeOffDutyTests\" -v q",
+      "result": "red — 3 of 20 failed: A_creature_left_without_work_after_a_fight_does_not_stand_where_it_was_fought (baseline/20260726, baseline/20260728) and The_matrix_still_sends_somebody_off_duty_to_measure"
+    },
+    {
+      "id": "m2",
+      "half": "the destination: bunks are excluded from the tiles a creature goes off duty to",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "edit": "in OffDutyTargetFor, replace the bunk filter with the whole zone",
+      "replacement": "var standing = zone.ToList(); // MUTANT m2: bunks not excluded",
+      "command": "dotnet test tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj --filter \"FullyQualifiedName~PrototypeOffDutyTests\" -v q",
+      "result": "red — 3 of 20 failed: Going_off_duty_never_takes_a_bunk on all three baseline seeds"
+    },
+    {
+      "id": "m3",
+      "half": "the stagger: departures are spread out by creature id instead of happening on one tick",
+      "file": "src/DungeonFortress.Simulation/PrototypeTuning.cs",
+      "edit": "OffDutyStaggerTicks 3 -> 0",
+      "replacement": "public const int OffDutyStaggerTicks = 0; // MUTANT m3",
+      "command": "dotnet test tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj --filter \"FullyQualifiedName~PrototypePostCombatDispersalTests|FullyQualifiedName~PrototypeOffDutyTests\" -v q",
+      "result": "red — 1 of 25 failed: Walking_round_reaches_more_of_the_clinch_than_a_yield_could. The ratio a way round reached / a yield could have cleared falls to 1.43, below the 1.5 floor Issue #186 named its mechanism on: a group that stands up on one tick walks off as a column and jams the corridor."
+    }
+  ],
+  "whatIsNotCoveredByAMutant": {
+    "offDutyDelayTicks": "The value 8 itself has no mutant: it trades one kind of walking for another rather than making an assertion true or false, and no test states a property that only holds at 8. What is asserted is the shape of the rule, not the constant.",
+    "note": "Named here rather than left to be discovered: rule 21 asks for a mutant per half of the change, and the delay is a tuning knob inside a half, not a half."
+  }
+}
