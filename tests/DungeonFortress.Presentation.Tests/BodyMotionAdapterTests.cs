@@ -112,6 +112,75 @@ public sealed class BodyMotionAdapterTests
     }
 
     /// <summary>
+    /// The bob is a function of the path the body has walked and of the body's own
+    /// two cells — never of a clock, and never of a constant.
+    ///
+    /// <para>
+    /// This is the check the second mutant of Issue #221 runs into: a phase
+    /// replaced by a fixed number still compiles, still draws every body, and puts
+    /// the whole crew back on one line.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_bob_takes_its_phase_from_the_path_the_body_has_walked()
+    {
+        var push = AdapterSource.Body("PushBodyPose");
+
+        var bob = Assert.Single(AdapterSource.CallsTo(
+            push,
+            $"{nameof(BodyMotion)}.{nameof(BodyMotion.BobOffsetRef)}"));
+        Assert.Equal(2, bob.Arguments.Count);
+        Assert.Contains(
+            $"{nameof(BodyMotion)}.{nameof(BodyMotion.PathCells)}(",
+            bob.Arguments[0],
+            StringComparison.Ordinal);
+
+        // "Walking" is the body's own two cells and nothing else: not a mode, not
+        // a speed, not a timer.
+        Assert.Contains("from != to", bob.Arguments[1], StringComparison.Ordinal);
+
+        var path = Assert.Single(AdapterSource.CallsTo(
+            push,
+            $"{nameof(BodyMotion)}.{nameof(BodyMotion.PathCells)}"));
+        Assert.Equal(3, path.Arguments.Count);
+        Assert.Contains("MotionAlpha()", path.Arguments[2], StringComparison.Ordinal);
+
+        // And the two cells are the interpolation buffer's, which is where the
+        // cell a body came from is already kept.
+        var step = AdapterSource.Body("BodyStep");
+        Assert.Contains("_creatureMotionOrigin", step, StringComparison.Ordinal);
+        Assert.Contains("_raiderMotionOrigin", step, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The bob moves the drawing and never the point the world is sorted and
+    /// measured by.
+    ///
+    /// <para>
+    /// <c>RenderCenter</c> is what the depth pass orders bodies by and what
+    /// <c>--frame-pacing</c> converts back into a cell to count a body drawn ahead
+    /// of the simulation. A vertical offset added there would change depth order
+    /// and could report a body in a cell the simulation has not reached — which is
+    /// the hard constraint of this Issue, not a matter of taste.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_bob_is_in_the_drawing_and_not_in_the_render_centre()
+    {
+        Assert.DoesNotContain(
+            nameof(BodyMotion.BobOffsetRef),
+            AdapterSource.Body("RenderCenter"),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            nameof(BodyMotion.BobOffsetRef),
+            AdapterSource.Body("MeasureFramePacingFrame"),
+            StringComparison.Ordinal);
+        Assert.Equal(
+            1,
+            CountOf($"{nameof(BodyMotion)}.{nameof(BodyMotion.BobOffsetRef)}("));
+    }
+
+    /// <summary>
     /// The sprite, the side outline and the blow flash are all drawn in that same
     /// frame, and every routine that opens it closes it.
     ///
@@ -197,5 +266,18 @@ public sealed class BodyMotionAdapterTests
             load.LastIndexOf("RefreshState(", StringComparison.Ordinal),
             "LoadFixture remembers the previous cells after the last tick has " +
             "already overwritten them.");
+    }
+
+    private static int CountOf(string needle)
+    {
+        var count = 0;
+        for (var index = AdapterSource.Masked.IndexOf(needle, StringComparison.Ordinal);
+             index >= 0;
+             index = AdapterSource.Masked.IndexOf(needle, index + 1, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
     }
 }

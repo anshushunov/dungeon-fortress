@@ -1,3 +1,5 @@
+using DungeonFortress.Simulation;
+
 namespace DungeonFortress.Presentation;
 
 /// <summary>Which way a body is turned on screen.</summary>
@@ -90,4 +92,87 @@ public static class BodyMotion
     /// </summary>
     public static double FlipScale(BodyFacing facing) =>
         facing == AuthoredFacing ? 1.0 : -1.0;
+
+    /// <summary>
+    /// How far a body has walked, in cells, counted along its own path.
+    ///
+    /// <para>
+    /// <b>Why the cell itself carries the count.</b> A body moves one cell per
+    /// tick and only along an axis — <c>PrototypeMap.NeighborOffsets</c> is four
+    /// entries and <c>PrototypeWorld.Move</c> takes one of them — so every single
+    /// step changes <c>X + Y</c> by exactly one, whichever of the four it was.
+    /// That sum is therefore the number of steps the body has taken, up to where
+    /// it started from, and it is canonical: it is read off the position the
+    /// snapshot states, needs no counter of its own, and is the same number for
+    /// the same tick of the same fixture however the frame was reached.
+    /// <see cref="BodyMotionTests.Every_single_step_advances_the_path_by_exactly_one_cell"/>
+    /// is what holds the "exactly one" part.
+    /// </para>
+    ///
+    /// <para>
+    /// <paramref name="alpha"/> is the share of the step already drawn, so the
+    /// count runs continuously between two cells instead of jumping at the tick
+    /// boundary. A body that stands still has <paramref name="from"/> equal to
+    /// <paramref name="to"/> and its count does not move at all — which is the
+    /// first half of "a standing body does not bob", before
+    /// <see cref="BobOffsetRef"/> says the second.
+    /// </para>
+    /// </summary>
+    public static double PathCells(GridPoint from, GridPoint to, double alpha) =>
+        StepsTo(from) + (Clamp01(alpha) * (StepsTo(to) - StepsTo(from)));
+
+    /// <summary>
+    /// How many cells of path one gait cycle takes: the body rises over one step
+    /// and settles over the next.
+    ///
+    /// <para>
+    /// Two is the shortest cycle a step-by-step walk can have that is visible at
+    /// all. With a period of one cell every body would be at the same phase
+    /// whenever it stands on a cell centre — and a cell centre is where every
+    /// paused frame and every captured screenshot draws it, because those are
+    /// drawn at alpha 1. The cycle would then exist only between two frames
+    /// nobody can stop on.
+    /// </para>
+    /// </summary>
+    public const double GaitPeriodCells = 2.0;
+
+    /// <summary>
+    /// How far a walking body rides above the line it stands on at the top of the
+    /// cycle, in the reference pixels <c>Main.ScaleWorld</c> multiplies. 1.8 of
+    /// them is 3.27 world px at the shipped 40 px tile against a body drawn 61.82
+    /// px tall — about a twentieth of the body, which is a gait rather than a
+    /// bounce.
+    /// </summary>
+    public const double BobHeightRef = 1.8;
+
+    /// <summary>
+    /// How far above its feet a body is drawn, in reference pixels, having walked
+    /// <paramref name="pathCells"/>. Negative, because the view's Y grows
+    /// downwards.
+    ///
+    /// <para>
+    /// <b>A standing body does not bob, by construction.</b> Not "bobs slowly",
+    /// not "bobs with a small amplitude": <paramref name="walking"/> is false and
+    /// the answer is exactly zero, so a resting creature is drawn on the same line
+    /// it has always been drawn on. That is the half of this Issue's second
+    /// criterion a phase alone cannot give, because a phase frozen at some point
+    /// of the cycle would leave the body hanging above the floor.
+    /// </para>
+    ///
+    /// <para>
+    /// The curve never goes below zero on purpose. A body sinking under its own
+    /// foot line reads as a body sinking into the floor, and the ground a body
+    /// stands on is not the drawing's to move — the same rule
+    /// <see cref="CameraView.GoblinFootLine"/> is built on.
+    /// </para>
+    /// </summary>
+    public static double BobOffsetRef(double pathCells, bool walking) =>
+        walking
+            ? -BobHeightRef *
+              (1.0 + Math.Cos(Math.Tau * pathCells / GaitPeriodCells)) / 2.0
+            : 0.0;
+
+    private static int StepsTo(GridPoint cell) => cell.X + cell.Y;
+
+    private static double Clamp01(double value) => Math.Clamp(value, 0.0, 1.0);
 }

@@ -3721,33 +3721,42 @@ public partial class Main : Node2D
         // The body and its carried item hang off the interpolated point supplied
         // to Y-order. Informational affordances are projected in a later pass so
         // wall volume can occlude the body without erasing its state.
-        DrawSidedBody(
-            center,
-            CrewSpriteKey(creature),
-            BodyRelation.Own,
-            new BodyRef(BodyKind.Creature, creature.Id));
+        var body = new BodyRef(BodyKind.Creature, creature.Id);
+        DrawSidedBody(center, CrewSpriteKey(creature), BodyRelation.Own, body);
+        if (creature.Carrying is null)
+        {
+            return;
+        }
+
+        // In the body's own frame, because a load is carried by the body: left
+        // outside it, a mushroom would hang in the air beside a walking creature
+        // and stay on its right while the creature faced left.
+        PushBodyPose(center, body);
+        var carried = BodyLocalCenter();
         if (creature.Carrying is ResourceKind.Stone)
         {
             // Stone rides as a rimmed grey square, the same shape a stockpile pip
             // uses, so "carrying" and "stored" read as the same material.
             DrawRect(
-                new Rect2(center + ScaleWorld(3, -9), ScaleWorld(6, 6)),
+                new Rect2(carried + ScaleWorld(3, -9), ScaleWorld(6, 6)),
                 new Color("#e2e8f0"));
             DrawRect(
-                new Rect2(center + ScaleWorld(3, -9), ScaleWorld(6, 6)),
+                new Rect2(carried + ScaleWorld(3, -9), ScaleWorld(6, 6)),
                 new Color("#0f172a"),
                 false,
                 ScaleWorld(1.0f));
         }
-        else if (creature.Carrying is not null)
+        else
         {
             DrawCircle(
-                center + ScaleWorld(6, -6),
+                carried + ScaleWorld(6, -6),
                 ScaleWorld(2.5f),
                 creature.Carrying == ResourceKind.Meal
                     ? new Color("#fde68a")
                     : new Color("#a3e635"));
         }
+
+        ClearBodyPose();
     }
 
     private void DrawRaider(PrototypeRaiderSnapshot raider, Vector2 center)
@@ -5839,10 +5848,29 @@ public partial class Main : Node2D
     /// </summary>
     private void PushBodyPose(Vector2 center, BodyRef body)
     {
+        var (from, to) = BodyStep(body);
+        var bob = ScaleWorld((float)BodyMotion.BobOffsetRef(
+            BodyMotion.PathCells(from, to, MotionAlpha()),
+            from != to));
         DrawSetTransform(
-            center + new Vector2(0f, (float)CameraView.GoblinFootLine(_tileSize)),
+            center + new Vector2(0f, (float)CameraView.GoblinFootLine(_tileSize) + bob),
             0f,
             new Vector2((float)BodyMotion.FlipScale(BodyFacingOf(body)), 1f));
+    }
+
+    /// <summary>
+    /// The step a body is in the middle of: the cell it left when the tick being
+    /// drawn started, and the cell the snapshot puts it on. They are the same cell
+    /// when the body did not move, and that is what "walking" means here — the
+    /// body's own two cells, not a mode, not a clock.
+    /// </summary>
+    private (GridPoint From, GridPoint To) BodyStep(BodyRef body)
+    {
+        var to = BodyPosition(body) ?? default;
+        var origins = body.Kind == BodyKind.Creature
+            ? _creatureMotionOrigin
+            : _raiderMotionOrigin;
+        return (origins.TryGetValue(body.Id, out var from) ? from : to, to);
     }
 
     /// <summary>Back to the canvas everything else is drawn in.</summary>
