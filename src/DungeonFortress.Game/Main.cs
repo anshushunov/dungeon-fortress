@@ -2048,7 +2048,7 @@ public partial class Main : Node2D
         foreach (var (text, size, color) in new (string Text, int Size, string Color)[]
                  {
                      ("LEGEND", 9, "#cbd5e1"),
-                      ("teal ring = crew / red ring = raider / bar = HP / white X = downed", 8, "#cbd5e1"),
+                      ("teal outline = crew / red outline = raider / bar = HP / white X = downed", 8, "#cbd5e1"),
                      // Issue #52. It replaces the quarters' rest rule rather than
                      // joining it: the panel column is under the same overflow
                      // guard as everything else, and the rest rule now sits on the
@@ -2155,13 +2155,24 @@ public partial class Main : Node2D
             data[index + 2] = 255;
         }
 
+        // Флаг мип-уровней читается у источника, а не задаётся константой.
+        // Загрузка выше уже вызвала GenerateMipmaps, и буфер приходит длиннее
+        // одного уровня: 278508 байт против 208896 для 272x192 RGBA8. Жёсткий
+        // `false` здесь означал 90 строк ERROR за кадр — «Expected Image data
+        // size … got 278508 bytes instead», и поймала это стадия ui.
+        // Побеление проходит по всему буферу, включая мип-уровни: формат у них
+        // тот же, и уменьшенные копии силуэта обязаны быть такими же белыми.
         var silhouette = Image.CreateFromData(
             source.GetWidth(),
             source.GetHeight(),
-            false,
+            source.HasMipmaps(),
             Image.Format.Rgba8,
             data);
-        silhouette.GenerateMipmaps();
+        if (!silhouette.HasMipmaps())
+        {
+            silhouette.GenerateMipmaps();
+        }
+
         return ImageTexture.CreateFromImage(silhouette);
     }
 
@@ -5432,7 +5443,7 @@ public partial class Main : Node2D
 
     private string RaidLegend() =>
         "BATTLE LEGEND\n" +
-        "teal ring = crew  •  red ring = raider\n" +
+        "teal outline = crew  •  red outline = raider\n" +
         "bar = HP  •  white X = DOWNED\n" +
         "dot: green work, amber combat,\n" +
         "gray downed, pink fled";
