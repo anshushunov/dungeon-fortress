@@ -194,13 +194,33 @@ public static class InspectorText
     ///
     /// Empty for the great majority of cells, which are in no room at all — the
     /// panel then simply has no room line, exactly as it had no zones to list.
+    ///
+    /// <b>The pending-intent window (Issue #130).</b> The room line reads the
+    /// canonical rooms and the orphan line reads the folded zone membership, and
+    /// the two only agree while nothing is waiting. A zone paint or erase
+    /// accepted for this tick and not applied yet is exactly the moment they
+    /// stop agreeing — a paint has no room yet, an erase leaves the room holding
+    /// the cell — so in that window the panel names the player's intent instead
+    /// and does not print the room line or the orphan line that would contradict
+    /// it. This is the same sentence a pending dig mark, blueprint or stockpile
+    /// cell gets, so the pause window reads like every other accepted mark.
     /// </summary>
     public static string DescribeRooms(MapProjection view, GridPoint cell)
     {
         ArgumentNullException.ThrowIfNull(view);
         var lines = string.Empty;
+
+        // The pending-intent window, answered with the intent itself. A room the
+        // erase is about to remove is not held by this cell any more, and an
+        // orphan whose room the erase is about to create is not an answer — the
+        // player asked to remove the room, not to hear it needs repainting.
+        var pendingErasures = Enum.GetValues<ZoneKind>()
+            .Where(zone => PendingZoneMarks.IsErasing(view, zone, cell))
+            .ToArray();
+
         var rooms = view.State.Rooms
             .Where(room => room.Perimeter.Contains(cell))
+            .Where(room => !pendingErasures.Contains(room.Purpose))
             .ToArray();
         if (rooms.Length > 0)
         {
@@ -215,11 +235,25 @@ public static class InspectorText
             lines += "room " + string.Join(" · ", described) + "\n";
         }
 
+        foreach (var zone in Enum.GetValues<ZoneKind>())
+        {
+            if (view.IsPendingZonePaint(zone, cell))
+            {
+                lines += PendingMarkLine(zone.ToString()) + "\n";
+            }
+            else if (PendingZoneMarks.IsErasing(view, zone, cell))
+            {
+                lines += PendingMarkLine($"erasing {zone}") + "\n";
+            }
+        }
+
         // The other half of the silence: a post nobody has zoned is in no room, so
         // no room's caption can mention it. The map marks it; the panel says what
-        // to do about it.
+        // to do about it. Suppressed while an erase accepted on this tick is
+        // about to take this very cell out of the zone it needs — the erase
+        // intent line above already answers.
         var orphan = RoomObjects.Unroomed(view).FirstOrDefault(item => item.Position == cell);
-        if (orphan is not null)
+        if (orphan is not null && !pendingErasures.Contains(orphan.Needs))
         {
             lines += $"no room: this {RoomLabels.FeatureName(orphan.Kind)} needs " +
                 $"{orphan.Needs} painted over it\n";

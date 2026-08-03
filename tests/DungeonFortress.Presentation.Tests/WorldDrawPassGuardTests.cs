@@ -328,6 +328,24 @@ public sealed class WorldDrawPassGuardTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The map's half of Issue #130: an erase accepted while paused has to be
+    /// visible as immediately as a pending paint. The adapter reads the cells
+    /// being erased from the pure fold rather than deciding them itself — the
+    /// pure reading is pinned by
+    /// <c>MapAccentTests.A_zone_erased_while_paused_is_reported_until_the_tick_runs</c>.
+    /// </summary>
+    [Fact]
+    public void DrawZoneOutlines_reads_pending_erases_from_the_pure_fold()
+    {
+        var body = AdapterSource.Body("DrawZoneOutlines");
+
+        // An erase accepted on this tick is drawn as a removal mark, cell by
+        // cell, like the pending paint is drawn as a per-cell outline.
+        Assert.Contains("PendingZoneMarks.Erasures", body, StringComparison.Ordinal);
+        Assert.Contains("DrawLine", body, StringComparison.Ordinal);
+    }
+
     private static IEnumerable<OverlayMark> MarksWithPolicy(OverlayMarkPolicy policy) =>
         InformationalOverlays.All
             .Where(rule => rule.Policy == policy)

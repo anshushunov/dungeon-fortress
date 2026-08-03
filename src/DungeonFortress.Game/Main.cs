@@ -3317,13 +3317,20 @@ public partial class Main : Node2D
     }
 
     /// <summary>
-    /// A paint accepted on this tick and not applied yet.
+    /// A paint accepted on this tick and not applied yet — and, mirroring it, an
+    /// erase accepted on this tick and not applied yet (Issue #130).
     ///
-    /// The room it is about to join does not exist yet — which patch it lands in
-    /// and whether it completes a room are questions that need the tick to run
-    /// (see <c>MapAccents.Room</c>) — so the per-cell outline that used to draw
-    /// every zone stays here for exactly the case Issue #58 opened: the player
-    /// marks while paused and the map has to answer immediately.
+    /// The room a paint is about to join does not exist yet — which patch it
+    /// lands in and whether it completes a room are questions that need the tick
+    /// to run (see <c>MapAccents.Room</c>) — so the per-cell outline that used to
+    /// draw every zone stays here for exactly the case Issue #58 opened: the
+    /// player marks while paused and the map has to answer immediately.
+    ///
+    /// An erase is the same question with the sign flipped: the room still holds
+    /// the cell until the tick runs, so the cell being removed is crossed out,
+    /// per cell, the way the paint is outlined per cell. The cells come from
+    /// <see cref="PendingZoneMarks"/> — the pure fold — so the map and the panel
+    /// answer the same way.
     /// </summary>
     private void DrawZoneOutlines()
     {
@@ -3340,6 +3347,21 @@ public partial class Main : Node2D
                     CellTopLeft(cell),
                     new Vector2(_tileSize - 1, _tileSize - 1));
                 DrawRect(rect.Grow(-3), ZoneColor(zone), false, 1.5f);
+            }
+
+            foreach (var cell in PendingZoneMarks.Erasures(_projection!, zone))
+            {
+                var rect = new Rect2(
+                    CellTopLeft(cell),
+                    new Vector2(_tileSize - 1, _tileSize - 1));
+                var inner = rect.Grow(-3);
+                DrawRect(inner, ZoneColor(zone), false, 1.5f);
+                DrawLine(inner.Position, inner.End, new Color("#ef4444"), 1.5f);
+                DrawLine(
+                    new Vector2(inner.End.X, inner.Position.Y),
+                    new Vector2(inner.Position.X, inner.End.Y),
+                    new Color("#ef4444"),
+                    1.5f);
             }
         }
     }

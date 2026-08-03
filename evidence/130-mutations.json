@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "issue": 130,
+  "when": "2026-08-03, run on the worktree tree before the PR",
+  "what": "One mutant per half of the fix, not one for the whole. Criterion 4 of the issue requires a check that reddens on each half separately: the panel naming a paint, the panel refusing to contradict itself on an erase, and the map showing a pending erase.",
+  "howToReproduce": {
+    "runner": "each mutant was applied by hand to the worktree, the targeted test run, the file restored from a backup copy",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~<named test>\"",
+    "checks": [
+      "RoomReadingTests.Painting_a_zone_over_a_post_names_the_intent_while_paused",
+      "RoomReadingTests.Erasing_a_zone_from_under_a_bed_names_the_intent_while_paused",
+      "MapAccentTests.A_zone_erased_while_paused_is_reported_until_the_tick_runs",
+      "WorldDrawPassGuardTests.DrawZoneOutlines_reads_pending_erases_from_the_pure_fold"
+    ],
+    "baseline": "4 of 4 green on the shipped tree, run after every mutation was put back"
+  },
+  "mutants": [
+    {
+      "half": "panel: a pending zone paint is named, not met with silence",
+      "edit": "the `view.IsPendingZonePaint(zone, cell)` branch of InspectorText.DescribeRooms is dropped",
+      "result": "red: Painting_a_zone_over_a_post_names_the_intent_while_paused failed with an empty panel",
+      "failing": ["RoomReadingTests.Painting_a_zone_over_a_post_names_the_intent_while_paused"],
+      "reading": "This is the silence defect of criterion 1: with the room not yet created and the fold having cleared the orphan, the panel had nothing at all to say."
+    },
+    {
+      "half": "panel: an erase does not print room membership and no-room about the same cell",
+      "edit": "the `!pendingErasures.Contains(room.Purpose)` room filter and the `!pendingErasures.Contains(orphan.Needs)` orphan filter of InspectorText.DescribeRooms are both dropped",
+      "result": "red: Erasing_a_zone_from_under_a_bed_names_the_intent_while_paused failed on the contradiction",
+      "failing": ["RoomReadingTests.Erasing_a_zone_from_under_a_bed_names_the_intent_while_paused"],
+      "reading": "With the canonical room line and the folded orphan line both printed, the panel simultaneously claims the cell is in room FARM and that its bed needs Farm painted over it. This is criterion 2."
+    },
+    {
+      "half": "map: the pending-erase cells are read from the pure fold",
+      "edit": "PendingZoneMarks.Erasures returns an empty list",
+      "result": "red: A_zone_erased_while_paused_is_reported_until_the_tick_runs failed on the empty list",
+      "failing": ["MapAccentTests.A_zone_erased_while_paused_is_reported_until_the_tick_runs"],
+      "reading": "The canonical zone still holds the cell while the fold has already taken it out; the erase has to be visible before the tick runs."
+    },
+    {
+      "half": "map: DrawZoneOutlines actually draws the pending erase",
+      "edit": "the PendingZoneMarks.Erasures loop of Main.DrawZoneOutlines is removed",
+      "result": "red: DrawZoneOutlines_reads_pending_erases_from_the_pure_fold failed on the missing call",
+      "failing": ["WorldDrawPassGuardTests.DrawZoneOutlines_reads_pending_erases_from_the_pure_fold"],
+      "reading": "The adapter is not built by the Pure .NET job (ADR 0011), so its half of the fix is pinned structurally: the drawing routine has to read the cells from the same pure fold the panel reads, and draw a removal mark for them."
+    }
+  ],
+  "summary": {
+    "halves": 4,
+    "red": 4,
+    "green": 0
+  }
+}
