@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 2,
+  "issue": 228,
+  "when": "2026-08-04, taken on the tree that precedes the merge of PR #217",
+  "what": "How much of a post-raid cohort's time was spent in the quarters and the tiles around them BEFORE the off-duty rule of Issue #201 existed. The 'after' file measures the same quantity with the same harness on the current tree; only the two together answer the owner's «все встали в больницу и не могли оттуда выйти».",
+  "theOwnersWords": "разошлись быстрее, все встали в больницу и не могли оттуда выйти, возможно изза того что поле боя блокировало",
+  "base": {
+    "commit": "4af03a5",
+    "what": "Удар читается на экране (#210) (#218) — the commit immediately before 51302ba, which is the squash merge of PR #217",
+    "howObtained": "git log --oneline -12 on origin/main; 51302ba is the merge of #217 and 4af03a5 is its parent",
+    "worktree": "git worktree add --detach C:/gamedev/_wt-228-before 4af03a5, with tests/DungeonFortress.Simulation.Tests/PrototypeQuartersIdleTests.cs copied in from the branch of this issue and nothing else changed"
+  },
+  "command": "dotnet test tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj --filter \"FullyQualifiedName~PrototypeQuartersIdleTests\" -v q --logger \"console;verbosity=detailed\"",
+  "howTheHarnessCarriesOver": "PR #217 changed PrototypeWorld, PrototypeTuning, EventNarration and two test files and nothing in the snapshot schema (git diff --stat 4af03a5 51302ba). The harness reads only the published snapshot, so the same file compiles and measures the same quantity on both trees.",
+  "theWindowAndWhyItIsNotSixty": {
+    "window": "from the tick a wave ends to the tick the domain stops working: the start of the next muster (arriveTick - muster_lead_ticks), the arrival of the next wave, or WaveIntervalTicks = 350, whichever comes first",
+    "whyNotTheSixtyOf186And201": "those two files measure the dispersal itself and 60 ticks is the right length for it — the last of the cohort is off the battlefield in 33. This issue measures what happens AFTER the walk, and the ninth creature does not begin walking until OffDutyDelayTicks + 8 * OffDutyStaggerTicks = 8 + 24 = 32 ticks have passed. A 60-tick window would end while the group is still arriving.",
+    "whyItStopsAtTheMuster": "the correction independent review forced onto Issue #186: prepared sets muster_lead_ticks to 60 on tick 880, and a window that runs into the muster measures the muster, when the whole domain drops its work and walks into a Watch zone of ten tiles. Held by The_window_ends_before_the_domain_stops_working, which asserts that no tick of any window was spent by a creature with isMustering set.",
+    "cohort": "everybody in CreatureMode.Fighting on the tick before the wave ended — the same cohort PrototypePostCombatDispersalTests and PrototypeOffDutyTests use, so the three files talk about the same people",
+    "place": "the Quarters zone as the snapshot publishes it, plus every passable tile orthogonally adjacent to it and not in it ('и в тайлах вокруг них' of the issue)"
+  },
+  "matrix": {
+    "fixtures": ["baseline", "prepared"],
+    "seeds": [20260726, 20260727, 20260728],
+    "windows": 13
+  },
+  "measured": {
+    "cohortTicks": 17916,
+    "quartersTicks": 1630,
+    "quartersShare": "1630 / 17916 = 9.1 %",
+    "inZone": 1205,
+    "inHalo": 425,
+    "decomposition": {
+      "Stepped": 121,
+      "OffItsFeet": 0,
+      "Mustering": 0,
+      "BlockedByOthers": 101,
+      "RouteUnreachable": 0,
+      "LarderUnreachable": 0,
+      "Eating": 0,
+      "Resting": 815,
+      "Working": 0,
+      "WorkZoneUnreachable": 156,
+      "NoWork": 435,
+      "JobEnded": 2,
+      "Starving": 0,
+      "Unclassified": 0
+    },
+    "theJam": {
+      "blockedTowardsAnOffDutyTile": 0,
+      "longestBlockedStreak": 64,
+      "meanLongestStreakPerCreature": 9.4,
+      "creaturesWithAnyStreak": 10,
+      "wayRound": 75,
+      "walledIn": 0,
+      "wayRoundTooLong": 1,
+      "wayRoundShare": 0.987,
+      "refusedOnto": {"(21,4)": 64, "(23,4)": 9, "(23,7)": 2, "(23,5)": 1},
+      "whoWasInTheWay": {
+        "a creature lying on a bunk": 64,
+        "nobody; the arbitration refused it": 25,
+        "a creature standing still somewhere else": 9,
+        "a creature that walked on this very tick": 3
+      }
+    },
+    "theMatching": {
+      "joblessTicksInTheQuarters": 717,
+      "sawTheMatching": 609,
+      "missedTheMatching": 108,
+      "share": "84.94 %"
+    }
+  },
+  "perParty": {
+    "note": "prepared is identical on both trees, tick for tick and number for number, which is the cross-check that the whole change lives on baseline. Issue #201 measured why: the rule fires zero times on prepared, because that fixture paints a Watch zone and raises the Watch priority to 3, so there is standing work for everybody when a wave ends.",
+    "baseline/20260726": "windows=2 cohortTicks=2752 quartersTicks=184 BlockedByOthers=0 NoWork=60 WorkZoneUnreachable=117 Resting=0 Stepped=7",
+    "baseline/20260727": "windows=3 cohortTicks=4969 quartersTicks=322 BlockedByOthers=23 NoWork=121 WorkZoneUnreachable=0 Resting=146 Stepped=31",
+    "baseline/20260728": "windows=1 cohortTicks=2592 quartersTicks=302 BlockedByOthers=1 NoWork=254 WorkZoneUnreachable=39 Resting=0 Stepped=8",
+    "prepared/20260726": "windows=3 cohortTicks=2810 quartersTicks=194 BlockedByOthers=1 NoWork=0 Resting=175 Stepped=18",
+    "prepared/20260727": "windows=2 cohortTicks=1739 quartersTicks=146 BlockedByOthers=2 NoWork=0 Resting=120 Stepped=24",
+    "prepared/20260728": "windows=2 cohortTicks=3054 quartersTicks=482 BlockedByOthers=74 NoWork=0 Resting=374 Stepped=33"
+  },
+  "whyShareAndNotCount": "the number of observed windows differs between the two trees (13 against 16) because the parties take a different course once creatures move — the same reason Issue #201 gave for reporting a share. Absolute counts of the two trees are not comparable and the shares are.",
+  "whatThisFileDoesNotClaim": "that 9.1 % is a good number or that the tree before #217 was better. It is the reference the 'after' file is read against, and nothing else."
+}
