@@ -1,0 +1,80 @@
+{
+  "issue": 210,
+  "checkpoint": 1,
+  "what": "Что о ударе доступно слою представления на текущем main, до единой правки: кадр боя и выборка боевых событий из канонического журнала одной партии, включая замер схлопывания повторов.",
+  "base": {
+    "branch": "agent/210-readable-blow",
+    "mergeBase": "a180b3207124e1731fba4912ebb03b3651e08452",
+    "command": "git merge-base HEAD origin/main"
+  },
+  "party": {
+    "fixture": "prepared",
+    "seed": 20260726,
+    "ticks": 2400,
+    "checksum": "fa8a019911d620d72d82538da25d5152f877d1728c611a827cbf935009832c0f",
+    "eventCount": 2517,
+    "command": "dotnet build tests/DungeonFortress.Scenarios/DungeonFortress.Scenarios.csproj -c Release && dotnet tests/DungeonFortress.Scenarios/bin/Release/net8.0/DungeonFortress.Scenarios.dll --prototype --commands scenarios/prototype1/prepared.commands.v2.json --ticks 2400 --snapshot <out>/prepared-2400.json"
+  },
+  "combatJournal": {
+    "command": "jq -c '[.events[] | select(.reasonCode|startswith(\"combat_\"))] | group_by(.reasonCode) | map({reason: .[0].reasonCode, entries: length, repeats: (map(.repeats)|add)})' <out>/prepared-2400.json",
+    "byReason": [
+      { "reason": "combat_absent_unreachable", "entries": 2, "repeats": 2 },
+      { "reason": "combat_attack", "entries": 52, "repeats": 136 },
+      { "reason": "combat_downed", "entries": 5, "repeats": 5 },
+      { "reason": "combat_fled_morale", "entries": 18, "repeats": 18 },
+      { "reason": "combat_joined", "entries": 41, "repeats": 41 },
+      { "reason": "combat_raider_downed", "entries": 17, "repeats": 17 },
+      { "reason": "combat_refused_injured", "entries": 7, "repeats": 11 },
+      { "reason": "combat_refused_starving", "entries": 6, "repeats": 6 },
+      { "reason": "combat_returned", "entries": 10, "repeats": 10 }
+    ],
+    "note": "Три из девяти кодов описывают удар: combat_attack (кто, по кому, сколько), combat_raider_downed (рейдер выбыл) и combat_downed (защитник выбыл). Остальные шесть — про участие в бою, а не про удар."
+  },
+  "collapseTrap": {
+    "what": "Ловушка, названная брифом: PrototypeWorld.RecordDecision схлопывает одинаковый повтор в предыдущую запись того же существа — растут LastTick и Repeats, новой записи нет.",
+    "command": "jq -c '[.events[]|select(.reasonCode==\"combat_attack\")] | {entries: length, blows: (map(.repeats)|add), collapsedEntries: (map(select(.repeats>1))|length), maxRepeats: (map(.repeats)|max)}' <out>/prepared-2400.json",
+    "measured": {
+      "entries": 52,
+      "blows": 136,
+      "collapsedEntries": 37,
+      "maxRepeats": 9
+    },
+    "worstCase": {
+      "firstTick": 1301,
+      "lastTick": 1309,
+      "creatureId": 3,
+      "raiderId": 0,
+      "damage": 3,
+      "repeats": 9,
+      "note": "Девять ударов подряд по одной цели с одинаковым уроном — одна запись журнала."
+    },
+    "answer": "Схлопывание реально (37 из 52 записей — схлопнутые, до девяти ударов в одной), но удара текущего тика оно не прячет: LastTick — это тик последнего повтора. Представление рисует ровно один кадр мира, и вопрос, который оно задаёт журналу, — «кто ударил на только что отработанном тике», а не «сколько раз он бил за партию». Ответ на такой вопрос схлопывание сохраняет точно. Доказательство — тест BlowJournalSourceTests.Every_blow_of_the_party_is_recoverable_tick_by_tick на рубеже 2; правка симуляции не нужна и не делалась.",
+    "tickOffset": {
+      "what": "События тика пишутся с CurrentTick ДО инкремента (PrototypeWorld.cs:284), поэтому в снапшоте с Tick = T свежайшие события несут LastTick = T - 1.",
+      "command": "jq -c '{tick} , ([.events[]|select(.reasonCode|startswith(\"combat_\"))]|.[-1:])' <out>/p-1320.json",
+      "observed": "tick 1320, последнее боевое событие lastTick 1319"
+    }
+  },
+  "whatIsUnavailable": [
+    "Удар рейдера по защитнику, который выжил, не пишется вообще: PrototypeWorld.ActRaiders записывает только combat_downed, когда защитник упал. За всю партию — 5 записей combat_downed против 136 ударов команды.",
+    "Промаха в симуляции нет: урон в бою всегда не меньше PrototypeTuning.DamageFloor = 1, а дальность проверяется до удара. «Не попал» в словаре журнала не существует — существует «на этом тике удара не было»."
+  ],
+  "frameBefore": {
+    "path": "evidence/210-before.png",
+    "fixture": "prepared",
+    "tick": 1318,
+    "checksum": "81ea5502d82ad300404b0fdc56a5ebf4cee8562996068f965771016b8e83fb12",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -GodotPath <godot-console> -Fixture prepared -ScreenshotTicks 1318 -ScreenshotPath \"210/before.png\" -TileSize 40 -CameraZoom 2.0 -CameraPosition \"1020,480\" -UiScale 1.0 -FrameSize \"1280x720\" -TemporaryRoot <короткий каталог вне worktree>",
+    "crop": [230, 150, 660, 560],
+    "cropNote": "Область боя из кадра 1280x720, 1:1 без масштабирования; палитра сведена к 128 цветам ради веса. Обрезка тем же способом, что в PR #209.",
+    "whyThisTick": "На тике 1317 (виден в снапшоте с Tick = 1318) сходятся оба исхода удара сразу: Кремень (id 1) бьёт рейдера 1 на 5, Тишина (id 8) бьёт его же на 2 и добивает — combat_attack и combat_raider_downed в одном кадре.",
+    "whatIsMissing": "На кадре девять тел стоят рядом. Кто кого ударил и с каким результатом — не показано ничем: позы у всех бойцов одинаковые (combat), урона не видно, направления не видно. Единственный след боя — белые X на двух уже выбывших рейдерах и полоски HP."
+  },
+  "reachablePosesBefore": {
+    "loadedSpriteStates": ["idle", "work", "combat", "windup", "flinch", "downed"],
+    "drawnStates": ["idle", "work", "combat", "downed"],
+    "unreachable": ["windup", "flinch"],
+    "why": "Main.cs:5502 и Main.cs:5505 передают BodyActionPhase.None безусловно, поэтому BodySprites.PhaseKey никогда не возвращает windup или flinch.",
+    "command": "jq -r '.loadedSpriteStates|join(\",\")' — из строки godot_graybox_screenshot прогона выше"
+  }
+}
