@@ -112,6 +112,8 @@ public static class WorldDrawOrder
         new("DrawBuiltPost", WorldDrawPass.Depth, null),
         new("DrawCreature", WorldDrawPass.Depth, null),
         new("DrawRaider", WorldDrawPass.Depth, null),
+        new("DrawSidedBody", WorldDrawPass.Depth, null),
+        new("DrawGoblinOutline", WorldDrawPass.Depth, null),
         new("DrawGoblin", WorldDrawPass.Depth, null),
 
         // Pass 3 — informational marks.

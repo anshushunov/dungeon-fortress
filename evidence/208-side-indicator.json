@@ -1,0 +1,70 @@
+{
+  "issue": 208,
+  "decision": "docs/design/SIDE_INDICATOR.md",
+  "scene": {
+    "fixture": "prepared",
+    "seed": 20260726,
+    "tick": 1670,
+    "checksum": "5708432701fbb383539e66f11adb029e3d2f3f5c0b471df3a4cc7d121d7e7a70",
+    "tileSize": 40,
+    "cameraZoom": 2.0,
+    "cameraPosition": "900,500",
+    "uiScale": 1.0,
+    "frameSize": "1280x720"
+  },
+  "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture prepared -ScreenshotTicks 1670 -ScreenshotPath \"side/<before|after>.png\" -TileSize 40 -CameraZoom 2.0 -CameraPosition \"900,500\" -UiScale 1.0 -FrameSize \"1280x720\" -TemporaryRoot <короткий каталог вне worktree>",
+  "frames": {
+    "before": "evidence/208-before.png",
+    "after": "evidence/208-after.png",
+    "crop": [545, 145, 875, 545],
+    "cropNote": "Область боя из кадра 1280x720, 1:1 без масштабирования; палитра сведена к 128 цветам ради веса — 19.5 и 18.4 КиБ. Полные кадры не коммитятся: 211 и 227 КиБ при том, что предмет проверки целиком лежит в этой области.",
+    "why": "Критерий готовности #208 требует кадры в PR. Решение принято по playtest-наблюдению «круги загромождают экран», то есть кадр — предмет проверки, а не иллюстрация: по тексту нельзя проверить, что 98.18 px наложенных дуг сменились бахромой по силуэту."
+  },
+  "why": {
+    "ringRadiusRef": 27,
+    "worldVisualScale": "tile / 22",
+    "ringRadiusPxAtTile40": 49.09,
+    "ringDiameterPxAtTile40": 98.18,
+    "cellPx": 40,
+    "cellsCoveredAcross": 2.45,
+    "note": "Кольцо стороны занимало около шести клеток площади на одно тело. Контур занимает площадь силуэта, поэтому плотность толпы его не ломает."
+  },
+  "outlineWidths": {
+    "ownRefPx": 1.2,
+    "hostileRefPx": 2.0,
+    "ownWorldPxAtTile40": 2.18,
+    "hostileWorldPxAtTile40": 3.64
+  },
+  "mutants": [
+    {
+      "target": "SideOutline.Color",
+      "mutation": "тела Own и Hostile переставлены местами",
+      "expected": "SideOutlineTests.The_colours_are_the_documented_teal_and_red краснеет",
+      "observed": "не пройдено 1, пройдено 4, всего 5",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter FullyQualifiedName~SideOutlineTests"
+    },
+    {
+      "target": "Main.DrawSidedBody",
+      "mutation": "вызов DrawGoblinOutline удалён",
+      "expected": "SideOutlineAdapterTests.The_outline_is_drawn_before_the_sprite краснеет",
+      "observed": "не пройдено 1, пройдено 5, всего 6",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter FullyQualifiedName~SideOutlineAdapterTests"
+    }
+  ],
+  "defectFoundDuringImplementation": {
+    "where": "Main.BuildSilhouette",
+    "what": "Image.CreateFromData вызывался с флагом мип-уровней false, а буфер приходил с ними: 278508 байт против 208896 для 272x192 RGBA8",
+    "effect": "90 строк ERROR движка за кадр",
+    "foundBy": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage ui",
+    "fix": "флаг читается у источника через source.HasMipmaps()",
+    "afterFix": "engineErrorCount 0 в обоих godot_process_guard прогона со скриншотом"
+  },
+  "legendFit": {
+    "label": "legend[1]",
+    "text": "teal outline = crew / red outline = raider / bar = HP / white X = downed",
+    "neededLines": 1,
+    "visibleLines": 1,
+    "widthPx": 367,
+    "note": "Слово outline длиннее ring на три символа и встречается в строке дважды; переноса не возникло, запасное слово edge не понадобилось."
+  }
+}

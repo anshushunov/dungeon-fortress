@@ -25,6 +25,11 @@ public partial class Main : Node2D
     private readonly List<RuntimeDiagnostic> _diagnostics = [];
     private readonly Dictionary<int, Label> _nameLabels = [];
     private readonly Dictionary<string, Texture2D> _goblinSprites = [];
+    // Те же шесть поз с каждым непрозрачным пикселем, выкрученным в белый.
+    // Копия силуэта под телом должна быть плоской фигурой цвета стороны, а не
+    // палитрой спрайта, умноженной на него: иначе контур унаследует
+    // собственные свет и тень гоблина. Строится один раз при загрузке пака.
+    private readonly Dictionary<string, Texture2D> _goblinSilhouettes = [];
     private readonly List<string> _loadedSpriteStates = [];
     private readonly List<string> _missingSpriteStates = [];
     private readonly Dictionary<string, Texture2D> _icons = [];
@@ -2043,7 +2048,7 @@ public partial class Main : Node2D
         foreach (var (text, size, color) in new (string Text, int Size, string Color)[]
                  {
                      ("LEGEND", 9, "#cbd5e1"),
-                      ("teal ring = crew / red ring = raider / bar = HP / white X = downed", 8, "#cbd5e1"),
+                      ("teal outline = crew / red outline = raider / bar = HP / white X = downed", 8, "#cbd5e1"),
                      // Issue #52. It replaces the quarters' rest rule rather than
                      // joining it: the panel column is under the same overflow
                      // guard as everything else, and the rest rule now sits on the
@@ -2122,6 +2127,7 @@ public partial class Main : Node2D
                 var texture = ImageTexture.CreateFromImage(image);
                 _spritesHaveMipmaps &= texture.GetImage().HasMipmaps();
                 _goblinSprites.Add(state, texture);
+                _goblinSilhouettes.Add(state, BuildSilhouette(imported.GetImage()));
                 _loadedSpriteStates.Add(state);
             }
             else
@@ -2130,6 +2136,56 @@ public partial class Main : Node2D
                 _missingSpriteStates.Add(state);
             }
         }
+    }
+
+    /// <summary>
+    /// Та же поза с белым цветом и сохранённой альфой, чтобы отрисовка с
+    /// modulate давала плоскую фигуру этого цвета. Байтовый проход, а не
+    /// попиксельный: 192x272 на шесть поз — это 313 тысяч пикселей, и делать их
+    /// через <c>SetPixel</c> значит платить за загрузку заметную задержку.
+    /// </summary>
+    private static ImageTexture BuildSilhouette(Image source)
+    {
+        // Своя копия перед конверсией: Convert правит объект на месте, а
+        // GetImage() отдаёт его разделяемым. Что именно разделяемым, доказано
+        // этим же кодом — мип-уровни, созданные на строке выше по загрузке,
+        // пришли в буфер следующего вызова GetImage(). Сегодня конверсия
+        // безвредна (пак уже RGBA8, и она no-op), но первый пак в другом
+        // формате превратил бы её в правку чужого кэшированного ресурса.
+        var working = Image.CreateFromData(
+            source.GetWidth(),
+            source.GetHeight(),
+            source.HasMipmaps(),
+            source.GetFormat(),
+            source.GetData());
+        working.Convert(Image.Format.Rgba8);
+        var data = working.GetData();
+        for (var index = 0; index + 3 < data.Length; index += 4)
+        {
+            data[index] = 255;
+            data[index + 1] = 255;
+            data[index + 2] = 255;
+        }
+
+        // Флаг мип-уровней читается у источника, а не задаётся константой.
+        // Загрузка выше уже вызвала GenerateMipmaps, и буфер приходит длиннее
+        // одного уровня: 278508 байт против 208896 для 272x192 RGBA8. Жёсткий
+        // `false` здесь означал 90 строк ERROR за кадр — «Expected Image data
+        // size … got 278508 bytes instead», и поймала это стадия ui.
+        // Побеление проходит по всему буферу, включая мип-уровни: формат у них
+        // тот же, и уменьшенные копии силуэта обязаны быть такими же белыми.
+        var silhouette = Image.CreateFromData(
+            working.GetWidth(),
+            working.GetHeight(),
+            working.HasMipmaps(),
+            Image.Format.Rgba8,
+            data);
+        if (!silhouette.HasMipmaps())
+        {
+            silhouette.GenerateMipmaps();
+        }
+
+        return ImageTexture.CreateFromImage(silhouette);
     }
 
     private void AssertRequiredSpritesLoaded()
@@ -3588,23 +3644,7 @@ public partial class Main : Node2D
         // The body and its carried item hang off the interpolated point supplied
         // to Y-order. Informational affordances are projected in a later pass so
         // wall volume can occlude the body without erasing its state.
-        DrawGoblin(center, CrewSpriteKey(creature));
-        // Issue #177: the filled circle that used to sit here was entirely
-        // covered by the v2 sprite at 170 % body scale (61.8 px canvas). The
-        // team cue is now a stroke ring drawn AFTER the sprite so wall volume
-        // can still occlude everything together, yet the ring stays visible on
-        // top: GoblinDrawWidth/2 ≈ 43.8 px at tile 40; ScaleWorld(27) ≈ 49.1 px
-        // radius leaves a clear gap around every pose in the pack's opaque
-        // envelope (columns 26..268, rows 20..187). The radius and the colour
-        // are SideMarker's, so the presentation test reads the same values.
-        DrawArc(
-            center,
-            ScaleWorld(SideMarker.RingRadiusRef),
-            0,
-            Mathf.Tau,
-            24,
-            new Color(SideMarker.CrewRingColor),
-            ScaleWorld(2));
+        DrawSidedBody(center, CrewSpriteKey(creature), BodyRelation.Own);
         if (creature.Carrying is ResourceKind.Stone)
         {
             // Stone rides as a rimmed grey square, the same shape a stockpile pip
@@ -3631,18 +3671,61 @@ public partial class Main : Node2D
 
     private void DrawRaider(PrototypeRaiderSnapshot raider, Vector2 center)
     {
-        DrawGoblin(center, RaiderSpriteKey(raider));
-        // Issue #177: same fix as DrawCreature — the pre-sprite filled circle
-        // was occluded at 170 % body scale. Red stroke ring drawn after the
-        // sprite so it stays visible above wall volume too.
-        DrawArc(
-            center,
-            ScaleWorld(SideMarker.RingRadiusRef),
-            0,
-            Mathf.Tau,
-            24,
-            new Color(SideMarker.RaiderRingColor),
-            ScaleWorld(2));
+        DrawSidedBody(center, RaiderSpriteKey(raider), BodyRelation.Hostile);
+    }
+
+    /// <summary>
+    /// Тело вместе с тем, что говорит, на чьей оно стороне. Контур идёт перед
+    /// спрайтом, спрайт поверх — наружу выходит только бахрома.
+    ///
+    /// <para>
+    /// Заменяет кольцо стороны Issue #177. Кольцо было видимым, но при клетке
+    /// 40 px имело диаметр 98.18 px против 40 px клетки, которую занимает одно
+    /// тело: девять тел в куче превращали карту в наложенные дуги. Контур
+    /// занимает площадь силуэта, поэтому плотность толпы его не ломает, и
+    /// выводится он из альфы спрайта — значит любой будущий пак рас получает
+    /// индикацию без ручной разметки. Спека — docs/design/SIDE_INDICATOR.md.
+    /// </para>
+    /// </summary>
+    private void DrawSidedBody(Vector2 center, string key, BodyRelation relation)
+    {
+        DrawGoblinOutline(center, key, relation);
+        DrawGoblin(center, key);
+    }
+
+    /// <summary>
+    /// Восемь смещённых копий белого силуэта позы в цвете отношения. Смещения,
+    /// цвет и ширина — <see cref="SideOutline"/>: адаптер не решает, как
+    /// выглядит сторона, потому что решение, принятое здесь, принято там, где
+    /// его не проверяет джоб «Pure .NET» (ADR 0011).
+    /// </summary>
+    private void DrawGoblinOutline(Vector2 center, string key, BodyRelation relation)
+    {
+        var color = new Color(SideOutline.Color(relation));
+        var width = ScaleWorld(SideOutline.WidthRef(relation));
+        if (!_goblinSilhouettes.TryGetValue(key, out var silhouette))
+        {
+            // Пак не загрузился: DrawGoblin рисует зелёный кружок-заглушку,
+            // одинаковый для обеих сторон, и обводить нечего. Кольцо в цвете
+            // отношения — минимум, чтобы сторона читалась и здесь. До этой
+            // задачи её рисовал DrawArc безусловно, и терять признак на том
+            // самом пути, ради которого существует счётчик
+            // _fallbackSpriteDraws, было бы регрессией.
+            DrawArc(center, ScaleWorld(9), 0, Mathf.Tau, 16, color, width);
+            return;
+        }
+
+        var rect = ToRect2(CameraView.GoblinDrawRect(
+            new ViewPoint(center.X, center.Y),
+            _tileSize));
+        foreach (var (x, y) in SideOutline.Offsets)
+        {
+            DrawTextureRect(
+                silhouette,
+                new Rect2(rect.Position + new Vector2(x * width, y * width), rect.Size),
+                false,
+                color);
+        }
     }
 
     private void DrawBodyInformationOverlays()
@@ -5379,7 +5462,7 @@ public partial class Main : Node2D
 
     private string RaidLegend() =>
         "BATTLE LEGEND\n" +
-        "teal ring = crew  •  red ring = raider\n" +
+        "teal outline = crew  •  red outline = raider\n" +
         "bar = HP  •  white X = DOWNED\n" +
         "dot: green work, amber combat,\n" +
         "gray downed, pink fled";

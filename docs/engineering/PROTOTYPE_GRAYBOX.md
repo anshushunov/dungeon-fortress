@@ -1676,10 +1676,13 @@ creature has fatigue at least 50 and a bunk is free. Its empty early-economy
 state is expected by the Prototype 1 contract, not a routing failure. The map
 labels it as `QUARTERS • REST`, and selecting it repeats this condition.
 
-During a raid, teal ring outlines are crew and red ring outlines are raiders
-(Issue #177: the filled circles that preceded them were occluded under v2 at
-170 % body scale; they became stroke rings drawn after the sprite so wall
-volume occludes everything together while the cue stays on top). HP bars appear
+During a raid, a teal outline around a body is crew and a red one is a raider;
+the raider outline is the wider of the two, so the rarer thing is the louder
+mark. The outline is derived from the sprite's own alpha, which is what keeps it
+working when a race pack changes (`docs/design/SIDE_INDICATOR.md`). It replaced
+the stroke rings of Issue #177: those were visible, but at 27 reference pixels a
+ring is 98.18 px across against a 40 px cell, so nine bodies in a cluster turned
+the map into overlapping arcs. HP bars appear
 under both. Crew dots show working (green), fighting (amber), fled (pink), or
 downed (gray); a white X is a downed body. The battle legend is in the side
 panel and selected-creature inspection states `ALIVE`, `DOWNED`, or `FLED` with
