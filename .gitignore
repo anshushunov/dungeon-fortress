@@ -8,6 +8,7 @@ secrets/
 CLAUDE.local.md
 .claude/settings.local.json
 .claude/worktrees/
+docs/superpowers/
 
 # .NET and Godot derived files
 **/bin/
