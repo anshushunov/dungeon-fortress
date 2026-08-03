@@ -2,8 +2,8 @@
   "issue": 222,
   "pr": 232,
   "round": 2,
-  "what": "Two mutants review found against the round-1 LegendCompletenessTests, re-run against the round-2 rewrite that scopes both checks to the legend array's tuple captions with comments stripped first.",
-  "checkpointCommit": "a8d43c2abbdc5839040e5481119a4c82adba92f3",
+  "what": "Two mutants review found against the round-1 LegendCompletenessTests, re-run against the round-2 rewrite that scopes both checks to the legend array's tuple captions with comments stripped first. Re-run a second time after the legend was restructured to eight rows (AssertLabelsFit fix), against the final committed state of this round.",
+  "checkpointCommit": "b7660256a377709a91554279b0c22f38dba95f8e",
   "method": "Each mutant was applied to a plain filesystem copy of the worktree outside the repo tree (C:/gamedev/_mut-222, removed afterward), never to a tracked file, so no revert of tracked source was needed.",
   "targetFile": "src/DungeonFortress.Game/Main.cs",
   "mutants": [
@@ -15,19 +15,20 @@
       "new_string": "                     // live subtree (see HudReadabilityTests.AuthoredHud).\n                     // (formerly \"amber=fighting pink=fled\" before the copy update)\n                     (\"dot: blue=idle amber=combat pink=fled green=working gray=downed\", 8, \"#bfdbfe\"),",
       "expected": "State_dot_colors_are_named_in_legend fails (fighting no longer found among parsed captions); CreateLegend_authors_the_expected_number_of_legend_rows stays green (row count unchanged).",
       "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~LegendCompletenessTests\" -v normal",
-      "observed": "\u0412\u0441\u0435\u0433\u043e \u0442\u0435\u0441\u0442\u043e\u0432: 2 \u041f\u0440\u043e\u0439\u0434\u0435\u043d\u043e: 1 \u041d\u0435 \u043f\u0440\u043e\u0439\u0434\u0435\u043d\u043e: 1. State_dot_colors_are_named_in_legend FAIL: Assert.Contains() Failure: Filter not matched in collection. CreateLegend_authors_the_expected_number_of_legend_rows PASS.",
+      "observed": "\u0412\u0441\u0435\u0433\u043e \u0442\u0435\u0441\u0442\u043e\u0432: 2 \u041f\u0440\u043e\u0439\u0434\u0435\u043d\u043e: 1 \u041d\u0435 \u043f\u0440\u043e\u0439\u0434\u0435\u043d\u043e: 1. State_dot_colors_are_named_in_legend FAIL: Assert.Contains() Failure: Filter not matched in collection. Collection dump shows the mutated caption reading \u2018...amber=combat pink=fled...\u2019. CreateLegend_authors_the_expected_number_of_legend_rows PASS (row count still 8).",
       "result": "red as required"
     },
     {
       "id": "b",
       "name": "innocuous_comment_containing_paren_quote_inside_array",
       "reviewClaim": "A benign explanatory comment containing the two characters (\" inside the array literal broke the round-1 row count from 10 to 11 with no behaviour change.",
-      "old_string": "                     (\"light warm block = diggable rock / dark = map edge\", 8, \"#d6d3d1\"),\n                     (\"amber X = dig mark / yellow bar = dig progress\", 8, \"#fcd34d\"),",
-      "new_string": "                     (\"light warm block = diggable rock / dark = map edge\", 8, \"#d6d3d1\"),\n                     // see readSpec(\"legend\") for the row format this array follows\n                     (\"amber X = dig mark / yellow bar = dig progress\", 8, \"#fcd34d\"),",
+      "old_string": "                     (\"light warm block = diggable rock / dark = map edge\", 8, \"#d6d3d1\"),\n                     (\"red X = unreachable / pale tile = new floor / gray dot = loose stone\", 8, \"#fca5a5\"),",
+      "new_string": "                     (\"light warm block = diggable rock / dark = map edge\", 8, \"#d6d3d1\"),\n                     // see readSpec(\"legend\") for the row format this array follows\n                     (\"red X = unreachable / pale tile = new floor / gray dot = loose stone\", 8, \"#fca5a5\"),",
       "expected": "Both tests stay green: the comment is stripped before either check runs, so it cannot be mistaken for a tuple's leading (\" and cannot change the caption count.",
       "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~LegendCompletenessTests\" -v normal",
-      "observed": "\u0412\u0441\u0435\u0433\u043e \u0442\u0435\u0441\u0442\u043e\u0432: 2 \u041f\u0440\u043e\u0439\u0434\u0435\u043d\u043e: 2 \u041d\u0435 \u043f\u0440\u043e\u0439\u0434\u0435\u043d\u043e: 0.",
+      "observed": "\u0412\u0441\u0435\u0433\u043e \u0442\u0435\u0441\u0442\u043e\u0432: 2 \u041f\u0440\u043e\u0439\u0434\u0435\u043d\u043e: 2 \u041d\u0435 \u043f\u0440\u043e\u0439\u0434\u0435\u043d\u043e: 0. Both LegendCompletenessTests facts pass.",
       "result": "green as required"
     }
-  ]
+  ],
+  "note": "Mutant (b)'s insertion point moved from the old 'amber X = dig mark' row (round 1 layout) to 'light warm block / red X = unreachable' (round 2 layout), because that row was folded into the merged LEGEND heading row while fixing the AssertLabelsFit overflow (see evidence/222-crowd-frame.json). The mechanism under test — comment stripping before caption extraction — is identical; only the specific adjacent rows used to host the mutant changed."
 }
