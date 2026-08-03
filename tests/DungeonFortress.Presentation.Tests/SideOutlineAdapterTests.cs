@@ -113,6 +113,26 @@ public sealed class SideOutlineAdapterTests
     }
 
     /// <summary>
+    /// На заглушке спрайта сторона всё равно читается. Когда пак не
+    /// загрузился, обводить нечего, а <c>DrawGoblin</c> рисует один и тот же
+    /// зелёный кружок обеим сторонам; до перехода на контур сторону здесь
+    /// держал безусловный <c>DrawArc</c>. Путь редкий, но не гипотетический —
+    /// ради него существует счётчик <c>_fallbackSpriteDraws</c>.
+    /// </summary>
+    [Fact]
+    public void The_side_is_still_readable_when_a_pose_has_no_sprite()
+    {
+        var body = AdapterSource.Body("DrawGoblinOutline");
+
+        var fallback = AdapterSource.CallsTo(body, "DrawArc");
+        Assert.Single(fallback);
+        Assert.Contains(
+            $"{nameof(SideOutline)}.{nameof(SideOutline.Color)}(",
+            body,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Круг под телом снова означает ровно одно — намерение игрока. Кольцо
     /// выделения радиусом 10 опорных px существовало и раньше, но тонуло рядом
     /// с кольцом стороны радиусом 27; после снятия колец единственная дуга в

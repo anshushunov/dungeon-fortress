@@ -11,6 +11,63 @@ namespace DungeonFortress.Presentation.Tests;
 public sealed class SideOutlineTests
 {
     /// <summary>
+    /// Сколько world-пикселей бахромы должно остаться снаружи тела, чтобы
+    /// игрок её увидел.
+    ///
+    /// <para>
+    /// Это то условие, которое держал <c>SideMarkerVisibilityTests</c> для
+    /// кольца и которое иначе потерялось бы вместе с ним. Режим отказа у
+    /// Issue #177 и у контура один: индикатор есть в коде, а игрок его не
+    /// видит, — меняется только причина. У кольца причиной было перекрытие
+    /// спрайтом, у контура это толщина: копии силуэта рисуются ПОД спрайтом,
+    /// поэтому наружу выходит ровно ширина смещения и ничего больше. Без
+    /// этого пола ширины 0.1 и 0.2 опорных px проходят все остальные
+    /// проверки, а при клетке 40 это бахрома 0.18 world px.
+    /// </para>
+    ///
+    /// <para>
+    /// 1.5 px, а не 1.0: мир рисуется фильтром <c>LinearWithMipmaps</c> (поле
+    /// <c>textureFilter</c> в диагностике кадра), поэтому штрих тоньше
+    /// полутора пикселей усредняется с фоном раньше, чем доходит до игрока.
+    /// Самое узкое место — свой контур при наименьшей поддерживаемой клетке
+    /// 32: <c>1.2 * 32 / 22 = 1.745</c> px, запас над полом 0.245 px. Запас
+    /// маленький намеренно: пол описывает границу видимости, а не удобную
+    /// дистанцию от текущих значений.
+    /// </para>
+    /// </summary>
+    private const double MinimumVisibleFringeWorldPx = 1.5;
+
+    /// <summary>
+    /// Контур каждого отношения остаётся видимым при каждом размере клетки,
+    /// который поддерживает игра: 32, 40 и 48 px (диапазон ADR 0008).
+    ///
+    /// <para>
+    /// Если тест покраснел — сторона перестала читаться, и чинить это надо
+    /// увеличением ширины в <see cref="SideOutline"/>, а не правкой пола
+    /// здесь.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_outline_stays_visible_at_every_supported_tile_size()
+    {
+        foreach (var tileSize in new[] { CameraView.MinimumTileSize, 40, CameraView.MaximumTileSize })
+        {
+            foreach (var relation in Enum.GetValues<BodyRelation>())
+            {
+                var fringePx = SideOutline.WidthRef(relation) *
+                    CameraView.WorldVisualScale(tileSize);
+
+                Assert.True(
+                    fringePx >= MinimumVisibleFringeWorldPx,
+                    $"Tile {tileSize}, relation {relation}: the outline shows " +
+                    $"{fringePx:f2} px of fringe, under the {MinimumVisibleFringeWorldPx:f2} px " +
+                    "floor. The side is in the code and invisible on screen — " +
+                    "the failure mode of Issue #177 with a different cause.");
+            }
+        }
+    }
+
+    /// <summary>
     /// Таблица полна: у каждого отношения есть и цвет, и ширина. Добавленный
     /// член перечисления без строки в таблице роняет этот тест, а не игру.
     /// </summary>

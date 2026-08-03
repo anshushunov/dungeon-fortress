@@ -2146,8 +2146,20 @@ public partial class Main : Node2D
     /// </summary>
     private static ImageTexture BuildSilhouette(Image source)
     {
-        source.Convert(Image.Format.Rgba8);
-        var data = source.GetData();
+        // Своя копия перед конверсией: Convert правит объект на месте, а
+        // GetImage() отдаёт его разделяемым. Что именно разделяемым, доказано
+        // этим же кодом — мип-уровни, созданные на строке выше по загрузке,
+        // пришли в буфер следующего вызова GetImage(). Сегодня конверсия
+        // безвредна (пак уже RGBA8, и она no-op), но первый пак в другом
+        // формате превратил бы её в правку чужого кэшированного ресурса.
+        var working = Image.CreateFromData(
+            source.GetWidth(),
+            source.GetHeight(),
+            source.HasMipmaps(),
+            source.GetFormat(),
+            source.GetData());
+        working.Convert(Image.Format.Rgba8);
+        var data = working.GetData();
         for (var index = 0; index + 3 < data.Length; index += 4)
         {
             data[index] = 255;
@@ -2163,9 +2175,9 @@ public partial class Main : Node2D
         // Побеление проходит по всему буферу, включая мип-уровни: формат у них
         // тот же, и уменьшенные копии силуэта обязаны быть такими же белыми.
         var silhouette = Image.CreateFromData(
-            source.GetWidth(),
-            source.GetHeight(),
-            source.HasMipmaps(),
+            working.GetWidth(),
+            working.GetHeight(),
+            working.HasMipmaps(),
             Image.Format.Rgba8,
             data);
         if (!silhouette.HasMipmaps())
@@ -3689,16 +3701,23 @@ public partial class Main : Node2D
     /// </summary>
     private void DrawGoblinOutline(Vector2 center, string key, BodyRelation relation)
     {
+        var color = new Color(SideOutline.Color(relation));
+        var width = ScaleWorld(SideOutline.WidthRef(relation));
         if (!_goblinSilhouettes.TryGetValue(key, out var silhouette))
         {
+            // Пак не загрузился: DrawGoblin рисует зелёный кружок-заглушку,
+            // одинаковый для обеих сторон, и обводить нечего. Кольцо в цвете
+            // отношения — минимум, чтобы сторона читалась и здесь. До этой
+            // задачи её рисовал DrawArc безусловно, и терять признак на том
+            // самом пути, ради которого существует счётчик
+            // _fallbackSpriteDraws, было бы регрессией.
+            DrawArc(center, ScaleWorld(9), 0, Mathf.Tau, 16, color, width);
             return;
         }
 
         var rect = ToRect2(CameraView.GoblinDrawRect(
             new ViewPoint(center.X, center.Y),
             _tileSize));
-        var color = new Color(SideOutline.Color(relation));
-        var width = ScaleWorld(SideOutline.WidthRef(relation));
         foreach (var (x, y) in SideOutline.Offsets)
         {
             DrawTextureRect(

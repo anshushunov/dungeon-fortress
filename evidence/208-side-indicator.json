@@ -13,6 +13,13 @@
     "frameSize": "1280x720"
   },
   "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture prepared -ScreenshotTicks 1670 -ScreenshotPath \"side/<before|after>.png\" -TileSize 40 -CameraZoom 2.0 -CameraPosition \"900,500\" -UiScale 1.0 -FrameSize \"1280x720\" -TemporaryRoot <короткий каталог вне worktree>",
+  "frames": {
+    "before": "evidence/208-before.png",
+    "after": "evidence/208-after.png",
+    "crop": [545, 145, 875, 545],
+    "cropNote": "Область боя из кадра 1280x720, 1:1 без масштабирования; палитра сведена к 128 цветам ради веса — 19.5 и 18.4 КиБ. Полные кадры не коммитятся: 211 и 227 КиБ при том, что предмет проверки целиком лежит в этой области.",
+    "why": "Критерий готовности #208 требует кадры в PR. Решение принято по playtest-наблюдению «круги загромождают экран», то есть кадр — предмет проверки, а не иллюстрация: по тексту нельзя проверить, что 98.18 px наложенных дуг сменились бахромой по силуэту."
+  },
   "why": {
     "ringRadiusRef": 27,
     "worldVisualScale": "tile / 22",
