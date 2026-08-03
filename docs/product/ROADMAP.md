@@ -954,9 +954,9 @@ B разделён 2026-07-30: при едином B социальная и м�
 |---|---|---|
 | [#201](https://github.com/anshushunov/dungeon-fortress/issues/201) существо без работы уходит с места боя — **gameplay-слайс** | основная сессия | `src/DungeonFortress.Simulation/**`, контракт, evidence |
 | [#210](https://github.com/anshushunov/dungeon-fortress/issues/210) вертикаль 3 #77: удар читается на экране — **фича блока** | внешняя дорожка, `tier:deep` | `Main.cs`, `src/DungeonFortress.Presentation/**` |
-| [#202](https://github.com/anshushunov/dungeon-fortress/issues/202) команда worktree в двух местах | `tier:fast` | `docs/engineering/HOW_WE_WORK.md` |
+| ✅ [#202](https://github.com/anshushunov/dungeon-fortress/issues/202) команда worktree в двух местах | `tier:fast` | смержена PR #213, коммит `cd6056f` |
 | [#196](https://github.com/anshushunov/dungeon-fortress/issues/196) расхождение тела PR с деревом ловится прогоном | `tier:standard` | новый скрипт, `EVIDENCE_WORKFLOW.md` |
-| [#207](https://github.com/anshushunov/dungeon-fortress/issues/207) `test-take-task.ps1` в стадию `scripts` | `tier:fast` | `scripts/verify.ps1`, `test-verify-stages.ps1` |
+| ✅ [#207](https://github.com/anshushunov/dungeon-fortress/issues/207) `test-take-task.ps1` в стадию `scripts` | `tier:fast` | смержена PR #214, коммит `fe08076` |
 | [#183](https://github.com/anshushunov/dungeon-fortress/issues/183) ослабление ADR держится на поимённом списке | `tier:standard`, после этого PR | `ROADMAP.md`, преамбула «Темпа разработки» |
 | [#159](https://github.com/anshushunov/dungeon-fortress/issues/159) реестр долга: срок годности записи | `tier:standard`, после этого PR | `DEBT_LEDGER.md`, `coord.md` |
 
@@ -971,6 +971,14 @@ B разделён 2026-07-30: при едином B социальная и м�
 **Что владелец получит на выходе блока:** после боя группа расходится, а не
 зависает на месте драки; удар видно на экране — поза замаха, вспышка, число
 урона.
+
+**Смержено блоком на 2026-08-03** (состояние получено `gh issue view <N> --json
+state` и `git log --oneline -3 origin/main`): `cd6056f` —
+[#202](https://github.com/anshushunov/dungeon-fortress/issues/202), команда
+worktree осталась одна (PR #213, review ЗЕЛЁНЫЙ С ЗАМЕЧАНИЕМ); `fe08076` —
+[#207](https://github.com/anshushunov/dungeon-fortress/issues/207),
+`test-take-task.ps1` подключён в стадию `scripts` (PR #214, review ЗЕЛЁНЫЙ). Обе
+Issue `CLOSED`.
 
 **Закрыто бухгалтерией сессии 2026-08-03:**
 [#130](https://github.com/anshushunov/dungeon-fortress/issues/130) (merge PR #205,
