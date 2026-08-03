@@ -542,6 +542,92 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
         output.WriteLine(diagnostics.ToString());
     }
 
+    /// <summary>
+    /// Criterion 2 of Issue #228 as a check rather than a paragraph: going off
+    /// duty takes nobody out of the matching.
+    ///
+    /// <para>The contract of section 4.1 says «существо на пути к покоям доступно
+    /// работе на каждом тике». Literally that is false and was false before Issue
+    /// #201 too — on 566 of 3591 jobless quarters ticks the matching did not see
+    /// the creature — so the check states the thing that is actually true and that
+    /// the sentence was reaching for: <b>every tick the matching did not see is
+    /// explained by a candidate condition of <c>MatchJobs</c> that predates the
+    /// off-duty rule</b>. The conditions are read off the snapshot, not off the
+    /// code: a reserved meal, a muster, a fight or a flight, a collapse. What is
+    /// left over is the tick a job ended after the matching had already run, which
+    /// is <see cref="Cause.JobEnded"/> and is asserted to be exactly that many
+    /// rather than merely small.</para>
+    ///
+    /// <para>If the off-duty rule ever starts holding a creature back — a
+    /// reservation, a mode, a job — the leftover stops matching
+    /// <see cref="Cause.JobEnded"/> and this reddens.</para>
+    /// </summary>
+    [Fact]
+    public void Going_off_duty_never_takes_a_creature_out_of_the_matching()
+    {
+        var jobless = Matrix.Sum(party => party.JoblessTicks);
+        var unexplained = Matrix.Sum(party =>
+            party.MissedThePool.GetValueOrDefault("no candidate condition explains it"));
+        var jobEnded = Matrix.Sum(party => party.Total(Cause.JobEnded));
+
+        Assert.True(
+            jobless >= 500,
+            $"Only {jobless} jobless creature-tick(s) of the cohort were spent in the quarters " +
+            $"over the matrix, which is too few for the claim below to have been sampled." +
+            $"{Environment.NewLine}{Detail()}");
+        Assert.True(
+            unexplained == jobEnded,
+            $"{unexplained} tick(s) on which the matching did not see an idle ex-combatant in the " +
+            "quarters are explained by no candidate condition of MatchJobs, against " +
+            $"{jobEnded} tick(s) on which a job ended after the matching had run. Going off duty " +
+            $"is holding somebody back from work.{Environment.NewLine}{Detail()}");
+    }
+
+    /// <summary>
+    /// Point 3 of the scope of Issue #228 as a check: the time between work
+    /// appearing that a creature standing in the quarters could take and that
+    /// creature taking work.
+    ///
+    /// <para>The first assertion is what keeps the number a measurement. Run
+    /// lengths are accumulated per (creature, job); <c>OfferTickTotal</c> is a
+    /// plain tally of the same (creature, job, tick) triples that knows nothing
+    /// about runs. A length that stopped being counted — replaced by a constant,
+    /// by the previous run's value, by anything — leaves the two disagreeing.</para>
+    ///
+    /// <para>The second is the claim itself, and it is a ceiling rather than a
+    /// corridor because the conclusion drawn from it is one-sided: whatever holds
+    /// the group in the quarters, it is not that the matching stopped offering. A
+    /// response of tens of ticks would make that conclusion false. Five is chosen
+    /// with room over the measured maximum of three and is named as a choice.</para>
+    /// </summary>
+    [Fact]
+    public void The_response_to_work_appearing_is_measured_and_short()
+    {
+        var runs = Matrix.SelectMany(party => party.OfferedRuns).ToArray();
+        var counted = Matrix.Sum(party => party.OfferTickTotal);
+
+        Assert.True(
+            runs.Sum(run => run.Ticks) == counted,
+            $"The runs add up to {runs.Sum(run => run.Ticks)} tick(s) of work waiting for an idle " +
+            $"ex-combatant and the independent tally of the same ticks says {counted}. A run " +
+            $"length has stopped being measured.{Environment.NewLine}{Detail()}");
+
+        var answered = runs
+            .Where(run => run.Ending.StartsWith("took", StringComparison.Ordinal))
+            .ToArray();
+        Assert.True(
+            answered.Length >= 20,
+            $"Only {answered.Length} stretch(es) of work waiting for an idle ex-combatant in the " +
+            "quarters ended with that creature taking work, which is too few for a maximum over " +
+            $"them to mean anything.{Environment.NewLine}{Detail()}");
+        Assert.True(
+            answered.Max(run => run.Ticks) <= 5,
+            $"Work that an ex-combatant standing in the quarters could have taken waited " +
+            $"{answered.Max(run => run.Ticks)} tick(s) for it, where five is the ceiling. Above it " +
+            "the conclusion of Issue #228 — that the group is held by refused steps and not by a " +
+            $"matching that stopped offering — has to be taken again.{Environment.NewLine}{Detail()}");
+    }
+
     private static IReadOnlyList<PartyMeasurement> Matrix => MatrixMeasurements.Value;
 
     private static readonly Lazy<IReadOnlyList<PartyMeasurement>> MatrixMeasurements =
@@ -803,6 +889,7 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
         private readonly Dictionary<int, int> _blockedStreak = [];
         private readonly Dictionary<int, int> _longestBlockedStreak = [];
         private int _blockedTowardsAnOffDutyTile;
+        private int _offerTickTotal;
         private int _joblessTicks;
         private int _joblessAndInThePool;
 
@@ -1016,6 +1103,13 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
 
             foreach (var (jobId, kind) in open)
             {
+                // Counted here as well as inside the run, and on purpose: this is
+                // a plain tally of (creature, job, tick) triples that knows
+                // nothing about runs. A run whose length stopped being measured —
+                // a constant, a copy of the previous one, an off-by-one — parts
+                // company with it, and The_response_to_work_appearing_is_measured
+                // is where that shows.
+                _offerTickTotal++;
                 var key = (creature.Id, jobId);
                 _offered[key] = _offered.TryGetValue(key, out var run)
                     ? run with { Ticks = run.Ticks + 1, LastReason = reason }
@@ -1147,6 +1241,7 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
                 _offerAnswered,
                 _offerUnanswered,
                 [.. _firstStepDelays],
+                _offerTickTotal,
                 _joblessTicks,
                 _joblessAndInThePool,
                 new Dictionary<string, int>(_missedThePool),
@@ -1452,6 +1547,8 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
         public IReadOnlyList<int> FirstStepDelays =>
             [.. Windows.SelectMany(window => window.FirstStepDelays)];
 
+        public int OfferTickTotal => Windows.Sum(window => window.OfferTickTotal);
+
         public int JoblessTicks => Windows.Sum(window => window.JoblessTicks);
 
         public int JoblessAndInThePool => Windows.Sum(window => window.JoblessAndInThePool);
@@ -1522,6 +1619,7 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
         int OfferAnswered,
         int OfferUnanswered,
         IReadOnlyList<int> FirstStepDelays,
+        int OfferTickTotal,
         int JoblessTicks,
         int JoblessAndInThePool,
         IReadOnlyDictionary<string, int> MissedThePool,
