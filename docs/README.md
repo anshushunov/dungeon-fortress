@@ -54,6 +54,10 @@ authentication и точный token usage handoff описаны в
 Правила работы Codex, Claude Code и других агентов находятся в
 `engineering/MULTI_AGENT_WORKFLOW.md`.
 
+Правила входа агента, которые `take-task.ps1` печатает в начале каждого брифа, —
+`engineering/AGENT_ENTRY.md`: изоляция, партиция, запрет следов и формат отчёта
+телом PR.
+
 Находки независимого review, у которых нет наблюдаемого последствия ни для
 игрока, ни для запускаемой проверки, лежат в
 [`engineering/DEBT_LEDGER.md`](engineering/DEBT_LEDGER.md). Там же записано, при
