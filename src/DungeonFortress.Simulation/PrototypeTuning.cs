@@ -304,6 +304,28 @@ public static class PrototypeTuning
     public const int ExhaustedSpeedMultiplier = 2;
     public const int AffinitySpeedDenominator = 4;
 
+    // How long a creature with nothing to do stands where it is before it walks
+    // off to the quarters (Issue #201). The delay exists so that the gap between
+    // two pieces of work does not send anybody across the dungeon and back: a
+    // creature that is idle for a tick or two is between jobs, not off duty.
+    //
+    // Eight is shorter than the shortest piece of work in the prototype — a
+    // harvest is HarvestTicks = 12 — so leaving never competes with work that was
+    // about to arrive; and it is long enough that the one-tick gaps the matching
+    // produces every tick do not count. It is deliberately not derived from
+    // WaveIntervalTicks: this is a rule about a creature's own idleness, not about
+    // the rhythm of waves.
+    public const int OffDutyDelayTicks = 8;
+
+    // Ticks of extra delay per creature id before it leaves the ground a fight
+    // was fought on. A group that stands up all on the same tick walks off as a
+    // column and reproduces in the corridor exactly the jam it just left: with
+    // no stagger the matrix's "a way round reached / a yield could have cleared"
+    // ratio fell from 1.49 to 1.43, below the floor Issue #186 named its
+    // mechanism on. Leaving one at a time is what a group does anyway, and by id
+    // it stays deterministic.
+    public const int OffDutyStaggerTicks = 3;
+
     // Digging is deliberately slower than a harvest and faster than a cook batch:
     // the player must be able to watch a single tile finish inside one 4x pass.
     public const int DigTicks = 36;
