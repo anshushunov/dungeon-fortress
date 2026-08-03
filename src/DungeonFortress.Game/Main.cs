@@ -3573,14 +3573,15 @@ public partial class Main : Node2D
         // can still occlude everything together, yet the ring stays visible on
         // top: GoblinDrawWidth/2 ≈ 43.8 px at tile 40; ScaleWorld(27) ≈ 49.1 px
         // radius leaves a clear gap around every pose in the pack's opaque
-        // envelope (columns 26..268, rows 20..187).
+        // envelope (columns 26..268, rows 20..187). The radius and the colour
+        // are SideMarker's, so the presentation test reads the same values.
         DrawArc(
             center,
-            ScaleWorld(27),
+            ScaleWorld(SideMarker.RingRadiusRef),
             0,
             Mathf.Tau,
             24,
-            new Color("#14b8a6"),
+            new Color(SideMarker.CrewRingColor),
             ScaleWorld(2));
         if (creature.Carrying is ResourceKind.Stone)
         {
@@ -3614,11 +3615,11 @@ public partial class Main : Node2D
         // sprite so it stays visible above wall volume too.
         DrawArc(
             center,
-            ScaleWorld(27),
+            ScaleWorld(SideMarker.RingRadiusRef),
             0,
             Mathf.Tau,
             24,
-            new Color("#dc2626"),
+            new Color(SideMarker.RaiderRingColor),
             ScaleWorld(2));
     }
 
