@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "captures": [
+    {
+      "name": "walk",
+      "fixture": "prepared",
+      "screenshotTicks": 288,
+      "tileSize": 40,
+      "cameraZoom": 2.0,
+      "cameraPosition": "400,300",
+      "uiScale": 1.0,
+      "frameSize": "1280x720"
+    },
+    {
+      "name": "blow",
+      "fixture": "prepared",
+      "screenshotTicks": 1302,
+      "tileSize": 40,
+      "cameraZoom": 2.0,
+      "cameraPosition": "1040,520",
+      "uiScale": 1.0,
+      "frameSize": "1280x720"
+    }
+  ]
+}
