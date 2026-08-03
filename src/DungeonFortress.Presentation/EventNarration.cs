@@ -89,7 +89,9 @@ public static class EventNarration
             "chosen_ration" => "ate on the way to the muster point.",
             "chosen_traffic_yield" =>
                 $"stepped aside{where} for #{Number(details, "beneficiaryId", "?")}.",
-            "chosen_off_duty" => $"went off duty to the quarters{where}: no work left.",
+            "chosen_off_duty" =>
+                $"went off to the quarters{where} after wave {Number(details, "wave", "?")}: " +
+                "no work left.",
 
             // Waiting.
             "waiting_no_job_available" => "is standing about: nothing to do.",

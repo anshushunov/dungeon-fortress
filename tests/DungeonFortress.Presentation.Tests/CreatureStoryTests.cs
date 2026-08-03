@@ -77,6 +77,12 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
         "chosen_highest_priority", "chosen_bottleneck", "chosen_affinity_match", "chosen_nearest",
         "chosen_only_option", "chosen_tie_break", "chosen_need_hunger", "chosen_need_fatigue",
         "chosen_muster", "chosen_ration", "chosen_traffic_yield",
+        // Issue #201. Going off duty to the quarters is routine on purpose: it
+        // happens to most of the crew after most fights, and ranking it above
+        // routine would push the turning points a panel exists for — a nerve
+        // that broke, a wound, a refusal by memory — off the four lines with the
+        // most ordinary thing a creature does.
+        "chosen_off_duty",
         "waiting_no_job_available", "waiting_input_missing", "waiting_storage_full",
         "waiting_stock_sufficient", "waiting_crop_not_ripe", "waiting_blocked_by_other",
         "waiting_no_designation", "waiting_no_blueprint", "waiting_no_stockpile",
@@ -740,8 +746,16 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
         {
             var mine = state.Events.Where(@event => @event.CreatureId == creature.Id).ToArray();
             var lines = Body(HudText.CreatureStory(state, creature.Id));
+            // One line, one entry. `Where` here would count a line twice when two
+            // entries of the same kind share a tick and render to the same
+            // sentence — `refused_rule_reserve` carries no details to tell such a
+            // pair apart, and creature #2 of `baseline` has exactly that pair on
+            // t2399 once Issue #201 shifts the party's course. That is an
+            // ambiguity of the match, not a second line on the panel, and the
+            // claim below — no two lines are the same kind of decision — is about
+            // lines.
             var kinds = lines
-                .SelectMany(line => mine.Where(@event => Renders(@event, line)))
+                .Select(line => mine.First(@event => Renders(@event, line)))
                 .Select(@event => @event.ReasonCode)
                 .ToArray();
 

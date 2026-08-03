@@ -2515,11 +2515,28 @@ public sealed class PrototypeWorld
             RecordDecision(
                 creature,
                 "chosen_off_duty",
+                // The tile and the wave it followed — no tick count. Two things
+                // are being got right here, and both were measured rather than
+                // reasoned.
+                //
+                // A varying `idleTicks` would make every departure its own event
+                // even when nothing else about it differed; the story panel shows
+                // one line per **kind** of decision, and the panel would fill with
+                // one sentence.
+                //
+                // The wave number is what keeps two departures of the same
+                // creature distinguishable **as sentences**. Without it both read
+                // identically, and a reader — including
+                // A_decision_a_creature_took_again_and_again_takes_one_line_of_its_story,
+                // which matches journal entries to rendered lines by their text —
+                // cannot tell which of them a line is. It is also the honest
+                // answer to "when": a creature goes off duty after a fight, so the
+                // fight is the natural clock for it.
                 new Dictionary<string, int>
                 {
                     ["targetX"] = target.X,
                     ["targetY"] = target.Y,
-                    ["idleTicks"] = creature.IdleTicks,
+                    ["wave"] = _waves.LastOrDefault(wave => wave.Outcome is not null)?.Number ?? 0,
                 },
                 target: target);
         }
