@@ -470,6 +470,13 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
             $"tookTheJob={Matrix.Sum(party => party.OfferAnswered)} " +
             $"neverTook={Matrix.Sum(party => party.OfferUnanswered)} " +
             $"maxFirstStepDelay={Matrix.SelectMany(party => party.FirstStepDelays).DefaultIfEmpty(0).Max()}");
+        var anyWork = all.Where(run => run.Ending.StartsWith("took", StringComparison.Ordinal)).ToArray();
+        report.AppendLine(CultureInfo.InvariantCulture,
+            $"MATRIX theResponseToAnyWork runs={anyWork.Length} " +
+            $"max={(anyWork.Length == 0 ? 0 : anyWork.Max(run => run.Ticks))} " +
+            $"mean={(anyWork.Length == 0 ? 0 : anyWork.Average(run => run.Ticks)):F2} " +
+            $"histogram=[{string.Join(",", anyWork.GroupBy(run => run.Ticks).OrderBy(group => group.Key).Select(group => $"{group.Key}:{group.Count()}"))}]");
+
         var answered = all.Where(run => run.Ending == "took this very job").ToArray();
         report.AppendLine(CultureInfo.InvariantCulture,
             $"MATRIX theResponseItself runs={answered.Length} " +
