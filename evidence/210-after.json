@@ -1,7 +1,20 @@
 {
   "issue": 210,
   "checkpoint": 3,
-  "what": "Кадр «после» той же сцены боя, что и evidence/210-before.json: одна и та же партия, тот же тик, те же параметры кадра. Отличается только код представления.",
+  "what": "Кадры «после» тех же сцен боя, что и evidence/210-before.json: одна и та же партия, те же тики, те же параметры кадра. Отличается только код представления.",
+  "pairs": [
+    {
+      "id": "1302",
+      "role": "главная пара критерия 1 — «кто кого ударил»",
+      "addedInRound": 2,
+      "why": "Круг 1 показывал только пару 1318, где получатель стоит под двумя другими телами и потому невидим. Независимый review назвал это блокирующей находкой Ф1 и нашёл несгруженную сцену; она проверена и снята здесь заново обеими сборками."
+    },
+    {
+      "id": "1318",
+      "role": "вторая пара — различие исходов Hit и Downed в одном кадре",
+      "addedInRound": 1
+    }
+  ],
   "scene": {
     "fixture": "prepared",
     "seed": 20260726,
@@ -19,6 +32,40 @@
     "after": "evidence/210-after.png",
     "crop": [230, 150, 660, 560],
     "cropNote": "Область боя из кадра 1280x720, 1:1 без масштабирования; палитра сведена к 128 цветам ради веса — 26.6 и 31.4 КиБ. Обрезка тем же способом, что в PR #209."
+  },
+  "pair1302": {
+    "what": "Несгруженная сцена: ровно один удар, бьющий один на клетке, получатель один на клетке. Здесь критерий 1 читается кадром, а не описанием.",
+    "fixture": "prepared",
+    "seed": 20260726,
+    "tick": 1302,
+    "tickDrawn": 1301,
+    "checksum": "981c28ec641774f3eb7f2f1c6aacbaf7324759cdc97d59dbe1bd0c6270a429dc",
+    "blow": {
+      "attacker": "Смола (crew 3) одна на клетке 26,12",
+      "target": "рейдер 0 один на клетке 26,13",
+      "damage": 3,
+      "outcome": "Hit",
+      "evidence": "Recorded (combat_attack, единственное боевое событие тика 1301)"
+    },
+    "sceneCommand": "dotnet tests/DungeonFortress.Scenarios/bin/Release/net8.0/DungeonFortress.Scenarios.dll --prototype --commands scenarios/prototype1/prepared.commands.v2.json --ticks 1302 --snapshot <out>/p-1302.json",
+    "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -GodotPath <godot-console> -Fixture prepared -ScreenshotTicks 1302 -ScreenshotPath \"210/<before|after>-1302.png\" -TileSize 40 -CameraZoom 2.0 -CameraPosition \"1040,520\" -UiScale 1.0 -FrameSize \"1280x720\" -TemporaryRoot <короткий каталог вне worktree>",
+    "beforeIsBuiltFrom": "origin/main da5039600c1e59f7ed212c11438b1d8b6764c452, отдельный worktree, снят той же командой и удалён после съёмки",
+    "frames": {
+      "before": "evidence/210-before-1302.png",
+      "after": "evidence/210-after-1302.png",
+      "crop": [350, 200, 640, 490],
+      "cropNote": "Область выбрана по фактической разнице двух кадров, а не на глаз: bbox изменившихся пикселей — [403,245,575,438], 17269 пикселей из 921600. Обрезка с запасом вокруг него, 1:1, палитра 128 цветов — 9.5 и 13.3 КиБ.",
+      "diffCommand": "python: попиксельное сравнение .artifacts/210/after-1302.png и .artifacts/210/before-1302.png, вывод bbox различий"
+    },
+    "whatChangesBetweenTheTwoFrames": [
+      "рейдер 0 меняет позу combat на flinch — тело откинуто, видно целиком, ничем не закрыто",
+      "по силуэту рейдера идёт вспышка: тело светится бледным на весь свой контур",
+      "над рейдером стоит янтарная -3 — цвет «рейдер потерял HP»",
+      "Смола (crew 3) меняет позу combat на windup",
+      "от Смолы к рейдеру идёт вертикальный янтарный штрих направления"
+    ],
+    "engine": { "engineErrorCount": 0, "fallbackSpriteDraws": 0 },
+    "checksumIsUnchanged": "Обе сборки — до изменения и после — печатают один checksum кадра 981c28ec641774f3eb7f2f1c6aacbaf7324759cdc97d59dbe1bd0c6270a429dc."
   },
   "checksumIsUnchanged": {
     "before": "81ea5502d82ad300404b0fdc56a5ebf4cee8562996068f965771016b8e83fb12",
@@ -48,6 +95,7 @@
     "readBackFromTheFrame": "Два числа стоят рядом над одним телом: -5 янтарным и -2 белым. Янтарное значит «рейдер потерял HP», белое — «этим ударом его положили». Оба бьющих на кадре в позе замаха, оба стоят на своих клетках и различимы; штрихи идут от них к цели."
   },
   "limitOfThisScene": {
+    "roundTwoNote": "Это ограничение относится к паре 1318 и осталось в силе. В круге 1 оно было единственной парой, и review справедливо назвал это блокирующим: сцену выбрал автор, а критерий требует показать кадром. Пара 1302 выше закрывает критерий; пара 1318 остаётся ради того, ради чего она и снималась, — различия исходов Hit и Downed в одном кадре.",
     "what": "Поза flinch на этом кадре не видна, и это свойство сцены, а не эффекта.",
     "why": "Получатель — рейдер 1 на клетке 26,12, где кроме него стоят рейдеры 2 и 3 и существо 3. Порядок Y-сортировки (WorldRenderOrder: Y, затем вид, затем id) рисует рейдера 1 раньше рейдеров 2 и 3, и его спрайт закрыт целиком. Именно поэтому вспышка, число и штрих вынесены выше depth-прохода — иначе они исчезли бы вместе с телом. Позы windup у обоих бьющих видны: они стоят на своих клетках по одному.",
     "poseIsProvenSeparately": "BlowReadoutTests.The_striker_winds_up_and_the_target_flinches — на том же самом тике, без движка."
@@ -65,6 +113,19 @@
   },
   "presentationTests": {
     "command": "dotnet test tests/DungeonFortress.Presentation.Tests",
-    "result": "пройдено 560, не пройдено 0"
+    "result": "пройдено 560, не пройдено 0 (на момент рубежа 3; на финальном состоянии — 561)"
+  },
+  "newTestCount": {
+    "claimedInRoundOne": 30,
+    "actual": 27,
+    "correction": "Число «30» в теле PR круга 1 не воспроизводилось — находка Ф2 review. 561 на ветке минус 534 на da50396 = 27, и столько же атрибутов в четырёх новых файлах.",
+    "command": "for f in tests/DungeonFortress.Presentation.Tests/Blow*.cs; do rg -c '^\\s*\\[(Fact|Theory)\\]' $f; done",
+    "byFile": {
+      "BlowAdapterTests.cs": 6,
+      "BlowEffectsTests.cs": 8,
+      "BlowJournalSourceTests.cs": 1,
+      "BlowReadoutTests.cs": 12
+    },
+    "inlineData": 0
   }
 }
