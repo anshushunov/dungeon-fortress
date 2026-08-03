@@ -319,11 +319,16 @@ public static class PrototypeTuning
 
     // Ticks of extra delay per creature id before it leaves the ground a fight
     // was fought on. A group that stands up all on the same tick walks off as a
-    // column and reproduces in the corridor exactly the jam it just left: with
-    // no stagger the matrix's "a way round reached / a yield could have cleared"
-    // ratio fell from 1.49 to 1.43, below the floor Issue #186 named its
-    // mechanism on. Leaving one at a time is what a group does anyway, and by id
-    // it stays deterministic.
+    // column and reproduces in the corridor exactly the jam it just left.
+    //
+    // The quantity is the one `Walking_round_reaches_more_of_the_clinch_than_a_
+    // yield_could` asserts — detourWithABody / yieldCouldClear, floor 1.5 — and
+    // the three readings are: with the stagger 937 / 605 = 1.55; without it
+    // 916 / 639 = 1.43, under the floor, and the test goes red; on origin/main,
+    // before this rule existed, 639 / 344 = 1.86.
+    //
+    // Leaving one at a time is what a group does anyway, and by id it stays
+    // deterministic.
     public const int OffDutyStaggerTicks = 3;
 
     // Digging is deliberately slower than a harvest and faster than a cook batch:

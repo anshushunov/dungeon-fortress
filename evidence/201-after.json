@@ -9,8 +9,18 @@
     "howObtained": "git merge-base HEAD origin/main at the time of measurement"
   },
   "standingStill": {
-    "before": { "cohortTicks": 3780, "standingStill": 1989, "idleAndStill": 1121, "windows": 13 },
-    "after": { "cohortTicks": 4020, "standingStill": 1605, "idleAndStill": 688, "windows": 16 },
+    "before": {
+      "cohortTicks": 3780,
+      "standingStill": 1989,
+      "idleAndStill": 1121,
+      "windows": 13
+    },
+    "after": {
+      "cohortTicks": 4020,
+      "standingStill": 1605,
+      "idleAndStill": 688,
+      "windows": 16
+    },
     "share": {
       "before": "1121 / 3780 = 29.7 %",
       "after": "688 / 4020 = 17.1 %",
@@ -18,18 +28,38 @@
     }
   },
   "howLongTheLastOneTakes": {
-    "before": { "maxDispersalDelay": 60 },
-    "after": { "maxDispersalDelay": 33 },
+    "before": {
+      "maxDispersalDelay": 60
+    },
+    "after": {
+      "maxDispersalDelay": 33
+    },
     "meaning": "ticks between the end of a wave and the first tick on which the slowest member of the cohort stands somewhere else; 60 is the whole window, i.e. it never left"
   },
   "whatTheStillOnesWereDoing": {
-    "before": { "Waiting": 1121, "waiting_stock_sufficient": 850, "refused_zone_unreachable": 232, "waiting_blocked_by_other": 18 },
-    "after": { "Waiting": 688, "waiting_stock_sufficient": 479, "refused_zone_unreachable": 159, "waiting_blocked_by_other": 22 }
+    "before": {
+      "Waiting": 1121,
+      "waiting_stock_sufficient": 850,
+      "refused_zone_unreachable": 232,
+      "waiting_blocked_by_other": 18
+    },
+    "after": {
+      "Waiting": 688,
+      "waiting_stock_sufficient": 479,
+      "refused_zone_unreachable": 159,
+      "waiting_blocked_by_other": 22
+    }
   },
   "thePriceNamed": {
-    "blockedStepsPerWindow": { "before": "782 / 13 = 60.2", "after": "1201 / 16 = 75.1" },
+    "blockedStepsPerWindow": {
+      "before": "782 / 13 = 60.2",
+      "after": "1201 / 16 = 75.1"
+    },
     "why": "a group that stands still is never refused a step; a group that walks is. The extra refusals are the jam of Issue #76, which the owner left on slice 6 — this rule does not fix it and does not claim to.",
-    "clinchRatio": { "before": 1.45, "after": 2.12 }
+    "clinchRatio": {
+      "before": 1.45,
+      "after": 2.12
+    }
   },
   "twoDesignDecisionsMadeByRedTests": {
     "bunksExcluded": "Without the exclusion 12 simulation tests failed at once, among them Rest_jobs_are_personal_start_at_fifty_and_preempt_only_above_seventy_five and A_party_that_wins_its_fights_does_not_end_it_starving: idle bodies parked on the bunks and Move refuses a step onto an occupied tile.",
@@ -38,5 +68,26 @@
   "tests": {
     "command": "dotnet test tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj -v q",
     "result": "305/305 passed (285 before this branch, 20 added by PrototypeOffDutyTests)"
+  },
+  "correctedByReviewOfPR217": {
+    "whatWasWrong": "Three claims of the first round did not survive independent review and are corrected here rather than left standing.",
+    "ratioOfDetourToYield": {
+      "claimed": "fell from 1.49 to 1.43 without the stagger",
+      "measured": {
+        "withStagger": "detourWithABody 937 / yieldCouldClear 605 = 1.55",
+        "withoutStagger": "916 / 639 = 1.43",
+        "onOriginMain": "639 / 344 = 1.86"
+      },
+      "why": "1.49 is blockedRatio of the MATRIX line, a different quantity. The claim was self-refuting: the floor is 1.5, so at 1.49 the test would have been red on the branch itself."
+    },
+    "twelveRedTests": {
+      "claimed": "without excluding bunks 12 simulation tests fail",
+      "measured": "3 of 305 on the shipped rule (Going_off_duty_never_takes_a_bunk on three baseline seeds); the 12 were measured on the first version of the rule, whose trigger was any idleness",
+      "why": "the contract and this file presented a number from a discarded version as current"
+    },
+    "preparedFires": {
+      "claimed": "almost never fires on prepared",
+      "measured": "departures=0 on all three seeds"
+    }
   }
 }

@@ -2524,14 +2524,19 @@ public sealed class PrototypeWorld
                 // one line per **kind** of decision, and the panel would fill with
                 // one sentence.
                 //
-                // The wave number is what keeps two departures of the same
-                // creature distinguishable **as sentences**. Without it both read
-                // identically, and a reader — including
-                // A_decision_a_creature_took_again_and_again_takes_one_line_of_its_story,
-                // which matches journal entries to rendered lines by their text —
-                // cannot tell which of them a line is. It is also the honest
-                // answer to "when": a creature goes off duty after a fight, so the
-                // fight is the natural clock for it.
+                // The wave number answers "after which fight", which is the
+                // honest clock for this decision: a creature goes off duty after
+                // a fight, not after a tick count.
+                //
+                // What it does **not** do is make two departures of one creature
+                // distinguishable as sentences — an earlier version of this
+                // comment claimed that, and independent review of PR #217
+                // disproved it by measurement: creatures #3, #5 and #7 of
+                // `baseline` each leave twice while wave 1 is still the last
+                // resolved one, so both entries carry wave=1 and render word for
+                // word alike. What tells them apart on the panel is the tick
+                // prefix of the line, and nothing here needs them told apart —
+                // the story panel keeps one entry per kind of decision.
                 new Dictionary<string, int>
                 {
                     ["targetX"] = target.X,

@@ -124,8 +124,9 @@ public sealed class PrototypeOffDutyTests(ITestOutputHelper output)
     /// The assertion above only means something while the rule fires somewhere,
     /// and "somewhere" is the matrix rather than every cell of it.
     ///
-    /// <para>It is deliberately not per fixture: on <c>prepared</c> the rule
-    /// almost never fires, and that is correct behaviour rather than a gap. That
+    /// <para>It is deliberately not per fixture: on <c>prepared</c> the rule fires
+    /// <b>not once</b> — `departures=0` on all three seeds, measured, not
+    /// estimated — and that is correct behaviour rather than a gap. That
     /// fixture paints a Watch zone and raises the Watch priority to 3, so when a
     /// wave ends there is standing work for everybody — the matching hands it out
     /// and nobody is off duty. The whole rule is «when there is no work», and on

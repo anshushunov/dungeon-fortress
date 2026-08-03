@@ -107,9 +107,28 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
 
     /// <summary>Whether this line of the panel is this entry of the journal.</summary>
     private static bool Renders(PrototypeEvent @event, string line) =>
-        line.StartsWith(
-            string.Create(CultureInfo.InvariantCulture, $"t{@event.FirstTick}"),
-            StringComparison.Ordinal) &&
+        // The tick prefix ends at a separator, and that is load-bearing rather
+        // than tidy: without it `"t2399 · …".StartsWith("t239")` is true, so an
+        // entry of t239 claims a line of t2399 whenever both render the same
+        // sentence. `refused_rule_reserve` carries no details to tell such a pair
+        // apart, and creature #2 of `baseline` has exactly that pair — t239 and
+        // t2399 — once Issue #201 shifts the party's course. Found by independent
+        // review of PR #217, which also showed the first fix attempt was wrong:
+        // it changed the aggregation below and left this predicate broken.
+        //
+        // Two separators, because a panel line carries two shapes of prefix
+        // (HudText, where the line is built): `t{lastTick} · …` for an entry that
+        // happened once, and `t{firstTick}-{lastTick} · …` for one the world
+        // folded. Accepting only the space would silently stop matching every
+        // folded entry — measured: it turned
+        // The_story_a_creature_shows_is_the_journal_ranked_by_what_it_meant red on
+        // both fixtures.
+        (line.StartsWith(
+                string.Create(CultureInfo.InvariantCulture, $"t{@event.FirstTick} "),
+                StringComparison.Ordinal) ||
+            line.StartsWith(
+                string.Create(CultureInfo.InvariantCulture, $"t{@event.FirstTick}-"),
+                StringComparison.Ordinal)) &&
         line.Contains(
             EventNarration.Sentence(
                 @event.ReasonCode,
@@ -746,16 +765,8 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
         {
             var mine = state.Events.Where(@event => @event.CreatureId == creature.Id).ToArray();
             var lines = Body(HudText.CreatureStory(state, creature.Id));
-            // One line, one entry. `Where` here would count a line twice when two
-            // entries of the same kind share a tick and render to the same
-            // sentence — `refused_rule_reserve` carries no details to tell such a
-            // pair apart, and creature #2 of `baseline` has exactly that pair on
-            // t2399 once Issue #201 shifts the party's course. That is an
-            // ambiguity of the match, not a second line on the panel, and the
-            // claim below — no two lines are the same kind of decision — is about
-            // lines.
             var kinds = lines
-                .Select(line => mine.First(@event => Renders(@event, line)))
+                .SelectMany(line => mine.Where(@event => Renders(@event, line)))
                 .Select(@event => @event.ReasonCode)
                 .ToArray();
 
