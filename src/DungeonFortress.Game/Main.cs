@@ -108,6 +108,13 @@ public partial class Main : Node2D
     private readonly Dictionary<int, GridPoint> _raiderMotionOrigin = [];
     private bool _motionOriginPending;
     private bool _interpolatesMotion;
+    // The blows of the moment being drawn, and the hit points they are measured
+    // against. Both are presentation state of the same kind as the motion buffer
+    // above: derived from canonical snapshots, never written back to one. What
+    // they mean and why the hit points are needed at all is
+    // DungeonFortress.Presentation.BlowReadout.
+    private readonly Dictionary<int, int> _creatureHitPointsBefore = [];
+    private BlowReading _blows = BlowReading.Empty;
     private string _checksum = string.Empty;
     private int _screenshotFramesRemaining;
     private int _fallbackSpriteDraws;
@@ -2242,6 +2249,10 @@ public partial class Main : Node2D
         _tickAccumulator = 0;
         _selectedCreatureId = null;
         _selectedCell = null;
+        // A fixture is run in one go, so there is no "before" to measure a fall in
+        // hit points against. The journal still names every blow of the last tick,
+        // which is what a captured frame is drawn from.
+        _creatureHitPointsBefore.Clear();
         RefreshState();
     }
 
@@ -2252,8 +2263,32 @@ public partial class Main : Node2D
             return;
         }
 
+        // Presentation only, and here rather than in RememberMotionOrigin because
+        // every way of running a tick has to be covered: a raider's blow on a
+        // defender that survives is recorded nowhere, so a fall in hit points is
+        // the only evidence of it, and a STEP or an accepted command must show it
+        // as readily as a running clock does.
+        RememberCreatureHitPoints();
         _world.RunTicks(Math.Min(ticks, PrototypeTuning.SessionTicks - _world.CurrentTick));
         RefreshState();
+    }
+
+    /// <summary>
+    /// What every creature's hit points were before the tick about to run. Written
+    /// from snapshots and never read by <see cref="PrototypeWorld"/>.
+    /// </summary>
+    private void RememberCreatureHitPoints()
+    {
+        _creatureHitPointsBefore.Clear();
+        if (_state is null)
+        {
+            return;
+        }
+
+        foreach (var creature in _state.Creatures)
+        {
+            _creatureHitPointsBefore[creature.Id] = creature.Hp;
+        }
     }
 
     private void RefreshState()
@@ -2268,6 +2303,10 @@ public partial class Main : Node2D
         // command, a replay — is drawn at the canonical position straight away.
         _interpolatesMotion = _motionOriginPending;
         _motionOriginPending = false;
+        // Once per tick and not once per frame: the journal is the whole party's
+        // history and the reading is the same for every frame drawn from this
+        // state.
+        _blows = BlowReadout.Of(_state, _creatureHitPointsBefore);
         _checksum = PrototypeScenario.Capture(_world).Checksum;
         UpdateHud();
         UpdateCreatureLabels();
@@ -5494,16 +5533,26 @@ public partial class Main : Node2D
     // the same reason as the rectangle below: it has cases, and cases are checked
     // without starting the engine (ADR 0011).
     //
-    // Both callers pass BodyActionPhase.None, and that is a statement rather than
-    // a placeholder: the pack's `windup` and `flinch` are loaded and reachable,
-    // but nothing in the snapshot says when a creature is drawing back or being
-    // struck, so nothing here may claim to know. See BodyActionPhase for what the
-    // simulation does say and why it is not the same thing.
-    private static string RaiderSpriteKey(PrototypeRaiderSnapshot raider) =>
-        BodySprites.RaiderKey(raider.Mode, raider.ReturningToGate, BodyActionPhase.None);
+    // Both callers used to pass an unconditional none, because nothing in the
+    // snapshot was thought to say when a creature is drawing back or being struck.
+    // The canonical journal does say it, and BlowReadout is where that reading
+    // lives; this file only asks it about one body at a time.
+    private string RaiderSpriteKey(PrototypeRaiderSnapshot raider) =>
+        BodySprites.RaiderKey(
+            raider.Mode,
+            raider.ReturningToGate,
+            BodyPhase(BodyKind.Raider, raider.Id));
 
-    private static string CrewSpriteKey(PrototypeCreatureSnapshot creature) =>
-        BodySprites.CrewKey(creature.Mode, BodyActionPhase.None);
+    private string CrewSpriteKey(PrototypeCreatureSnapshot creature) =>
+        BodySprites.CrewKey(creature.Mode, BodyPhase(BodyKind.Creature, creature.Id));
+
+    /// <summary>
+    /// The pose one body owes to the blow it is in, read off the reading built for
+    /// this tick. A body no blow touches gets <see cref="BodyActionPhase.None"/>
+    /// from <see cref="BlowReading.PhaseOf"/> and keeps the pose its mode chooses.
+    /// </summary>
+    private BodyActionPhase BodyPhase(BodyKind kind, int id) =>
+        _blows.PhaseOf(new BodyRef(kind, id));
 
     private void DrawGoblin(Vector2 center, string key)
     {
