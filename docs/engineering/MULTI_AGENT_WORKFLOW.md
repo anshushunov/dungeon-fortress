@@ -355,6 +355,11 @@ review имя повторяет имя проверяемой задачи с �
 
 ```text
 Работай по Issue #N в репозитории dungeon-fortress.
+**Первым шагом займи задачу.** Выполни:
+`gh issue edit <NUMBER> --add-label "claimed" --remove-label "ready"`
+Проверь, что метка `claimed` появилась и `ready` исчезла
+(`gh issue view <NUMBER> --json labels`). Не встала — задача занята другим:
+остановись и сообщи ведущему.
 Прочитай корневые инструкции агента и документы, связанные из Issue.
 Проверь why_now, scope, non-goals, deliverables, acceptance, dependencies,
 constraints, verification и handoff. Если поля неполны или противоречат друг
