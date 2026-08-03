@@ -517,6 +517,83 @@ and the largest distance a body moves in one frame goes from 12 px to 18.462 px
 at 20 fps — the catch-up factor 1 / (1 − 0.35), still well inside the 40 px cell
 the check exists to protect.
 
+## A body in motion (Issue #221)
+
+A body used to switch pictures and slide along a straight line between two
+cells. It now turns, rides, leans and takes a blow, and none of it is a new
+frame of art: the four motions are multipliers on the sprites the v2 pack
+already ships, decided in `DungeonFortress.Presentation.BodyMotion` and applied
+by the adapter as one canvas transform.
+
+**One frame per body, three drawings in it.** `Main.PushBodyPose` puts the
+canvas origin on the body's feet — the line `CameraView.GoblinFootLine` already
+stands the sprite on — and hangs the four motions off it. Everything that draws
+the body goes inside that frame: the sprite, the eight offset copies of the side
+outline (Issue #208), the load it is carrying and the blow flash (Issue #210),
+which live in two different passes of `WorldDrawOrder`. A flip applied to one of
+them and not the others is a body wearing somebody else's silhouette, so the
+frame is opened and closed by every routine that draws a body, and
+`BodyMotionAdapterTests` holds that. What stays outside it is the body's
+readouts — the HP bar, the state dot, the damage number, the streak — because a
+reading that rides up and down with the body is harder to read, not easier.
+
+| Motion | What it is taken from | What decides it |
+|---|---|---|
+| facing and flip | the sideways part of the step, and the cell of the body a blow was landed on | `BodyMotion.Turn`, `BodyMotion.FlipScale` |
+| bob | how far the body has walked, in cells | `BodyMotion.PathCells`, `BodyMotion.BobOffsetRef` |
+| lean | the sideways part of the step | `BodyMotion.LeanRadians` |
+| squash and stretch | the pose the blow reading gives this body | `BodyMotion.BlowHeightScale`, `BodyMotion.BlowWidthScale` |
+
+**The walk phase is the path and not the clock.** A phase taken from elapsed
+time keeps running while a body stands still, and a captured frame — always
+drawn at alpha 1 with time stopped — would show every body at whatever phase the
+clock happened to hold. Here the phase is `X + Y` of the cell the body is on,
+interpolated across the step: a body moves one cell per tick and only along an
+axis, so **every single step changes that sum by exactly one**, whichever of the
+four directions it was. That is the number of steps the body has taken, it is
+canonical, it needs no counter of its own, and it is the same for the same tick
+of the same fixture however the frame was reached.
+`BodyMotionTests.Every_single_step_advances_the_path_by_exactly_one_cell` walks
+400 ticks of the shipped party and measures it rather than arguing it from the
+movement code — a diagonal step would leave the sum unchanged or move it by two,
+and the gait would silently stop being a gait.
+
+The cycle is two cells long. One cell would be worse than short: every body
+would be at the same phase whenever it stands on a cell centre, and a cell
+centre is exactly where every paused frame and every screenshot draws it. With
+two, a body rises over one step and settles over the next, and the difference is
+visible in a frame anybody can stop on. A body that is **not** walking gets
+exactly zero — not a small amplitude, not a frozen phase, which would leave it
+hanging above its own feet — and the curve never goes below zero either, because
+the ground a body stands on is not the drawing's to move.
+
+**A blow keeps the body's area.** The wind-up stretches it and the recoil
+squashes it, and the width is the height's reciprocal at every phase, so the
+body reads as the same body under tension rather than as a bigger one. Both
+curves fade towards a floor above zero for the reason every curve in
+`BlowEffects` has one: a paused frame is drawn at alpha 1 and an effect that
+rested there would be missing from every piece of evidence.
+
+**A captured frame runs its last tick on its own.** A fixture used to be run in
+one go, so nothing in a screenshot had a previous cell and every body in it was
+standing still by construction. `LoadFixture` now runs everything but the last
+tick, remembers where the bodies stand and then runs that one — the same number
+of ticks, in the same order, and the canonical checksum of a capture is
+unchanged at every tick measured (`evidence/221-invariants.json`, tick 289 also
+against a run with no engine at all).
+
+**Nothing here reaches the simulation.** The facing is presentation state of the
+same kind as the interpolation buffer: written from snapshots and from the
+canonical journal, never read back. The bob moves the drawing and not
+`RenderCenter`, which is what the depth pass sorts by and what `--frame-pacing`
+converts back into a cell — a vertical offset there would change depth order and
+could report a body in a cell the simulation has not reached. Measured on the
+shipped `prepared` journal to tick 1400: the canonical checksum at 20 fps, at
+60 fps, in a frameless replay and in a run of the build without any of this is
+one and the same, `interpolationLeadViolations` stays 0, and the largest
+distance a body moves in one frame is unchanged to the third decimal —
+18.462 px at 20 fps and 6.154 at 60.
+
 ## Wall volume and depth order (Issue #83)
 
 Rock is rendered in immediate mode rather than through `TileMapLayer`. This is

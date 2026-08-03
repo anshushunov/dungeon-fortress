@@ -1,0 +1,82 @@
+{
+  "issue": 221,
+  "checkpoint": 5,
+  "claim": "Ни одно движение — поворот, покачивание, наклон, squash & stretch — не входит в канонический снапшот и не меняет checksum (ADR 0011). Прогон с эффектами и без даёт один checksum, и frame_pacing на 20 и 60 fps — тоже.",
+  "scene": {
+    "fixture": "prepared",
+    "seed": 20260726,
+    "targetTick": 1400,
+    "why": "Тот же отрезок, на котором мерил #210: прогон проходит весь бой тиков 1300–1326, где одновременно работают hit-stop, замах, получение удара и ходьба. Замер на тихом отрезке ничего бы не проверил."
+  },
+  "runs": [
+    {
+      "what": "без представления вообще: канонический прогон того же журнала",
+      "command": "dotnet tests/DungeonFortress.Scenarios/bin/Release/net8.0/DungeonFortress.Scenarios.dll --prototype --commands scenarios/prototype1/prepared.commands.v2.json --ticks 1400",
+      "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002"
+    },
+    {
+      "what": "без процедурной анимации: коммит 83e53e1 (код main), 20 fps",
+      "command": "<godot-4.7.1-console> --headless --fixed-fps 20 --path ./src/DungeonFortress.Game -- --fixture prepared --frame-pacing 1400",
+      "tick": 1400,
+      "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "frames": 4665,
+      "interpolatedFrames": 4661,
+      "interpolationLeadViolations": 0,
+      "maxRenderStepPixels": 18.462
+    },
+    {
+      "what": "без процедурной анимации: коммит 83e53e1, 60 fps",
+      "command": "<godot-4.7.1-console> --headless --fixed-fps 60 --path ./src/DungeonFortress.Game -- --fixture prepared --frame-pacing 1400",
+      "tick": 1400,
+      "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "frames": 13992,
+      "interpolatedFrames": 12583,
+      "interpolationLeadViolations": 0,
+      "maxRenderStepPixels": 6.154
+    },
+    {
+      "what": "с процедурной анимацией: коммит ee4906e, 20 fps",
+      "command": "<godot-4.7.1-console> --headless --fixed-fps 20 --path ./src/DungeonFortress.Game -- --fixture prepared --frame-pacing 1400",
+      "tick": 1400,
+      "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "frames": 4665,
+      "interpolatedFrames": 4665,
+      "interpolationLeadViolations": 0,
+      "maxRenderStepPixels": 18.462
+    },
+    {
+      "what": "с процедурной анимацией: коммит ee4906e, 60 fps",
+      "command": "<godot-4.7.1-console> --headless --fixed-fps 60 --path ./src/DungeonFortress.Game -- --fixture prepared --frame-pacing 1400",
+      "tick": 1400,
+      "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "frames": 13992,
+      "interpolatedFrames": 12593,
+      "interpolationLeadViolations": 0,
+      "maxRenderStepPixels": 6.154
+    }
+  ],
+  "verdict": {
+    "checksum": "Пять прогонов — один checksum 18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002: канонический прогон без представления, обе частоты кадров до изменения и обе после. Внутри каждого прогона с движком checksum равен replayChecksum — тот же журнал, переигранный вообще без кадров.",
+    "criterion3": "Прогон с эффектами и без даёт один checksum; frame_pacing 20 и 60 fps — один. Выполнено.",
+    "framePacingIsUnchanged": {
+      "leadViolations": "0 во всех четырёх прогонах с движком. Иначе и быть не могло: покачивание, наклон и сжатие живут только в трансформе холста, а RenderCenter — точка, по которой зонд переводит тело обратно в клетку, — их не видит. Это отдельно закреплено гардом The_bob_is_in_the_drawing_and_not_in_the_render_centre.",
+      "maxRenderStepPixels": "18.462 и 6.154 — те же значения до и после, до третьего знака."
+    },
+    "theOneNumberThatMoved": {
+      "what": "interpolatedFrames: 4661 -> 4665 на 20 fps и 12583 -> 12593 на 60 fps.",
+      "why": "LoadFixture теперь прогоняет последний тик фикстуры отдельным шагом, поэтому кадры сразу после загрузки уже имеют, что интерполировать, и попадают в счётчик. Тиков прогоняется столько же, checksum тот же, leadViolations 0.",
+      "size": "+4 кадра из 4665 и +10 из 13992"
+    }
+  },
+  "capturePathIsCanonical": {
+    "what": "Разбиение последнего тика в LoadFixture — единственное место, где эта задача трогает порядок прогона ticks, поэтому проверено отдельно и на другом тике.",
+    "command": "dotnet tests/DungeonFortress.Scenarios/bin/Release/net8.0/DungeonFortress.Scenarios.dll --prototype --commands scenarios/prototype1/prepared.commands.v2.json --ticks 289 против строки godot_graybox_screenshot прогона scripts/run-game.ps1 -ScreenshotTicks 289",
+    "canonicalChecksum": "ffcc822da4aa7f61443bc552bc54d8509ee48479f8cd04ad848a10a3ce23711e",
+    "engineChecksum": "ffcc822da4aa7f61443bc552bc54d8509ee48479f8cd04ad848a10a3ce23711e",
+    "andOnTheTwoCapturedTicks": "t288 7e20bf18… и t1302 981c28ec… совпадают со сборкой до изменения (evidence/221-before.json)."
+  }
+}

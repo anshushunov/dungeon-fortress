@@ -1,0 +1,41 @@
+{
+  "issue": 221,
+  "checkpoint": 5,
+  "rule": "По одному мутанту на половину задачи (правило 21). Каждая подстановка записана дословно — текстом, который надо подставить, а не прозой: проза, исполненная буквально, на #186 не собиралась. Оба мутанта наложены на закоммиченное состояние ee4906e и откачены командой git checkout -- src/DungeonFortress.Game/Main.cs.",
+  "baseline": {
+    "commit": "ee4906e89d8d9eae665a017d7f1a6ec9f416ed9d",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release",
+    "result": "пройдено 592, не пройдено 0"
+  },
+  "mutations": [
+    {
+      "id": "m1",
+      "half": "facing и flip",
+      "whatItRollsBack": "тело всегда смотрит в одну сторону: множитель отражения убран из кадра тела, остаётся только ширина от удара",
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "inMethod": "PushBodyPose",
+      "replace": "                (float)(BodyMotion.FlipScale(BodyFacingOf(body)) *\n                    BodyMotion.BlowWidthScale(phase, alpha)),\n",
+      "with": "                (float)BodyMotion.BlowWidthScale(phase, alpha),\n",
+      "occurrences": 1,
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release",
+      "result": "пройдено 591, не пройдено 1",
+      "redTest": "DungeonFortress.Presentation.Tests.BodyMotionAdapterTests.The_frame_a_body_is_drawn_in_takes_the_flip_from_that_body_s_facing",
+      "greenHalf": "проверки покачивания остались зелёными — The_bob_takes_its_phase_from_the_path_the_body_has_walked прошла"
+    },
+    {
+      "id": "m2",
+      "half": "покачивание при ходьбе",
+      "whatItRollsBack": "константа вместо функции пройденного пути: фаза покачивания больше не зависит ни от клетки, ни от alpha",
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "inMethod": "PushBodyPose",
+      "replace": "            BodyMotion.PathCells(from, to, alpha),\n",
+      "with": "            0.0,\n",
+      "occurrences": 1,
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release",
+      "result": "пройдено 591, не пройдено 1",
+      "redTest": "DungeonFortress.Presentation.Tests.BodyMotionAdapterTests.The_bob_takes_its_phase_from_the_path_the_body_has_walked",
+      "greenHalf": "проверки поворота остались зелёными — The_frame_a_body_is_drawn_in_takes_the_flip_from_that_body_s_facing прошла"
+    }
+  ],
+  "verdict": "Каждый мутант красит ровно одну проверку, и это разные проверки: половины задачи покрыты по отдельности, а не одной общей проверкой, которая краснеет на что угодно."
+}

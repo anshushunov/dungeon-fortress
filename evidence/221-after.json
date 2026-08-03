@@ -1,0 +1,97 @@
+{
+  "issue": 221,
+  "checkpoint": 5,
+  "what": "Кадры «после» тех же двух сцен, что и evidence/221-before.json: та же фикстура, те же тики, та же спека кадров. Отличается только код представления.",
+  "build": {
+    "commit": "ee4906e89d8d9eae665a017d7f1a6ec9f416ed9d",
+    "beforeCommit": "83e53e1d6bb4ae83b6c19489909569a9f2e21e1f",
+    "sourceDirty": false
+  },
+  "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/capture-evidence.ps1 -SpecPath evidence/221-frames.spec.json -OutputRoot 221-after -GodotPath <godot-4.7.1-console>, при $env:DUNGEON_FORTRESS_TEMP=<короткий каталог вне worktree>",
+  "captureResult": {
+    "event": "evidence_capture",
+    "status": "ok",
+    "captures": 2,
+    "reproducible": true,
+    "publishable": true,
+    "manifest": ".artifacts/221-after/manifest.json"
+  },
+  "pairs": [
+    {
+      "name": "walk",
+      "tick": 288,
+      "checksumBefore": "7e20bf1881ba4202b32b08968c64ca778f52995736641d1b93316f95c158fcd7",
+      "checksumAfter": "7e20bf1881ba4202b32b08968c64ca778f52995736641d1b93316f95c158fcd7",
+      "imageSha256Before": "9a14967bd98b15cb0c1a6a0c3b96e5110b368fd4385758cea04a51ebc085c65d",
+      "imageSha256After": "e904400b3eb34054daefc85dbfd7dd7d366ed2cb3d7cf73842e0c3ec681119d3",
+      "frames": {
+        "before": "evidence/221-before-walk.png",
+        "after": "evidence/221-after-walk.png",
+        "crop": [120, 236, 872, 422]
+      },
+      "diff": {
+        "command": "python + PIL: попиксельное сравнение .artifacts/221-before/walk.png и .artifacts/221-after/walk.png, вывод bbox и полос изменившихся столбцов",
+        "bbox": [110, 238, 867, 396],
+        "changedPixels": 24582,
+        "ofPixels": 921600,
+        "changedColumnRuns": [[110, 202], [357, 452], [590, 682], [785, 790], [804, 808], [831, 831], [865, 866]],
+        "reading": "изменились ровно полосы четырёх тел кадра и ничего между ними: карта, комнаты, маршруты и HUD побайтово те же."
+      },
+      "whatChangesBetweenTheTwoFrames": [
+        "Смола (6,7), шаг влево: спрайт отражён, тело наклонено влево",
+        "Обух (9,7), шаг вправо: тело поднято над линией ступней и наклонено вправо",
+        "Брусок (12,7), шаг влево: спрайт отражён, наклонён влево, ноша переехала на левую сторону вместе с телом",
+        "Уголёк (14,7), стоит: не изменился ни на пиксель"
+      ],
+      "measuredLift": {
+        "what": "Верхняя строка бирюзового контура тела в его полосе столбцов — контур рисуется восемью копиями силуэта позы, поэтому его верх и есть верх нарисованного тела.",
+        "command": "python + PIL: поиск первой сверху строки, где в полосе столбцов встречается пиксель в пределах 40 от #14b8a6 (SideOutline.OwnColor), для кадров .artifacts/221-before/walk.png и .artifacts/221-after/walk.png",
+        "columnBands": {
+          "cell6": [120, 204],
+          "cell9": [360, 445],
+          "cell12": [600, 685],
+          "cell14": [760, 845],
+          "howComputed": "x = 16 + 425.5 + (cell*40 + 20 − 400)*2 по worldViewport [16,146,851,424], камере 400,300 и зуму 2 из самого кадра"
+        },
+        "rows": {
+          "cell6": { "before": 279, "after": 280, "delta": 1 },
+          "cell9": { "before": 279, "after": 273, "delta": -6 },
+          "cell12": { "before": 279, "after": 279, "delta": 0 },
+          "cell14": { "before": 279, "after": 279, "delta": 0 }
+        },
+        "reading": "Поднято ровно одно тело — Обух на (9,7). Сумма его клетки 16 чётная, то есть путь прошёл целое число полуциклов и фаза стоит на верхней точке: BobOffsetRef = −BobHeightRef = −1.8 опорных px = −1.8 * 40/22 * 2 = −6.55 экранных px при зуме 2. Измерено −6 при округлении отрисовки до пикселя. У Смолы (13) и Бруска (19) суммы нечётные — нижняя точка цикла, подъёма нет; ±1 px у Смолы даёт наклон. Стоящий Уголёк не сдвинулся вовсе.",
+        "whyThisIsNotTheProofOfCriterion2": "Кадр показывает подъём, но половину «стоящее тело не качается» держат проверки без движка: BodyMotionTests.A_standing_body_does_not_bob_at_any_phase (ровно ноль на всём цикле) и структурный гард The_bob_takes_its_phase_from_the_path_the_body_has_walked (признак «идёт» — это две клетки самого тела, from != to)."
+      }
+    },
+    {
+      "name": "blow",
+      "tick": 1302,
+      "checksumBefore": "981c28ec641774f3eb7f2f1c6aacbaf7324759cdc97d59dbe1bd0c6270a429dc",
+      "checksumAfter": "981c28ec641774f3eb7f2f1c6aacbaf7324759cdc97d59dbe1bd0c6270a429dc",
+      "imageSha256Before": "c87b6b03423c5659e1167944c5b2c8180e7be46c7419f1818668f9cfc2188207",
+      "imageSha256After": "d1fbb0fcaea1fda147aa49caa18400a1bacf5cb4ef4f59efc09af369424ea8ee",
+      "frames": {
+        "before": "evidence/221-before-blow.png",
+        "after": "evidence/221-after-blow.png",
+        "crop": [350, 170, 630, 460]
+      },
+      "diff": {
+        "command": "python + PIL: попиксельное сравнение .artifacts/221-before/blow.png и .artifacts/221-after/blow.png",
+        "bbox": [155, 165, 544, 431],
+        "changedPixels": 27911,
+        "ofPixels": 921600
+      },
+      "whatChangesBetweenTheTwoFrames": [
+        "Смола (crew 3) на (26,12) в позе windup вытянута вверх: BlowHeightScale на полу кривой даёт 1.07 высоты и 1/1.07 = 0.935 ширины",
+        "рейдер 0 на (26,13) в позе flinch сжат: 1/1.10 = 0.909 высоты и 1.10 ширины, вспышка и контур стороны сжаты вместе с телом — они рисуются в том же кадре тела",
+        "часть тел отражена: у каждого своё направление последнего шага или удара"
+      ],
+      "whatDoesNotChange": "Полоска здоровья, точка состояния, число урона и штрих удара стоят там же: они рисуются вне кадра тела, чтобы показания не ездили вместе с ним."
+    }
+  ],
+  "limitOfTheseScenes": {
+    "what": "Ни один удар первой волны shipped-журнала не идёт влево: все combat_attack тика 1301–1327 направлены вправо (+1,0) или вниз (0,+1).",
+    "command": "перебор снапшотов тиков 1300..1330 той же командой, что в evidence/221-before.json, с разбором боевых событий тика T-1",
+    "consequence": "поворот тела к цели удара на кадре виден только как отсутствие поворота — цель справа или снизу, а тело и так обращено вправо. Эту половину критерия 1 держит структурный гард BodyMotionAdapterTests.The_facing_is_turned_by_the_step_and_by_the_blow, а не кадр; так критерий и сформулирован."
+  }
+}
