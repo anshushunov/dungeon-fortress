@@ -1,0 +1,90 @@
+{
+  "issue": 221,
+  "checkpoint": 1,
+  "what": "Замер «до»: кадры несгруженных сцен на сборке без процедурной анимации и эталонные прогоны checksum. Всё снято на коммите 83e53e1 — рабочее дерево чистое, манифест publishable.",
+  "build": {
+    "commit": "83e53e1d6bb4ae83b6c19489909569a9f2e21e1f",
+    "base": "origin/main 51302ba, ветка agent/221-… без единой правки кода на момент съёмки",
+    "sourceDirty": false
+  },
+  "howTheScenesWereChosen": {
+    "what": "Сцены выбраны перебором канонических снапшотов, а не на глаз: урок вертикали 3 — сцену со стопкой тел review отверг.",
+    "rule": "тело считается пригодным, если оно сдвинулось на последнем тике (позиция в снапшоте T отличается от позиции в T-1) и ни одно другое тело не стоит ближе двух клеток по Чебышёву",
+    "command": "dotnet tests/DungeonFortress.Scenarios/bin/Release/net8.0/DungeonFortress.Scenarios.dll --prototype --commands scenarios/prototype1/prepared.commands.v2.json --ticks <T> --snapshot <out>/p<T>.json — прогнано для каждого T подряд в окнах 100..420 и 1300..1330, разбор снапшотов скриптом перебора вне репозитория",
+    "whyNotInRepository": "перебор — разовый инструмент выбора сцены, а не проверка; воспроизводится приведённой командой и правилом выше"
+  },
+  "scenes": [
+    {
+      "name": "walk",
+      "tick": 288,
+      "checksum": "7e20bf1881ba4202b32b08968c64ca778f52995736641d1b93316f95c158fcd7",
+      "why": "один кадр несёт обе половины критерия 2: идущие качаются, стоящие — нет.",
+      "bodiesInFrame": [
+        "Смола (crew 3): (7,7) -> (6,7), шаг влево, одна на клетке",
+        "Обух (crew 7): (8,7) -> (9,7), шаг вправо, один на клетке, несёт сырой гриб",
+        "Брусок (crew 0): (13,7) -> (12,7), шаг влево, один на клетке, несёт сырой гриб",
+        "Уголёк (crew 5): (14,7), стоит — lastMoveTick 285 против тика 287",
+        "Прель (crew 6): (15,7), стоит — lastMoveTick 277, край кадра"
+      ],
+      "outOfFrame": "Мотылёк (crew 2) шагает влево (4,7) -> (3,7), но при zoom 2 клетка 3 за левой границей мира: visibleWorldSize 425.5x212 px при клетке 40",
+      "noStack": "ни одно тело кадра не делит клетку ни с одним другим; ближайшая пара — Уголёк (14,7) и Прель (15,7), обе стоят"
+    },
+    {
+      "name": "blow",
+      "tick": 1302,
+      "checksum": "981c28ec641774f3eb7f2f1c6aacbaf7324759cdc97d59dbe1bd0c6270a429dc",
+      "why": "ровно та сцена, которую независимый review принял в #210 как несгруженную: Смола (crew 3) одна на (26,12) бьёт рейдера 0, одного на (26,13), урон 3, исход Hit, единственное боевое событие тика 1301.",
+      "checksumMatchesIssue210": "981c28ec641774f3eb7f2f1c6aacbaf7324759cdc97d59dbe1bd0c6270a429dc — то же значение, что в evidence/210-after.json, то есть сцена та же самая"
+    }
+  ],
+  "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/capture-evidence.ps1 -SpecPath evidence/221-frames.spec.json -OutputRoot 221-before -GodotPath <godot-4.7.1-console>, при $env:DUNGEON_FORTRESS_TEMP=<короткий каталог вне worktree>",
+  "captureResult": {
+    "event": "evidence_capture",
+    "status": "ok",
+    "captures": 2,
+    "reproducible": true,
+    "publishable": true,
+    "manifest": ".artifacts/221-before/manifest.json",
+    "byteForByteRepeat": "обе сцены сняты дважды и совпали побайтово: walk sha256 9a14967bd98b15cb0c1a6a0c3b96e5110b368fd4385758cea04a51ebc085c65d, blow sha256 c87b6b03423c5659e1167944c5b2c8180e7be46c7419f1818668f9cfc2188207 — это замеры артефактов прогона, а не хеши дерева Git"
+  },
+  "frames": {
+    "walk": "evidence/221-before-walk.png",
+    "blow": "evidence/221-before-blow.png",
+    "cropWalk": [120, 236, 872, 422],
+    "cropBlow": [350, 170, 630, 460],
+    "cropCommand": "python + PIL: crop указанной коробки из кадра 1280x720, палитра сведена к 128 цветам ради веса; обрезка 1:1, без масштабирования — тем же способом, что в PR #209 и #210",
+    "whatTheBeforeFrameShows": "walk: четыре тела в кадре нарисованы одной и той же картинкой, все обращены вправо, все стоят на одной линии — идущие неотличимы от стоящих. blow: у бьющих поза windup и вспышка на получателе (это дало #210), но ни одно тело не повёрнуто, не наклонено и не сжато."
+  },
+  "referenceRuns": {
+    "what": "Эталон критерия 3: канонический checksum до изменения, на обеих частотах кадров.",
+    "runs": [
+      {
+        "what": "без процедурной анимации, 20 fps",
+        "command": "<godot-4.7.1-console> --headless --fixed-fps 20 --path ./src/DungeonFortress.Game -- --fixture prepared --frame-pacing 1400",
+        "tick": 1400,
+        "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "frames": 4665,
+        "interpolatedFrames": 4661,
+        "interpolationLeadViolations": 0,
+        "maxRenderStepPixels": 18.462
+      },
+      {
+        "what": "без процедурной анимации, 60 fps",
+        "command": "<godot-4.7.1-console> --headless --fixed-fps 60 --path ./src/DungeonFortress.Game -- --fixture prepared --frame-pacing 1400",
+        "tick": 1400,
+        "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "frames": 13992,
+        "interpolatedFrames": 12583,
+        "interpolationLeadViolations": 0,
+        "maxRenderStepPixels": 6.154
+      }
+    ],
+    "note": "Оба значения совпадают с evidence/210-determinism.json тик в тик и кадр в кадр, то есть база не сдвинулась с #210."
+  },
+  "presentationTests": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --no-build",
+    "result": "пройдено 561, не пройдено 0 — база, с которой сравнивается прирост тестов"
+  }
+}
