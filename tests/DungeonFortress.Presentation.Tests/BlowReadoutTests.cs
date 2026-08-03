@@ -197,7 +197,10 @@ public sealed class BlowReadoutTests
         var downed = Assert.Single(reading.Blows, blow => blow.Outcome == BlowOutcome.Downed);
         var untouched = new BodyRef(BodyKind.Raider, 3);
 
-        Assert.NotEqual(hit.Outcome, downed.Outcome);
+        Assert.NotEqual(BlowEffects.DamageColor(hit), BlowEffects.DamageColor(downed));
+        Assert.NotEqual(
+            BlowEffects.FlashColor(BlowOutcome.Hit),
+            BlowEffects.FlashColor(BlowOutcome.Downed));
 
         Assert.Null(reading.OutcomeOf(untouched));
         Assert.Empty(reading.Struck(untouched));

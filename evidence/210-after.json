@@ -1,0 +1,70 @@
+{
+  "issue": 210,
+  "checkpoint": 3,
+  "what": "Кадр «после» той же сцены боя, что и evidence/210-before.json: одна и та же партия, тот же тик, те же параметры кадра. Отличается только код представления.",
+  "scene": {
+    "fixture": "prepared",
+    "seed": 20260726,
+    "tick": 1318,
+    "checksum": "81ea5502d82ad300404b0fdc56a5ebf4cee8562996068f965771016b8e83fb12",
+    "tileSize": 40,
+    "cameraZoom": 2.0,
+    "cameraPosition": "1020,480",
+    "uiScale": 1.0,
+    "frameSize": "1280x720"
+  },
+  "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -GodotPath <godot-console> -Fixture prepared -ScreenshotTicks 1318 -ScreenshotPath \"210/<before|after>.png\" -TileSize 40 -CameraZoom 2.0 -CameraPosition \"1020,480\" -UiScale 1.0 -FrameSize \"1280x720\" -TemporaryRoot <короткий каталог вне worktree>",
+  "frames": {
+    "before": "evidence/210-before.png",
+    "after": "evidence/210-after.png",
+    "crop": [230, 150, 660, 560],
+    "cropNote": "Область боя из кадра 1280x720, 1:1 без масштабирования; палитра сведена к 128 цветам ради веса — 26.6 и 31.4 КиБ. Обрезка тем же способом, что в PR #209."
+  },
+  "checksumIsUnchanged": {
+    "before": "81ea5502d82ad300404b0fdc56a5ebf4cee8562996068f965771016b8e83fb12",
+    "after": "81ea5502d82ad300404b0fdc56a5ebf4cee8562996068f965771016b8e83fb12",
+    "note": "Оба кадра печатают один checksum в строке godot_graybox_screenshot. Полное доказательство неизменности — evidence/210-determinism.json на рубеже 4."
+  },
+  "whatTheBlowSaysOnThisFrame": {
+    "tickDrawn": 1317,
+    "blows": [
+      {
+        "attacker": "Кремень (crew 1) на клетке 25,12",
+        "target": "рейдер 1 на клетке 26,12",
+        "damage": 5,
+        "outcome": "Hit",
+        "evidence": "Recorded (combat_attack)",
+        "drawn": "поза windup у бьющего, вспышка на получателе, число -5 янтарным, штрих слева направо"
+      },
+      {
+        "attacker": "Тишина (crew 8) на клетке 26,11",
+        "target": "рейдер 1 на клетке 26,12",
+        "damage": 2,
+        "outcome": "Downed",
+        "evidence": "Recorded (combat_attack + combat_raider_downed на одном тике)",
+        "drawn": "поза windup у бьющего, вспышка на получателе, число -2 белым — тем же белым, что и крест выбывания, штрих сверху вниз"
+      }
+    ],
+    "readBackFromTheFrame": "Два числа стоят рядом над одним телом: -5 янтарным и -2 белым. Янтарное значит «рейдер потерял HP», белое — «этим ударом его положили». Оба бьющих на кадре в позе замаха, оба стоят на своих клетках и различимы; штрихи идут от них к цели."
+  },
+  "limitOfThisScene": {
+    "what": "Поза flinch на этом кадре не видна, и это свойство сцены, а не эффекта.",
+    "why": "Получатель — рейдер 1 на клетке 26,12, где кроме него стоят рейдеры 2 и 3 и существо 3. Порядок Y-сортировки (WorldRenderOrder: Y, затем вид, затем id) рисует рейдера 1 раньше рейдеров 2 и 3, и его спрайт закрыт целиком. Именно поэтому вспышка, число и штрих вынесены выше depth-прохода — иначе они исчезли бы вместе с телом. Позы windup у обоих бьющих видны: они стоят на своих клетках по одному.",
+    "poseIsProvenSeparately": "BlowReadoutTests.The_striker_winds_up_and_the_target_flinches — на том же самом тике, без движка."
+  },
+  "readabilityFix": {
+    "what": "Первый снятый кадр этого изменения показал числа урона нечитаемыми: янтарная «-5» на оливково-золотом гоблине не различалась.",
+    "fix": "Тёмная обводка глифа (BlowEffects.DamageOutlineColor / DamageOutlineRef) и размер 11 опорных px вместо 9; пол вспышки поднят с 0.40 до 0.55, штрих с 2.0 до 2.6 опорных px.",
+    "foundBy": "тот же captureCommand — дефект виден на кадре, а не в тесте, поэтому кадр и есть инструмент проверки"
+  },
+  "engine": {
+    "engineErrorCount": 0,
+    "fallbackSpriteDraws": 0,
+    "loadedSpriteStates": ["idle", "work", "combat", "windup", "flinch", "downed"],
+    "note": "Обе строки godot_process_guard прогона со скриншотом дали engineErrorCount 0."
+  },
+  "presentationTests": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests",
+    "result": "пройдено 560, не пройдено 0"
+  }
+}

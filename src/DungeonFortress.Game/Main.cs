@@ -3787,6 +3787,10 @@ public partial class Main : Node2D
                 pair.Key,
                 new ViewPoint(pair.Value.X, pair.Value.Y))));
 
+        // Under the bodies' own readouts and above every body: a blow joins two of
+        // them, so it belongs to neither one's Y-order slot.
+        DrawBlowStreaks(creatureCenters, raiderCenters);
+
         foreach (var item in WorldRenderOrder.BackToFront(items))
         {
             switch (item.Kind)
@@ -3807,10 +3811,143 @@ public partial class Main : Node2D
         }
     }
 
+    /// <summary>
+    /// The struck body lights up in its own silhouette.
+    ///
+    /// <para>
+    /// It is drawn above the depth pass, for the reason the HP bar is: the first
+    /// review round of Issue #83 found a raised wall top hiding a body's readout
+    /// completely while the body itself stayed visible, and a flash is a readout of
+    /// the same kind. Bodies stack too — three raiders share one larder tile in the
+    /// first wave of the shipped journal, and the one that is struck is not always
+    /// the one drawn last — so a flash left in the depth pass would be erased by
+    /// the neighbour standing on the same cell.
+    /// </para>
+    ///
+    /// <para>
+    /// The silhouette is the one <see cref="DrawGoblinOutline"/> already builds at
+    /// load time: an alpha mask of the pose, so the tint is the shape of the body
+    /// rather than the goblin's own light and shade multiplied by a colour. Colour
+    /// and opacity come from <see cref="BlowEffects"/>, which is where a decision
+    /// with cases can be checked without the engine (ADR 0011).
+    /// </para>
+    /// </summary>
+    private void DrawBlowFlash(Vector2 center, string key, BodyRef body)
+    {
+        if (_blows.OutcomeOf(body) is not { } outcome ||
+            !_goblinSilhouettes.TryGetValue(key, out var silhouette))
+        {
+            return;
+        }
+
+        var colour = new Color(BlowEffects.FlashColor(outcome))
+        {
+            A = (float)BlowEffects.FlashAlpha(MotionAlpha()),
+        };
+        DrawTextureRect(
+            silhouette,
+            ToRect2(CameraView.GoblinDrawRect(new ViewPoint(center.X, center.Y), _tileSize)),
+            false,
+            colour);
+    }
+
+    /// <summary>
+    /// Which way each blow of this tick travelled. The stroke is a piece of the
+    /// line between the two bodies — <see cref="BlowEffects.Streak"/> decides which
+    /// piece — and a blow whose striker the journal does not name has no stroke at
+    /// all: an arrow drawn from a guess is indistinguishable on screen from an
+    /// arrow drawn from a fact.
+    /// </summary>
+    private void DrawBlowStreaks(
+        IReadOnlyDictionary<int, Vector2> creatureCenters,
+        IReadOnlyDictionary<int, Vector2> raiderCenters)
+    {
+        foreach (var blow in _blows.Blows)
+        {
+            if (blow.Attacker is not { } attacker ||
+                BodyCenter(attacker, creatureCenters, raiderCenters) is not { } from ||
+                BodyCenter(blow.Target, creatureCenters, raiderCenters) is not { } to ||
+                from == to)
+            {
+                continue;
+            }
+
+            var streak = BlowEffects.Streak(
+                new ViewPoint(from.X, from.Y),
+                new ViewPoint(to.X, to.Y));
+            DrawLine(
+                ToVector2(streak.From),
+                ToVector2(streak.To),
+                new Color(BlowEffects.StreakColor(blow))
+                {
+                    A = (float)BlowEffects.FlashAlpha(MotionAlpha()),
+                },
+                ScaleWorld((float)BlowEffects.StreakWidthRef));
+        }
+    }
+
+    private static Vector2? BodyCenter(
+        BodyRef body,
+        IReadOnlyDictionary<int, Vector2> creatureCenters,
+        IReadOnlyDictionary<int, Vector2> raiderCenters)
+    {
+        var centers = body.Kind == BodyKind.Creature ? creatureCenters : raiderCenters;
+        return centers.TryGetValue(body.Id, out var center) ? center : null;
+    }
+
+    /// <summary>
+    /// How much this body just lost, over its head. Several blows on one body in
+    /// one tick is ordinary — two crew members reach the same raider twice in the
+    /// first wave of the shipped journal — so the numbers are laid out side by side
+    /// rather than on top of each other.
+    /// </summary>
+    private void DrawBlowDamage(Vector2 center, BodyRef body)
+    {
+        var landed = _blows.Struck(body);
+        if (landed.Count == 0)
+        {
+            return;
+        }
+
+        var alpha = MotionAlpha();
+        var opacity = (float)BlowEffects.DamageAlpha(alpha);
+        var size = Math.Max(1, (int)Math.Round(ScaleWorld((float)BlowEffects.DamageTextRef)));
+        var width = ScaleWorld(30);
+        for (var index = 0; index < landed.Count; index++)
+        {
+            var blow = landed[index];
+            var origin = center + ScaleWorld(
+                (float)BlowEffects.DamageSlotOffsetRef(index, landed.Count),
+                (float)BlowEffects.DamageOffsetRef(alpha)) - new Vector2(width / 2f, 0);
+            var label = BlowEffects.DamageLabel(blow);
+
+            // The rim first: a number without it is unreadable over a goblin, which
+            // is the defect the first captured frame of this change showed.
+            DrawStringOutline(
+                ThemeDB.FallbackFont,
+                origin,
+                label,
+                HorizontalAlignment.Center,
+                width,
+                size,
+                Math.Max(1, (int)Math.Round(ScaleWorld((float)BlowEffects.DamageOutlineRef))),
+                new Color(BlowEffects.DamageOutlineColor) { A = opacity });
+            DrawString(
+                ThemeDB.FallbackFont,
+                origin,
+                label,
+                HorizontalAlignment.Center,
+                width,
+                size,
+                new Color(BlowEffects.DamageColor(blow)) { A = opacity });
+        }
+    }
+
     private void DrawCreatureInformation(
         PrototypeCreatureSnapshot creature,
         Vector2 center)
     {
+        DrawBlowFlash(center, CrewSpriteKey(creature), new BodyRef(BodyKind.Creature, creature.Id));
         var color = DefenderColor(creature);
         if (creature.Mode == CreatureMode.Downed)
         {
@@ -3834,10 +3971,13 @@ public partial class Main : Node2D
                 new Color("#ffffff"),
                 ScaleWorld(2));
         }
+
+        DrawBlowDamage(center, new BodyRef(BodyKind.Creature, creature.Id));
     }
 
     private void DrawRaiderInformation(PrototypeRaiderSnapshot raider, Vector2 center)
     {
+        DrawBlowFlash(center, RaiderSpriteKey(raider), new BodyRef(BodyKind.Raider, raider.Id));
         DrawHpBar(
             center + ScaleWorld(-7, 9),
             raider.Hp,
@@ -3851,6 +3991,8 @@ public partial class Main : Node2D
         {
             DrawCircle(center + ScaleWorld(6, -6), ScaleWorld(2), new Color("#fecaca"));
         }
+
+        DrawBlowDamage(center, new BodyRef(BodyKind.Raider, raider.Id));
     }
 
     private void DrawDownedMark(Vector2 center)

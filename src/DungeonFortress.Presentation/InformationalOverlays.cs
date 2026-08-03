@@ -104,6 +104,11 @@ public enum OverlayMark
     BuildSiteProgress,
     StockpileOccupancy,
     BodyState,
+
+    // Issue #210. Not part of BodyState: the state of a body is what it is now,
+    // and this is what has just happened to it — a different reading, drawn for
+    // one tick and gone.
+    BlowFeedback,
     CellInteraction,
     BrushPreview,
     SelectionCount,
@@ -254,6 +259,23 @@ public static class InformationalOverlays
             "HP, state dot, downed cross and selection ring are the body's own " +
             "readout. They are drawn above the depth pass precisely so a raised " +
             "wall top cannot erase them, and they must stay legible."),
+        new(
+            OverlayMark.BlowFeedback,
+            OverlayMarkSubject.Body,
+            CellCanHoldBody: null,
+            OverlayMarkPolicy.Opaque,
+            1.0,
+            1.0,
+            "The flash, the damage number and the streak that says which way a " +
+            "blow travelled are anchored to bodies and not to cells: the flash and " +
+            "the number sit on the body that lost the hit points, and the streak " +
+            "is a piece of the line between the two bodies the journal names. They " +
+            "are above the depth pass for the reason the HP bar is — a raised wall " +
+            "top erased a body's readout completely in the first review round of " +
+            "Issue #83, and bodies stack besides, three raiders to one larder tile " +
+            "in the first wave of the shipped journal. Nothing here fills: a tinted " +
+            "silhouette of the body's own pose, a glyph and a stroke, all three " +
+            "gone with the tick the blow was recorded on."),
         new(
             OverlayMark.RoomBorder,
             OverlayMarkSubject.Cell,

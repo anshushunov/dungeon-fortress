@@ -79,4 +79,111 @@ public sealed class BlowAdapterTests
             "Advance remembers the hit points after running the tick, so every " +
             "difference it could measure has already been overwritten.");
     }
+
+    /// <summary>
+    /// The three marks of a blow are actually drawn, each from the routine whose
+    /// pass it belongs to. Deleting any one of them is the mutation this test
+    /// exists for: the phase would still be computed and the frame would go back
+    /// to saying nothing about the blow.
+    /// </summary>
+    [Fact]
+    public void Both_kinds_of_body_get_a_flash_and_a_number_and_a_blow_gets_a_streak()
+    {
+        foreach (var routine in new[] { "DrawCreatureInformation", "DrawRaiderInformation" })
+        {
+            var body = AdapterSource.Body(routine);
+            Assert.Single(AdapterSource.CallsTo(body, "DrawBlowFlash"));
+            Assert.Single(AdapterSource.CallsTo(body, "DrawBlowDamage"));
+
+            // The flash is a tint the size of the body, so everything else this
+            // routine draws has to go on top of it.
+            Assert.True(
+                body.IndexOf("DrawBlowFlash(", StringComparison.Ordinal) <
+                body.IndexOf("DrawBlowDamage(", StringComparison.Ordinal),
+                $"{routine} draws the flash over its own readouts instead of under " +
+                "them.");
+        }
+
+        Assert.Single(AdapterSource.CallsTo(
+            AdapterSource.Body("DrawBodyInformationOverlays"),
+            "DrawBlowStreaks"));
+    }
+
+    /// <summary>
+    /// The flash is the shape of the body and nothing else. Drawn from anything but
+    /// the pose silhouette it would be the goblin's own palette multiplied by a
+    /// colour, which is the defect the side outline of Issue #208 had to solve
+    /// already, and it has to be the silhouette of the pose the body is actually
+    /// drawn in — a flinching body flashed in its idle outline is a second body.
+    /// </summary>
+    [Fact]
+    public void The_flash_is_the_silhouette_of_the_pose_the_body_is_drawn_in()
+    {
+        Assert.Contains(
+            "CrewSpriteKey(",
+            AdapterSource.Body("DrawCreatureInformation"),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "RaiderSpriteKey(",
+            AdapterSource.Body("DrawRaiderInformation"),
+            StringComparison.Ordinal);
+
+        var flash = AdapterSource.Body("DrawBlowFlash");
+        Assert.Contains("_goblinSilhouettes", flash, StringComparison.Ordinal);
+        Assert.Contains(
+            $"{nameof(BlowEffects)}.{nameof(BlowEffects.FlashColor)}(",
+            flash,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"{nameof(BlowEffects)}.{nameof(BlowEffects.FlashAlpha)}(",
+            flash,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Every value a blow's marks are drawn with is read from the policy rather
+    /// than written next to the draw call. A literal here is invisible to every
+    /// check in the repository — the same argument the alpha check of
+    /// <see cref="WorldDrawPassGuardTests"/> is built on.
+    /// </summary>
+    [Fact]
+    public void The_marks_of_a_blow_take_every_value_from_the_policy()
+    {
+        var damage = AdapterSource.Body("DrawBlowDamage");
+        foreach (var member in new[]
+                 {
+                     nameof(BlowEffects.DamageLabel),
+                     nameof(BlowEffects.DamageColor),
+                     nameof(BlowEffects.DamageAlpha),
+                     nameof(BlowEffects.DamageOffsetRef),
+                     nameof(BlowEffects.DamageSlotOffsetRef),
+                     nameof(BlowEffects.DamageTextRef),
+                     nameof(BlowEffects.DamageOutlineRef),
+                     nameof(BlowEffects.DamageOutlineColor),
+                 })
+        {
+            Assert.Contains(
+                $"{nameof(BlowEffects)}.{member}",
+                damage,
+                StringComparison.Ordinal);
+        }
+
+        var streaks = AdapterSource.Body("DrawBlowStreaks");
+        foreach (var member in new[]
+                 {
+                     nameof(BlowEffects.Streak),
+                     nameof(BlowEffects.StreakColor),
+                 })
+        {
+            Assert.Contains(
+                $"{nameof(BlowEffects)}.{member}(",
+                streaks,
+                StringComparison.Ordinal);
+        }
+
+        Assert.Contains(
+            $"{nameof(BlowEffects)}.{nameof(BlowEffects.StreakWidthRef)}",
+            streaks,
+            StringComparison.Ordinal);
+    }
 }
