@@ -172,6 +172,91 @@ public static class BodyMotion
               (1.0 + Math.Cos(Math.Tau * pathCells / GaitPeriodCells)) / 2.0
             : 0.0;
 
+    /// <summary>
+    /// How far a body tips into the side it is walking to, in degrees.
+    ///
+    /// <para>
+    /// Six of them is 6.5 px of head travel on a body drawn 61.82 px tall at the
+    /// shipped tile — enough to read as effort at a glance and small enough that
+    /// the body still stands on its own feet. The lean is the cheapest of the four
+    /// motions here and the one that carries weight: a body that leans is a body
+    /// pushing against something.
+    /// </para>
+    /// </summary>
+    public const double LeanDegrees = 6.0;
+
+    /// <summary>
+    /// Which way and how far a body is tipped, in radians, having stepped
+    /// <paramref name="dx"/> to the side. Positive turns the body clockwise on a
+    /// canvas whose Y grows downwards, which is the head moving to the right.
+    ///
+    /// <para>
+    /// A step straight up or down does not tip anything: there is no side to lean
+    /// into, and a lean guessed from the facing instead would tip a body that is
+    /// walking away from the camera. The sign is the step's and not the facing's
+    /// for the same reason — a body may be turned left while its last sideways
+    /// step went right, and it is the step that carries the weight.
+    /// </para>
+    /// </summary>
+    public static double LeanRadians(double dx) =>
+        Math.Sign(dx) * LeanDegrees * Math.PI / 180.0;
+
+    /// <summary>
+    /// How much taller a body drawing back is at the start of its tick, as a share
+    /// of its height, and how much at the end of it.
+    ///
+    /// <para>
+    /// The floor is above zero for the reason every curve in
+    /// <see cref="BlowEffects"/> has one: a paused frame and a captured screenshot
+    /// are drawn at alpha 1, so an effect that reached its rest there would be
+    /// invisible in every piece of evidence this repository keeps.
+    /// </para>
+    /// </summary>
+    public const double StretchPeak = 0.12;
+
+    /// <inheritdoc cref="StretchPeak"/>
+    public const double StretchFloor = 0.07;
+
+    /// <summary>
+    /// And how much shorter a body that has just been struck is, at the start of
+    /// its tick and at the end of it. Larger than the stretch above because the
+    /// two are read differently: a wind-up is the body gathering itself, a flinch
+    /// is the body losing.
+    /// </summary>
+    public const double SquashPeak = 0.16;
+
+    /// <inheritdoc cref="SquashPeak"/>
+    public const double SquashFloor = 0.10;
+
+    /// <summary>
+    /// What a blow does to a body's drawn height: taller while it draws back,
+    /// shorter while it recoils, unchanged when no blow touches it.
+    /// </summary>
+    public static double BlowHeightScale(BodyActionPhase phase, double tickAlpha) =>
+        phase switch
+        {
+            BodyActionPhase.Windup => 1.0 + Fade(StretchPeak, StretchFloor, tickAlpha),
+            BodyActionPhase.Flinch => 1.0 / (1.0 + Fade(SquashPeak, SquashFloor, tickAlpha)),
+            _ => 1.0,
+        };
+
+    /// <summary>
+    /// And to its drawn width: the reciprocal of the height, so the body keeps its
+    /// area.
+    ///
+    /// <para>
+    /// That reciprocal is the whole of squash and stretch as an idea, and it is
+    /// what separates it from simply scaling a sprite: mass is conserved, so a
+    /// body that gets taller gets narrower and reads as the same body under
+    /// tension rather than as a bigger one.
+    /// </para>
+    /// </summary>
+    public static double BlowWidthScale(BodyActionPhase phase, double tickAlpha) =>
+        1.0 / BlowHeightScale(phase, tickAlpha);
+
+    private static double Fade(double peak, double floor, double tickAlpha) =>
+        peak + ((floor - peak) * Clamp01(tickAlpha));
+
     private static int StepsTo(GridPoint cell) => cell.X + cell.Y;
 
     private static double Clamp01(double value) => Math.Clamp(value, 0.0, 1.0);

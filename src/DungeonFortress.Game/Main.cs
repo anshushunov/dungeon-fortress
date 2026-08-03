@@ -5849,13 +5849,18 @@ public partial class Main : Node2D
     private void PushBodyPose(Vector2 center, BodyRef body)
     {
         var (from, to) = BodyStep(body);
+        var alpha = MotionAlpha();
+        var phase = BodyPhase(body.Kind, body.Id);
         var bob = ScaleWorld((float)BodyMotion.BobOffsetRef(
-            BodyMotion.PathCells(from, to, MotionAlpha()),
+            BodyMotion.PathCells(from, to, alpha),
             from != to));
         DrawSetTransform(
             center + new Vector2(0f, (float)CameraView.GoblinFootLine(_tileSize) + bob),
-            0f,
-            new Vector2((float)BodyMotion.FlipScale(BodyFacingOf(body)), 1f));
+            (float)BodyMotion.LeanRadians(to.X - from.X),
+            new Vector2(
+                (float)(BodyMotion.FlipScale(BodyFacingOf(body)) *
+                    BodyMotion.BlowWidthScale(phase, alpha)),
+                (float)BodyMotion.BlowHeightScale(phase, alpha)));
     }
 
     /// <summary>

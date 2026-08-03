@@ -143,7 +143,11 @@ public sealed class BodyMotionAdapterTests
             push,
             $"{nameof(BodyMotion)}.{nameof(BodyMotion.PathCells)}"));
         Assert.Equal(3, path.Arguments.Count);
-        Assert.Contains("MotionAlpha()", path.Arguments[2], StringComparison.Ordinal);
+        Assert.Contains("alpha", path.Arguments[2], StringComparison.Ordinal);
+
+        // And that share of the tick is the one hit-stop already decides, so the
+        // gait holds still with the rest of the picture when a blow lands.
+        Assert.Contains("alpha = MotionAlpha()", push, StringComparison.Ordinal);
 
         // And the two cells are the interpolation buffer's, which is where the
         // cell a body came from is already kept.
@@ -178,6 +182,59 @@ public sealed class BodyMotionAdapterTests
         Assert.Equal(
             1,
             CountOf($"{nameof(BodyMotion)}.{nameof(BodyMotion.BobOffsetRef)}("));
+    }
+
+    /// <summary>
+    /// The lean and the squash go into the same frame, from the same policy: the
+    /// tip is the step's sideways part, and the two scales are the phase the blow
+    /// reading gives this body.
+    /// </summary>
+    [Fact]
+    public void The_lean_is_the_step_and_the_squash_is_the_blow()
+    {
+        var push = AdapterSource.Body("PushBodyPose");
+
+        var lean = Assert.Single(AdapterSource.CallsTo(
+            push,
+            $"{nameof(BodyMotion)}.{nameof(BodyMotion.LeanRadians)}"));
+        Assert.Single(lean.Arguments);
+        Assert.Contains("to.X - from.X", lean.Arguments[0], StringComparison.Ordinal);
+
+        foreach (var member in new[]
+                 {
+                     nameof(BodyMotion.BlowWidthScale),
+                     nameof(BodyMotion.BlowHeightScale),
+                 })
+        {
+            var scale = Assert.Single(AdapterSource.CallsTo(
+                push,
+                $"{nameof(BodyMotion)}.{member}"));
+            Assert.Equal(2, scale.Arguments.Count);
+            Assert.Contains("phase", scale.Arguments[0], StringComparison.Ordinal);
+            Assert.Contains("alpha", scale.Arguments[1], StringComparison.Ordinal);
+        }
+
+        // The phase is the reading's, the same one the pose itself is chosen by,
+        // so a stretched body and a wind-up pose can never disagree.
+        Assert.Contains("BodyPhase(", push, StringComparison.Ordinal);
+
+        // No number of this policy is written next to the draw call: a literal is
+        // invisible to every check in the repository — the argument the alpha check
+        // of WorldDrawPassGuardTests is built on.
+        foreach (var member in new[]
+                 {
+                     nameof(BodyMotion.BobHeightRef),
+                     nameof(BodyMotion.LeanDegrees),
+                     nameof(BodyMotion.StretchPeak),
+                     nameof(BodyMotion.SquashPeak),
+                     nameof(BodyMotion.GaitPeriodCells),
+                 })
+        {
+            Assert.DoesNotContain(
+                $"{nameof(BodyMotion)}.{member}",
+                AdapterSource.Masked,
+                StringComparison.Ordinal);
+        }
     }
 
     /// <summary>

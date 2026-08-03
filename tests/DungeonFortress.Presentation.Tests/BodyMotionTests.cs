@@ -216,4 +216,81 @@ public sealed class BodyMotionTests
             Assert.InRange(offset, -BodyMotion.BobHeightRef, 0.0);
         }
     }
+
+    /// <summary>
+    /// A body tips into the side it walks to, by the same amount either way, and a
+    /// body with no sideways step does not tip at all.
+    /// </summary>
+    [Fact]
+    public void A_body_leans_into_the_side_it_walks_to()
+    {
+        var right = BodyMotion.LeanRadians(1.0);
+        var left = BodyMotion.LeanRadians(-1.0);
+
+        Assert.True(right > 0.0, "A step to the right does not tip the head right.");
+        Assert.Equal(-right, left, 12);
+        Assert.Equal(0.0, BodyMotion.LeanRadians(0.0));
+
+        // The angle is the declared one and not a radian written out by hand: at
+        // six degrees a body drawn 61.82 px tall moves its head 6.46 px sideways.
+        Assert.Equal(BodyMotion.LeanDegrees * Math.PI / 180.0, right, 12);
+    }
+
+    /// <summary>
+    /// A blow stretches the body that strikes and squashes the body that is
+    /// struck, and leaves every other body exactly as it was.
+    /// </summary>
+    [Fact]
+    public void A_blow_stretches_the_striker_and_squashes_the_struck()
+    {
+        Assert.True(BodyMotion.BlowHeightScale(BodyActionPhase.Windup, 0.0) > 1.0);
+        Assert.True(BodyMotion.BlowHeightScale(BodyActionPhase.Flinch, 0.0) < 1.0);
+        Assert.Equal(1.0, BodyMotion.BlowHeightScale(BodyActionPhase.None, 0.0));
+        Assert.Equal(1.0, BodyMotion.BlowWidthScale(BodyActionPhase.None, 1.0));
+    }
+
+    /// <summary>
+    /// And it is squash and <em>stretch</em> rather than a resize: the width is the
+    /// height's reciprocal, so the body keeps its area at every phase and every
+    /// moment of the tick.
+    /// </summary>
+    [Theory]
+    [InlineData(BodyActionPhase.None)]
+    [InlineData(BodyActionPhase.Windup)]
+    [InlineData(BodyActionPhase.Flinch)]
+    public void A_blow_conserves_the_area_of_the_body_it_scales(BodyActionPhase phase)
+    {
+        for (var alpha = 0.0; alpha <= 1.0; alpha += 0.05)
+        {
+            Assert.Equal(
+                1.0,
+                BodyMotion.BlowHeightScale(phase, alpha) *
+                BodyMotion.BlowWidthScale(phase, alpha),
+                12);
+        }
+    }
+
+    /// <summary>
+    /// The scale fades over the tick towards a floor and never to nothing, for the
+    /// reason every curve of <see cref="BlowEffects"/> has a floor: a paused frame
+    /// and a captured screenshot are both drawn at alpha 1, and an effect that
+    /// rested there would be missing from every frame anybody can stop on.
+    /// </summary>
+    [Theory]
+    [InlineData(BodyActionPhase.Windup)]
+    [InlineData(BodyActionPhase.Flinch)]
+    public void The_scale_of_a_blow_fades_to_a_floor_and_not_to_nothing(BodyActionPhase phase)
+    {
+        var peak = Math.Abs(BodyMotion.BlowHeightScale(phase, 0.0) - 1.0);
+        var floor = Math.Abs(BodyMotion.BlowHeightScale(phase, 1.0) - 1.0);
+
+        Assert.True(peak > floor, "The scale does not fade over the tick.");
+        Assert.True(floor > 0.0, "The scale rests at exactly nothing on a paused frame.");
+
+        // Beyond the tick it holds the floor rather than turning over.
+        Assert.Equal(
+            BodyMotion.BlowHeightScale(phase, 1.0),
+            BodyMotion.BlowHeightScale(phase, 4.0),
+            12);
+    }
 }
