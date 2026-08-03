@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "issue": 177,
+  "pr": 203,
+  "checkpoint": "Круг доработки после вердикта ВОЗВРАТ по PR #203 — критерий готовности 2: «признак проверяется исполняемо, а не утверждается: проверка краснеет, если признак перестал быть виден»",
+  "rule": "Мутант назначается брифом (правило 21): предмет — представление, признак стороны перестаёт быть виден. Проверка обязана краснеть от отката самого признака в Main.cs, а не от отката изменения целиком. Второй мутант назначен из вердикта review: прежний тест о цветах сравнивал две литеральные строки внутри самого теста и был тавтологией — нужно показать, что тест о цветах теперь читает фактические цвета кода.",
+  "runAgainst": {
+    "commit": "de0dc4d",
+    "commitSubject": "Issue #177: couple the side-marker ring check to the feature in Main.cs",
+    "branch": "agent/177-side-marker",
+    "hygiene": "Оба мутанта применялись к закоммиченному состоянию и снимались `git checkout -- <файл>` сразу после прогона, поэтому откат мутанта не мог снести саму правку. Между мутантами `git status --short` пуст."
+  },
+  "history": {
+    "reviewFinding": "Независимый review PR #203 показал, что назначенная брифом мутация не отчитывалась, а при собственной проверке откат признака (вернуть DrawCreature к состоянию «до»: заполненный диск до спрайта, кольцо убрано) тест НЕ ловил — SideMarkerVisibilityTests оставались зелёными. Причина структурная: тест цитировал радиус (SideMarkerRingRadiusRef = 27.0) и цвета (#14b8a6, #dc2626) собственными константами и не читал код Main.cs; тест о цветах сравнивал литералы внутри самого теста (тавтология).",
+    "cause": "Значение признака держалось литералами внутри теста вместо фактического кода. Значения в Main.cs и в тесте могли разойтись молча, и удаление кольца из Main.cs не меняло ни одного значения, которое тест читал, — проверка была утверждением без связи с признаком.",
+    "fix": "Коммит de0dc4d: кольцо рисуется из нового класса SideMarker (src/DungeonFortress.Presentation/SideMarker.cs — радиус RingRadiusRef, цвета CrewRingColor/RaiderRingColor), который читают и Main.cs, и тест; тест получил структурную половину через AdapterSource (тот же читатель, что в WorldDrawPassGuardTests): тела DrawCreature/DrawRaider обязаны содержать ровно один DrawArc с радиусом ScaleWorld(SideMarker.RingRadiusRef), цветом своей стороны и после DrawGoblin; тест о цветах читает константы кода и держит их за документированные teal/red."
+  },
+  "mutants": [
+    {
+      "id": "m1",
+      "where": "src/DungeonFortress.Game/Main.cs",
+      "keyBranch": "кольцо стороны рисуется и видно: DrawArc после спрайта",
+      "edit": "Оба метода возвращены к состоянию «до» из PR #176: в DrawCreature вместо DrawArc-кольца — заполненный диск DrawCircle(center, ScaleWorld(9), DefenderColor(creature)) до спрайта, в DrawRaider — DrawCircle(center, ScaleWorld(9), new Color(\"#7f1d1d\")) до спрайта; кольца убраны. Признак перестал быть виден ровно так, как требует мутация брифа.",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~SideMarkerVisibilityTests\" --nologo",
+      "result": "FAILED: 1 of 3 — DrawCreature_and_DrawRaider_still_draw_the_side_marker_ring. «DrawCreature must draw the side-marker ring exactly once; found 0 DrawArc call(s). The ring is the team cue of Issue #177.» Геометрическая половина (2 теста) осталась зелёной, потому что читает SideMarker.RingRadiusRef, а не тела Main.cs — это и есть смысл двух половин проверки.",
+      "killedBy": "Структурная половина: AdapterSource читает тело DrawCreature, CallsTo(body, \"DrawArc\") пуст — Assert.True(rings.Count == 1) падает.",
+      "killed": true
+    },
+    {
+      "id": "m2",
+      "where": "src/DungeonFortress.Presentation/SideMarker.cs",
+      "keyBranch": "цвета сторон различны и держатся за документированные teal/red",
+      "edit": "CrewRingColor = \"#14b8a6\" заменено на \"#dc2626\" — оба кольца красные, игрок больше не различает стороны по кольцу (ребейз двух оттенков на один — класс мутации из вердикта review).",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~SideMarkerVisibilityTests\" --nologo",
+      "result": "FAILED: 1 of 3 — The_ring_colours_are_the_documented_teal_and_red. Assert.Equal() Failure: Expected: \"#14b8a6\", Actual: \"#dc2626\".",
+      "killedBy": "Тест о цветах теперь читает константы кода (SideMarker.CrewRingColor — ту, что Main.cs передаёт в кольцо) и держит её за документированный teal, вместо сравнения двух литералов внутри теста.",
+      "killed": true
+    }
+  ],
+  "greenBaseline": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests --nologo -v q",
+    "result": "520 passed, 0 failed. Таргетно (SideMarkerVisibilityTests): 3/3 зелёные. До правки слой был 519; после добавления структурного теста — 520.",
+    "note": "После каждого отката мутанта и после финального коммита таргетный фильтр и полный слой прогнаны заново: 3/3 и 520/520 соответственно."
+  },
+  "knownLimitation": {
+    "scope": "Вне этого круга.",
+    "what": "Структурная проверка держит признак за конвенцию WorldDrawPassGuardTests: читает тела методов DrawCreature/DrawRaider через AdapterSource и понимает вызовы в формах «DrawArc(…» и «this.DrawArc(…». Кольцо, нарисованное из другого метода или с другим получателем, — вне проверки; это свойство конвенции имён, а не упущение. Полный verify.ps1 не перегонялся: правило 22 оставляет промежуточному кругу таргетные тесты слоя."
+  }
+}
