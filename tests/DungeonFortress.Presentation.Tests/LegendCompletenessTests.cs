@@ -235,15 +235,21 @@ public sealed class LegendCompletenessTests
     /// <summary>
     /// The number of legend rows must match the row count
     /// <see cref="HudReadabilityTests.AuthoredHud"/> lists as
-    /// <c>legend[0]</c>..<c>legend[8]</c> (nine rows). Adding or removing a
+    /// <c>legend[0]</c>..<c>legend[7]</c> (eight rows). Adding or removing a
     /// row changes this count and must change that list too, so both sides
-    /// move together or the mismatch is caught here. Mutant: deleting the
-    /// state-dot row (Issue #222) drops the count from 9 to 8.
+    /// move together or the mismatch is caught here. The count stayed at
+    /// eight rather than growing to nine when the state-dot row was added:
+    /// the standalone "LEGEND" heading row was folded into the shortest
+    /// content row (see the comment above that tuple in
+    /// <c>CreateLegend</c>) because a ninth row overflowed
+    /// <c>AssertLabelsFit</c>'s worst-case feed measurement at UI scale 2 —
+    /// evidence/222-crowd-frame.json records the failing and passing runs.
+    /// Mutant: deleting the state-dot tuple drops the count from 8 to 7.
     /// </summary>
     [Fact]
     public void CreateLegend_authors_the_expected_number_of_legend_rows()
     {
-        Assert.Equal(9, LegendRowCaptions().Count);
+        Assert.Equal(8, LegendRowCaptions().Count);
     }
 
     /// <summary>

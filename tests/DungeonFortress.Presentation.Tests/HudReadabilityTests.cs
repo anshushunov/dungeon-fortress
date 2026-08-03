@@ -16,7 +16,7 @@ public sealed class HudReadabilityTests
 {
     /// <summary>
     /// The HUD as <c>Main.cs</c> authors it today: the four panels, the heading,
-    /// the nine legend rows, a toolbar button, a hotkey badge and — since Issue
+    /// the eight legend rows, a toolbar button, a hotkey badge and — since Issue
     /// #127 — the tooltip's title and body. The adapter does not read this list —
     /// it walks its own HUD subtree and passes what it finds — so this is a copy,
     /// and what keeps the copy honest is the negative run
@@ -44,7 +44,7 @@ public sealed class HudReadabilityTests
         new("inspector", 11),
         new("feedback", 12),
         new("heading", 13),
-        new("legend[0]", 9),
+        new("legend[0]", 8),
         new("legend[1]", 8),
         new("legend[2]", 8),
         new("legend[3]", 8),
@@ -52,7 +52,6 @@ public sealed class HudReadabilityTests
         new("legend[5]", 8),
         new("legend[6]", 8),
         new("legend[7]", 8),
-        new("legend[8]", 8),
         new("control[inspect]", 10),
         new("hotkey[0]", 8),
         new("tooltip.title", HudFontSizes.TooltipTitleFontSize),
