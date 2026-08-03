@@ -1,0 +1,40 @@
+{
+  "issue": 210,
+  "checkpoint": 5,
+  "rule": "Правило 21: по одному мутанту на половину задачи, оба назначены брифом Issue #210. Гонялись только после коммита проверяемого состояния; git status --short пуст до и после каждого прогона, снятие — git checkout -- src/DungeonFortress.Game/Main.cs.",
+  "commitUnderTest": "65ae5fc (до rebase на origin/main da50396; после rebase тот же tree)",
+  "mutants": [
+    {
+      "id": "m1",
+      "half": "фаза",
+      "target": "src/DungeonFortress.Game/Main.cs — RaiderSpriteKey и CrewSpriteKey",
+      "mutation": "оба вызова BodySprites снова передают безусловный BodyActionPhase.None вместо BodyPhase(...)",
+      "expected": "гард критерия 2 краснеет",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter FullyQualifiedName~BlowAdapterTests",
+      "observed": "не пройдено 1, пройдено 5, всего 6",
+      "failed": ["BlowAdapterTests.Neither_sprite_key_passes_a_literal_phase"],
+      "restored": "git checkout -- src/DungeonFortress.Game/Main.cs"
+    },
+    {
+      "id": "m2",
+      "half": "эффект",
+      "target": "src/DungeonFortress.Game/Main.cs — DrawCreatureInformation и DrawRaiderInformation",
+      "mutation": "удалены четыре вызова: DrawBlowFlash и DrawBlowDamage у обоих видов тел. Вычисление фазы не тронуто — BlowReadout.Of, BodyPhase и оба вызова BodySprites остались как были, то есть позы windup и flinch продолжают работать.",
+      "expected": "проверка критерия 1 краснеет",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~BlowAdapterTests|FullyQualifiedName~WorldDrawPassGuardTests\"",
+      "observed": "не пройдено 3, пройдено 15, всего 18",
+      "failed": [
+        "BlowAdapterTests.Both_kinds_of_body_get_a_flash_and_a_number_and_a_blow_gets_a_streak",
+        "BlowAdapterTests.The_flash_is_the_silhouette_of_the_pose_the_body_is_drawn_in",
+        "WorldDrawPassGuardTests.Every_declared_routine_is_reachable_from_DrawMap"
+      ],
+      "note": "Третий тест — не мой: манифест WorldDrawOrder объявляет DrawBlowFlash, и удаление единственных его вызовов делает объявленную рутину недостижимой из DrawMap. То есть отключить эффект молча нельзя и через манифест тоже.",
+      "restored": "git checkout -- src/DungeonFortress.Game/Main.cs"
+    }
+  ],
+  "afterBoth": {
+    "command": "git status --short && dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~BlowAdapterTests|FullyQualifiedName~WorldDrawPassGuardTests\"",
+    "status": "пусто",
+    "result": "не пройдено 0, пройдено 18, всего 18"
+  }
+}

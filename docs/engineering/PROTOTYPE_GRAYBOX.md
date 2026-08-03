@@ -437,6 +437,86 @@ None of this is state. The interpolation buffer is written from snapshots and is
 never read by `PrototypeWorld`, and `--frame-pacing` below is the check that says
 so out loud.
 
+## A blow on screen (Issue #210)
+
+A fight used to be bodies standing next to each other and bars changing. The
+picture now says who struck whom and what came of it, and every part of it is
+drawn from the canonical journal — no new canonical fact, no new frame of
+animation.
+
+**Where the reading comes from.** `DungeonFortress.Presentation.BlowReadout`
+turns one snapshot into the blows of the moment being drawn.
+`PrototypeWorld` increments `CurrentTick` at the end of a step, so a snapshot
+whose `Tick` is `T` is the world after step `T - 1`, and the entries it draws are
+the ones stamped `T - 1`:
+
+| Reason code | What the picture makes of it |
+|---|---|
+| `combat_attack` | crew member → raider, with the damage |
+| `combat_raider_downed` | the same blow, now with the outcome `Downed` |
+| `combat_downed` | raider → defender, the blow that put the defender down |
+
+A raider's blow that a defender *survives* is recorded nowhere at all, so it is
+read off the fall in hit points between the previous tick and this one. Such a
+blow names the body that was struck and the damage, and leaves the striker
+unnamed: an arrow drawn from a guess is indistinguishable on screen from an arrow
+drawn from a fact. The hit points of the previous tick are the second piece of
+per-frame state the adapter keeps, written from snapshots and never read back.
+
+**Collapsed repeats do not hide a blow.** `RecordDecision` folds an identical
+repeat into the creature's previous entry — over the shipped `prepared` journal,
+136 blows in 52 entries, nine folded into one at worst. It costs the picture
+nothing, because a fold moves `LastTick` to the tick of the latest repeat and a
+frame asks about one tick only.
+`BlowJournalSourceTests.Every_blow_of_the_party_is_recoverable_tick_by_tick`
+walks a whole party and recovers all 136. Nothing in the simulation changed.
+
+**What is drawn.** Four marks, all of them presentation only:
+
+- the **pose**: the striker draws back (`windup`), the struck body recoils
+  (`flinch`). Both poses shipped with the v2 pack and were unreachable until this
+  change, because the adapter passed an unconditional `BodyActionPhase.None`.
+  Being struck wins over striking when the same body does both on one tick, and
+  a body on the ground stays on the ground — `downed` outranks both;
+- the **flash**: the body's own pose silhouette, tinted. Warm white for a body
+  still standing, red-white for one that has just gone down;
+- the **number**: what the body lost, written as a loss (`-5`). White when the
+  blow put the body down, amber when a raider lost the hit points, red when a
+  crew member did. It carries a dark rim, because a number without one is
+  unreadable over a goblin;
+- the **streak**: a piece of the line between the two bodies, pointing from the
+  striker to the struck. Only a blow the journal names both ends of gets one.
+
+All four last exactly the tick the blow was recorded on, and all four fade
+towards a floor rather than to nothing — a paused frame and a captured screenshot
+are drawn at alpha 1, and an effect that reached zero there would be invisible in
+every piece of evidence.
+
+The flash, the number and the streak are drawn **above the depth pass**, for the
+reason the HP bar is (Issue #83): a raised wall top erased a body's readout
+completely, and bodies stack besides — three raiders share one larder tile in the
+first wave of the shipped journal. They are declared in `WorldDrawOrder` under
+`OverlayMark.BlowFeedback` and none of them fills anything.
+
+There is no mark for a **miss**, and that is a fact about the simulation rather
+than a gap: an attack in reach always lands and the damage is floored at
+`PrototypeTuning.DamageFloor`, so no reason code says "missed". The third reading
+next to "hit" and "put down" is the absence of every mark — a fighting body with
+no blow on this tick.
+
+**Hit-stop stops the drawing and not the tick.** On a tick a blow landed on, the
+picture holds at the position that tick started from for the first 35 % of it and
+then catches up; the tick itself is already over by then. It rides entirely on
+`MotionAlpha`, which is the one place that decides *which frame of the journey
+between two canonical positions* is shown, and the remapping can only ever lower
+that alpha — so no body is drawn ahead of the simulation. Measured on the shipped
+`prepared` journal to tick 1400 (`evidence/210-determinism.json`): the canonical
+checksum at 20 fps, at 60 fps, in a frameless replay and in a run of the build
+without any of this is one and the same, `interpolationLeadViolations` stays 0,
+and the largest distance a body moves in one frame goes from 12 px to 18.462 px
+at 20 fps — the catch-up factor 1 / (1 − 0.35), still well inside the 40 px cell
+the check exists to protect.
+
 ## Wall volume and depth order (Issue #83)
 
 Rock is rendered in immediate mode rather than through `TileMapLayer`. This is
@@ -1705,7 +1785,10 @@ non-canonical time controls. No Node stores an alternative job, creature or
 economy state, and no input sends a direct creature command. The motion
 interpolation buffer is the one piece of per-frame state the adapter keeps: it
 holds the tile each body came from, it is written from snapshots only, and
-`--frame-pacing` is the check that it never travels the other way. It remains a
+`--frame-pacing` is the check that it never travels the other way. Issue #210
+added two more of the same kind and no others: the blows of the moment being
+drawn and the hit points of the previous tick they are measured against, both
+derived from snapshots and both invisible to `PrototypeWorld`. It remains a
 graybox: the wall topology is derived from the published rock set and creates no
 new canonical fact or asset. Art assets, animation, production onboarding and
 Ivan runtime integration are outside Prototype 1.

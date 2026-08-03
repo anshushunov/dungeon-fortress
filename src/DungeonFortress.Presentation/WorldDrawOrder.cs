@@ -140,6 +140,13 @@ public static class WorldDrawOrder
         new("DrawBodyInformationOverlays", WorldDrawPass.Informational, OverlayMark.BodyState),
         new("DrawCreatureInformation", WorldDrawPass.Informational, OverlayMark.BodyState),
         new("DrawRaiderInformation", WorldDrawPass.Informational, OverlayMark.BodyState),
+        // Issue #210. All three marks of a blow sit above the depth pass, for the
+        // reason the HP bar does: a raised wall top and a body sharing the same
+        // cell both erase a mark left inside that pass, and the first review round
+        // of Issue #83 is where that was measured.
+        new("DrawBlowFlash", WorldDrawPass.Informational, OverlayMark.BlowFeedback),
+        new("DrawBlowStreaks", WorldDrawPass.Informational, OverlayMark.BlowFeedback),
+        new("DrawBlowDamage", WorldDrawPass.Informational, OverlayMark.BlowFeedback),
         new("DrawDownedMark", WorldDrawPass.Informational, OverlayMark.BodyState),
         new("DrawHpBar", WorldDrawPass.Informational, OverlayMark.BodyState),
         new("DrawRoomLabels", WorldDrawPass.Informational, OverlayMark.RoomLabel),

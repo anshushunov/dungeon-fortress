@@ -82,15 +82,24 @@ public sealed class InformationalOverlayRuleTests
     }
 
     /// <summary>
-    /// Only a body's own readout is outside the rule by subject, and the cell
-    /// question is asked exactly of the marks it means something for: a value
+    /// Only what is anchored to a body is outside the rule by subject, and the
+    /// cell question is asked exactly of the marks it means something for: a value
     /// nobody reads looks load-bearing and is not.
+    ///
+    /// <para>
+    /// The list is named rather than derived on purpose. Two marks are on it —
+    /// what a body <em>is</em> (<see cref="OverlayMark.BodyState"/>) and what has
+    /// just <em>happened</em> to it (<see cref="OverlayMark.BlowFeedback"/>, Issue
+    /// #210) — and a third one joining them has to be an edit here, because
+    /// declaring a cell mark as a body mark is how the one rule of this pass would
+    /// be escaped rather than answered.
+    /// </para>
     /// </summary>
     [Fact]
     public void Only_a_body_readout_is_outside_the_rule_and_the_cell_flag_is_never_dead()
     {
         Assert.Equal(
-            new[] { OverlayMark.BodyState },
+            new[] { OverlayMark.BodyState, OverlayMark.BlowFeedback },
             InformationalOverlays.All
                 .Where(rule => rule.Subject != OverlayMarkSubject.Cell)
                 .Select(rule => rule.Mark)
