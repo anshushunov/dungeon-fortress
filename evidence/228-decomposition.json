@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 2,
+  "issue": 228,
+  "when": "2026-08-04, on the branch of this issue at checkpoint 2",
+  "what": "Criterion 1 of Issue #228: every creature-tick an ex-combatant spent in the quarters and the tiles around them, filed under a named cause, with no remainder. Not most of the cohort — all of it.",
+  "command": "dotnet test tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj --filter \"FullyQualifiedName~PrototypeQuartersIdleTests\" -v q --logger \"console;verbosity=detailed\"",
+  "howTheCoverageIsGuaranteed": {
+    "shape": "Classify is a ladder, so a tick lands in exactly one bucket by construction and the partition needs no disjointness proof. What it does need is a proof that the last rung is not a catch-all, and that is what the two halves of The_decomposition_of_the_stay_in_the_quarters_leaves_no_remainder are.",
+    "coverage": "Cause.Unclassified is what a tick lands in when no rung claims it, and it is asserted to be zero. It was not zero on the first run: three ticks of the matrix — baseline/20260727 t1573, baseline/20260728 t2235 and prepared/20260728 t1562 — fell through, and the reason was found rather than swept up. MatchJobs runs before ActCreatures, so a creature whose Rest job finishes inside the tick was never in the matching pool that tick and no waiting reason was written for it. That is Cause.JobEnded, named because it is a real thing that happens and not because the remainder had to be made to vanish.",
+    "corroboration": "Coverage alone passes for a classifier that answers 'no work' to everything, so the same check holds the buckets against counters the classifier does not read. The ladder reads the canonical event journal; moveCount and blockedTicks are kept by PrototypeWorld.Move. Three assertions: Stepped equals the ticks moveCount rose (292 = 292); every tick blockedTicks rose was classified BlockedByOthers (1876 = 1876); and no tick on which blockedTicks rose was classified as one of the causes whose meaning is that the creature took no step (Stepped, WorkZoneUnreachable, NoWork, JobEnded, Starving, Unclassified — all zero).",
+    "whyTheBucketIsBiggerThanTheCounter": "BlockedByOthers holds 1897 ticks and blockedTicks corroborates 1876 of them. The 21 are real and the direction of the gap is asserted rather than papered over: blockedTicks is kept by PrototypeWorld.Move alone, and three other places write waiting_blocked_by_other without going through it — the two larder retries of ActJob (PrototypeWorld.cs:3567 and :3630) and the meal lane of CanAdvanceMealQueue (PrototypeWorld.cs:4255). Those are refusals by a body just the same."
+  },
+  "theLadderAndWhyItIsOrderedThatWay": {
+    "order": ["Stepped", "OffItsFeet", "Mustering", "BlockedByOthers", "RouteUnreachable", "LarderUnreachable", "Eating", "Resting", "Working", "WorkZoneUnreachable", "NoWork", "JobEnded", "Starving", "Unclassified"],
+    "theOneChoiceThatMovesNumbers": "BlockedByOthers sits above Eating, Resting and Working. Issue #228 asks what HOLDS the group in the quarters, and a creature that has somewhere to be and is refused the step is held there whatever the errand was. With the errand first, 500 refused steps of the matrix would be filed under «оно шло есть» and the symptom would disappear from the answer: the buckets were Eating=499, Resting=959, Working=10, BlockedByOthers=1376 in that order, against Eating=0, Resting=947, Working=0, BlockedByOthers=1897 in this one. The choice is named because it is a choice, and the cross-tabulation below shows the same ticks the other way round so that nothing is hidden by it.",
+    "threeCodesUnderOneName": "refused_zone_unreachable is written from three places that mean three different things, and Issue #228 asks about one of them. They are told apart by the arguments the decision carries, which is the only place the difference survives into the journal: Move writes targetX/targetY (Cause.RouteUnreachable), TryStartEating and CanAdvanceMealQueue write zoneKind (Cause.LarderUnreachable), and the matching's own diagnostic in DiagnosticReason writes neither (Cause.WorkZoneUnreachable)."
+  },
+  "measuredNow": {
+    "quartersTicks": 4657,
+    "cohortTicks": 19180,
+    "causes": {
+      "BlockedByOthers": {"ticks": 1897, "share": "40.7 %"},
+      "NoWork": {"ticks": 1129, "share": "24.2 %"},
+      "Resting": {"ticks": 947, "share": "20.3 %"},
+      "WorkZoneUnreachable": {"ticks": 389, "share": "8.4 %"},
+      "Stepped": {"ticks": 292, "share": "6.3 %"},
+      "JobEnded": {"ticks": 3, "share": "0.1 %"},
+      "OffItsFeet": 0,
+      "Mustering": 0,
+      "RouteUnreachable": 0,
+      "LarderUnreachable": 0,
+      "Eating": 0,
+      "Working": 0,
+      "Starving": 0,
+      "Unclassified": 0
+    },
+    "sum": "1897 + 1129 + 947 + 389 + 292 + 3 = 4657, which is quartersTicks exactly"
+  },
+  "measuredBefore": {
+    "quartersTicks": 1630,
+    "cohortTicks": 17916,
+    "causes": {
+      "Resting": 815,
+      "NoWork": 435,
+      "WorkZoneUnreachable": 156,
+      "Stepped": 121,
+      "BlockedByOthers": 101,
+      "JobEnded": 2,
+      "Unclassified": 0
+    },
+    "sum": "815 + 435 + 156 + 121 + 101 + 2 = 1630"
+  },
+  "whatTheJournalActuallySaid": {
+    "note": "the decision codes carried on the tick, by cause, printed by Report_what_the_journal_said_about_the_stay_in_the_quarters. A tick can carry several — the matching writes one, the movement writes another — and this is the whole record rather than lastDecision, which keeps only the last of them.",
+    "BlockedByOthers": {
+      "waiting_stock_sufficient:Harvest + waiting_blocked_by_other": 995,
+      "waiting_blocked_by_other": 491,
+      "refused_rule_reserve + waiting_stock_sufficient:Harvest + waiting_blocked_by_other": 291,
+      "waiting_stock_sufficient:Cook + waiting_blocked_by_other": 87,
+      "waiting_blocked_by_other:Rest": 12,
+      "chosen_need_hunger + waiting_blocked_by_other": 7,
+      "reading": "on at least 1373 of the 1897 (995 + 291 + 87, the rows above that carry both a matching diagnostic and the refusal) the matching had already told the creature there was no work on that same tick. It was refused a step it took because it had nothing else to do — the off-duty walk — and not because it was hurrying somewhere. 'At least' because the report prints the eight commonest combinations per cause and eight ticks of this cause fall below that cut."
+    },
+    "NoWork": {
+      "waiting_stock_sufficient:Harvest": 698,
+      "refused_rule_reserve + waiting_stock_sufficient:Harvest": 300,
+      "refused_too_exhausted": 121,
+      "waiting_input_missing:Haul": 7,
+      "refused_place_of_panic:Cook": 3
+    },
+    "WorkZoneUnreachable": {
+      "refused_zone_unreachable:Haul": 287,
+      "refused_rule_reserve + refused_zone_unreachable:Haul": 102,
+      "reading": "all 389 carry JobKind.Haul. This is «the zone of the work I would otherwise have taken cannot be reached», not «the quarters cannot be reached»: RouteUnreachable and LarderUnreachable are both zero over the whole matrix."
+    }
+  },
+  "crossTabulation": {
+    "what": "the same ticks counted the other way round, so the one ordering choice above can be checked rather than trusted",
+    "ticksOnWhichBlockedTicksRose": 1876,
+    "byCause": {"BlockedByOthers": 1876, "everythingElse": 0},
+    "ticksOnWhichMoveCountRose": 292,
+    "byCauseMoved": {"Stepped": 292, "everythingElse": 0}
+  }
+}
