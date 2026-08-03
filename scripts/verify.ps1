@@ -41,6 +41,7 @@ $ivanMcpConfigTestScript = Join-Path $repoRoot "scripts\test-ivan-mcp-config.ps1
 $domainMcpConfigTestScript = Join-Path $repoRoot "scripts\test-domain-mcp-config.ps1"
 $domainMcpLauncherTestScript = Join-Path $repoRoot "scripts\test-domain-mcp-launcher.ps1"
 $domainMcpVerificationScript = Join-Path $repoRoot "scripts\verify-domain-mcp.ps1"
+$takeTaskTestScript = Join-Path $repoRoot "scripts\agent\test-take-task.ps1"
 
 $env:DOTNET_CLI_HOME = Join-Path $artifactsRoot "dotnet-home"
 $env:DOTNET_NOLOGO = "1"
@@ -262,7 +263,7 @@ function Initialize-EngineRuntime {
 # agent can verify what it touched without paying for the rest.
 $stageCatalog = [ordered]@{
     scripts = [pscustomobject]@{
-        Summary = "Dependency-free script guards: stage selection, temporary directory, Godot output, screenshot/evidence paths, GitHub auth diagnostics, Ivan and domain MCP config."
+        Summary = "Dependency-free script guards: stage selection, temporary directory, Godot output, screenshot/evidence paths, GitHub auth diagnostics, Ivan and domain MCP config, take-task behavioural test."
         Body = {
             # Stage selection is only honest while every check lives in a stage and
             # the documented table matches this script. Neither is visible in a green
@@ -306,6 +307,12 @@ $stageCatalog = [ordered]@{
             # MSB3027 whenever an agent has the server connected.
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $domainMcpConfigTestScript
+            )
+            # The behavioural test for take-task.ps1 (Issue #182) runs real code
+            # through a stub gh harness and an end-to-end fixture repository. It does
+            # not depend on the solution build, the engine, or network access.
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $takeTaskTestScript
             )
         }
     }
