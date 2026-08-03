@@ -1,0 +1,80 @@
+{
+  "issue": 210,
+  "checkpoint": 4,
+  "claim": "Ни один введённый эффект не входит в канонический снапшот и не меняет checksum. Hit-stop останавливает отрисовку, а не тик.",
+  "scene": {
+    "fixture": "prepared",
+    "seed": 20260726,
+    "targetTick": 1400,
+    "why": "Тик 1400 — после первой волны, то есть прогон проходит через весь бой тиков 1300–1326, где hit-stop реально срабатывает: 136 ударов партии дают вспышки, числа и остановку отрисовки. Замер на тихом отрезке ничего бы не проверил."
+  },
+  "runs": [
+    {
+      "what": "без представления вообще: канонический прогон того же журнала",
+      "command": "dotnet tests/DungeonFortress.Scenarios/bin/Release/net8.0/DungeonFortress.Scenarios.dll --prototype --commands scenarios/prototype1/prepared.commands.v2.json --ticks 1400",
+      "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002"
+    },
+    {
+      "what": "без эффектов: сборка origin/main (da50396), кадры реальные",
+      "command": "<godot-console> --headless --fixed-fps 20 --path ./src/DungeonFortress.Game -- --fixture prepared --frame-pacing 1400",
+      "tick": 1400,
+      "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "frames": 4665,
+      "interpolationLeadViolations": 0,
+      "maxRenderStepPixels": 12.0
+    },
+    {
+      "what": "без эффектов, 60 fps",
+      "command": "<godot-console> --headless --fixed-fps 60 --path ./src/DungeonFortress.Game -- --fixture prepared --frame-pacing 1400",
+      "tick": 1400,
+      "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "frames": 13992,
+      "interpolationLeadViolations": 0,
+      "maxRenderStepPixels": 4.0
+    },
+    {
+      "what": "с эффектами и hit-stop: эта ветка, 20 fps",
+      "command": "<godot-console> --headless --fixed-fps 20 --path ./src/DungeonFortress.Game -- --fixture prepared --frame-pacing 1400",
+      "tick": 1400,
+      "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "frames": 4665,
+      "interpolatedFrames": 4661,
+      "interpolationLeadViolations": 0,
+      "maxRenderStepPixels": 18.462
+    },
+    {
+      "what": "с эффектами и hit-stop: эта ветка, 60 fps",
+      "command": "<godot-console> --headless --fixed-fps 60 --path ./src/DungeonFortress.Game -- --fixture prepared --frame-pacing 1400",
+      "tick": 1400,
+      "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+      "frames": 13992,
+      "interpolatedFrames": 12583,
+      "interpolationLeadViolations": 0,
+      "maxRenderStepPixels": 6.154
+    }
+  ],
+  "verdict": {
+    "checksum": "Пять прогонов — один checksum 18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002. Совпадают и канонический прогон без представления, и обе частоты кадров до изменения, и обе после. Внутри каждого прогона с движком checksum равен replayChecksum — тот же журнал, переигранный вообще без кадров.",
+    "criterion4": "Прогон с эффектами и без даёт один checksum — выполнено, обеими командами.",
+    "criterion5": "frame_pacing на 20 и 60 fps даёт один checksum — выполнено; hit-stop в тик не протёк.",
+    "costOfHitStop": {
+      "what": "Единственное, что hit-stop меняет в замерах, — максимальный сдвиг тела за один кадр.",
+      "before": { "fps20": 12.0, "fps60": 4.0 },
+      "after": { "fps20": 18.462, "fps60": 6.154 },
+      "factor": 1.5384615384615383,
+      "why": "1 / (1 − BlowEffects.HitStopShare) = 1 / 0.65. Отрисовка стоит первые 35 % тика и догоняет оставшиеся 65 %, поэтому скорость догона выше ровно во столько раз.",
+      "bound": "Клетка 40 px. 18.462 < 40, то есть свойство «ни один кадр не двигает тело на целую клетку», ради которого зонд существует, сохраняется с запасом больше чем вдвое.",
+      "leadViolations": "0 во всех четырёх прогонах с движком: hit-stop только понижает alpha, а понижение рисует тело ближе к клетке, откуда оно вышло."
+    }
+  },
+  "frameIsUnchangedByHitStop": {
+    "what": "Пауза рисуется при alpha 1, поэтому hit-stop не должен менять снятый кадр — и не меняет.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -GodotPath <godot-console> -Fixture prepared -ScreenshotTicks 1318 -ScreenshotPath \"210/after-hitstop.png\" -TileSize 40 -CameraZoom 2.0 -CameraPosition \"1020,480\" -UiScale 1.0 -FrameSize \"1280x720\" -TemporaryRoot <короткий каталог вне worktree>",
+    "sha256OfCapture": "ade86a7d3e6cf1d2f6213abd0da7da1c80a69c0d576a1bbda9513ae5901400db",
+    "note": "Побайтово тот же PNG, что кадр «после» рубежа 3 (.artifacts/210/after.png). Это замер рабочих артефактов прогона, а не хеш дерева Git."
+  }
+}

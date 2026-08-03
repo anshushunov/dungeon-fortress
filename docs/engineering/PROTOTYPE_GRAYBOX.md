@@ -504,6 +504,19 @@ than a gap: an attack in reach always lands and the damage is floored at
 next to "hit" and "put down" is the absence of every mark — a fighting body with
 no blow on this tick.
 
+**Hit-stop stops the drawing and not the tick.** On a tick a blow landed on, the
+picture holds at the position that tick started from for the first 35 % of it and
+then catches up; the tick itself is already over by then. It rides entirely on
+`MotionAlpha`, which is the one place that decides *which frame of the journey
+between two canonical positions* is shown, and the remapping can only ever lower
+that alpha — so no body is drawn ahead of the simulation. Measured on the shipped
+`prepared` journal to tick 1400 (`evidence/210-determinism.json`): the canonical
+checksum at 20 fps, at 60 fps, in a frameless replay and in a run of the build
+without any of this is one and the same, `interpolationLeadViolations` stays 0,
+and the largest distance a body moves in one frame goes from 12 px to 18.462 px
+at 20 fps — the catch-up factor 1 / (1 − 0.35), still well inside the 40 px cell
+the check exists to protect.
+
 ## Wall volume and depth order (Issue #83)
 
 Rock is rendered in immediate mode rather than through `TileMapLayer`. This is

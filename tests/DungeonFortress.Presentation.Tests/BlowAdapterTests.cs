@@ -186,4 +186,40 @@ public sealed class BlowAdapterTests
             streaks,
             StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Hit-stop lives in the one place that decides which frame of the journey
+    /// between two canonical positions is drawn, and nowhere else. A pause put
+    /// anywhere near <c>Advance</c> or the accumulator would be a pause of the
+    /// simulation, which is what the hard constraint of this Issue forbids.
+    /// </summary>
+    [Fact]
+    public void Hit_stop_holds_the_drawing_and_never_the_tick()
+    {
+        var alpha = AdapterSource.Body("MotionAlpha");
+        Assert.Contains(
+            $"{nameof(BlowEffects)}.{nameof(BlowEffects.HitStopAlpha)}(",
+            alpha,
+            StringComparison.Ordinal);
+
+        Assert.Empty(AdapterSource.CallsTo(
+            AdapterSource.Body("Advance"),
+            $"{nameof(BlowEffects)}.{nameof(BlowEffects.HitStopAlpha)}"));
+        Assert.Equal(
+            1,
+            CountOf($"{nameof(BlowEffects)}.{nameof(BlowEffects.HitStopAlpha)}("));
+    }
+
+    private static int CountOf(string needle)
+    {
+        var count = 0;
+        for (var index = AdapterSource.Masked.IndexOf(needle, StringComparison.Ordinal);
+             index >= 0;
+             index = AdapterSource.Masked.IndexOf(needle, index + 1, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
+    }
 }

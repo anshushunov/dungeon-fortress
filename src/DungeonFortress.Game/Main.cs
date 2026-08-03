@@ -487,9 +487,17 @@ public partial class Main : Node2D
     ///
     /// Paused, stepped, reloaded and command-edited states are drawn at alpha 1,
     /// which is canonical: STEP has to show the result of the step it just ran.
+    ///
+    /// Hit-stop rides on this and on nothing else. On a tick a blow landed on, the
+    /// drawing holds at the position the tick started from for the first share of
+    /// it and then catches up — the tick itself is already over, and the remapping
+    /// can only lower the alpha, so no body is ever drawn ahead of the simulation.
+    /// The curve is <see cref="BlowEffects.HitStopAlpha"/>.
     /// </summary>
     private float MotionAlpha() =>
-        !_interpolatesMotion || _paused ? 1f : (float)Math.Clamp(_tickAccumulator, 0.0, 1.0);
+        !_interpolatesMotion || _paused
+            ? 1f
+            : (float)BlowEffects.HitStopAlpha(_tickAccumulator, _blows.Landed);
 
     private Vector2 RenderCenter(GridPoint position, Dictionary<int, GridPoint> origins, int id)
     {
