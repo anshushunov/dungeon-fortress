@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 2,
+  "issue": 201,
+  "when": "2026-08-03, taken on origin/main (a180b32) before any edit of this branch",
+  "what": "The half of the post-combat symptom that has nothing to do with the jam: how much of the cohort stands still after a fight because there is nothing to do. Issue #201 asks for the same measurement as #186 so that before and after are comparable; this file is the 'before'.",
+  "theOwnersWords": "Существо без работы должно возвращаться куда-то — в покои или на пост, — а не стоять там, где кончилась драка.",
+  "command": "dotnet test tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj --filter \"FullyQualifiedName~PrototypePostCombatDispersalTests.Report_post_combat_dispersal_over_the_seed_matrix\" -v q --logger \"console;verbosity=detailed\"",
+  "base": {
+    "commit": "a180b32",
+    "howObtained": "git merge-base HEAD origin/main",
+    "worktree": "../_wt-201-idle-disperse, branch agent/201-idle-disperse"
+  },
+  "matrix": {
+    "fixtures": ["baseline", "prepared"],
+    "seeds": [20260726, 20260727, 20260728],
+    "windows": 13,
+    "dispersalWindowTicks": 60
+  },
+  "standingStill": {
+    "cohortTicks": 3780,
+    "standingStill": 1989,
+    "idleAndStill": 1121,
+    "meaning": {
+      "cohortTicks": "creature-ticks observed over every post-combat window, cohort = everybody still Fighting on the tick before the wave ended",
+      "standingStill": "creature-ticks with no step taken",
+      "idleAndStill": "creature-ticks with no step taken and no refusal recorded — the creature was not blocked by anything, it had nothing to do"
+    }
+  },
+  "whatTheStillOnesWereDoing": {
+    "modes": {
+      "Waiting": 1121,
+      "Working": 693,
+      "Resting": 140,
+      "Eating": 35
+    },
+    "lastDecisionsOfTheWaitingOnes": {
+      "waiting_stock_sufficient": 850,
+      "refused_zone_unreachable": 232,
+      "waiting_blocked_by_other": 18,
+      "chosen_nearest": 6,
+      "chosen_traffic_yield": 4,
+      "waiting_input_missing": 3,
+      "refused_rule_reserve": 2,
+      "chosen_need_hunger": 2,
+      "chosen_tie_break": 2,
+      "chosen_only_option": 1
+    },
+    "note": "LastDecision can be several ticks stale for a creature that took no decision on the tick being read — named by #186 and not re-measured here."
+  },
+  "whatThisReproduces": "Every number above is quoted by Issue #201 from the measurement of #186. Reproducing them on this branch's base is the point of the file: the 'after' measurement is only comparable if the 'before' is the same run.",
+  "whatIsOutOfScope": {
+    "refused_zone_unreachable": "232 of the 1121 idle Waiting ticks are 'I cannot reach the zone', not 'there is no work'. #201 must not be credited with moving them and must not be confused with them.",
+    "cellOccupancy": "#76 stays on slice 6 by the owner's decision of 2026-08-03; the jam itself is not fixed here."
+  }
+}

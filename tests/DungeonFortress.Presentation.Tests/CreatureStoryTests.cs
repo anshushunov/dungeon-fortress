@@ -77,6 +77,12 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
         "chosen_highest_priority", "chosen_bottleneck", "chosen_affinity_match", "chosen_nearest",
         "chosen_only_option", "chosen_tie_break", "chosen_need_hunger", "chosen_need_fatigue",
         "chosen_muster", "chosen_ration", "chosen_traffic_yield",
+        // Issue #201. Going off duty to the quarters is routine on purpose: it
+        // happens to most of the crew after most fights, and ranking it above
+        // routine would push the turning points a panel exists for — a nerve
+        // that broke, a wound, a refusal by memory — off the four lines with the
+        // most ordinary thing a creature does.
+        "chosen_off_duty",
         "waiting_no_job_available", "waiting_input_missing", "waiting_storage_full",
         "waiting_stock_sufficient", "waiting_crop_not_ripe", "waiting_blocked_by_other",
         "waiting_no_designation", "waiting_no_blueprint", "waiting_no_stockpile",
@@ -101,9 +107,28 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
 
     /// <summary>Whether this line of the panel is this entry of the journal.</summary>
     private static bool Renders(PrototypeEvent @event, string line) =>
-        line.StartsWith(
-            string.Create(CultureInfo.InvariantCulture, $"t{@event.FirstTick}"),
-            StringComparison.Ordinal) &&
+        // The tick prefix ends at a separator, and that is load-bearing rather
+        // than tidy: without it `"t2399 · …".StartsWith("t239")` is true, so an
+        // entry of t239 claims a line of t2399 whenever both render the same
+        // sentence. `refused_rule_reserve` carries no details to tell such a pair
+        // apart, and creature #2 of `baseline` has exactly that pair — t239 and
+        // t2399 — once Issue #201 shifts the party's course. Found by independent
+        // review of PR #217, which also showed the first fix attempt was wrong:
+        // it changed the aggregation below and left this predicate broken.
+        //
+        // Two separators, because a panel line carries two shapes of prefix
+        // (HudText, where the line is built): `t{lastTick} · …` for an entry that
+        // happened once, and `t{firstTick}-{lastTick} · …` for one the world
+        // folded. Accepting only the space would silently stop matching every
+        // folded entry — measured: it turned
+        // The_story_a_creature_shows_is_the_journal_ranked_by_what_it_meant red on
+        // both fixtures.
+        (line.StartsWith(
+                string.Create(CultureInfo.InvariantCulture, $"t{@event.FirstTick} "),
+                StringComparison.Ordinal) ||
+            line.StartsWith(
+                string.Create(CultureInfo.InvariantCulture, $"t{@event.FirstTick}-"),
+                StringComparison.Ordinal)) &&
         line.Contains(
             EventNarration.Sentence(
                 @event.ReasonCode,
