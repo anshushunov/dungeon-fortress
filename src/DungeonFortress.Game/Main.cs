@@ -2069,8 +2069,14 @@ public partial class Main : Node2D
         foreach (var (text, size, color) in new (string Text, int Size, string Color)[]
                  {
                      ("LEGEND", 9, "#cbd5e1"),
-                      ("teal outline = crew / red outline = raider / bar = HP / white X = downed", 8, "#cbd5e1"),
-                     // Issue #52. It replaces the quarters' rest rule rather than
+                       ("teal outline = crew / red outline = raider / bar = HP / white X = downed", 8, "#cbd5e1"),
+                       // Issue #222. The state dot is the small circle at the upper-
+                       // right corner of each own body. It disappears behind the
+                       // legend row "bar = HP" on the line above, so this row is
+                       // the one that keeps the copy honest when the test walks the
+                       // live subtree (see HudReadabilityTests.AuthoredHud).
+                        ("dot: blue=idle amber=fighting pink=fled green=working gray=downed", 8, "#bfdbfe"),
+                       // Issue #52. It replaces the quarters' rest rule rather than
                      // joining it: the panel column is under the same overflow
                      // guard as everything else, and the rest rule now sits on the
                      // room line of the inspector, where clicking the quarters
