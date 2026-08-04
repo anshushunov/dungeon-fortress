@@ -10,6 +10,7 @@ separate spear comes from the combat cell.  All coordinates below are in the
 from __future__ import annotations
 
 import argparse
+from collections import deque
 import hashlib
 import json
 from pathlib import Path
@@ -124,6 +125,77 @@ def source_pixels(source: Image.Image, mask: Image.Image) -> Image.Image:
     return result
 
 
+def assign_visible_pixels_by_nearest_part(
+    part_masks: dict[str, Image.Image], source_alpha: Image.Image
+) -> dict[str, int]:
+    """Flood every unclaimed visible edge pixel from the nearest owned pixel."""
+    width, height = source_alpha.size
+    names = list(part_masks)
+    labels = [-1] * (width * height)
+    queue: deque[tuple[int, int]] = deque()
+    alpha = source_alpha.load()
+    mask_pixels = {name: part_masks[name].load() for name in names}
+    for label, name in enumerate(names):
+        pixels = mask_pixels[name]
+        for y in range(height):
+            row = y * width
+            for x in range(width):
+                if alpha[x, y] > 0 and pixels[x, y] > 0:
+                    labels[row + x] = label
+                    queue.append((x, y))
+
+    assigned = {name: 0 for name in names}
+    while queue:
+        x, y = queue.popleft()
+        label = labels[y * width + x]
+        for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+            if nx < 0 or ny < 0 or nx >= width or ny >= height:
+                continue
+            index = ny * width + nx
+            if alpha[nx, ny] == 0 or labels[index] != -1:
+                continue
+            labels[index] = label
+            name = names[label]
+            mask_pixels[name][nx, ny] = 255
+            assigned[name] += 1
+            queue.append((nx, ny))
+
+    unassigned = sum(
+        1 for y in range(height) for x in range(width)
+        if alpha[x, y] > 0 and labels[y * width + x] == -1
+    )
+    if unassigned:
+        raise RuntimeError(f"{unassigned} visible source pixels have no reachable semantic part")
+    return assigned
+
+
+def significant_alpha_components(image: Image.Image, minimum_area: int = 16) -> list[int]:
+    """Return 8-connected alpha component sizes, ignoring subpixel specks."""
+    alpha = image.getchannel("A")
+    width, height = alpha.size
+    pixels = alpha.load()
+    visited: set[tuple[int, int]] = set()
+    sizes: list[int] = []
+    for y in range(height):
+        for x in range(width):
+            if pixels[x, y] == 0 or (x, y) in visited:
+                continue
+            visited.add((x, y))
+            queue = deque([(x, y)])
+            size = 0
+            while queue:
+                cx, cy = queue.popleft()
+                size += 1
+                for nx in range(max(0, cx - 1), min(width, cx + 2)):
+                    for ny in range(max(0, cy - 1), min(height, cy + 2)):
+                        if pixels[nx, ny] > 0 and (nx, ny) not in visited:
+                            visited.add((nx, ny))
+                            queue.append((nx, ny))
+            if size >= minimum_area:
+                sizes.append(size)
+    return sorted(sizes, reverse=True)
+
+
 def crop_with_padding(image: Image.Image, padding: int = PAD) -> tuple[Image.Image, tuple[int, int]]:
     bbox = image.getchannel("A").getbbox()
     if bbox is None:
@@ -149,7 +221,14 @@ def add_hidden_joint_fill(
     skin = (144, 144, 48, 255)
     skin_light = (194, 185, 75, 255)
 
-    if part_name == "torso":
+    if part_name == "leg_far":
+        # Hidden upper/lower-leg bridge under torso and the near leg.
+        draw.polygon([(310, 320), (341, 318), (365, 384), (350, 408),
+                      (321, 401), (316, 354)], fill=outline)
+        draw.polygon([(316, 326), (336, 325), (357, 381), (346, 399),
+                      (327, 395), (323, 353)], fill=(105, 67, 38, 255))
+        draw.line([(323, 337), (343, 333)], fill=(167, 103, 56, 255), width=4)
+    elif part_name == "torso":
         # Tunic cap under the near shoulder.  The torso owns the adjacent scarf
         # and skirt pixels; only this rounded overlap follows the shoulder joint.
         draw.ellipse((202, 210, 239, 251), fill=outline)
@@ -161,10 +240,17 @@ def add_hidden_joint_fill(
         draw.ellipse((247, 315, 286, 352), fill=outline)
         draw.ellipse((252, 319, 282, 348), fill=teal)
     elif part_name == "arm_far":
-        # Round upper-arm cap under the torso for the far-arm counter-swing.
-        draw.ellipse((334, 216, 371, 254), fill=outline)
-        draw.ellipse((339, 220, 367, 250), fill=skin)
-        draw.arc((342, 222, 365, 247), 190, 325, fill=skin_light, width=4)
+        # The flattened idle hides the forearm between upper arm and hand.  A
+        # continuous arm is authored under the torso so rotation cannot leave a
+        # detached hand on a dark shard.
+        draw.polygon([(339, 216), (371, 216), (388, 302), (398, 326),
+                      (368, 340), (354, 304), (347, 260)], fill=outline)
+        draw.polygon([(344, 221), (367, 221), (376, 278), (359, 288),
+                      (352, 258)], fill=skin)
+        draw.arc((346, 223, 366, 250), 190, 325, fill=skin_light, width=4)
+        draw.polygon([(357, 277), (378, 271), (390, 318), (369, 329)],
+                     fill=(105, 58, 31, 255))
+        draw.line([(360, 285), (382, 280)], fill=(167, 92, 45, 255), width=4)
 
     allowed = ImageChops.multiply(patch.getchannel("A"), higher_opaque)
     result = image.copy()
@@ -323,6 +409,16 @@ def main() -> None:
         part_masks[spec["name"]] = ImageChops.multiply(authored_masks[spec["name"]], available)
         assigned = ImageChops.lighter(assigned, authored_masks[spec["name"]])
 
+    near_pixels = part_masks["arm_near"].load()
+    for y in range(247, 512):
+        for x in range(217, 512):
+            near_pixels[x, y] = 0
+    far_pixels = part_masks["arm_far"].load()
+    for y in range(320, 512):
+        for x in range(0, 360):
+            far_pixels[x, y] = 0
+    nearest_assignments = assign_visible_pixels_by_nearest_part(part_masks, idle.getchannel("A"))
+
     # Duplicate only fully opaque source pixels around each joint.  These are
     # hidden by identical pixels in the rest pose, but give both adjoining
     # pieces real source material under a small rotation.
@@ -335,19 +431,6 @@ def main() -> None:
         px, py = spec["pivot_source"]
         joint_draw.ellipse((px - 14, py - 14, px + 14, py + 14), fill=255)
         mask = ImageChops.lighter(mask, ImageChops.multiply(joint, opaque))
-        # Keep the flattened tunic/thigh pixels next to the hands on the torso.
-        # Their colours touch the limb silhouettes, so polygon overlap alone is
-        # insufficient: the ownership boundary must follow the anatomical edge.
-        if spec["name"] == "arm_near":
-            pixels = mask.load()
-            for y in range(247, 512):
-                for x in range(217, 512):
-                    pixels[x, y] = 0
-        elif spec["name"] == "arm_far":
-            pixels = mask.load()
-            for y in range(320, 512):
-                for x in range(0, 360):
-                    pixels[x, y] = 0
         coverage = ImageChops.lighter(coverage, mask)
         full = source_pixels(idle, mask)
         higher = Image.new("L", idle.size, 0)
@@ -357,6 +440,11 @@ def main() -> None:
         higher_opaque = ImageChops.multiply(higher, opaque)
         full = add_hidden_joint_fill(spec["name"], full, higher_opaque)
         cropped, origin = crop_with_padding(full)
+        components = significant_alpha_components(cropped)
+        if len(components) != 1:
+            raise RuntimeError(
+                f"{spec['name']} has {len(components)} significant alpha components: {components}"
+            )
         filename = f"goblin_cutout_{spec['name']}_v1.png"
         cropped.save(args.out_dir / filename, optimize=True)
         pivot = [spec["pivot_source"][0] - origin[0], spec["pivot_source"][1] - origin[1]]
@@ -368,31 +456,8 @@ def main() -> None:
             "z_index": spec["z_index"],
             "rest_position": list(origin),
             "motion": spec["motion"],
+            "significant_alpha_components": len(components),
         })
-
-    # Any visible idle pixel missed by the authored polygons belongs to torso.
-    missed = Image.new("L", idle.size, 0)
-    idle_alpha = idle.getchannel("A")
-    missed_pixels = missed.load()
-    coverage_pixels = coverage.load()
-    alpha_pixels = idle_alpha.load()
-    missed_count = 0
-    for y in range(idle.height):
-        for x in range(idle.width):
-            if alpha_pixels[x, y] > 0 and coverage_pixels[x, y] == 0:
-                missed_pixels[x, y] = 255
-                missed_count += 1
-    if missed_count:
-        torso_meta = next(part for part in built_parts if part["name"] == "torso")
-        torso_path = args.out_dir / torso_meta["file"]
-        torso_crop = Image.open(torso_path).convert("RGBA")
-        full_torso = Image.new("RGBA", idle.size, (0, 0, 0, 0))
-        full_torso.alpha_composite(torso_crop, tuple(torso_meta["rest_position"]))
-        full_torso.paste(idle, (0, 0), missed)
-        recropped, origin = crop_with_padding(full_torso)
-        recropped.save(torso_path, optimize=True)
-        torso_meta["rest_position"] = list(origin)
-        torso_meta["pivot"] = [286 - origin[0], 330 - origin[1]]
 
     weapon_full = make_weapon(combat)
     weapon_crop, weapon_origin = crop_with_padding(weapon_full)
@@ -435,7 +500,7 @@ def main() -> None:
             "committed_sha256": committed_sha256(Path(__file__)),
         },
         "alpha_sheet": {"path": args.alpha_sheet.as_posix(), "sha256": sha256(args.alpha_sheet)},
-        "missed_visible_pixels_assigned_to_torso": missed_count,
+        "nearest_visible_edge_assignments": nearest_assignments,
         "rest_reconstruction": "byte-identical RGBA to idle source cell",
         "outputs": [
             {"path": path.as_posix(), "committed_sha256": committed_sha256(path)}

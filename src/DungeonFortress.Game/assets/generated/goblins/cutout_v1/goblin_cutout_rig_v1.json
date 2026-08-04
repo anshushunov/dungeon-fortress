@@ -30,37 +30,40 @@
         301,
         310
       ],
-      "motion": "Independent far-leg step and crouch during windup and recovery."
+      "motion": "Independent far-leg step and crouch during windup and recovery.",
+      "significant_alpha_components": 1
     },
     {
       "name": "arm_far",
       "file": "goblin_cutout_arm_far_v1.png",
       "pivot": [
-        26,
+        22,
         28
       ],
       "parent": "torso",
       "z_index": 1,
       "rest_position": [
-        326,
+        330,
         208
       ],
-      "motion": "Independent far-arm counterbalance and two-handed weapon support."
+      "motion": "Independent far-arm counterbalance and two-handed weapon support.",
+      "significant_alpha_components": 1
     },
     {
       "name": "torso",
       "file": "goblin_cutout_torso_v1.png",
       "pivot": [
-        121,
-        229
+        96,
+        132
       ],
       "parent": null,
       "z_index": 2,
       "rest_position": [
-        165,
-        101
+        190,
+        198
       ],
-      "motion": "Root body part: leans into the strike and recoils independently of both legs."
+      "motion": "Root body part: leans into the strike and recoils independently of both legs.",
+      "significant_alpha_components": 1
     },
     {
       "name": "leg_near",
@@ -75,7 +78,8 @@
         194,
         310
       ],
-      "motion": "Independent near-leg step and crouch preserve the readable planted stance."
+      "motion": "Independent near-leg step and crouch preserve the readable planted stance.",
+      "significant_alpha_components": 1
     },
     {
       "name": "head",
@@ -90,22 +94,24 @@
         164,
         84
       ],
-      "motion": "Turns toward the target independently from the torso during anticipation and follow-through."
+      "motion": "Turns toward the target independently from the torso during anticipation and follow-through.",
+      "significant_alpha_components": 1
     },
     {
       "name": "arm_near",
       "file": "goblin_cutout_arm_near_v1.png",
       "pivot": [
         54,
-        29
+        33
       ],
       "parent": "torso",
       "z_index": 5,
       "rest_position": [
         165,
-        203
+        199
       ],
-      "motion": "Primary strike arm rotates around the shoulder through windup, hit, follow-through, and return."
+      "motion": "Primary strike arm rotates around the shoulder through windup, hit, follow-through, and return.",
+      "significant_alpha_components": 1
     },
     {
       "name": "weapon",

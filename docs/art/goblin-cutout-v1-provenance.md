@@ -71,12 +71,15 @@ Exact original prompt:
 3. Authored polygons partition the idle cell by semantic part. Limb masks use
    anatomical ownership boundaries rather than global dilation: the belt,
    buckle, skirt, and scarf remain on `torso` instead of rotating with a limb.
+   Unclaimed antialiased edge pixels are assigned by a four-neighbour,
+   nearest-owned-pixel flood; they are not collected into a blanket torso layer.
    Fully opaque source pixels are duplicated in a 14 px radius around each
    pivot so small rotations have real overlap instead of seams.
 4. Occluded material that does not exist in the flattened source is manually
    reconstructed only where a higher rest-pose layer is fully opaque: teal
    a rounded cloth cap behind the near shoulder and hip, a skin neck under the
-   head, and a rounded far-shoulder cap under the torso. Colors are the measured v2 palette:
+   head, a continuous hidden far forearm, and a rounded far-shoulder cap under
+   the torso. Colors are the measured v2 palette:
    skin `(144,144,48)` with `(194,185,75)` highlight, dark teal cloth, and the
    existing charcoal outline. These pixels are hidden in idle and become
    visible only when a joint rotates.
@@ -103,6 +106,8 @@ For each part:
 - `parent` names the parent part, or is `null` for root `torso`;
 - `z_index` is ascending back-to-front draw order;
 - `motion` explains why the part exists.
+- `significant_alpha_components` is `1`; the builder fails if a body part has
+  a detached alpha component of at least 16 source pixels.
 
 The metadata also records `source_body_bbox`, `runtime_target_size`, and the
 fact that `weapon` is intentionally hidden in the idle rest pose. Issue #244
@@ -134,9 +139,8 @@ python evidence\243-build-goblin-cutout.py `
 
 The builder fails unless the alpha sheet is 1536×1024 and unless compositing
 all rest-visible parts reproduces the complete 512×512 idle cell byte-for-byte.
-The recorded successful run assigns every visible source pixel to a part (the
-manifest records pixels that fall outside the limb polygons and are therefore
-assigned to `torso`) and reports
+The recorded successful run assigns every visible source pixel to its nearest
+semantic part (the manifest records the per-part edge assignment counts) and reports
 `rest reconstruction: byte-identical RGBA to idle source cell`. Output hashes
 are in `evidence/243-goblin-cutout-manifest.json`.
 
