@@ -1,0 +1,50 @@
+{
+  "builder": {
+    "path": "evidence/243-build-goblin-cutout.py",
+    "committed_sha256": "9cbfcc91e42495ca4acfa9602d5c0073638f63de32af57ea7ca5afd101d949ee"
+  },
+  "alpha_sheet": {
+    "path": ".artifacts/243/source-alpha.png",
+    "sha256": "bc845f9afa3759819b7ec0943d737761583e918ea59609883a141e9b654a1bd9"
+  },
+  "missed_visible_pixels_assigned_to_torso": 0,
+  "rest_reconstruction": "byte-identical RGBA to idle source cell",
+  "outputs": [
+    {
+      "path": "evidence/243-goblin-cutout-contact-sheet.png",
+      "committed_sha256": "0b64e907b3d3794fc5c1e34919037348c22932f62ebd27aab4ececfb2900a70e"
+    },
+    {
+      "path": "src/DungeonFortress.Game/assets/generated/goblins/cutout_v1/goblin_cutout_arm_far_v1.png",
+      "committed_sha256": "e8810f5efad2ccf3eb1c01f6f4cb8791c2a5311e5eb0510aa8efa6fa296d41fc"
+    },
+    {
+      "path": "src/DungeonFortress.Game/assets/generated/goblins/cutout_v1/goblin_cutout_arm_near_v1.png",
+      "committed_sha256": "8540e75170963103ee0591bf217d6011c014d8829e70918c99e4a268e5f8458b"
+    },
+    {
+      "path": "src/DungeonFortress.Game/assets/generated/goblins/cutout_v1/goblin_cutout_head_v1.png",
+      "committed_sha256": "29e1bff38e3e7c0fc45eda419d3cde374beed6ec7b671ab02adf186dc697a872"
+    },
+    {
+      "path": "src/DungeonFortress.Game/assets/generated/goblins/cutout_v1/goblin_cutout_leg_far_v1.png",
+      "committed_sha256": "bfc17434d47a0ba2880645235446f6d30bb26c012bed3d00aadeb93c6e2534a6"
+    },
+    {
+      "path": "src/DungeonFortress.Game/assets/generated/goblins/cutout_v1/goblin_cutout_leg_near_v1.png",
+      "committed_sha256": "999737d117b2e6ef6ff802423b12349aed1c306214f60d295fdd8f130513c981"
+    },
+    {
+      "path": "src/DungeonFortress.Game/assets/generated/goblins/cutout_v1/goblin_cutout_rig_v1.json",
+      "committed_sha256": "99b669db878120975b135475dce73941a91e87bfd61b9a0f9bac16c49c7c7200"
+    },
+    {
+      "path": "src/DungeonFortress.Game/assets/generated/goblins/cutout_v1/goblin_cutout_torso_v1.png",
+      "committed_sha256": "31b16c734449cd8ab0a465e31c9c21973dd2339d753410c1f31fc42fc7a2ef52"
+    },
+    {
+      "path": "src/DungeonFortress.Game/assets/generated/goblins/cutout_v1/goblin_cutout_weapon_spear_v1.png",
+      "committed_sha256": "6546fc9d7dd6c2e5c2a877b267ebadffd57a5fff88d0cc05989a6d6ffed3a0e4"
+    }
+  ]
+}

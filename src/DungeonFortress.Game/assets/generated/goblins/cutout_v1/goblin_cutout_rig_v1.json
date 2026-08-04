@@ -1,0 +1,127 @@
+{
+  "format_version": 1,
+  "coordinate_space": "source-cell pixels; origin is top-left; pivots are local to each PNG",
+  "source_cell_size": [
+    512,
+    512
+  ],
+  "source_body_bbox": [
+    172,
+    92,
+    400,
+    422
+  ],
+  "runtime_target_size": [
+    116,
+    168
+  ],
+  "rest_pose": "idle; weapon is intentionally hidden",
+  "parts": [
+    {
+      "name": "leg_far",
+      "file": "goblin_cutout_leg_far_v1.png",
+      "pivot": [
+        22,
+        22
+      ],
+      "parent": "torso",
+      "z_index": 0,
+      "rest_position": [
+        304,
+        310
+      ],
+      "motion": "Independent far-leg step and crouch during windup and recovery."
+    },
+    {
+      "name": "arm_far",
+      "file": "goblin_cutout_arm_far_v1.png",
+      "pivot": [
+        26,
+        28
+      ],
+      "parent": "torso",
+      "z_index": 1,
+      "rest_position": [
+        326,
+        208
+      ],
+      "motion": "Independent far-arm counterbalance and two-handed weapon support."
+    },
+    {
+      "name": "torso",
+      "file": "goblin_cutout_torso_v1.png",
+      "pivot": [
+        94,
+        126
+      ],
+      "parent": null,
+      "z_index": 2,
+      "rest_position": [
+        192,
+        204
+      ],
+      "motion": "Root body part: leans into the strike and recoils independently of both legs."
+    },
+    {
+      "name": "leg_near",
+      "file": "goblin_cutout_leg_near_v1.png",
+      "pivot": [
+        68,
+        49
+      ],
+      "parent": "torso",
+      "z_index": 3,
+      "rest_position": [
+        197,
+        284
+      ],
+      "motion": "Independent near-leg step and crouch preserve the readable planted stance."
+    },
+    {
+      "name": "head",
+      "file": "goblin_cutout_head_v1.png",
+      "pivot": [
+        139,
+        166
+      ],
+      "parent": "torso",
+      "z_index": 4,
+      "rest_position": [
+        164,
+        84
+      ],
+      "motion": "Turns toward the target independently from the torso during anticipation and follow-through."
+    },
+    {
+      "name": "arm_near",
+      "file": "goblin_cutout_arm_near_v1.png",
+      "pivot": [
+        54,
+        51
+      ],
+      "parent": "torso",
+      "z_index": 5,
+      "rest_position": [
+        165,
+        181
+      ],
+      "motion": "Primary strike arm rotates around the shoulder through windup, hit, follow-through, and return."
+    },
+    {
+      "name": "weapon",
+      "file": "goblin_cutout_weapon_spear_v1.png",
+      "pivot": [
+        243,
+        58
+      ],
+      "parent": "arm_near",
+      "z_index": 6,
+      "rest_position": [
+        36,
+        220
+      ],
+      "visible_in_rest": false,
+      "motion": "Separate equipment layer follows the strike hand and can be swapped without redrawing the arm."
+    }
+  ]
+}
