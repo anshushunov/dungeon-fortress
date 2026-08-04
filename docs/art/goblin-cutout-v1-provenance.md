@@ -68,14 +68,15 @@ Exact original prompt:
    from the top-left `idle` cell; the separate spear comes from the top-right
    `combat` cell. Parts remain at source resolution. The runtime target remains
    116×168 inside the unchanged 272×192/170% presentation boundary.
-3. Authored polygons partition the idle cell by semantic part. Masks are
-   expanded by eight pixels before z-ordered exclusivity, preserving edge
-   antialiasing. Fully opaque source pixels are duplicated in a 14 px radius
-   around each pivot so small rotations have real overlap instead of seams.
+3. Authored polygons partition the idle cell by semantic part. Limb masks use
+   anatomical ownership boundaries rather than global dilation: the belt,
+   buckle, skirt, and scarf remain on `torso` instead of rotating with a limb.
+   Fully opaque source pixels are duplicated in a 14 px radius around each
+   pivot so small rotations have real overlap instead of seams.
 4. Occluded material that does not exist in the flattened source is manually
    reconstructed only where a higher rest-pose layer is fully opaque: teal
-   cloth behind the near shoulder and hip, a skin neck under the head, and a
-   rounded far-shoulder cap under the torso. Colors are the measured v2 palette:
+   a rounded cloth cap behind the near shoulder and hip, a skin neck under the
+   head, and a rounded far-shoulder cap under the torso. Colors are the measured v2 palette:
    skin `(144,144,48)` with `(194,185,75)` highlight, dark teal cloth, and the
    existing charcoal outline. These pixels are hidden in idle and become
    visible only when a joint rotates.
@@ -84,7 +85,8 @@ Exact original prompt:
    the visible v2 shaft; the visible wood, binding, outline, and blade pixels
    are then pasted back from the source. No new weapon design was introduced.
 6. Each part is cropped with eight transparent pixels of padding. The builder
-   emits the PNGs, the JSON contract, the contact sheet, and a SHA-256 manifest.
+   emits the PNGs, the JSON contract, the contact sheet, a non-zero-angle joint
+   check sheet, and a SHA-256 manifest.
    No paint-over or palette replacement beyond the explicitly named occlusion
    fills and shaft bridge was applied.
 
@@ -126,12 +128,15 @@ python evidence\243-build-goblin-cutout.py `
   --alpha-sheet .artifacts\243\source-alpha.png `
   --out-dir src\DungeonFortress.Game\assets\generated\goblins\cutout_v1 `
   --contact-sheet evidence\243-goblin-cutout-contact-sheet.png `
+  --joint-check evidence\243-goblin-cutout-joint-rotation-check.png `
   --manifest evidence\243-goblin-cutout-manifest.json
 ```
 
 The builder fails unless the alpha sheet is 1536×1024 and unless compositing
 all rest-visible parts reproduces the complete 512×512 idle cell byte-for-byte.
-The recorded successful run reports zero missed visible pixels and
+The recorded successful run assigns every visible source pixel to a part (the
+manifest records pixels that fall outside the limb polygons and are therefore
+assigned to `torso`) and reports
 `rest reconstruction: byte-identical RGBA to idle source cell`. Output hashes
 are in `evidence/243-goblin-cutout-manifest.json`.
 
@@ -140,6 +145,13 @@ idle body, and the seven separate source-resolution parts including the spear.
 It was reviewed at original size: source and reconstruction preserve the same
 silhouette, palette, three-quarter facing, proportions, and baseline. This is
 the required internal art check; independent PR review remains separate.
+
+`evidence/243-goblin-cutout-joint-rotation-check.png` is the regression image
+for the first review finding. It renders `arm_near` at -15°, -10°, and +15°,
+`arm_far` at +10°, and `leg_near` at -10° and +10° around the JSON pivots. The
+belt, buckle, skirt, and scarf remain on the torso in every panel; the detached
+torso-coloured shards and transparent joint holes from the initial cut are no
+longer present.
 
 There is no mutant: Issue #243 changes neither simulation, determinism, nor a
 runtime contract. Verification is the byte-identical rest reconstruction,

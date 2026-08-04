@@ -21,13 +21,13 @@
       "name": "leg_far",
       "file": "goblin_cutout_leg_far_v1.png",
       "pivot": [
-        22,
+        25,
         22
       ],
       "parent": "torso",
       "z_index": 0,
       "rest_position": [
-        304,
+        301,
         310
       ],
       "motion": "Independent far-leg step and crouch during windup and recovery."
@@ -51,14 +51,14 @@
       "name": "torso",
       "file": "goblin_cutout_torso_v1.png",
       "pivot": [
-        94,
-        126
+        121,
+        229
       ],
       "parent": null,
       "z_index": 2,
       "rest_position": [
-        192,
-        204
+        165,
+        101
       ],
       "motion": "Root body part: leans into the strike and recoils independently of both legs."
     },
@@ -66,14 +66,14 @@
       "name": "leg_near",
       "file": "goblin_cutout_leg_near_v1.png",
       "pivot": [
-        68,
-        49
+        71,
+        23
       ],
       "parent": "torso",
       "z_index": 3,
       "rest_position": [
-        197,
-        284
+        194,
+        310
       ],
       "motion": "Independent near-leg step and crouch preserve the readable planted stance."
     },
@@ -97,13 +97,13 @@
       "file": "goblin_cutout_arm_near_v1.png",
       "pivot": [
         54,
-        51
+        29
       ],
       "parent": "torso",
       "z_index": 5,
       "rest_position": [
         165,
-        181
+        203
       ],
       "motion": "Primary strike arm rotates around the shoulder through windup, hit, follow-through, and return."
     },

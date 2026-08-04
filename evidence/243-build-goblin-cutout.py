@@ -14,7 +14,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 
 EXPECTED_ALPHA_SIZE = (1536, 1024)
@@ -30,7 +30,8 @@ PARTS = [
         "parent": "torso",
         "z_index": 0,
         "pivot_source": (326, 332),
-        "polygon": [(286, 302), (352, 300), (390, 365), (385, 412), (304, 412), (290, 356)],
+        "polygon": [(310, 318), (352, 317), (375, 338), (390, 374), (385, 412),
+                    (304, 412), (296, 374), (300, 340)],
         "motion": "Independent far-leg step and crouch during windup and recovery.",
     },
     {
@@ -38,7 +39,12 @@ PARTS = [
         "parent": "torso",
         "z_index": 1,
         "pivot_source": (352, 236),
-        "polygon": [(326, 205), (375, 207), (403, 276), (397, 349), (348, 357), (330, 304)],
+        "polygon": [
+            [(342, 211), (370, 215), (386, 241), (397, 276), (393, 306),
+             (382, 319), (358, 318), (350, 299), (344, 272), (335, 252)],
+            [(360, 302), (389, 302), (401, 318), (394, 338), (371, 342),
+             (360, 334)],
+        ],
         "motion": "Independent far-arm counterbalance and two-handed weapon support.",
     },
     {
@@ -55,7 +61,8 @@ PARTS = [
         "parent": "torso",
         "z_index": 3,
         "pivot_source": (265, 333),
-        "polygon": [(199, 301), (294, 300), (316, 356), (304, 425), (197, 429), (190, 365)],
+        "polygon": [(221, 318), (277, 318), (298, 339), (309, 374), (304, 414),
+                    (283, 429), (207, 429), (191, 404), (195, 365), (207, 337)],
         "motion": "Independent near-leg step and crouch preserve the readable planted stance.",
     },
     {
@@ -73,8 +80,13 @@ PARTS = [
         "parent": "torso",
         "z_index": 5,
         "pivot_source": (219, 232),
-        "polygon": [(184, 194), (233, 199), (249, 248), (239, 305), (239, 353), (183, 363),
-                    (169, 310), (173, 257)],
+        "polygon": [
+            [(197, 211), (220, 214), (225, 238), (220, 263), (212, 282),
+             (216, 299), (210, 313), (184, 315), (173, 300), (179, 278),
+             (176, 253), (184, 226)],
+            [(176, 299), (214, 299), (220, 319), (216, 347), (190, 359),
+             (171, 341), (166, 318)],
+        ],
         "motion": "Primary strike arm rotates around the shoulder through windup, hit, follow-through, and return.",
     },
 ]
@@ -96,9 +108,12 @@ def committed_sha256(path: Path) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def polygon_mask(points: list[tuple[int, int]], size: tuple[int, int] = (512, 512)) -> Image.Image:
+def polygon_mask(points: list, size: tuple[int, int] = (512, 512)) -> Image.Image:
     mask = Image.new("L", size, 0)
-    ImageDraw.Draw(mask).polygon(points, fill=255)
+    draw = ImageDraw.Draw(mask)
+    polygons = [points] if isinstance(points[0][0], int) else points
+    for polygon in polygons:
+        draw.polygon(polygon, fill=255)
     return mask
 
 
@@ -135,12 +150,11 @@ def add_hidden_joint_fill(
     skin_light = (194, 185, 75, 255)
 
     if part_name == "torso":
-        # Tunic under the near shoulder, neck under the head, and cloth over the
-        # near hip.  These zones are absent from the flattened source because
-        # foreground parts cover them.
-        draw.ellipse((200, 212, 241, 256), fill=outline)
-        draw.ellipse((205, 217, 238, 253), fill=teal)
-        draw.arc((208, 219, 237, 249), 190, 330, fill=teal_light, width=4)
+        # Tunic cap under the near shoulder.  The torso owns the adjacent scarf
+        # and skirt pixels; only this rounded overlap follows the shoulder joint.
+        draw.ellipse((202, 210, 239, 251), fill=outline)
+        draw.ellipse((208, 216, 235, 247), fill=teal)
+        draw.arc((211, 218, 233, 245), 190, 330, fill=teal_light, width=3)
         draw.ellipse((282, 232, 324, 271), fill=outline)
         draw.ellipse((287, 236, 320, 267), fill=skin)
         draw.arc((290, 238, 317, 263), 190, 325, fill=skin_light, width=4)
@@ -204,6 +218,43 @@ def compose(parts: list[dict], out_dir: Path, include_weapon: bool = False) -> I
     return canvas
 
 
+def compose_with_rotation(parts: list[dict], out_dir: Path, part_name: str, angle: float) -> Image.Image:
+    """Compose one deterministic joint probe around the declared source pivot."""
+    canvas = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
+    for part in sorted(parts, key=lambda item: item["z_index"]):
+        if part["name"] == "weapon":
+            continue
+        image = Image.open(out_dir / part["file"]).convert("RGBA")
+        full = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
+        full.alpha_composite(image, tuple(part["rest_position"]))
+        if part["name"] == part_name:
+            origin_x, origin_y = part["rest_position"]
+            pivot = (origin_x + part["pivot"][0], origin_y + part["pivot"][1])
+            full = full.rotate(angle, resample=Image.Resampling.NEAREST, center=pivot)
+        canvas.alpha_composite(full)
+    return canvas
+
+
+def joint_check_sheet(parts: list[dict], out_dir: Path) -> Image.Image:
+    """Render the minimum review angles that previously exposed bad cut lines."""
+    probes = [
+        ("arm_near", -15), ("arm_near", -10), ("arm_near", 15),
+        ("arm_far", 10), ("leg_near", -10), ("leg_near", 10),
+    ]
+    background = (48, 44, 54, 255)
+    panel_width, panel_height, header = 512, 556, 44
+    sheet = Image.new("RGBA", (panel_width * 3, panel_height * 2), background)
+    draw = ImageDraw.Draw(sheet)
+    font = ImageFont.load_default()
+    for index, (part_name, angle) in enumerate(probes):
+        x = (index % 3) * panel_width
+        y = (index // 3) * panel_height
+        draw.text((x + 18, y + 16), f"{part_name} {angle:+d} deg", font=font,
+                  fill=(240, 236, 220, 255))
+        sheet.alpha_composite(compose_with_rotation(parts, out_dir, part_name, angle), (x, y + header))
+    return sheet
+
+
 def contact_sheet(reference: Image.Image, reconstructed: Image.Image, parts: list[dict], out_dir: Path) -> Image.Image:
     background = (48, 44, 54, 255)
     panel_width = 560
@@ -244,6 +295,7 @@ def main() -> None:
     parser.add_argument("--alpha-sheet", required=True, type=Path)
     parser.add_argument("--out-dir", required=True, type=Path)
     parser.add_argument("--contact-sheet", required=True, type=Path)
+    parser.add_argument("--joint-check", required=True, type=Path)
     parser.add_argument("--manifest", required=True, type=Path)
     args = parser.parse_args()
 
@@ -254,14 +306,16 @@ def main() -> None:
     combat = sheet.crop(COMBAT_BOX)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     args.contact_sheet.parent.mkdir(parents=True, exist_ok=True)
+    args.joint_check.parent.mkdir(parents=True, exist_ok=True)
     args.manifest.parent.mkdir(parents=True, exist_ok=True)
 
     built_parts: list[dict] = []
     coverage = Image.new("L", idle.size, 0)
-    authored_masks = {
-        spec["name"]: polygon_mask(spec["polygon"]).filter(ImageFilter.MaxFilter(17))
-        for spec in PARTS
-    }
+    # Polygons follow semantic cut lines.  Expanding every polygon used to let
+    # foreground limbs steal adjacent belt/scarf/tunic pixels; those pixels then
+    # rotated with the limb and opened long holes.  Joint overlap is added below
+    # explicitly and cannot change ownership away from the torso.
+    authored_masks = {spec["name"]: polygon_mask(spec["polygon"]) for spec in PARTS}
     assigned = Image.new("L", idle.size, 0)
     part_masks: dict[str, Image.Image] = {}
     for spec in sorted(PARTS, key=lambda item: item["z_index"], reverse=True):
@@ -281,6 +335,19 @@ def main() -> None:
         px, py = spec["pivot_source"]
         joint_draw.ellipse((px - 14, py - 14, px + 14, py + 14), fill=255)
         mask = ImageChops.lighter(mask, ImageChops.multiply(joint, opaque))
+        # Keep the flattened tunic/thigh pixels next to the hands on the torso.
+        # Their colours touch the limb silhouettes, so polygon overlap alone is
+        # insufficient: the ownership boundary must follow the anatomical edge.
+        if spec["name"] == "arm_near":
+            pixels = mask.load()
+            for y in range(247, 512):
+                for x in range(217, 512):
+                    pixels[x, y] = 0
+        elif spec["name"] == "arm_far":
+            pixels = mask.load()
+            for y in range(320, 512):
+                for x in range(0, 360):
+                    pixels[x, y] = 0
         coverage = ImageChops.lighter(coverage, mask)
         full = source_pixels(idle, mask)
         higher = Image.new("L", idle.size, 0)
@@ -360,6 +427,7 @@ def main() -> None:
         diff = sum(a != b for a, b in zip(reconstructed.tobytes(), source_rgba.tobytes()))
         raise RuntimeError(f"rest reconstruction differs from source in {diff} channel bytes")
     contact_sheet(source_rgba, reconstructed, built_parts, args.out_dir).save(args.contact_sheet, optimize=True)
+    joint_check_sheet(built_parts, args.out_dir).save(args.joint_check, optimize=True)
 
     manifest = {
         "builder": {
@@ -371,7 +439,8 @@ def main() -> None:
         "rest_reconstruction": "byte-identical RGBA to idle source cell",
         "outputs": [
             {"path": path.as_posix(), "committed_sha256": committed_sha256(path)}
-            for path in sorted([*args.out_dir.glob("goblin_cutout_*_v1.png"), metadata_path, args.contact_sheet])
+            for path in sorted([*args.out_dir.glob("goblin_cutout_*_v1.png"), metadata_path,
+                                args.contact_sheet, args.joint_check])
         ],
     }
     args.manifest.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
