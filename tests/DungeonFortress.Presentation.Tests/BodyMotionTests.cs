@@ -81,47 +81,110 @@ public sealed class BodyMotionTests
     /// <c>X + Y</c> unchanged or move it by two, and the gait would silently stop
     /// being a gait.
     /// </para>
+    ///
+    /// <para>
+    /// Both body lists are walked. Raiders are drawn by the same
+    /// <see cref="BodyMotion.BobOffsetRef"/> as the crew, so a premise measured on
+    /// the crew alone would leave half of the bodies it is claimed about defended
+    /// by an argument rather than by a measurement.
+    /// </para>
     /// </summary>
     [Fact]
     public void Every_single_step_advances_the_path_by_exactly_one_cell()
     {
         var world = new PrototypeWorld(PresentationFixtures.LogOf("prepared"));
-        var previous = world.GetSnapshot().Creatures
-            .ToDictionary(creature => creature.Id, creature => creature.Position);
+        var previous = new Dictionary<BodyRef, GridPoint>();
 
-        var steps = 0;
+        var crewSteps = 0;
+        var raiderSteps = 0;
         while (world.CurrentTick < 400 && !world.IsComplete)
         {
             world.RunTicks(1);
-            foreach (var creature in world.GetSnapshot().Creatures)
-            {
-                var from = previous[creature.Id];
-                var to = creature.Position;
-                previous[creature.Id] = to;
-                if (from == to)
-                {
-                    // Standing still moves nothing, which the bob relies on just
-                    // as much as it relies on the step below.
-                    Assert.Equal(
-                        BodyMotion.PathCells(from, from, 1.0),
-                        BodyMotion.PathCells(from, to, 1.0),
-                        12);
-                    continue;
-                }
-
-                steps++;
-                Assert.Equal(
-                    1.0,
-                    Math.Abs(
-                        BodyMotion.PathCells(from, to, 1.0) -
-                        BodyMotion.PathCells(from, from, 1.0)),
-                    12);
-            }
+            crewSteps += MeasureSteps(world, previous).Crew;
         }
 
-        // And the walk really happened: a party in which nothing moved would make
-        // the check above true and empty.
-        Assert.True(steps > 500, $"Only {steps} steps were taken in 400 ticks.");
+        // The raiders walk too, and they are drawn by the same bob. Their window is
+        // the first two waves rather than the opening minutes, because before a
+        // wave arrives there is no raider on the map to measure — which is why the
+        // first round of this Issue measured only half of the bodies it claims
+        // about, and why independent review asked for the other half.
+        world.RunTicks(900);
+        previous.Clear();
+        MeasureSteps(world, previous);
+        while (world.CurrentTick < 1700 && !world.IsComplete)
+        {
+            world.RunTicks(1);
+            var measured = MeasureSteps(world, previous);
+            crewSteps += measured.Crew;
+            raiderSteps += measured.Raiders;
+        }
+
+        // And the walk really happened, on both sides: a party in which nothing
+        // moved would make the checks above true and empty. The raiders' bound is
+        // the low one because the shipped journal gives them little walking to do
+        // — they arrive next to a defence line that is already standing there and
+        // are put down within about thirty ticks — and 16 steps is what this party
+        // actually offers by tick 1700. A low bound measured is still a bound; an
+        // invented one is not.
+        Assert.True(crewSteps > 500, $"Only {crewSteps} crew steps were taken.");
+        Assert.True(raiderSteps > 10, $"Only {raiderSteps} raider steps were taken.");
+    }
+
+    /// <summary>
+    /// Every step both body lists took since the last reading, checked against
+    /// <see cref="BodyMotion.PathCells"/> and counted.
+    /// </summary>
+    private static (int Crew, int Raiders) MeasureSteps(
+        PrototypeWorld world,
+        Dictionary<BodyRef, GridPoint> previous)
+    {
+        var state = world.GetSnapshot();
+        var crew = 0;
+        var raiders = 0;
+        foreach (var (body, to) in
+                 state.Creatures
+                     .Select(creature =>
+                         (new BodyRef(BodyKind.Creature, creature.Id), creature.Position))
+                     .Concat(state.Raiders
+                         .Select(raider =>
+                             (new BodyRef(BodyKind.Raider, raider.Id), raider.Position))))
+        {
+            if (!previous.TryGetValue(body, out var from))
+            {
+                previous[body] = to;
+                continue;
+            }
+
+            previous[body] = to;
+            if (from == to)
+            {
+                // Standing still moves nothing, which the bob relies on just as
+                // much as it relies on the step below.
+                Assert.Equal(
+                    BodyMotion.PathCells(from, from, 1.0),
+                    BodyMotion.PathCells(from, to, 1.0),
+                    12);
+                continue;
+            }
+
+            if (body.Kind == BodyKind.Creature)
+            {
+                crew++;
+            }
+            else
+            {
+                raiders++;
+            }
+
+            Assert.Equal(
+                1.0,
+                Math.Abs(
+                    BodyMotion.PathCells(from, to, 1.0) -
+                    BodyMotion.PathCells(from, from, 1.0)),
+                12);
+        }
+
+        return (crew, raiders);
     }
 
     /// <summary>

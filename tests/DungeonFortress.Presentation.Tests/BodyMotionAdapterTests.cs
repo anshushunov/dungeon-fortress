@@ -23,6 +23,19 @@ public sealed class BodyMotionAdapterTests
     /// already knew: the cell it stepped out of and the blow it landed. A step is
     /// read from the motion buffer, and a blow from the reading built for this
     /// tick.
+    ///
+    /// <para>
+    /// <b>Both directions are checked, not just their existence.</b> The first
+    /// round of this Issue only asked that a turn happens, and independent review
+    /// showed what that misses: subtracting the two cells the other way round — in
+    /// the blow branch, or one floor up where the difference is handed to the
+    /// policy — turns every body away from what it is doing, compiles, draws a
+    /// whole party and leaves the whole suite green. There is no other witness in
+    /// the repository for the blow branch: no blow of the shipped journal's first
+    /// wave travels left, so a frame cannot tell the two signs apart either. Hence
+    /// the literal difference is pinned here, exactly as it already was for the
+    /// step and the lean.
+    /// </para>
     /// </summary>
     [Fact]
     public void The_facing_is_turned_by_the_step_and_by_the_blow()
@@ -33,7 +46,9 @@ public sealed class BodyMotionAdapterTests
         Assert.Contains("_creatureMotionOrigin", turn, StringComparison.Ordinal);
         Assert.Contains("_raiderMotionOrigin", turn, StringComparison.Ordinal);
         Assert.Contains($"_blows.{nameof(BlowReading.Blows)}", turn, StringComparison.Ordinal);
-        Assert.Equal(3, AdapterSource.CallsTo(turn, "TurnBody").Count);
+
+        var turns = AdapterSource.CallsTo(turn, "TurnBody");
+        Assert.Equal(3, turns.Count);
 
         // The step is the difference between the cell the body came from and the
         // cell it is on. Measured the other way round the whole crew would face
@@ -41,11 +56,23 @@ public sealed class BodyMotionAdapterTests
         var step = AdapterSource.Body("SidewaysStep");
         Assert.Contains("position.X - origin.X", step, StringComparison.Ordinal);
 
-        // And the decision itself is the policy's, not this file's.
-        Assert.Contains(
-            $"{nameof(BodyMotion)}.{nameof(BodyMotion.Turn)}(",
+        // A body that struck turns towards what it struck, and "towards" is the
+        // target's cell minus the striker's. The other way round is the mutation
+        // review found nothing catching: a striker turning its back on its target.
+        var struck = Assert.Single(turns.Where(call =>
+            call.Arguments.Count == 2 &&
+            string.Equals(call.Arguments[0], "attacker", StringComparison.Ordinal)));
+        Assert.Equal("to.X - from.X", struck.Arguments[1]);
+
+        // And the decision itself is the policy's, not this file's — with the
+        // difference handed over untouched. A minus sign here would turn the whole
+        // party backwards while every check above stayed green.
+        var decision = Assert.Single(AdapterSource.CallsTo(
             AdapterSource.Body("TurnBody"),
-            StringComparison.Ordinal);
+            $"{nameof(BodyMotion)}.{nameof(BodyMotion.Turn)}"));
+        Assert.Equal(2, decision.Arguments.Count);
+        Assert.Contains("BodyFacingOf(", decision.Arguments[0], StringComparison.Ordinal);
+        Assert.Equal("dx", decision.Arguments[1]);
     }
 
     /// <summary>

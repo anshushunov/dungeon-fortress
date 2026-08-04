@@ -2334,8 +2334,20 @@ public partial class Main : Node2D
         // output — so they cannot be looking at four moments of the same tick.
         _projection = MapProjection.Of(_state);
         // Only a refresh that follows RememberMotionOrigin has something to lerp
-        // from. Everything else — loading a fixture, a single STEP, an accepted
-        // command, a replay — is drawn at the canonical position straight away.
+        // from: a single STEP, an accepted command and a replay are drawn at the
+        // canonical position straight away.
+        //
+        // Loading a fixture used to be in that list and is not any more. Its last
+        // tick runs on its own (LoadFixture), so a freshly loaded world does have
+        // a previous cell for every body — which is the whole point, because a
+        // captured frame is drawn from one. It changes no drawn position while the
+        // load is paused, and a load is always paused: MotionAlpha answers 1 while
+        // _paused, which is the canonical position. What it does change is the
+        // first tick's worth of frames after RUN is pressed, which are now
+        // interpolated from that cell like every other tick's; that is the whole
+        // of the +4 frames at 20 fps and +10 at 60 fps the frame-pacing probe
+        // reports in evidence/221-invariants.json — one tick that became
+        // interpolated, not one extra tick of the world.
         _interpolatesMotion = _motionOriginPending;
         _motionOriginPending = false;
         // Once per tick and not once per frame: the journal is the whole party's
