@@ -44,7 +44,7 @@ public sealed class HudReadabilityTests
         new("inspector", 11),
         new("feedback", 12),
         new("heading", 13),
-        new("legend[0]", 9),
+        new("legend[0]", 8),
         new("legend[1]", 8),
         new("legend[2]", 8),
         new("legend[3]", 8),

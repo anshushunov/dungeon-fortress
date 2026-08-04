@@ -2068,8 +2068,26 @@ public partial class Main : Node2D
 
         foreach (var (text, size, color) in new (string Text, int Size, string Color)[]
                  {
-                     ("LEGEND", 9, "#cbd5e1"),
-                      ("teal outline = crew / red outline = raider / bar = HP / white X = downed", 8, "#cbd5e1"),
+                     // Issue #222 round 2. Growing the legend by the state-dot row
+                     // below to nine rows overflows AssertLabelsFit's worst-case
+                     // feed measurement: at viewport (2048, 1440), UI scale 2, a
+                     // "prepared" fixture run at tick 1318
+                     // (evidence/222-crowd-frame.json) fails with "the story of
+                     // 'widest padded story' needs 10 lines but only 9 fit". This
+                     // is not a rebase side effect — it reproduces on commit
+                     // 8e41cf3, this Issue's own round-1 tip, unrebased. The column
+                     // has room for eight legend rows, not nine, so the standalone
+                     // "LEGEND" heading (previously its own 9pt row) is folded into
+                     // the shortest content row below instead of dropped, keeping
+                     // every word this legend already had at eight rows total.
+                     ("LEGEND — amber X = dig mark / yellow bar = dig progress", 8, "#cbd5e1"),
+                     ("teal outline = crew / red outline = raider / bar = HP / white X = downed", 8, "#cbd5e1"),
+                     // Issue #222. The state dot is the small circle at the upper-
+                     // right corner of each own body. It disappears behind the
+                     // legend row "bar = HP" on the line above, so this row is
+                     // the one that keeps the copy honest when the test walks the
+                     // live subtree (see HudReadabilityTests.AuthoredHud).
+                     ("dot: blue=idle amber=fighting pink=fled green=working gray=downed", 8, "#bfdbfe"),
                      // Issue #52. It replaces the quarters' rest rule rather than
                      // joining it: the panel column is under the same overflow
                      // guard as everything else, and the rest rule now sits on the
@@ -2078,7 +2096,6 @@ public partial class Main : Node2D
                      // it is the one mark on the map with no words next to it.
                      ("room = own floor + outline + caption; amber ring = object with no room", 8, "#fcd34d"),
                      ("light warm block = diggable rock / dark = map edge", 8, "#d6d3d1"),
-                     ("amber X = dig mark / yellow bar = dig progress", 8, "#fcd34d"),
                      ("red X = unreachable / pale tile = new floor / gray dot = loose stone", 8, "#fca5a5"),
                      ("[M] stockpile: cornered square = material cell / grey box on a crew = carried stone", 8, "#e2e8f0"),
                      ("filled pip = stored / hollow blue pip = booked by a carrier on the way", 8, "#7dd3fc"),
@@ -4062,10 +4079,13 @@ public partial class Main : Node2D
         {
             DrawDownedMark(center);
         }
-        else
-        {
-            DrawCircle(center + ScaleWorld(6, -6), ScaleWorld(2), new Color("#fecaca"));
-        }
+
+        // Issue #222. A pale dot used to sit at the upper-right corner of every
+        // non-downed raider, same corner as the creature state dot below. Unlike
+        // that dot, its color never varied with RaiderMode — it was always
+        // #fecaca — so it carried no information the red outline (see LEGEND)
+        // does not already give. Decision: removed rather than given a legend
+        // row, since a row would document a color that means nothing.
 
         DrawBlowDamage(center, new BodyRef(BodyKind.Raider, raider.Id));
     }

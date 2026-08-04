@@ -1,0 +1,90 @@
+{
+  "issue": 222,
+  "pr": 232,
+  "round": 2,
+  "why": "Criterion 1 of Issue #222 requires before/after frames on a crowd scene (nine bodies, starting map, battle) as the proof, not a code citation. Round 1's PR body substituted a code location (\"Named in legend[2]\") for this; independent review returned the PR for exactly that (finding 1). This file supplies the frames and the commands that produced them.",
+  "scene": {
+    "fixture": "prepared",
+    "seed": 20260726,
+    "tick": 1318,
+    "checksum": "81ea5502d82ad300404b0fdc56a5ebf4cee8562996068f965771016b8e83fb12",
+    "tileSize": 40,
+    "cameraZoom": 2.0,
+    "cameraPosition": "1020,480",
+    "uiScale": 1.0,
+    "frameSize": "1280x720",
+    "sameSceneAs": "evidence/210-before.json (\"On the frame nine bodies stand together\"), reused unchanged so this frame is directly comparable to the one Issue #210's readable-blow work already measured."
+  },
+  "before": {
+    "commit": "5b82944",
+    "commitDescription": "origin/main HEAD before any commit of PR #232 (the state dot and raider dot are drawn, undocumented in the legend — the state Issue #222 was opened against)",
+    "worktree": "C:/gamedev/_wt-222-before (git worktree add C:/gamedev/_wt-222-before 5b82944, read-only, removed after capture)",
+    "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -GodotPath <godot-console> -Fixture prepared -ScreenshotTicks 1318 -ScreenshotPath \"222/before.png\" -TileSize 40 -CameraZoom 2.0 -CameraPosition \"1020,480\" -UiScale 1.0 -FrameSize \"1280x720\" -TemporaryRoot <short dir outside the worktree>",
+    "result": "exitCode 0, engineErrorCount 0, checksum 81ea5502d82ad300404b0fdc56a5ebf4cee8562996068f965771016b8e83fb12 (matches evidence/210-before.json's frameBefore.checksum exactly, confirming the same deterministic scene)",
+    "legendRows": 8,
+    "legendNote": "8 rows: LEGEND heading (9pt) plus 7 content rows. Neither the state dot nor the raider dot has a legend row at this commit."
+  },
+  "after": {
+    "commit": "b7660256a377709a91554279b0c22f38dba95f8e",
+    "commitDescription": "this round's tip: state-dot legend row added, raider dot removed (decision recorded at the DrawRaiderInformation call site), legend restructured back to 8 rows to keep AssertLabelsFit green",
+    "worktree": "C:/gamedev/_wt-222 (this branch, agent/222-state-dot-legend)",
+    "captureCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -GodotPath <godot-console> -Fixture prepared -ScreenshotTicks 1318 -ScreenshotPath \"222/after.png\" -TileSize 40 -CameraZoom 2.0 -CameraPosition \"1020,480\" -UiScale 1.0 -FrameSize \"1280x720\" -TemporaryRoot <short dir outside the worktree>",
+    "result": "exitCode 0, engineErrorCount 0, checksum 81ea5502d82ad300404b0fdc56a5ebf4cee8562996068f965771016b8e83fb12 (identical scene checksum to before -- only the HUD differs, never the simulated world)",
+    "legendRows": 8,
+    "legendNote": "8 rows: legend[0] = \"LEGEND \u2014 amber X = dig mark / yellow bar = dig progress\" (heading folded into the shortest content row), legend[2] = \"dot: blue=idle amber=fighting pink=fled green=working gray=downed\". The raider dot is gone from the drawn frame, not merely undocumented."
+  },
+  "frames": {
+    "before": "evidence/222-before.png",
+    "after": "evidence/222-after.png",
+    "crop": [230, 150, 660, 560],
+    "cropNote": "Same crop rectangle as evidence/210-before.json, on the same 1280x720 frame: the battle knot of nine bodies at the west wall. Full frames are 235626 and 239852 bytes; cropped and reduced to a 128-color palette they are 32120 and 32166 bytes, so only the cropped PNGs are committed.",
+    "whatChanges": "Legend panel (right-side HUD column, outside this crop) gains the row naming the five state-dot colors between before and after; the raider dot (present in every prior PR back to commit 2c948a3) is no longer drawn in the after frame.",
+    "pixelDiff": {
+      "method": "PIL.ImageChops.difference on the two full, uncropped 1280x720 PNGs (before quantization), thresholded at per-pixel channel sum > 10",
+      "totalDiffPixels": 4914,
+      "worldSpaceCluster": {
+        "pixels": 166,
+        "xRange": [536, 550],
+        "yRange": [369, 382],
+        "identity": "the removed raider dot -- a 14x13px cluster, consistent with a 2px-radius circle at 2x camera zoom plus anti-aliasing"
+      },
+      "hudCluster": {
+        "pixels": 4748,
+        "identity": "the restructured legend text (x >= 870)"
+      },
+      "conclusion": "Exactly two disjoint diff regions exist between before.png and after.png: the legend text and one small world-space cluster at the raider's position. Nothing else in the frame changed."
+    },
+    "raiderDotCloseUp": {
+      "before": "evidence/222-raider-dot-before.png",
+      "after": "evidence/222-raider-dot-after.png",
+      "crop": [500, 340, 610, 410],
+      "cropNote": "The world-space diff cluster above, cropped tight and scaled 4x nearest-neighbor so the removed dot is unambiguous rather than a few pixels lost in a wide shot. The lighter, larger pink blob in both images is the goblin's mouth (sprite art, unrelated); the smaller, more saturated pink circle sitting on the tusk in 'before' is the removed marker."
+    }
+  },
+  "raiderMarkerDecision": {
+    "what": "DrawRaiderInformation drew a constant #fecaca dot at the raider's upper-right corner for every non-Downed RaiderMode. Its color never varied with RaiderMode -- it was always the same pale pink -- so it carried no information the already-legended red outline does not give.",
+    "decision": "Removed the marker rather than adding a legend row for it. A row would have documented a color that means nothing.",
+    "command": "rg \"fecaca\" src/DungeonFortress.Game/Main.cs",
+    "observedBefore": "1 match: DrawCircle(center + ScaleWorld(6, -6), ScaleWorld(2), new Color(\"#fecaca\"));",
+    "observedAfter": "0 matches"
+  },
+  "defectFoundDuringImplementation": {
+    "where": "Main.CreateLegend, discovered while capturing the after frame above",
+    "what": "Growing the legend from 8 to 9 rows (round 1's state-dot row, unchanged) overflows AssertLabelsFit's worst-case feed measurement at viewport (2048, 1440), UI scale 2, on this exact scene",
+    "firstEngineError": "The HUD loses text in 1 place(s): the story of 'widest padded story' needs 10 lines but only 9 fit at viewport (2048, 1440), UI scale 2.",
+    "reproducedOn": ["8e41cf3 (round 1's own branch tip, before this branch's rebase)", "8feaf33 (round 1's commit rebased onto origin/main 5b82944)"],
+    "notReproducedOn": "5b82944 (origin/main, 8-row legend, no state-dot row)",
+    "conclusion": "Not a rebase side effect -- present since round 1's own commit, undetected because dotnet test does not run the Godot engine and AssertLabelsFit only runs inside it",
+    "fix": "Folded the standalone \"LEGEND\" heading row into the shortest content row (\"amber X = dig mark / yellow bar = dig progress\"), returning the legend to 8 rows total while keeping every word both rows had",
+    "afterFix": "engineErrorCount 0 on the same scene, same viewport sweep (see after.result above)",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -GodotPath <godot-console> -Fixture prepared -ScreenshotTicks 1318 -ScreenshotPath \"222/probe.png\" -TileSize 40 -CameraZoom 2.0 -CameraPosition \"1020,480\" -UiScale 1.0 -FrameSize \"1280x720\" -TemporaryRoot <short dir outside the worktree>"
+  },
+  "legendFit": {
+    "label": "legend[0]",
+    "text": "LEGEND \u2014 amber X = dig mark / yellow bar = dig progress",
+    "neededLines": 1,
+    "visibleLines": 1,
+    "widthPx": 367,
+    "note": "The merged heading row measured at 1 needed / 1 visible line at width 367 (the same column width evidence/208-side-indicator.json measured legend[1] against) across every checked viewport, including the (2048, 1440) UI-scale-2 case that failed before the fix."
+  }
+}
