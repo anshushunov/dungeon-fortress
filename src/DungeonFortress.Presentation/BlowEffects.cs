@@ -96,6 +96,103 @@ public static class BlowEffects
     /// <inheritdoc cref="StreakStartShare"/>
     public const double StreakEndShare = 0.86;
 
+    // -----------------------------------------------------------------------
+    // The contact effect (Issue #244)
+    //
+    // ADR 0020 asks the probe for "один эффект контакта" and leaves the choice
+    // to whoever builds it. Three were on the table and the body is 61.8 px tall
+    // at the shipped 40 px tile, which is what decides between them:
+    //
+    // * a splash of particles needs each particle to be a separate readable
+    //   mark, and a mark under about 2 world px is a pixel of noise on this
+    //   canvas -- at 61.8 px a believable splash would be a dozen of them;
+    // * a trail behind the weapon needs the weapon's own path to be legible
+    //   frame to frame, and the drawing holds still for HitStopShare of the tick
+    //   at exactly the moment the trail would be at its most useful;
+    // * a spark is one shape whose meaning is its direction. Rays leaving one
+    //   point read as an impact at any size at which the rays themselves are
+    //   visible, and SparkOuterRef below is 8.5 reference px -- 15.5 world px at
+    //   the shipped tile, a quarter of the body -- against a stroke of 1.6, i.e.
+    //   2.9 world px. Both are far above the pixel where a stroke stops being a
+    //   stroke.
+    //
+    // So: a spark. It is also the only one of the three that survives the
+    // capture rule every effect in this class is written to -- a paused frame and
+    // a screenshot are drawn at alpha 1, and a shape has a floor while a path
+    // does not.
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// How many rays the contact spark has. Eight, evenly spaced, so the shape
+    /// is a star rather than a direction: which way the blow travelled is the
+    /// streak's job, and a spark that also pointed would say it twice and
+    /// disagree with itself whenever the two were drawn a frame apart.
+    /// </summary>
+    public const int SparkRays = 8;
+
+    /// <summary>
+    /// How far a long ray reaches from the point of contact, in the reference
+    /// pixels <c>Main.ScaleWorld</c> multiplies.
+    /// </summary>
+    public const double SparkOuterRef = 8.5;
+
+    /// <summary>And a short one: every second ray, so the star has a rhythm.</summary>
+    public const double SparkInnerRef = 4.5;
+
+    /// <summary>How far from the contact point the rays start.</summary>
+    public const double SparkCoreRef = 1.6;
+
+    /// <summary>The stroke of a ray.</summary>
+    public const double SparkWidthRef = 1.6;
+
+    /// <summary>
+    /// Where along the line from striker to struck the spark sits. Further along
+    /// than the streak ends, because contact happens at the body that was hit and
+    /// not between the two: a spark in the middle of the gap reads as something
+    /// that missed.
+    /// </summary>
+    public const double SparkContactShare = 0.78;
+
+    /// <summary>How bright the spark is when the blow lands, and as it closes.</summary>
+    public const double SparkPeak = 0.95;
+
+    /// <inheritdoc cref="SparkPeak"/>
+    public const double SparkFloor = 0.35;
+
+    /// <summary>
+    /// How much a ray has grown by the end of the contact window, as a share of
+    /// its length. A spark that only faded would read as a light going out; one
+    /// that also opens reads as something giving way.
+    /// </summary>
+    public const double SparkGrowth = 0.55;
+
+    /// <summary>Where the point of contact is, for a blow between two bodies.</summary>
+    public static ViewPoint SparkAt(ViewPoint attacker, ViewPoint target) =>
+        Along(attacker, target, SparkContactShare);
+
+    /// <summary>The opacity of the spark, across the contact window.</summary>
+    public static double SparkAlpha(double contactAlpha) =>
+        Fade(SparkPeak, SparkFloor, contactAlpha);
+
+    /// <summary>
+    /// How long the <paramref name="index"/>-th ray is at this point of the
+    /// contact window, in reference pixels. Odd rays are the short ones.
+    /// </summary>
+    public static double SparkRayRef(int index, double contactAlpha) =>
+        (index % 2 == 0 ? SparkOuterRef : SparkInnerRef) *
+        (1.0 + (SparkGrowth * Clamp01(contactAlpha)));
+
+    /// <summary>The direction of one ray, in radians.</summary>
+    public static double SparkRayRadians(int index) =>
+        Math.Tau * index / SparkRays;
+
+    /// <summary>
+    /// The colour of the spark: the same two the flash already uses, so a body
+    /// going down and a body merely losing hit points read the same way in both
+    /// marks.
+    /// </summary>
+    public static string SparkColor(BlowOutcome outcome) => FlashColor(outcome);
+
     /// <summary>
     /// The share of a tick the drawing holds still on when a blow lands. The
     /// bodies stop sliding, the tick does not stop: the simulation has already
