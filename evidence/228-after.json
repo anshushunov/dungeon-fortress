@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 2,
+  "issue": 228,
+  "when": "2026-08-04, taken on the branch of this issue, whose base is the tree the owner played",
+  "what": "The same measurement as evidence/228-before.json, on the tree that carries the off-duty rule of Issue #201. Read the two side by side: this file alone says nothing.",
+  "base": {
+    "commit": "41bccf0",
+    "howObtained": "git log --oneline -12; the branch agent/228-... is cut from it and changes only tests, evidence and the contract",
+    "whyThisCommit": "it is the tree the owner played on 2026-08-04, named by Issue #228 itself"
+  },
+  "command": "dotnet test tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj --filter \"FullyQualifiedName~PrototypeQuartersIdleTests\" -v q --logger \"console;verbosity=detailed\"",
+  "matrix": {
+    "fixtures": ["baseline", "prepared"],
+    "seeds": [20260726, 20260727, 20260728],
+    "windows": 16
+  },
+  "measured": {
+    "cohortTicks": 19180,
+    "quartersTicks": 4657,
+    "quartersShare": "4657 / 19180 = 24.3 %",
+    "inZone": 4441,
+    "inHalo": 216,
+    "decomposition": {
+      "Stepped": 292,
+      "OffItsFeet": 0,
+      "Mustering": 0,
+      "BlockedByOthers": 1897,
+      "RouteUnreachable": 0,
+      "LarderUnreachable": 0,
+      "Eating": 0,
+      "Resting": 947,
+      "Working": 0,
+      "WorkZoneUnreachable": 389,
+      "NoWork": 1129,
+      "JobEnded": 3,
+      "Starving": 0,
+      "Unclassified": 0
+    },
+    "theJam": {
+      "blockedTowardsAnOffDutyTile": 1376,
+      "longestBlockedStreak": 183,
+      "meanLongestStreakPerCreature": 45.7,
+      "creaturesWithAnyStreak": 27,
+      "wayRound": 1235,
+      "wayRoundStrictlyLonger": 748,
+      "wayRoundTooLong": 503,
+      "walledIn": 110,
+      "wayRoundShare": 0.668,
+      "refusedOnto": {"(22,4)": 454, "(22,3)": 320, "(23,3)": 216, "(21,3)": 204, "(21,2)": 201, "(21,4)": 180},
+      "whoWasInTheWay": {
+        "a creature lying on a bunk": 838,
+        "a creature standing still somewhere else": 604,
+        "a creature parked on its own off-duty tile": 393,
+        "nobody; the arbitration refused it": 49,
+        "a creature that walked on this very tick": 13
+      }
+    },
+    "theMatching": {
+      "joblessTicksInTheQuarters": 3591,
+      "sawTheMatching": 3025,
+      "missedTheMatching": 566,
+      "share": "84.24 %"
+    }
+  },
+  "beforeAgainstAfter": {
+    "quartersShare": "1630 / 17916 = 9.1 % -> 4657 / 19180 = 24.3 %",
+    "refusedStepsInTheQuarters": "101 -> 1897",
+    "refusalsPerQuartersCreatureTick": "101 / 1630 = 0.062 -> 1897 / 4657 = 0.407, a factor of 6.6",
+    "blockedTowardsAnOffDutyTile": "0 -> 1376 — a class of refused step that did not exist before the rule, because before the rule nobody was walking to a tile chosen by identifier",
+    "longestBlockedStreak": "64 -> 183 consecutive ticks on which one creature was refused a step without a single one succeeding",
+    "onlyBaselineMoved": "prepared/20260726, prepared/20260727 and prepared/20260728 are identical on both trees, number for number (quartersTicks 194, 146, 482; BlockedByOthers 1, 2, 74). The rule fires zero times on that fixture, measured by Issue #201, so the whole difference is baseline: quartersShare there is 808 / 10313 = 7.8 % -> 3835 / 11577 = 33.1 % and refused steps 24 -> 1820."
+  },
+  "howToReadIt": "The group is not standing still in the quarters: it is still trying to get to the tile the rule assigned it and is being refused the step, over and over. 1376 of the 1897 refusals (72.5 %) are steps towards the creature's own off-duty tile and the longest unbroken run of them is 183 ticks. That is the owner's «не могли оттуда выйти», and it is the way IN rather than the way out. What it is NOT is a demonstration that there was work to be had: on those same 1376 ticks the matching had already told the creature it had nothing, and counting the Cause.NoWork bucket with them gives 2505 of 4657 (53.8 %) quarters ticks with nothing on offer. The refused step is the proximate mechanism of the symptom; the shortage of work is a second, older one and belongs to Issue #72. Corrected after independent review of PR #236 — evidence/228-mechanism.json."
+}

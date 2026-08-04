@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 2,
+  "issue": 228,
+  "when": "2026-08-04, applied to the committed state of the branch at 71e39c3 and reverted after each run",
+  "why": "Rule 21. A measurement whose checks stay green when the measurement is broken is a paragraph with a test suite next to it. Each mutant is written out verbatim below rather than described, because on Issue #186 a prose instruction executed literally did not compile and cost a round of review.",
+  "howEachWasRun": {
+    "discipline": "the mutant is applied to a committed file, run, and reverted with `git checkout -- <file>`. Applying it to uncommitted work destroys the work, measured on Issue #147.",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj --filter \"FullyQualifiedName~PrototypeQuartersIdleTests\" -v q --logger \"console;verbosity=detailed\"",
+    "baseline": "9 of 9 green on the unmutated branch; 314 of 314 for the whole simulation suite"
+  },
+  "mutants": [
+    {
+      "number": 1,
+      "assignedBy": "the brief: «откат полноты разложения — одна причина поглощает остальные; проверка «покрытие 100 %» обязана покраснеть»",
+      "file": "tests/DungeonFortress.Simulation.Tests/PrototypeQuartersIdleTests.cs",
+      "where": "PrototypeQuartersIdleTests.Classify, the BlockedByOthers rung",
+      "replace": "        if (codes.Any(code => code.ReasonCode == \"waiting_blocked_by_other\"))\n        {\n            return Cause.BlockedByOthers;\n        }\n",
+      "with": "        if (codes.Any(code => MatchingHadNothing.Contains(code.ReasonCode)))\n        {\n            return Cause.NoWork;\n        }\n",
+      "whatItIs": "the cause «there is no work» swallows the cause «a body refused the step», which is the shape of a decomposition that covers 100 % of the cohort and means nothing.",
+      "result": "RED — The_decomposition_of_the_stay_in_the_quarters_leaves_no_remainder",
+      "message": "The canonical blockedTicks counter rose on 1876 creature-tick(s) in the quarters and only 0 of them were classified as 'BlockedByOthers'. A refused step has been filed as something else.",
+      "counts": "8 passed, 1 failed",
+      "whatItProves": "coverage alone does not catch this — Unclassified stays 0 under the mutant and the buckets still sum to 4657, with NoWork holding 978 on baseline/20260726 instead of 281. What catches it is the second half of the same check, which holds the buckets against blockedTicks and moveCount, counters the classifier never reads."
+    },
+    {
+      "number": 2,
+      "assignedBy": "the brief: «откат измерения времени отклика — константа вместо измеренной величины»",
+      "file": "tests/DungeonFortress.Simulation.Tests/PrototypeQuartersIdleTests.cs",
+      "where": "PrototypeQuartersIdleTests.Window.TrackOffers, where an open offer is carried to the next tick",
+      "replace": "                    ? run with { Ticks = run.Ticks + 1, LastReason = reason }",
+      "with": "                    ? run with { Ticks = 1, LastReason = reason }",
+      "whatItIs": "the length of a stretch of waiting work stops being counted and becomes the constant 1 — the flattering constant, since the conclusion of Issue #228 is that the response is short.",
+      "result": "RED — The_response_to_work_appearing_is_measured_and_short",
+      "message": "The runs add up to 59 tick(s) of work waiting for an idle ex-combatant and the independent tally of the same ticks says 418. A run length has stopped being measured.",
+      "counts": "8 passed, 1 failed",
+      "whatItProves": "the ceiling of five ticks would have passed under this mutant — a constant of 1 is under any ceiling. What catches it is the plain tally of (creature, job, tick) triples that knows nothing about runs, and the assertion that the runs add up to it."
+    },
+    {
+      "number": 3,
+      "assignedBy": "not assigned; added because the window boundary is the choice independent review of Issue #186 overturned once already, and an unguarded choice of that kind is what cost that issue three rounds",
+      "file": "tests/DungeonFortress.Simulation.Tests/PrototypeQuartersIdleTests.cs",
+      "where": "PrototypeQuartersIdleTests.Window.ShouldClose",
+      "replace": "            var lead = snapshot.Rules.GetValueOrDefault(\"muster_lead_ticks\");\n            var next = snapshot.Waves.FirstOrDefault(item => item.Outcome is null);\n            return next is not null && acted >= next.ArriveTick - Math.Max(lead, 0);",
+      "with": "            var next = snapshot.Waves.FirstOrDefault(item => item.Outcome is null);\n            return next is not null && acted >= next.ArriveTick;",
+      "whatItIs": "the window stops ending where the muster starts and runs to the wave's arrival instead — exactly the defect independent review found in the control window of Issue #186.",
+      "result": "RED — The_window_ends_before_the_domain_stops_working (and, as a consequence, The_decomposition_of_the_stay_in_the_quarters_leaves_no_remainder)",
+      "message": "prepared/20260726 window after wave 1: 420 tick(s) of it were spent by creatures assembling for the next wave. The stay in the quarters is then being measured over ticks in which the domain has stopped handing out work at all.",
+      "counts": "7 passed, 2 failed",
+      "whatItProves": "the boundary is held by a check and not by a comment. The second failure is a consequence rather than a second finding: muster ticks entering the window put refused steps into Cause.Mustering, and the corroboration against blockedTicks reddens too (1896 rose, 1876 classified)."
+    }
+  ],
+  "theMutantThatWasNotRun": {
+    "assignedBy": "the brief: «если внесена правка — откат самой правки; проверка её эффекта обязана покраснеть отдельно от двух первых»",
+    "why": "no change of behaviour was made. Issue #228 permits one in the same task for exactly two culprits — refused_zone_unreachable and the rule that packs an overflowing quarters into one cluster — and the culprit measured is neither (evidence/228-mechanism.json). There is therefore nothing to revert, and inventing a third mutant over the two halves already covered would report coverage that does not exist.",
+    "whatCoversTheHalvesInstead": "the two halves of this task are the decomposition (mutant 1) and the response (mutant 2), one mutant each, which is what rule 21 asks for."
+  }
+}
