@@ -1,0 +1,78 @@
+{
+  "issue": 244,
+  "claim": "ADR 0011 without concessions: no part of the skeleton, no curve of the chain and no effect reaches canonical state.",
+  "measuredOn": "2026-08-04",
+  "commit": "the state this file was committed with; see the PR body for the hash",
+  "framePacing": {
+    "how": "scripts/GodotTools.ps1 Invoke-GodotChecked with --headless --fixed-fps <fps> --path src/DungeonFortress.Game -- --fixture prepared --frame-pacing 1400. The driver used is .artifacts/244/invariants.ps1, a throwaway around scripts/HudVerification.ps1's own procedure; the shipped stage runs the same probe on the baseline fixture.",
+    "fixture": "prepared",
+    "targetTick": 1400,
+    "runs": [
+      {
+        "body": "rig",
+        "fixedFps": 20,
+        "tick": 1400,
+        "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "frames": 4665,
+        "interpolatedFrames": 4665,
+        "interpolationLeadViolations": 0,
+        "maxRenderStepPixels": 18.462
+      },
+      {
+        "body": "rig",
+        "fixedFps": 60,
+        "tick": 1400,
+        "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "frames": 13992,
+        "interpolatedFrames": 12593,
+        "interpolationLeadViolations": 0,
+        "maxRenderStepPixels": 6.154
+      },
+      {
+        "body": "flat",
+        "fixedFps": 20,
+        "tick": 1400,
+        "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "frames": 4665,
+        "interpolatedFrames": 4665,
+        "interpolationLeadViolations": 0,
+        "maxRenderStepPixels": 18.462
+      },
+      {
+        "body": "flat",
+        "fixedFps": 60,
+        "tick": 1400,
+        "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "frames": 13992,
+        "interpolatedFrames": 12593,
+        "interpolationLeadViolations": 0,
+        "maxRenderStepPixels": 6.154
+      }
+    ],
+    "reading": [
+      "One checksum across all four runs, and each equals the checksum of a frameless replay of the same log: the render loop writes nothing back.",
+      "The rig and the flat body differ in three times the number of draw calls per body and in every pose, and produce the same canonical state.",
+      "20 and 60 fps really differ: 4665 frames against 13992. A comparison of two runs that drew the same number of frames would prove nothing.",
+      "No frame draws a body in a cell the simulation has not reached (0 lead violations) and no frame moves one a whole 40 px tile (18.462 px at 20 fps)."
+    ]
+  },
+  "duelScrub": {
+    "how": "scripts/run-game.ps1 -Fixture prepared -DemoDuel -DuelFrame <n> -ScreenshotPath ... -CameraZoom 2.0 -CameraPosition 560,320 -FrameSize 1280x720 -UiScale 1.0 -TileSize 40",
+    "tick": 2061,
+    "runs": [
+      {
+        "duelFrame": 0,
+        "checksum": "1fae2007cd00c342e547a76d1a4792b04c3f9d1871126d221ccd420341af5c82"
+      },
+      {
+        "duelFrame": 9,
+        "checksum": "1fae2007cd00c342e547a76d1a4792b04c3f9d1871126d221ccd420341af5c82"
+      }
+    ],
+    "reading": "Stepping a paused blow from its first twelfth to its tenth changes every drawn pose, both bodies' places and the contact spark, and leaves the canonical checksum identical. The scrub runs no tick, which is why."
+  }
+}

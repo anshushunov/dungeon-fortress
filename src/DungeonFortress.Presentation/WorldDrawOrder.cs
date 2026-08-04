@@ -115,6 +115,11 @@ public static class WorldDrawOrder
         new("DrawSidedBody", WorldDrawPass.Depth, null),
         new("DrawGoblinOutline", WorldDrawPass.Depth, null),
         new("DrawGoblin", WorldDrawPass.Depth, null),
+        // Issue #244 / ADR 0020. The body drawn from the cutout rig instead of a
+        // flat pose. It is in the depth pass because it *is* the body: the same
+        // rectangle, the same foot line, the same Y-order slot, only assembled
+        // from parts.
+        new("DrawRigBody", WorldDrawPass.Depth, null),
 
         // Pass 3 — informational marks.
         // The half of a room's border that a wall standing in front of it would
@@ -145,6 +150,14 @@ public static class WorldDrawOrder
         // cell both erase a mark left inside that pass, and the first review round
         // of Issue #83 is where that was measured.
         new("DrawBlowFlash", WorldDrawPass.Informational, OverlayMark.BlowFeedback),
+        // Issue #244. The rig's half of the flash, and the contact spark. Both
+        // are of the same mark and the same pass as the three marks above: a
+        // spark is what has just happened to a body, drawn for one tick and gone.
+        // DrawRigFlash repeats the loop of DrawRigBody rather than calling it,
+        // because the two are in different passes and a call across passes is
+        // exactly the defect this manifest exists to catch.
+        new("DrawRigFlash", WorldDrawPass.Informational, OverlayMark.BlowFeedback),
+        new("DrawContactSparks", WorldDrawPass.Informational, OverlayMark.BlowFeedback),
         new("DrawBlowStreaks", WorldDrawPass.Informational, OverlayMark.BlowFeedback),
         new("DrawBlowDamage", WorldDrawPass.Informational, OverlayMark.BlowFeedback),
         new("DrawDownedMark", WorldDrawPass.Informational, OverlayMark.BodyState),

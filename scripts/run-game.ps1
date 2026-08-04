@@ -20,6 +20,19 @@ param(
     [switch]$DemoDig,
     [switch]$DemoStone,
     [switch]$DemoBuild,
+    # ADR 0020's probe scene: one on one, close up. It runs the raid journal to
+    # the first tick the canonical log records a blow on, points the camera at
+    # the two bodies that tick names and stops there. -DuelFrame steps the blow
+    # itself: 0 is the start of the tick, 12 its end, and the [F] key does the
+    # same thing live.
+    [switch]$DemoDuel,
+    [ValidateRange(0, 12)]
+    [Nullable[int]]$DuelFrame,
+    # Draws the flat six-pose pack where the cutout rig would be drawn, on the
+    # same scene at the same moment. It is the A/B ADR 0020's revision condition
+    # asks for, and it is what the "before" frames of Issue #244 were captured
+    # with.
+    [switch]$FlatBody,
     [switch]$VisibleSmoke,
     [ValidateRange(32, 48)]
     [int]$TileSize = 40,
@@ -198,6 +211,16 @@ if ($DemoStone) {
 }
 if ($DemoBuild) {
     $arguments += "--demo-build"
+}
+if ($DemoDuel) {
+    $arguments += "--demo-duel"
+}
+if ($FlatBody) {
+    $arguments += "--flat-body"
+}
+if ($null -ne $DuelFrame) {
+    $arguments += "--demo-duel-frame", ([int]$DuelFrame).ToString(
+        [Globalization.CultureInfo]::InvariantCulture)
 }
 
 if ($VisibleSmoke -and -not [string]::IsNullOrWhiteSpace($ScreenshotPath)) {

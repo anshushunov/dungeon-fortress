@@ -78,6 +78,7 @@ affordances rather than game actions.
 |---|---|---|
 | Pause / run | play / pause icon | `P` or `Space` |
 | Advance exactly one simulation tick | step icon | `S` |
+| Step one twelfth of the blow being drawn, running no tick | — | `F` |
 | Select time speed | `0.5x`, `1x`, `4x`, `16x` | `1`, `2`, `3`, `4` |
 | Reset fixture | `BASE`, `NEGLECT` | `R`, `N` |
 | Rebuild and replay the current log | `REPLAY` | `Y` |
@@ -593,6 +594,182 @@ shipped `prepared` journal to tick 1400: the canonical checksum at 20 fps, at
 one and the same, `interpolationLeadViolations` stays 0, and the largest
 distance a body moves in one frame is unchanged to the third decimal —
 18.462 px at 20 fps and 6.154 at 60.
+
+## A body built from parts (Issue #244, ADR 0020)
+
+A body is no longer one flat picture per state. In `idle`, `combat`, `windup`
+and `flinch` it is **seven parts hung off their joints** —
+`assets/generated/goblins/cutout_v1`, delivered by Issue #243 — and the blow it
+is in is played as a chain of poses rather than shown as one of them. `work` and
+`downed` keep their flat sprite: [ADR 0020](../decisions/0020-body-animation-cutout-rig.md)'s
+probe is about the blow, and converting the rest is explicitly out of this
+Issue's scope.
+
+**The rig is read, not retyped.** `BodyRig.Parse` loads
+`goblin_cutout_rig_v1.json` at start-up and refuses a rig this runtime cannot
+draw: a part the layer order names and the file does not have, a parent that is
+not a part, a root that is not the torso, a depth order that is not the file's
+own. The pivots are art — measured once, against the pixels the builder cut —
+and Issue #243's provenance says in as many words that #244 "must not retype or
+replace" them. A second copy in C# would be a second truth nothing compares with
+the first, and the failure is silent: a limb turning a few pixels off its own
+shoulder.
+
+**The order of the layers is the rig's, and it is named.** Back to front:
+`leg_far`, `arm_far`, `torso`, `leg_near`, `head`, `arm_near`, `weapon`. The
+figure is drawn in three-quarter view, so the order is the depth of the body
+itself — far side behind the trunk, near side in front of it. The head is above
+the trunk and below the near arm because the strike arm crosses the chest and
+the chin during the wind-up; over the head it would disappear into the face at
+exactly the frame the player is meant to read. The weapon is last because the
+strike hand carries it. Every one of those is the rig's own `z_index` sequence,
+and `BodyRigTests.The_layer_order_is_the_rig_s_own_back_to_front_order` is what
+keeps the written list and the cut art the same list.
+
+**The body lands where the flat pack stood.** The rig's `source_body_bbox` maps
+onto the 116x168 target box inside the unchanged 272x192 canvas
+`CameraView.GoblinDrawRect` already places on the map — top on the first row any
+flat state has a pixel in, bottom on the row its feet end on, centred
+horizontally. One scale for both axes, not two: the rig's own ratios differ in
+the fourth digit because the builder rounded a target size to whole pixels, and
+a part turned under a non-uniform scale stops being the shape it was drawn as.
+
+### The chain of a blow
+
+| Share of the tick | Striker | Struck body |
+|---|---|---|
+| 0 to 0.28 | stance into wind-up, spear raised | stands |
+| 0.28 to 0.35 | wind-up into the strike | stands |
+| **0.35** | **contact** | |
+| 0.35 to 0.52 | strike into follow-through, thrown back | driven away, torso back |
+| 0.52 to 0.78 | follow-through | settling |
+| 0.78 to 1 | back to the stance | back to the stance |
+
+Contact is `BlowEffects.HitStopShare` and deliberately not a number of its own:
+hit-stop and the strike pose are the same event seen from two sides, and two
+constants is how they end up a frame apart. The chain is driven by the **raw**
+share of the tick, not by `MotionAlpha` — hit-stop maps the whole wind-up onto
+zero, so a chain driven by it would stand still through the anticipation and
+then jump.
+
+Which chain a body plays comes from `BlowReadout`, i.e. from the canonical
+journal's `combat_attack`, `combat_raider_downed` and `combat_downed` entries.
+**No phase is a snapshot field**, and a body no blow touches is in
+`StrikePhase.Stance` at every alpha, which is what makes the whole of this
+invisible on the ticks with no fighting in them.
+
+**Both ends of a blow move.** `StrikeChain.RecoilOffsetRef` answers a signed
+distance along the line from the striker to the body it struck: the striker
+lunges in before contact and is thrown *back* after it, and the target is only
+ever pushed away. The adapter owns the line — `Main.BlowAxis`, target cell minus
+striker cell — and subtracting it the other way round turns both signs over at
+once, which compiles, animates and looks like a goblin sucked into the spear it
+just planted. That is why the direction is held by a structural guard over
+`Main.cs` and not by a value comparison inside a test.
+
+**The lean is a rotation of the whole frame**, not of the torso against the
+legs. That is a seam decision: turning the trunk against the lower body opens
+the widest gap of any joint in this rig, and turning the frame moves nothing
+relative to anything.
+
+**One contact effect: a spark.** Eight rays from the point the blow arrives at,
+for the window between contact and the follow-through. The choice is
+readability at this scale, and the argument is in `BlowEffects`: at a body drawn
+61.8 px tall the long ray is 15.5 world px with a 2.9 px stroke, while a
+believable splash would be a dozen marks each under the pixel at which a mark
+stops being one, and a weapon trail needs a legible path at exactly the moment
+hit-stop holds the picture still. The flash now waits for the blow to arrive as
+well — it used to burn for the whole tick, which at the duel's zoom lights a
+body up before the spear reaches it.
+
+### Choosing the angles against a measurement
+
+[ADR 0020](../decisions/0020-body-animation-cutout-rig.md) names the risk it was
+written for: «стыки частей видны, поворот руки вокруг сустава на мелком масштабе
+легко читается как поломка». The review of Issue #243 photographed it, and the
+review of this Issue's brief found a second one on the far arm. So the shipped
+angles are chosen by `evidence/244-measure-rig-gaps.py`, which composites the rig
+at a pose and counts **slit pixels**: background visible *through* the body —
+the rest pose had material there, this pose does not, and the body still has
+material on both sides of it along its own row. Zero on the rest pose by
+construction.
+
+```powershell
+python evidence/244-measure-rig-gaps.py --sweep --chain --json evidence/244-rig-gaps.json
+```
+
+Two things it decided, both recorded in `evidence/244-rig-gaps.json`:
+
+- **the directions are not symmetric.** The near arm opens 21-55 px² of slit
+  swinging one way (-30° to -15°) and 639 px² at +5°, 2393 at +30° the other.
+  The far arm is the mirror image: 373-769 px² backwards, 0-2 forwards. So the
+  wind-up *raises* the spear and the strike brings it down, and the far arm
+  counterbalances forwards — not a taste, a property of the cut;
+- **a small slide hides most of what is left.** Each keyframe carries an offset
+  in source pixels beside its angle, found by search: 758 to 224 px² on the
+  wind-up, 1510 to 534 on the strike, 1888 to 782 on the follow-through, 607 to
+  405 on the recoil. Nothing is repainted; the offsets are at most 8 source
+  pixels, i.e. 1.3 world px at the shipped tile.
+
+Two other numbers are reported and deliberately **not** gated on. Enclosed holes
+never saw the photographed defect at all, because that wedge is open to the
+outside; and the area a limb vacates is the animation happening rather than a
+fault. Keeping both in the report is what makes those two statements checkable.
+
+### The duel scene
+
+ADR 0020 asks the probe for «сцена один на один, крупно». `--demo-duel` runs the
+`prepared` raid journal forward to the first tick the canonical journal records
+a **side-on** blow on, points the camera at the two bodies that tick names at
+the largest declared zoom, and stops there.
+
+```powershell
+# watch it: SPACE runs the exchange, F steps one twelfth of a blow, S runs a tick
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-game.ps1 -DemoDuel
+
+# the same scene with the flat pack, for the A/B ADR 0020's revision condition needs
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-game.ps1 -DemoDuel -FlatBody
+```
+
+The scene **hides every body but those two**, and that is a measurement rather
+than a preference: the shipped journal has no moment to point a camera at. The
+blow the scene settles on — tick 2061 — has **five** other standing bodies within
+two cells of it, and a run reports that number itself as `duel.crowd` in the view
+state, so a scene built only out of the camera would be the stack of bodies the
+review of vertical 3 rejected. The hidden bodies go on fighting and reach the
+same checksum; only pixels change.
+
+The emptiest blow of the whole session is a different one — tick 1302, with three
+other bodies — and the scene does not take it, because `DuelScore` prefers a blow
+struck **sideways**: a blow along the camera's own column reads as one body
+standing behind another. So the number a reader gets from `duel.crowd` is the
+crowd around the blow that was chosen, not the smallest crowd in the session, and
+the case for hiding is the stronger of the two. An earlier revision of this
+paragraph claimed the run prints three; independent review of PR #256 ran the
+command this paragraph itself offers and got five.
+
+`-DuelFrame <0..12>` freezes the blow at one twelfth of the tick, which is what
+the evidence frames are captured with and what the `F` key does live. It runs no
+tick at all: stepping a paused blow from its first twelfth to its tenth changes
+every pose, both bodies' places and the spark, and leaves the checksum identical
+(`evidence/244-invariants.json`).
+
+### Nothing here reaches the simulation
+
+Measured on `prepared` to tick 1400, four runs — the rig and the flat body, at
+20 and at 60 fps: one canonical checksum
+`18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002`, equal to the
+checksum of a frameless replay of the same log in every one of them. The two
+frame rates really differ (4665 frames against 13992),
+`interpolationLeadViolations` stays 0 and the largest distance a body moves in
+one frame is 18.462 px at 20 fps against a 40 px tile. The throw of a blow goes
+into the drawing and never into `RenderCenter`, for the same reason the bob does
+not: `--frame-pacing` turns a render centre back into a cell.
+
+The before/after pictures of the change are
+`evidence/244-before-windup.png`, `evidence/244-after-windup.png`,
+`evidence/244-before-contact.png` and `evidence/244-after-contact.png` — the same
+duel, the same tick, the same camera, differing in the body and in nothing else.
 
 ## Wall volume and depth order (Issue #83)
 

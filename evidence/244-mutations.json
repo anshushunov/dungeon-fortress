@@ -1,0 +1,75 @@
+{
+  "issue": 244,
+  "rule": "Правило 32: мутант ставится на утверждение, которое делает проверка, а не на половину изменения. Подстановки записаны дословно.",
+  "why": "На PR #235 гард требовал наличия вызова поворота и был доволен телом, которое поворачивается не в ту сторону: два мутанта review дали 592 пройдено, 0 не пройдено. Поэтому каждый мутант ниже обязан краснеть отдельно и на своей названной проверке.",
+  "runOn": {
+    "commit": "e0963fc",
+    "note": "Мутанты прогнаны на закоммиченном состоянии и откачены через `git checkout -- <файл>`, чтобы откат мутанта не сносил саму правку.",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --nologo",
+    "baseline": {
+      "total": 614,
+      "passed": 614,
+      "failed": 0
+    }
+  },
+  "mutations": [
+    {
+      "id": 1,
+      "kind": "отсутствие",
+      "claim": "Каждая часть рига позируется цепочкой, а фаза цепочки берётся из чтения канонического журнала.",
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "method": "RigLayout",
+      "from": "            var pose = StrikeChain.PoseOf(phase, name, beat);",
+      "to": "            var pose = PartPose.Rest;",
+      "expectedRed": "StrikeAdapterTests.Every_part_of_the_rig_is_posed_by_the_chain",
+      "result": {
+        "passed": 613,
+        "failed": 1,
+        "failing": [
+          "DungeonFortress.Presentation.Tests.StrikeAdapterTests.Every_part_of_the_rig_is_posed_by_the_chain"
+        ]
+      },
+      "reading": "Компилируется, рисует весь бой и даёт ровно прежнее плоское тело: каждая часть стоит в позе покоя, цепочки нет. Красит именно свою проверку и только её."
+    },
+    {
+      "id": 2,
+      "kind": "полярность",
+      "claim": "Отдача считается вдоль линии от бьющего к цели: бьющего отбрасывает от цели, цель уходит прочь.",
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "method": "BlowAxis",
+      "from": "            var axis = new Vector2(to.X - from.X, to.Y - from.Y);",
+      "to": "            var axis = new Vector2(from.X - to.X, from.Y - to.Y);",
+      "expectedRed": "StrikeAdapterTests.The_recoil_of_a_blow_runs_from_the_striker_towards_the_struck",
+      "result": {
+        "passed": 613,
+        "failed": 1,
+        "failing": [
+          "DungeonFortress.Presentation.Tests.StrikeAdapterTests.The_recoil_of_a_blow_runs_from_the_striker_towards_the_struck"
+        ]
+      },
+      "reading": "Оба знака переворачиваются разом: бьющего тянет к цели, цель — на копьё. Проверка фаз (мутант 1) при этом зелёная, то есть отдача краснеет отдельно от цепочки, как и требует бриф."
+    },
+    {
+      "id": 3,
+      "kind": "порядок",
+      "claim": "Порядок слоёв — это порядок z_index рига, а не список, написанный отдельно от арта.",
+      "file": "src/DungeonFortress.Presentation/BodyRig.cs",
+      "method": "BodyRig.LayerOrder",
+      "from": "        \"head\",\n        \"arm_near\",",
+      "to": "        \"arm_near\",\n        \"head\",",
+      "expectedRed": "BodyRigTests.The_layer_order_is_the_rig_s_own_back_to_front_order",
+      "result": {
+        "passed": 609,
+        "failed": 5,
+        "failing": [
+          "DungeonFortress.Presentation.Tests.BodyRigTests.The_layer_order_is_the_rig_s_own_back_to_front_order",
+          "DungeonFortress.Presentation.Tests.BodyRigTests.The_shipped_rig_file_is_the_one_the_runtime_draws",
+          "DungeonFortress.Presentation.Tests.BodyRigTests.The_body_lands_where_the_flat_pack_stood",
+          "DungeonFortress.Presentation.Tests.BodyRigTests.The_rig_draws_the_states_of_the_blow_and_no_others",
+          "DungeonFortress.Presentation.Tests.BodyRigTests.A_rig_this_runtime_cannot_draw_is_refused"
+        ]
+      },
+      "reading": "Названная проверка краснеет. Остальные четыре краснеют по одной и той же причине и это не шум, а находка в пользу конструкции: BodyRig.Parse сам отказывается разбирать риг, чей z_index не совпадает с объявленным порядком, поэтому перестановка двух слоёв — это не тело, нарисованное неверно, а прогон, который не стартует."
+    }
+  ]
+}

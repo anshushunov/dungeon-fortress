@@ -32,6 +32,13 @@ public partial class Main : Node2D
     private readonly Dictionary<string, Texture2D> _goblinSilhouettes = [];
     private readonly List<string> _loadedSpriteStates = [];
     private readonly List<string> _missingSpriteStates = [];
+    // The cutout body of ADR 0020: the rig as the asset states it, one texture
+    // per part and the same part whitened for the side outline and the flash.
+    // All three are presentation and nothing else — see BodyRig.
+    private BodyRig? _bodyRig;
+    private readonly Dictionary<string, Texture2D> _rigParts = [];
+    private readonly Dictionary<string, Texture2D> _rigPartSilhouettes = [];
+    private readonly List<string> _missingRigParts = [];
     private readonly Dictionary<string, Texture2D> _icons = [];
     private readonly List<string> _missingIcons = [];
     private Texture2D? _iconPlaceholder;
@@ -121,6 +128,23 @@ public partial class Main : Node2D
     // rather than recomputed per frame because a facing outlives the step that
     // set it — see BodyMotion.Turn.
     private readonly Dictionary<BodyRef, BodyFacing> _bodyFacing = [];
+    // The frame the body being drawn stands in, kept so that every part of the
+    // rig can be placed inside it: PushBodyPose sets it, and the parts multiply
+    // their own joint transform onto it. It is a drawing state and is reset by
+    // ClearBodyPose along with the canvas transform itself.
+    private Transform2D _bodyFrame = Transform2D.Identity;
+    // The duel scene of Issue #244, and the frame of the strike chain a paused
+    // run is scrubbed to. Both are presentation: the pair is two bodies the
+    // canonical journal already named, and the scrub only decides which moment
+    // between two canonical snapshots is drawn.
+    private (BodyRef Attacker, BodyRef Target)? _duelPair;
+    private double? _strikeScrub;
+    // Draws the flat pack where the rig would be drawn, on the same scene at the
+    // same moment. It is the instrument ADR 0020's revision condition needs — «если
+    // на пробе владелец скажет, что скелет из частей выглядит хуже нынешних поз» —
+    // and it is what the "before" frames of this Issue are captured with, so the
+    // two pictures differ in the body and in nothing else.
+    private bool _flatBody;
     private string _checksum = string.Empty;
     private int _screenshotFramesRemaining;
     private int _fallbackSpriteDraws;
@@ -195,6 +219,15 @@ public partial class Main : Node2D
             var demoDig = arguments.Contains("--demo-dig", StringComparer.Ordinal);
             var demoStone = arguments.Contains("--demo-stone", StringComparer.Ordinal);
             var demoBuild = arguments.Contains("--demo-build", StringComparer.Ordinal);
+            // Issue #244 / ADR 0020: the duel scene. It runs the shipped raid
+            // fixture forward to the first tick the canonical journal records a
+            // blow on, points the camera at the two bodies it names and stops
+            // there. Nothing about it is simulation: the search runs ordinary
+            // ticks and stops on one, and the frame is chosen by a reading of the
+            // journal the view already builds every tick.
+            var demoDuel = arguments.Contains("--demo-duel", StringComparer.Ordinal);
+            var duelFrame = CommandLineArguments.ReadInt(arguments, "--demo-duel-frame");
+            _flatBody = arguments.Contains("--flat-body", StringComparer.Ordinal);
             var requiresSprites = !headlessSmoke && !controlsSmoke && !cameraSmoke;
 
             // World sprites are sampled below 1x at the two overview zoom levels.
@@ -215,14 +248,16 @@ public partial class Main : Node2D
             ApplyAutomaticCameraZoom();
             CreateCamera();
             LoadGoblinSprites();
+            LoadGoblinRig();
             if (requiresSprites)
             {
                 AssertRequiredSpritesLoaded();
+                AssertRigLoaded();
             }
             LoadFixture(
                 fixture,
-                demoControls || demoDig || demoStone || demoBuild || controlsSmoke ||
-                _screenshotPath is null
+                demoControls || demoDig || demoStone || demoBuild || demoDuel ||
+                controlsSmoke || _screenshotPath is null
                     ? 1
                     : screenshotTicks);
             if (hudGuardRegression)
@@ -265,6 +300,11 @@ public partial class Main : Node2D
             {
                 ApplyDemoBuild();
                 Advance(Math.Max(0, screenshotTicks - _state!.Tick));
+            }
+
+            if (demoDuel)
+            {
+                ApplyDemoDuel(duelFrame);
             }
             if (selectCreature is { } creatureId)
             {
@@ -501,9 +541,34 @@ public partial class Main : Node2D
     /// The curve is <see cref="BlowEffects.HitStopAlpha"/>.
     /// </summary>
     private float MotionAlpha() =>
-        !_interpolatesMotion || _paused
-            ? 1f
-            : (float)BlowEffects.HitStopAlpha(_tickAccumulator, _blows.Landed);
+        (float)BlowEffects.HitStopAlpha(TickAlpha(), _blows.Landed);
+
+    /// <summary>
+    /// The share of the tick being drawn, before hit-stop has had its say.
+    ///
+    /// <para>
+    /// <b>Why the strike chain reads this and not <see cref="MotionAlpha"/>.</b>
+    /// Hit-stop maps the whole of the first <c>HitStopShare</c> of a blow's tick
+    /// onto zero — that is what "the picture holds still" means — so a chain
+    /// driven by it would spend its entire wind-up frozen in the stance and then
+    /// jump. The two alphas answer different questions: <em>how far has the body
+    /// travelled between two cells</em>, which must hold, and <em>how far through
+    /// the blow are we</em>, which must not.
+    /// </para>
+    ///
+    /// <para>
+    /// <see cref="_strikeScrub"/> replaces it outright when a paused run is being
+    /// stepped through a blow frame by frame. That is presentation twice over: it
+    /// picks a moment between two canonical snapshots and runs no tick, so the
+    /// checksum of a scrubbed run is the checksum of the same run untouched.
+    /// </para>
+    /// </summary>
+    private float TickAlpha() =>
+        _strikeScrub is { } scrub
+            ? (float)scrub
+            : !_interpolatesMotion || _paused
+                ? 1f
+                : (float)Math.Clamp(_tickAccumulator, 0.0, 1.0);
 
     private Vector2 RenderCenter(GridPoint position, Dictionary<int, GridPoint> origins, int id)
     {
@@ -773,6 +838,11 @@ public partial class Main : Node2D
                 break;
             case Key.S:
                 Advance(1);
+                break;
+            // One twelfth of the blow being drawn, without running a tick: the
+            // frame-by-frame half of ADR 0020's duel scene.
+            case Key.F:
+                StepStrikeFrame();
                 break;
             case Key.Key1:
                 SetSpeed(0.5);
@@ -2177,6 +2247,69 @@ public partial class Main : Node2D
     }
 
     /// <summary>
+    /// The cutout rig and its parts, read from the asset rather than from a copy
+    /// of it in code.
+    ///
+    /// <para>
+    /// The JSON is the contract Issue #243 shipped, and its provenance says in as
+    /// many words that this Issue "may convert these source-space values to
+    /// runtime scale; it must not retype or replace the pivots".
+    /// <see cref="BodyRig.Parse"/> is where a rig this runtime cannot draw — a
+    /// missing part, a parent that is not a part, a layer order that is not the
+    /// rig's own — becomes a refusal to start instead of a body drawn wrong.
+    /// </para>
+    /// </summary>
+    private void LoadGoblinRig()
+    {
+        var folder = "res://" + BodyRig.AssetFolder;
+        var rigPath = folder + "/" + BodyRig.FileName;
+        if (!Godot.FileAccess.FileExists(rigPath))
+        {
+            _missingRigParts.Add(BodyRig.FileName);
+            return;
+        }
+
+        _bodyRig = BodyRig.Parse(Godot.FileAccess.GetFileAsString(rigPath));
+        foreach (var part in _bodyRig.Parts)
+        {
+            var path = folder + "/" + part.File;
+            if (!ResourceLoader.Exists(path) || GD.Load<Texture2D>(path) is not { } imported)
+            {
+                _missingRigParts.Add(part.File);
+                continue;
+            }
+
+            // Mipmaps for the same reason the flat pack has them: the two
+            // overview zoom levels sample a part below its authored draw size,
+            // and the repository ignores generated *.import files on purpose.
+            var image = imported.GetImage();
+            var mipmaps = image.GenerateMipmaps();
+            if (mipmaps != Error.Ok || !image.HasMipmaps())
+            {
+                throw new InvalidOperationException(
+                    $"Could not generate mipmaps for '{path}': {mipmaps}.");
+            }
+
+            _rigParts[part.Name] = ImageTexture.CreateFromImage(image);
+            _rigPartSilhouettes[part.Name] = BuildSilhouette(imported.GetImage());
+        }
+    }
+
+    private void AssertRigLoaded()
+    {
+        if (_missingRigParts.Count == 0 && _bodyRig is not null)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            "The goblin cutout rig could not be loaded: " +
+            string.Join(", ", _missingRigParts) +
+            ". Run scripts/run-game.ps1 so its Godot asset-import preflight can " +
+            "create the local .godot/import cache.");
+    }
+
+    /// <summary>
     /// Та же поза с белым цветом и сохранённой альфой, чтобы отрисовка с
     /// modulate давала плоскую фигуру этого цвета. Байтовый проход, а не
     /// попиксельный: 192x272 на шесть поз — это 313 тысяч пикселей, и делать их
@@ -2291,6 +2424,8 @@ public partial class Main : Node2D
         _raiderMotionOrigin.Clear();
         _motionOriginPending = false;
         _bodyFacing.Clear();
+        _strikeScrub = null;
+        _duelPair = null;
         RefreshState();
 
         // The last tick, with the previous cells kept. A captured frame is drawn
@@ -2315,6 +2450,9 @@ public partial class Main : Node2D
             return;
         }
 
+        // A tick is a new blow, so the frame the last one was scrubbed to means
+        // nothing any more.
+        _strikeScrub = null;
         // Presentation only, and here rather than in RememberMotionOrigin because
         // every way of running a tick has to be covered: a raider's blow on a
         // defender that survives is recorded nowhere, so a fall in hit points is
@@ -3190,6 +3328,34 @@ public partial class Main : Node2D
             displayServer = DisplayServer.GetName(),
             textureFilter = TextureFilter.ToString(),
             spriteMipmaps = _spritesHaveMipmaps,
+            // Issue #244 / ADR 0020. What the rig delivered and what the duel
+            // scene stopped on, so a captured frame can be asked which body it is
+            // showing instead of being looked at.
+            bodyRig = _bodyRig is null
+                ? null
+                : new
+                {
+                    parts = _bodyRig.Parts.Count,
+                    layers = BodyRig.LayerOrder,
+                    loaded = _rigParts.Count,
+                    missing = _missingRigParts,
+                    sourceToCanvas = _bodyRig.SourceToCanvas,
+                },
+            strikeScrub = _strikeScrub,
+            flatBody = _flatBody,
+            duel = _duelPair is { } duel
+                ? new
+                {
+                    attacker = new[] { (int)duel.Attacker.Kind, duel.Attacker.Id },
+                    target = new[] { (int)duel.Target.Kind, duel.Target.Id },
+                    tick = _state?.Tick ?? 0,
+                    // How many other standing bodies are close enough to be in
+                    // the picture. Zero is what makes the scene a duel, and a
+                    // frame that reports anything else is a crowd scene wearing
+                    // the name.
+                    crowd = DuelCrowd(duel),
+                }
+                : null,
             cameraInputChecks = _cameraInputChecks,
             cameraBoundsChecks = _cameraBoundsChecks,
             cameraPanChecks = _cameraPanChecks,
@@ -3613,10 +3779,10 @@ public partial class Main : Node2D
                 _tileSize));
         }
 
-        var creatureCenters = _state.Creatures.ToDictionary(
+        var creatureCenters = SceneCreatures().ToDictionary(
             creature => creature.Id,
             CreatureRenderCenter);
-        foreach (var creature in _state.Creatures)
+        foreach (var creature in SceneCreatures())
         {
             var center = creatureCenters[creature.Id];
             items.Add(WorldRenderGeometry.ForBody(
@@ -3625,10 +3791,9 @@ public partial class Main : Node2D
                 new ViewPoint(center.X, center.Y)));
         }
 
-        var raiderCenters = _state.Raiders
-            .Where(raider => raider.Mode != RaiderMode.Escaped)
+        var raiderCenters = SceneRaiders()
             .ToDictionary(raider => raider.Id, RaiderRenderCenter);
-        foreach (var raider in _state.Raiders.Where(item => item.Mode != RaiderMode.Escaped))
+        foreach (var raider in SceneRaiders())
         {
             var center = raiderCenters[raider.Id];
             items.Add(WorldRenderGeometry.ForBody(
@@ -3637,8 +3802,8 @@ public partial class Main : Node2D
                 new ViewPoint(center.X, center.Y)));
         }
 
-        var creatures = _state.Creatures.ToDictionary(creature => creature.Id);
-        var raiders = _state.Raiders.ToDictionary(raider => raider.Id);
+        var creatures = SceneCreatures().ToDictionary(creature => creature.Id);
+        var raiders = SceneRaiders().ToDictionary(raider => raider.Id);
         foreach (var item in WorldRenderOrder.BackToFront(items))
         {
             switch (item.Kind)
@@ -3820,9 +3985,140 @@ public partial class Main : Node2D
         // silhouette of the body as it is actually turned rather than of the body
         // the art was drawn as.
         PushBodyPose(center, body);
-        DrawGoblinOutline(key, relation);
-        DrawGoblin(key);
+        DrawGoblinOutline(key, relation, body);
+        DrawGoblin(key, body);
         ClearBodyPose();
+    }
+
+    /// <summary>
+    /// Whether this pose is drawn from the cutout rig of ADR 0020 rather than
+    /// from one of the flat states of the connected pack.
+    ///
+    /// <para>
+    /// <see cref="BodyRig.RiggedStates"/> is the list, and it deliberately leaves
+    /// <c>work</c> and <c>downed</c> out: ADR 0020's probe is about the blow, and
+    /// the Issue's non-goals say the other states are not converted. A run whose
+    /// rig did not load falls back to the flat pack for everything, which is the
+    /// same standing the missing-sprite fallback already has — art must not stop a
+    /// deterministic build.
+    /// </para>
+    /// </summary>
+    private bool UsesRigPose(string key) =>
+        !_flatBody &&
+        _bodyRig is not null &&
+        _missingRigParts.Count == 0 &&
+        BodyRig.RiggedStates.Contains(key, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Where every part of the rig is, for one body at one moment: its own frame
+    /// inside the body's frame, and the rectangle its texture is drawn into.
+    ///
+    /// <para>
+    /// <b>The order is the rig's.</b> The list is walked in
+    /// <see cref="BodyRig.LayerOrder"/>, which <c>BodyRigTests</c> holds to the
+    /// rig file's own <c>z_index</c>. Swapping two names there puts an arm inside
+    /// a chest, and it fails a check rather than a frame.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The frames are resolved parent first, and the layers are drawn back to
+    /// front.</b> They are not the same order — <c>leg_far</c> is drawn before the
+    /// <c>torso</c> it hangs off — and building both from one loop is how a child
+    /// silently loses its parent's rotation.
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<(Transform2D Frame, Rect2 Rect, string Part)> RigLayout(
+        string key,
+        BodyRef body)
+    {
+        var rig = _bodyRig!;
+        var canvas = BodyLocalRect();
+        var scale = canvas.Size.X / (float)CameraView.SpriteCanvasWidth;
+        var phase = BodyPhase(body.Kind, body.Id);
+        var beat = TickAlpha();
+        var frames = new Dictionary<string, Transform2D>(StringComparer.Ordinal);
+
+        Transform2D FrameOf(string name)
+        {
+            if (frames.TryGetValue(name, out var known))
+            {
+                return known;
+            }
+
+            var part = rig.Part(name);
+            var pose = StrikeChain.PoseOf(phase, name, beat);
+            var pivot = RigLocalPoint(part.Joint, canvas, scale);
+            var slide = new Vector2(
+                (float)(pose.OffsetX * rig.SourceToCanvas) * scale,
+                (float)(pose.OffsetY * rig.SourceToCanvas) * scale);
+            var turn = (float)(pose.Degrees * Math.PI / 180.0);
+            // x -> R(x - pivot) + pivot + slide, written as one matrix.
+            var own = new Transform2D(turn, pivot + slide - pivot.Rotated(turn));
+            var frame = part.Parent is { } parent ? FrameOf(parent) * own : own;
+            frames[name] = frame;
+            return frame;
+        }
+
+        var armed = BodyRig.ArmedStates.Contains(key, StringComparer.Ordinal);
+        var layout = new List<(Transform2D, Rect2, string)>();
+        foreach (var name in BodyRig.LayerOrder)
+        {
+            if (!armed && string.Equals(name, BodyRig.WeaponPart, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var part = rig.Part(name);
+            var size = _rigParts.TryGetValue(name, out var texture)
+                ? new Vector2(texture.GetWidth(), texture.GetHeight())
+                : Vector2.Zero;
+            layout.Add((
+                FrameOf(name),
+                new Rect2(
+                    RigLocalPoint(part.RestPosition, canvas, scale),
+                    size * (float)rig.SourceToCanvas * scale),
+                name));
+        }
+
+        return layout;
+    }
+
+    /// <summary>
+    /// A point of the rig's source cell, in the local pixels of the body frame.
+    /// The conversion is <see cref="BodyRig.CanvasPointOf"/> and a scale, so the
+    /// rig lands inside exactly the rectangle the flat pack was drawn into and the
+    /// two bodies stand on the same line.
+    /// </summary>
+    private Vector2 RigLocalPoint(ViewPoint source, Rect2 canvas, float scale)
+    {
+        var point = _bodyRig!.CanvasPointOf(source);
+        return canvas.Position + (new Vector2((float)point.X, (float)point.Y) * scale);
+    }
+
+    /// <summary>
+    /// The body itself, part by part, in the depth pass. <paramref name="shift"/>
+    /// is the side outline's offset copy and is zero for the body proper.
+    /// </summary>
+    private void DrawRigBody(
+        string key,
+        BodyRef body,
+        bool silhouette,
+        Color tint,
+        Vector2 shift)
+    {
+        var textures = silhouette ? _rigPartSilhouettes : _rigParts;
+        foreach (var (frame, rect, part) in RigLayout(key, body))
+        {
+            if (!textures.TryGetValue(part, out var texture))
+            {
+                continue;
+            }
+
+            DrawSetTransformMatrix(_bodyFrame.TranslatedLocal(shift) * frame);
+            DrawTextureRect(texture, rect, false, tint);
+        }
+
+        DrawSetTransformMatrix(_bodyFrame);
     }
 
     /// <summary>
@@ -3831,10 +4127,23 @@ public partial class Main : Node2D
     /// выглядит сторона, потому что решение, принятое здесь, принято там, где
     /// его не проверяет джоб «Pure .NET» (ADR 0011).
     /// </summary>
-    private void DrawGoblinOutline(string key, BodyRelation relation)
+    private void DrawGoblinOutline(string key, BodyRelation relation, BodyRef body)
     {
         var color = new Color(SideOutline.Color(relation));
         var width = ScaleWorld(SideOutline.WidthRef(relation));
+        if (UsesRigPose(key))
+        {
+            // The outline of the pose the rig is actually in, not of the pose the
+            // art was drawn as: the same claim the flat path already makes, one
+            // level further down. Eight offset copies of the whole assembly.
+            foreach (var (x, y) in SideOutline.Offsets)
+            {
+                DrawRigBody(key, body, true, color, new Vector2(x * width, y * width));
+            }
+
+            return;
+        }
+
         if (!_goblinSilhouettes.TryGetValue(key, out var silhouette))
         {
             // Пак не загрузился: DrawGoblin рисует зелёный кружок-заглушку,
@@ -3860,14 +4169,13 @@ public partial class Main : Node2D
 
     private void DrawBodyInformationOverlays()
     {
-        var creatureCenters = _state!.Creatures.ToDictionary(
+        var creatureCenters = SceneCreatures().ToDictionary(
             creature => creature.Id,
             CreatureRenderCenter);
-        var raiderCenters = _state.Raiders
-            .Where(raider => raider.Mode != RaiderMode.Escaped)
+        var raiderCenters = SceneRaiders()
             .ToDictionary(raider => raider.Id, RaiderRenderCenter);
-        var creatures = _state.Creatures.ToDictionary(creature => creature.Id);
-        var raiders = _state.Raiders.ToDictionary(raider => raider.Id);
+        var creatures = SceneCreatures().ToDictionary(creature => creature.Id);
+        var raiders = SceneRaiders().ToDictionary(raider => raider.Id);
         var items = creatureCenters
             .Select(pair => WorldRenderGeometry.ForBody(
                 WorldRenderKind.Creature,
@@ -3881,6 +4189,9 @@ public partial class Main : Node2D
         // Under the bodies' own readouts and above every body: a blow joins two of
         // them, so it belongs to neither one's Y-order slot.
         DrawBlowStreaks(creatureCenters, raiderCenters);
+        // And the spark on top of the streak, because the streak is where the blow
+        // came from and the spark is where it arrived.
+        DrawContactSparks(creatureCenters, raiderCenters);
 
         foreach (var item in WorldRenderOrder.BackToFront(items))
         {
@@ -3925,8 +4236,14 @@ public partial class Main : Node2D
     /// </summary>
     private void DrawBlowFlash(Vector2 center, string key, BodyRef body)
     {
+        // Nothing before the spear arrives. The flash used to burn for the whole
+        // tick, which was right while a blow was one pose and one moment; at the
+        // duel's zoom a body lit up ahead of the blow is the first thing an eye
+        // finds. StrikeChain.HasLanded is the same instant the strike pose and
+        // hit-stop are at, and it still holds at alpha 1 so a captured frame keeps
+        // the mark.
         if (_blows.OutcomeOf(body) is not { } outcome ||
-            !_goblinSilhouettes.TryGetValue(key, out var silhouette))
+            !StrikeChain.HasLanded(TickAlpha()))
         {
             return;
         }
@@ -3939,8 +4256,103 @@ public partial class Main : Node2D
         // silhouette is the pose's: a flash that ignored the flip would light up
         // a body facing the other way.
         PushBodyPose(center, body);
-        DrawTextureRect(silhouette, BodyLocalRect(), false, colour);
+        if (UsesRigPose(key))
+        {
+            DrawRigFlash(key, body, colour);
+        }
+        else if (_goblinSilhouettes.TryGetValue(key, out var silhouette))
+        {
+            DrawTextureRect(silhouette, BodyLocalRect(), false, colour);
+        }
+
         ClearBodyPose();
+    }
+
+    /// <summary>
+    /// The rig's own share of the flash: the same silhouettes the side outline
+    /// draws, in the same posed frames, tinted by the blow.
+    ///
+    /// <para>
+    /// It is a routine of its own rather than a call into
+    /// <see cref="DrawRigBody"/> because the two draw in different passes — the
+    /// body in the depth pass, everything a blow says above it — and
+    /// <c>WorldDrawPassGuardTests.A_routine_only_calls_routines_of_its_own_pass</c>
+    /// is the check that would otherwise be talked out of the very defect it was
+    /// written for.
+    /// </para>
+    /// </summary>
+    private void DrawRigFlash(string key, BodyRef body, Color tint)
+    {
+        foreach (var (frame, rect, part) in RigLayout(key, body))
+        {
+            if (!_rigPartSilhouettes.TryGetValue(part, out var texture))
+            {
+                continue;
+            }
+
+            DrawSetTransformMatrix(_bodyFrame * frame);
+            DrawTextureRect(texture, rect, false, tint);
+        }
+
+        DrawSetTransformMatrix(_bodyFrame);
+    }
+
+    /// <summary>
+    /// The contact effect ADR 0020 asks the probe for: one spark where the blow
+    /// arrives, for the window it arrives in.
+    ///
+    /// <para>
+    /// Why a spark and not a splash or a trail is argued in
+    /// <see cref="BlowEffects"/>, where the sizes that decide it live: at a body
+    /// drawn 61.8 px tall the spark's long ray is 15.5 world px and its stroke is
+    /// 2.9, while a believable splash would be a dozen marks each under the pixel
+    /// at which a mark stops being one.
+    /// </para>
+    ///
+    /// <para>
+    /// A blow whose striker the journal does not name has no spark, for the same
+    /// reason it has no streak: the point of contact is a point on a line between
+    /// two bodies, and one of the two would be a guess.
+    /// </para>
+    /// </summary>
+    private void DrawContactSparks(
+        IReadOnlyDictionary<int, Vector2> creatureCenters,
+        IReadOnlyDictionary<int, Vector2> raiderCenters)
+    {
+        var beat = TickAlpha();
+        if (!StrikeChain.ShowsContact(beat))
+        {
+            return;
+        }
+
+        var contact = StrikeChain.ContactAlpha(beat);
+        foreach (var blow in _blows.Blows)
+        {
+            if (blow.Attacker is not { } attacker ||
+                BodyCenter(attacker, creatureCenters, raiderCenters) is not { } from ||
+                BodyCenter(blow.Target, creatureCenters, raiderCenters) is not { } to ||
+                from == to)
+            {
+                continue;
+            }
+
+            var at = ToVector2(BlowEffects.SparkAt(
+                new ViewPoint(from.X, from.Y),
+                new ViewPoint(to.X, to.Y)));
+            var colour = new Color(BlowEffects.SparkColor(blow.Outcome))
+            {
+                A = (float)BlowEffects.SparkAlpha(contact),
+            };
+            for (var ray = 0; ray < BlowEffects.SparkRays; ray++)
+            {
+                var direction = Vector2.FromAngle((float)BlowEffects.SparkRayRadians(ray));
+                DrawLine(
+                    at + (direction * ScaleWorld((float)BlowEffects.SparkCoreRef)),
+                    at + (direction * ScaleWorld((float)BlowEffects.SparkRayRef(ray, contact))),
+                    colour,
+                    ScaleWorld((float)BlowEffects.SparkWidthRef));
+            }
+        }
     }
 
     /// <summary>
@@ -4829,6 +5241,9 @@ public partial class Main : Node2D
     private void TogglePause()
     {
         _paused = !_paused;
+        // A run that is moving again draws the moment its own clock is at, not
+        // the one somebody stepped to while it was stopped.
+        _strikeScrub = null;
         UpdateHud();
         QueueRedraw();
     }
@@ -5034,6 +5449,254 @@ public partial class Main : Node2D
             $"post on (25,2) at tick {DemoBuildBlueprintTick}, [B] zones it TrainingGround " +
             "and Drill is switched on. Nobody was ordered to carry or build anything.";
         RefreshState();
+    }
+
+    // ---------------------------------------------------------------------
+    // The duel scene (Issue #244, ADR 0020)
+    //
+    // ADR 0020 asks the probe for «сцена один на один, крупно» and says why:
+    // «качество самой анимации важнее поведения в толпе на этом шаге». So this
+    // is not a new kind of run — it is the shipped raid fixture, stopped on the
+    // first tick the canonical journal records a blow on, with the camera on the
+    // two bodies that tick names.
+    //
+    // Nothing here reaches canonical state. The search runs ordinary ticks and
+    // stops on one of them; the camera and the scrub decide pixels only. A duel
+    // run and a plain run of the same fixture to the same tick print the same
+    // checksum, which is the hard constraint of the Issue and is measured in
+    // evidence/244-invariants.json.
+    // ---------------------------------------------------------------------
+
+    /// <summary>The fixture with a raid in it: the only one that produces a duel.</summary>
+    private const string DuelFixture = "prepared";
+
+    /// <summary>
+    /// How far the search may run before giving up. The first wave of the shipped
+    /// <c>prepared</c> journal reaches the defenders well inside this, and a bound
+    /// is what keeps a fixture with no fighting in it from spinning the whole
+    /// session.
+    /// </summary>
+    private const int DuelSearchTicks = PrototypeTuning.SessionTicks;
+
+    /// <summary>
+    /// How many steps one blow is scrubbed through. Twelve, because the chain has
+    /// five phases and the shortest of them — the strike — is 17 % of a tick: a
+    /// step coarser than that could skip the moment of contact entirely, which is
+    /// the one frame the scene exists to show.
+    /// </summary>
+    private const int StrikeScrubSteps = 12;
+
+    /// <summary>The zoom a duel is watched at: the largest the camera declares.</summary>
+    private static double DuelZoom => CameraView.ZoomLevels[^1];
+
+    /// <summary>
+    /// How far from either body of the duel the scene wants nobody else, in
+    /// cells. Two, which at the shipped tile and the duel's zoom is the whole
+    /// visible height of the world viewport either side of the pair: a third body
+    /// closer than that is in the frame, and a frame with a third body in it is
+    /// the crowd scene the review of vertical 3 rejected and was right to.
+    /// </summary>
+    private const int DuelClearance = 2;
+
+    private void ApplyDemoDuel(int? frame)
+    {
+        LoadFixture(DuelFixture, 1);
+        var chosen = FindDuelTick();
+        LoadFixture(DuelFixture, 1);
+        while (_state!.Tick < chosen && _world is { IsComplete: false })
+        {
+            // The same pair of calls the running clock makes, so the frame knows
+            // which cell every body stepped out of and the scrub below has a
+            // journey to interpolate along.
+            RememberMotionOrigin();
+            Advance(1);
+        }
+
+        _duelPair = DuelPair();
+        _paused = true;
+        if (_duelPair is { } pair &&
+            BodyPosition(pair.Attacker) is { } attacker &&
+            BodyPosition(pair.Target) is { } target)
+        {
+            var one = CameraView.CellCenter(attacker, _tileSize);
+            var other = CameraView.CellCenter(target, _tileSize);
+            _cameraCenter = CameraView.ClampCenterToMap(
+                new ViewPoint((one.X + other.X) / 2.0, (one.Y + other.Y) / 2.0),
+                _tileSize);
+            _cameraZoom = CameraView.ValidateZoom(DuelZoom);
+            // Both are the scene's now, so neither the layout pass nor a resize
+            // may take them back — the same latch --camera-zoom already sets.
+            _cameraZoomIsAutomatic = false;
+            // Nothing is selected on purpose. The selection ring is drawn over the
+            // body it names, and at this zoom it covers the chest of one of the
+            // two bodies the scene exists to look at.
+            _selectedCreatureId = null;
+            _selectedCell = null;
+        }
+
+        if (frame is { } step)
+        {
+            _strikeScrub = Math.Clamp(step, 0, StrikeScrubSteps) / (double)StrikeScrubSteps;
+        }
+
+        _controlFeedback =
+            "Duel: the first recorded blow of the " + DuelFixture + " journal. " +
+            "[SPACE] runs the exchange, [F] steps one twelfth of the blow at a " +
+            "time, [S] runs one whole tick.";
+        UpdateHud();
+        QueueRedraw();
+    }
+
+    /// <summary>
+    /// The two bodies of the first blow this tick's reading names, or <c>null</c>
+    /// when the journal named none. Both ends have to be on the map: a blow whose
+    /// striker the journal does not name is not a duel, it is one body being hurt
+    /// by something the view may not draw.
+    /// </summary>
+    private (BodyRef Attacker, BodyRef Target)? DuelPair()
+    {
+        foreach (var blow in _blows.Blows)
+        {
+            if (blow.Attacker is { } attacker &&
+                BodyPosition(attacker) is not null &&
+                BodyPosition(blow.Target) is not null)
+            {
+                return (attacker, blow.Target);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The tick the duel stops on: the first one whose blow has nobody else
+    /// within <see cref="DuelClearance"/> of either end, and failing that the
+    /// emptiest one the search found.
+    ///
+    /// <para>
+    /// It runs the fixture forward and is then thrown away — the caller reloads
+    /// and runs to the tick this returned. That costs the search twice and buys
+    /// the one thing the scene is for: a frame with two bodies in it. Both passes
+    /// run the same ticks of the same journal, so the tick they agree on is a
+    /// property of the fixture rather than of when the search happened to stop.
+    /// </para>
+    /// </summary>
+    private int FindDuelTick()
+    {
+        var chosen = 0;
+        var emptiest = int.MaxValue;
+        for (var searched = 0; searched < DuelSearchTicks; searched++)
+        {
+            if (DuelPair() is { } pair)
+            {
+                var score = DuelScore(pair);
+                if (score < emptiest)
+                {
+                    emptiest = score;
+                    chosen = _state!.Tick;
+                }
+
+                if (score == 0)
+                {
+                    break;
+                }
+            }
+
+            if (_world is null || _world.IsComplete)
+            {
+                break;
+            }
+
+            Advance(1);
+        }
+
+        return chosen;
+    }
+
+    /// <summary>
+    /// How bad a blow is as a duel: lower is better, and zero is a side-on blow
+    /// with nobody else near it.
+    ///
+    /// <para>
+    /// Side-on beats everything, which is what the hundred is for. A blow struck
+    /// straight up or down has no sideways part at all, and the sideways part is
+    /// what carries the reading: the facing, the lean and the direction two bodies
+    /// are thrown in are all signed by it, and two bodies on one column are drawn
+    /// one on top of the other besides.
+    /// </para>
+    /// </summary>
+    private int DuelScore((BodyRef Attacker, BodyRef Target) pair)
+    {
+        if (BodyPosition(pair.Attacker) is not { } attacker ||
+            BodyPosition(pair.Target) is not { } target)
+        {
+            return int.MaxValue;
+        }
+
+        return (attacker.X == target.X ? 100 : 0) + DuelCrowd(pair);
+    }
+
+    /// <summary>
+    /// How many standing bodies other than the two of the blow are close enough
+    /// to be in the picture with them.
+    /// </summary>
+    private int DuelCrowd((BodyRef Attacker, BodyRef Target) pair)
+    {
+        if (BodyPosition(pair.Attacker) is not { } attacker ||
+            BodyPosition(pair.Target) is not { } target)
+        {
+            return int.MaxValue;
+        }
+
+        var crowd = 0;
+        foreach (var creature in _state!.Creatures)
+        {
+            var body = new BodyRef(BodyKind.Creature, creature.Id);
+            if (body != pair.Attacker && body != pair.Target &&
+                IsNearDuel(creature.Position, attacker, target))
+            {
+                crowd++;
+            }
+        }
+
+        foreach (var raider in _state.Raiders)
+        {
+            var body = new BodyRef(BodyKind.Raider, raider.Id);
+            if (raider.Mode != RaiderMode.Escaped &&
+                body != pair.Attacker && body != pair.Target &&
+                IsNearDuel(raider.Position, attacker, target))
+            {
+                crowd++;
+            }
+        }
+
+        return crowd;
+    }
+
+    private static bool IsNearDuel(GridPoint cell, GridPoint attacker, GridPoint target) =>
+        Chebyshev(cell, attacker) <= DuelClearance ||
+        Chebyshev(cell, target) <= DuelClearance;
+
+    private static int Chebyshev(GridPoint one, GridPoint other) =>
+        Math.Max(Math.Abs(one.X - other.X), Math.Abs(one.Y - other.Y));
+
+    /// <summary>
+    /// One step through the blow being drawn, without running a tick.
+    ///
+    /// <para>
+    /// This is the "остановить и промотать покадрово" half of ADR 0020's scene,
+    /// and it is presentation twice over: it picks which moment between two
+    /// canonical snapshots is drawn and runs nothing. A run that has been stepped
+    /// through a whole blow and one that has not print the same checksum.
+    /// </para>
+    /// </summary>
+    private void StepStrikeFrame()
+    {
+        _paused = true;
+        var current = (int)Math.Round((_strikeScrub ?? 1.0) * StrikeScrubSteps);
+        _strikeScrub = ((current + 1) % (StrikeScrubSteps + 1)) / (double)StrikeScrubSteps;
+        UpdateHud();
+        QueueRedraw();
     }
 
     private void VerifyControlsSmoke()
@@ -5851,6 +6514,42 @@ public partial class Main : Node2D
         int id) =>
         origins.TryGetValue(id, out var origin) ? position.X - origin.X : 0;
 
+    /// <summary>
+    /// The bodies the picture draws. Everybody, unless the duel scene of ADR 0020
+    /// is running — then the two the blow names and nobody else.
+    ///
+    /// <para>
+    /// <b>Why the scene hides bodies rather than framing them out.</b> ADR 0020
+    /// asks the probe for «сцена один на один, крупно» and says why in the same
+    /// sentence: «качество самой анимации важнее поведения в толпе на этом шаге».
+    /// The shipped raid journal has no such moment to point a camera at — the crew
+    /// musters as a block, and over the whole session the emptiest recorded blow
+    /// still has three other standing bodies within two cells of it (measured;
+    /// the number is <c>duel.crowd</c> in a run's own view state). So a scene
+    /// built only out of the camera would be the stack of bodies the review of
+    /// vertical 3 rejected, and rightly.
+    /// </para>
+    ///
+    /// <para>
+    /// It changes pixels and nothing else: the hidden bodies go on fighting, keep
+    /// their hit points and reach the same checksum, which is the whole difference
+    /// between a scene and a rule. Off by default and reachable only through
+    /// <c>--demo-duel</c>.
+    /// </para>
+    /// </summary>
+    private IEnumerable<PrototypeCreatureSnapshot> SceneCreatures() =>
+        _state!.Creatures.Where(creature =>
+            IsInScene(new BodyRef(BodyKind.Creature, creature.Id)));
+
+    /// <inheritdoc cref="SceneCreatures"/>
+    private IEnumerable<PrototypeRaiderSnapshot> SceneRaiders() =>
+        _state!.Raiders.Where(raider =>
+            raider.Mode != RaiderMode.Escaped &&
+            IsInScene(new BodyRef(BodyKind.Raider, raider.Id)));
+
+    private bool IsInScene(BodyRef body) =>
+        _duelPair is not { } duel || body == duel.Attacker || body == duel.Target;
+
     private GridPoint? BodyPosition(BodyRef body) =>
         body.Kind == BodyKind.Creature
             ? _state!.Creatures
@@ -5882,18 +6581,98 @@ public partial class Main : Node2D
     {
         var (from, to) = BodyStep(body);
         var alpha = MotionAlpha();
+        var beat = TickAlpha();
         var phase = BodyPhase(body.Kind, body.Id);
         var bob = ScaleWorld((float)BodyMotion.BobOffsetRef(
             BodyMotion.PathCells(from, to, alpha),
             from != to));
-        DrawSetTransform(
-            center + new Vector2(0f, (float)CameraView.GoblinFootLine(_tileSize) + bob),
-            (float)BodyMotion.LeanRadians(to.X - from.X),
+        var axis = BlowAxis(body);
+        _bodyFrame = new Transform2D(
+            (float)BodyMotion.LeanRadians(to.X - from.X) + StrikeLean(phase, axis, beat),
             new Vector2(
                 (float)(BodyMotion.FlipScale(BodyFacingOf(body)) *
                     BodyMotion.BlowWidthScale(phase, alpha)),
-                (float)BodyMotion.BlowHeightScale(phase, alpha)));
+                (float)BodyMotion.BlowHeightScale(phase, alpha)),
+            0f,
+            center +
+                new Vector2(0f, (float)CameraView.GoblinFootLine(_tileSize) + bob) +
+                BodyRecoil(phase, axis, beat));
+        DrawSetTransformMatrix(_bodyFrame);
     }
+
+    /// <summary>
+    /// The line one blow of this tick travels along, for a body that is one of
+    /// its two ends: <b>from the striker towards what it struck</b>, as a unit
+    /// vector, or <c>null</c> for a body no recorded blow touches.
+    ///
+    /// <para>
+    /// The direction is the whole of the polarity this Issue's second mutant
+    /// attacks. Subtracted the other way round, <see cref="BodyRecoil"/> pulls a
+    /// striker <em>into</em> the thing it just speared and throws its target
+    /// towards the spear — which compiles, draws a whole fight and looks, at a
+    /// glance, like an animation.
+    /// <c>StrikeAdapterTests.The_recoil_of_a_blow_runs_from_the_striker_towards_the_struck</c>
+    /// is what refuses it.
+    /// </para>
+    ///
+    /// <para>
+    /// Cells, not drawn centres. The drawn centre already carries the recoil this
+    /// answer feeds, and a direction that fed on its own output would drift a
+    /// little further every frame.
+    /// </para>
+    /// </summary>
+    private Vector2? BlowAxis(BodyRef body)
+    {
+        foreach (var blow in _blows.Blows)
+        {
+            if (blow.Attacker is not { } attacker ||
+                (attacker != body && blow.Target != body) ||
+                BodyPosition(attacker) is not { } from ||
+                BodyPosition(blow.Target) is not { } to)
+            {
+                continue;
+            }
+
+            var axis = new Vector2(to.X - from.X, to.Y - from.Y);
+            if (axis != Vector2.Zero)
+            {
+                return axis.Normalized();
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// How far this body is thrown along that line, in world pixels. Both ends of
+    /// a blow move: <see cref="StrikeChain.RecoilOffsetRef"/> answers negative for
+    /// the striker after contact and positive for the body it struck, and the one
+    /// axis below turns those two numbers into two bodies moving apart.
+    /// </summary>
+    private Vector2 BodyRecoil(BodyActionPhase phase, Vector2? axis, float tickAlpha) =>
+        axis is { } direction
+            ? direction * ScaleWorld((float)StrikeChain.RecoilOffsetRef(
+                StrikeChain.RoleOf(phase),
+                tickAlpha))
+            : Vector2.Zero;
+
+    /// <summary>
+    /// How far the whole body tips into the blow, in radians.
+    ///
+    /// <para>
+    /// A rotation of the body's own frame and never a rotation of the torso part
+    /// against the legs: nothing moves relative to anything, so a lean of any size
+    /// costs no seam at all. That is not a convenience — turning the torso against
+    /// the legs opens the widest gap of any joint in this rig, which is what
+    /// <c>evidence/244-measure-rig-gaps.py</c> measured before the chain was
+    /// written.
+    /// </para>
+    /// </summary>
+    private static float StrikeLean(BodyActionPhase phase, Vector2? axis, float tickAlpha) =>
+        axis is { } direction
+            ? (float)(StrikeChain.LeanDegrees(phase, tickAlpha) * Math.PI / 180.0) *
+                direction.X
+            : 0f;
 
     /// <summary>
     /// The step a body is in the middle of: the cell it left when the tick being
@@ -5911,7 +6690,11 @@ public partial class Main : Node2D
     }
 
     /// <summary>Back to the canvas everything else is drawn in.</summary>
-    private void ClearBodyPose() => DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+    private void ClearBodyPose()
+    {
+        _bodyFrame = Transform2D.Identity;
+        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+    }
 
     /// <summary>
     /// The rectangle a body's sprite is drawn into, in the frame
@@ -5933,8 +6716,14 @@ public partial class Main : Node2D
     private Vector2 BodyLocalCenter() =>
         new(0f, -(float)CameraView.GoblinFootLine(_tileSize));
 
-    private void DrawGoblin(string key)
+    private void DrawGoblin(string key, BodyRef body)
     {
+        if (UsesRigPose(key))
+        {
+            DrawRigBody(key, body, false, Colors.White, Vector2.Zero);
+            return;
+        }
+
         if (_goblinSprites.TryGetValue(key, out var sprite))
         {
             // Where the rectangle goes is CameraView's answer, not this method's,
