@@ -732,12 +732,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-game.ps1 -DemoDu
 ```
 
 The scene **hides every body but those two**, and that is a measurement rather
-than a preference: the shipped journal has no moment to point a camera at. Over
-the whole session the emptiest recorded blow still has three other standing
-bodies within two cells of it — a run reports its own number as `duel.crowd` in
-the view state — so a scene built only out of the camera would be the stack of
-bodies the review of vertical 3 rejected. The hidden bodies go on fighting and
-reach the same checksum; only pixels change.
+than a preference: the shipped journal has no moment to point a camera at. The
+blow the scene settles on — tick 2061 — has **five** other standing bodies within
+two cells of it, and a run reports that number itself as `duel.crowd` in the view
+state, so a scene built only out of the camera would be the stack of bodies the
+review of vertical 3 rejected. The hidden bodies go on fighting and reach the
+same checksum; only pixels change.
+
+The emptiest blow of the whole session is a different one — tick 1302, with three
+other bodies — and the scene does not take it, because `DuelScore` prefers a blow
+struck **sideways**: a blow along the camera's own column reads as one body
+standing behind another. So the number a reader gets from `duel.crowd` is the
+crowd around the blow that was chosen, not the smallest crowd in the session, and
+the case for hiding is the stronger of the two. An earlier revision of this
+paragraph claimed the run prints three; independent review of PR #256 ran the
+command this paragraph itself offers and got five.
 
 `-DuelFrame <0..12>` freezes the blow at one twelfth of the tick, which is what
 the evidence frames are captured with and what the `F` key does live. It runs no
