@@ -3,32 +3,36 @@
 Issue #244 inherits a named risk from ADR 0020 and from the review of Issue
 #243: "стыки частей видны, поворот руки вокруг сустава на мелком масштабе легко
 читается как поломка". `evidence/243-goblin-cutout-joint-rotation-check.png`
-shows it at `arm_near` -15 deg and -10 deg. The strike chain needs larger angles
-than the +-15 deg the builder checked, so the angles this repository ships have
-to be chosen against a measurement rather than against a look.
+shows it at `arm_near` -15 deg and -10 deg, and the review of this Issue's brief
+found a second one on the far arm. The strike chain needs larger angles than the
++-15 deg the builder checked, so the angles this repository ships are chosen
+against a measurement rather than against a look.
 
 What is measured
 ----------------
-A *hole* is a transparent pixel of the posed composite that is enclosed by
-opaque pixels of that same composite. It is the objective form of "щель":
-material moved away and left the floor showing through the middle of a body.
-Pixels the silhouette simply no longer covers -- the arm swinging out of its
-rest place -- are connected to the outside and are not holes; they are the
-animation doing its job.
+`slit_pixels` is the number this Issue gates on. A pixel counts when the rest
+pose had material there, the posed one does not, and the posed body still has
+material on both sides of it along its own row -- i.e. the floor is visible
+*through* the body. That is exactly the defect the review photographed: two
+parts that no longer meet. It is zero on the rest pose by construction.
 
-A second number, *revealed*, counts pixels that were opaque in the rest pose and
-are transparent now. It is reported because a large revealed area with zero
-holes is still worth looking at: it means a limb left a bay open at the
-silhouette edge.
+`hole_pixels` -- transparent pixels wholly enclosed by opaque ones -- is
+reported and deliberately not gated on. It misses the photographed defect
+entirely, because that wedge is open to the outside; keeping it in the report is
+what makes that statement checkable rather than asserted.
 
-Both are counted in source-cell pixels (the 512x512 space the rig is authored
-in) and converted to the runtime scale the game draws at.
+`revealed_pixels` -- what the rest pose covered and this one does not -- is
+reported for the same reason. A limb that moves is supposed to leave the
+silhouette it had; that is the animation happening.
+
+All three are counted in source-cell pixels, the 512x512 space the rig is
+authored in.
 
 Usage
 -----
     python evidence/244-measure-rig-gaps.py --sweep
     python evidence/244-measure-rig-gaps.py --chain --sheet .artifacts/244/chain.png
-    python evidence/244-measure-rig-gaps.py --json evidence/244-rig-gaps.json
+    python evidence/244-measure-rig-gaps.py --sweep --chain --json evidence/244-rig-gaps.json
 """
 
 from __future__ import annotations
@@ -51,10 +55,6 @@ ALPHA_OPAQUE = 32
 def load_rig(rig_dir: str) -> dict:
     with open(os.path.join(rig_dir, RIG_FILE), "r", encoding="utf-8") as handle:
         return json.load(handle)
-
-
-def identity() -> tuple[float, ...]:
-    return (1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
 
 
 def multiply(a: tuple[float, ...], b: tuple[float, ...]) -> tuple[float, ...]:
@@ -106,9 +106,15 @@ def compose(
     angles: dict[str, float] | None = None,
     offsets: dict[str, tuple[float, float]] | None = None,
     show_weapon: bool = False,
-    part_layers: dict[str, Image.Image] | None = None,
 ) -> Image.Image:
-    """One posed 512x512 RGBA cell, drawn back to front by the rig's z_index."""
+    """One posed 512x512 RGBA cell, drawn back to front by the rig's z_index.
+
+    The hierarchy is the rig's: a part's own transform turns it about its joint
+    and slides it, and a child's transform is its parent's times its own. That
+    is the same composition `Main.RigLayout` builds in the engine, written twice
+    on purpose -- this side has no Godot in it, so the measurement can be
+    reproduced from a shell.
+    """
     angles = angles or {}
     offsets = offsets or {}
     size = tuple(rig["source_cell_size"])
@@ -143,51 +149,13 @@ def compose(
         layer = image.transform(
             size, Image.AFFINE, invert(placement), resample=Image.NEAREST
         )
-        if part_layers is not None:
-            part_layers[part["name"]] = layer
         canvas = Image.alpha_composite(canvas, layer)
     return canvas
 
 
-def joint_revealed_pixels(
-    rest: Image.Image,
-    posed: Image.Image,
-    joint: tuple[int, int],
-    radius: int,
-) -> int:
-    """Material that stood at a joint in the rest pose and is background now.
-
-    This is the number the angles of this Issue are chosen by, and it is the
-    only one of the three that goes to zero on the rest pose by construction.
-    `hole_pixels` misses the defect the review of Issue #243 photographed at
-    `arm_near` -15 deg, because that wedge is open to the outside rather than
-    enclosed; `joint_gap_pixels` misses it too, because it opens further down
-    the seam than the builder's 14 px pivot collar reaches. What the eye reads
-    as a broken shoulder is simply this: the limb rotated out of the shoulder
-    and its parent did not have material behind to take over, so the floor shows
-    through where the two are supposed to meet.
-
-    Counted inside a disc around the joint rather than over the whole body,
-    because a limb is *supposed* to vacate its rest place further out -- that is
-    the animation happening, and counting it would rank a big swing as a worse
-    seam than a small one.
-    """
-    width, height = rest.size
-    before = alpha_mask(rest)
-    after = alpha_mask(posed)
-    cx, cy = joint
-    count = 0
-    for y in range(max(0, cy - radius), min(height, cy + radius + 1)):
-        for x in range(max(0, cx - radius), min(width, cx + radius + 1)):
-            if (x - cx) ** 2 + (y - cy) ** 2 <= radius * radius:
-                if before[y][x] and not after[y][x]:
-                    count += 1
-    return count
-
-
 def alpha_mask(image: Image.Image) -> list[list[bool]]:
     width, height = image.size
-    data = image.getdata(3)
+    data = list(image.getchannel("A").getdata())
     return [
         [data[y * width + x] >= ALPHA_OPAQUE for x in range(width)]
         for y in range(height)
@@ -195,7 +163,12 @@ def alpha_mask(image: Image.Image) -> list[list[bool]]:
 
 
 def hole_pixels(image: Image.Image) -> int:
-    """Transparent pixels that opaque material completely encloses."""
+    """Transparent pixels that opaque material completely encloses.
+
+    Reported, not gated on: the wedge the review of Issue #243 photographed is
+    open to the outside, so this number never saw it. Keeping it here is what
+    makes that a measurement rather than a claim.
+    """
     width, height = image.size
     opaque = alpha_mask(image)
     seen = [[False] * width for _ in range(height)]
@@ -226,143 +199,146 @@ def hole_pixels(image: Image.Image) -> int:
     )
 
 
-def joint_positions(rig: dict) -> dict[str, tuple[int, int]]:
-    return {
-        part["name"]: (
-            part["rest_position"][0] + part["pivot"][0],
-            part["rest_position"][1] + part["pivot"][1],
-        )
-        for part in rig["parts"]
-    }
-
-
-def joint_gap_pixels(image: Image.Image, joint: tuple[int, int], radius: int) -> int:
-    """Transparent pixels inside the collar the builder duplicated around a pivot.
-
-    The builder states the guarantee this measures: "fully opaque source pixels
-    are duplicated in a 14 px radius around each pivot so small rotations have
-    real overlap instead of seams". A disc centred on a pivot is invariant under
-    rotation about that pivot, so as long as the disc stays opaque the two parts
-    are still joined and the seam cannot be seen through. A transparent pixel
-    inside it is exactly the wedge the review of #243 photographed -- and, unlike
-    a hole, it is still counted when the wedge is open to the outside, which is
-    what `hole_pixels` misses.
-    """
-    width, height = image.size
-    opaque = alpha_mask(image)
-    cx, cy = joint
-    count = 0
-    for y in range(max(0, cy - radius), min(height, cy + radius + 1)):
-        for x in range(max(0, cx - radius), min(width, cx + radius + 1)):
-            if (x - cx) ** 2 + (y - cy) ** 2 <= radius * radius and not opaque[y][x]:
-                count += 1
-    return count
-
-
 def revealed_pixels(rest: Image.Image, posed: Image.Image) -> int:
-    rest_mask = alpha_mask(rest)
-    posed_mask = alpha_mask(posed)
-    height = len(rest_mask)
-    width = len(rest_mask[0])
+    """Pixels the rest pose covered and the posed one does not."""
+    before = alpha_mask(rest)
+    after = alpha_mask(posed)
+    height = len(before)
+    width = len(before[0])
     return sum(
         1
         for y in range(height)
         for x in range(width)
-        if rest_mask[y][x] and not posed_mask[y][x]
+        if before[y][x] and not after[y][x]
     )
+
+
+# How far a row is searched either side of a transparent pixel for body
+# material. 45 source pixels is 23 canvas pixels, a fifth of the body's own
+# 116-pixel width: wide enough to span any gap between two parts, narrow enough
+# that the empty space beside a body is not counted as being inside it.
+SLIT_REACH = 45
+
+
+def slit_pixels(rest: Image.Image, posed: Image.Image) -> int:
+    """Background visible *through* the body: the measured form of "щель"."""
+    before = alpha_mask(rest)
+    after = alpha_mask(posed)
+    height = len(before)
+    width = len(before[0])
+    count = 0
+    for y in range(height):
+        row = after[y]
+        left = [-1] * width
+        nearest = -1
+        for x in range(width):
+            if row[x]:
+                nearest = x
+            left[x] = nearest
+        nearest = width + SLIT_REACH + 1
+        for x in range(width - 1, -1, -1):
+            if row[x]:
+                nearest = x
+            elif (
+                before[y][x]
+                and left[x] >= 0
+                and x - left[x] <= SLIT_REACH
+                and nearest - x <= SLIT_REACH
+            ):
+                count += 1
+    return count
 
 
 def runtime_scale(rig: dict) -> float:
     """Source-cell pixels to runtime canvas pixels, from the rig's own metadata."""
     x0, y0, x1, y1 = rig["source_body_bbox"]
-    target_w, target_h = rig["runtime_target_size"]
-    return ((target_w / (x1 - x0)) + (target_h / (y1 - y0))) / 2.0
+    return rig["runtime_target_size"][1] / (y1 - y0)
 
 
-# The chain the runtime plays, as source-space degrees per part. Kept here so
-# the measurement and StrikeChain.cs can be compared by a human without either
-# one being the other's copy: StrikeChain.cs is the shipped source of truth and
-# these keys are named exactly as its phases are.
+# The chain the runtime plays, transcribed from StrikeChain.cs. Angles are
+# degrees about each part's own joint; offsets are source-cell pixels. The C#
+# file is the shipped source of truth -- this table exists so the measurement
+# can be reproduced without starting the engine, and the two are compared by
+# eye when either changes.
 CHAIN = {
-    "Stance": {},
-    "Windup": {
-        "arm_near": 34.0,
-        "arm_far": -8.0,
-        "torso": 5.0,
-        "head": 3.0,
-        "leg_near": -4.0,
-        "leg_far": 5.0,
-    },
-    "Strike": {
-        "arm_near": -12.0,
-        "arm_far": 10.0,
-        "torso": -7.0,
-        "head": -5.0,
-        "leg_near": 6.0,
-        "leg_far": -6.0,
-    },
-    "FollowThrough": {
-        "arm_near": -4.0,
-        "arm_far": 6.0,
-        "torso": -4.0,
-        "head": -3.0,
-        "leg_near": 4.0,
-        "leg_far": -4.0,
-    },
-    "Recover": {
-        "arm_near": 8.0,
-        "arm_far": -2.0,
-        "torso": 2.0,
-        "head": 1.0,
-        "leg_near": -1.0,
-        "leg_far": 1.0,
-    },
+    "Stance": ({}, {}),
+    "Windup": (
+        {"head": 3, "arm_near": -30, "arm_far": -6, "leg_near": 6, "leg_far": -5},
+        {
+            "head": (-6, 1),
+            "arm_near": (-8, -8),
+            "arm_far": (-8, 8),
+            "leg_near": (4, 1),
+            "leg_far": (-4, -6),
+        },
+    ),
+    "Strike": (
+        {"head": -4, "arm_near": 8, "arm_far": 10, "leg_near": 9, "leg_far": -7},
+        {
+            "head": (7, 1),
+            "arm_near": (8, 8),
+            "arm_far": (-8, -8),
+            "leg_near": (1, 1),
+            "leg_far": (-8, 6),
+        },
+    ),
+    "FollowThrough": (
+        {"head": -3, "arm_near": 12, "arm_far": 7, "leg_near": 6, "leg_far": -5},
+        {
+            "head": (5, 0),
+            "arm_near": (8, 8),
+            "arm_far": (-8, 1),
+            "leg_near": (-8, -8),
+            "leg_far": (-5, 0),
+        },
+    ),
+    "Recover": (
+        {"head": -1, "arm_near": 3, "arm_far": 2, "leg_near": 2, "leg_far": -1},
+        {
+            "head": (2, 0),
+            "arm_near": (8, -1),
+            "arm_far": (-5, 6),
+            "leg_near": (1, 0),
+            "leg_far": (-2, 0),
+        },
+    ),
 }
 
 FLINCH = {
-    "Stance": {},
-    "Impact": {
-        "torso": -13.0,
-        "head": -9.0,
-        "arm_near": 16.0,
-        "arm_far": -10.0,
-        "leg_near": -7.0,
-        "leg_far": 8.0,
-    },
-    "Settle": {
-        "torso": -5.0,
-        "head": -3.0,
-        "arm_near": 6.0,
-        "arm_far": -4.0,
-        "leg_near": -3.0,
-        "leg_far": 3.0,
-    },
+    "Impact": (
+        {"head": -7, "arm_near": -8, "arm_far": 6, "leg_near": -4, "leg_far": 5},
+        {
+            "head": (8, -1),
+            "arm_near": (8, 4),
+            "arm_far": (-5, 3),
+            "leg_near": (-1, 1),
+            "leg_far": (-1, 1),
+        },
+    ),
+    "Settle": (
+        {"head": -3, "arm_near": -4, "arm_far": 3, "leg_near": -2, "leg_far": 2},
+        {
+            "head": (5, 0),
+            "arm_near": (8, -3),
+            "arm_far": (-2, 8),
+            "leg_near": (0, 0),
+            "leg_far": (-7, 1),
+        },
+    ),
 }
 
-
-COLLAR_RADIUS = 14
-
-# 40 source pixels is 20.4 runtime canvas pixels and 6.6 world pixels at the
-# shipped 40 px tile -- about a tenth of a drawn body. A seam smaller than the
-# disc it is measured in cannot be hidden by the neighbouring part, so the disc
-# has to be wider than the pivot collar and narrower than the limb.
-JOINT_RADIUS = 40
+SWEEP_PARTS = ("arm_near", "arm_far", "torso", "head", "leg_near", "leg_far")
+SWEEP_ANGLES = (-30, -20, -15, -10, -5, 5, 10, 15, 20, 30)
 
 
-def measure(rig: dict, rig_dir: str, angles: dict[str, float], rest: Image.Image):
-    posed = compose(rig, rig_dir, angles=angles)
-    joints = joint_positions(rig)
-    collar = {
-        name: joint_gap_pixels(posed, joint, COLLAR_RADIUS)
-        for name, joint in joints.items()
-        if name != "weapon"
-    }
-    seams = {
-        name: joint_revealed_pixels(rest, posed, joint, JOINT_RADIUS)
-        for name, joint in joints.items()
-        if name != "weapon"
-    }
-    return posed, hole_pixels(posed), revealed_pixels(rest, posed), collar, seams
+def measure(rig, rig_dir, angles, offsets, rest):
+    posed = compose(rig, rig_dir, angles=angles, offsets=offsets)
+    return (
+        posed,
+        slit_pixels(rest, posed),
+        hole_pixels(posed),
+        revealed_pixels(rest, posed),
+    )
 
 
 def main() -> None:
@@ -376,68 +352,68 @@ def main() -> None:
 
     rig = load_rig(arguments.rig_dir)
     rest = compose(rig, arguments.rig_dir)
-    scale = runtime_scale(rig)
     report = {
         "rig": os.path.join(arguments.rig_dir, RIG_FILE).replace("\\", "/"),
-        "sourceToRuntimeScale": round(scale, 6),
+        "sourceToRuntimeScale": round(runtime_scale(rig), 6),
+        "slitReachSourcePixels": SLIT_REACH,
+        "restSlitPixels": slit_pixels(rest, rest),
         "restHolePixels": hole_pixels(rest),
         "sweep": [],
         "chain": [],
     }
+    print(f"rest: slit={report['restSlitPixels']} holes={report['restHolePixels']}")
 
     if arguments.sweep:
-        for part in ("arm_near", "arm_far", "torso", "head", "leg_near", "leg_far"):
-            for degrees in (-40, -30, -20, -15, -10, -5, 5, 10, 15, 20, 30, 40):
-                _, holes, revealed, collar, wide = measure(
-                    rig, arguments.rig_dir, {part: degrees}, rest
+        for part in SWEEP_PARTS:
+            for degrees in SWEEP_ANGLES:
+                _, slit, holes, revealed = measure(
+                    rig, arguments.rig_dir, {part: degrees}, {}, rest
                 )
                 report["sweep"].append(
                     {
                         "part": part,
                         "degrees": degrees,
+                        "slitPixels": slit,
                         "holePixels": holes,
                         "revealedPixels": revealed,
-                        "collarGapPixels": collar[part],
-                        "wideGapPixels": wide[part],
                     }
                 )
                 print(
-                    f"{part:9s} {degrees:+4d} deg  collar={collar[part]:4d}  "
-                    f"wide={wide[part]:4d}  holes={holes:5d}  revealed={revealed:5d}"
+                    f"{part:9s} {degrees:+4d} deg  slit={slit:5d}  "
+                    f"holes={holes:5d}  revealed={revealed:5d}"
                 )
 
     if arguments.chain or arguments.sheet:
         panels = []
-        for table, prefix in ((CHAIN, "strike"), (FLINCH, "flinch")):
-            for name, angles in table.items():
-                posed, holes, revealed, collar, wide = measure(
-                    rig, arguments.rig_dir, angles, rest
+        for table, name in ((CHAIN, "strike"), (FLINCH, "flinch")):
+            for phase, (angles, offsets) in table.items():
+                posed, slit, holes, revealed = measure(
+                    rig, arguments.rig_dir, angles, offsets, rest
                 )
+                bare = slit_pixels(rest, compose(rig, arguments.rig_dir, angles=angles))
                 report["chain"].append(
                     {
-                        "chain": prefix,
-                        "phase": name,
+                        "chain": name,
+                        "phase": phase,
                         "angles": angles,
+                        "offsets": {key: list(value) for key, value in offsets.items()},
+                        "slitPixels": slit,
+                        "slitPixelsWithoutOffsets": bare,
                         "holePixels": holes,
                         "revealedPixels": revealed,
-                        "collarGapPixels": collar,
-                        "worstCollarGapPixels": max(collar.values()),
-                        "worstWideGapPixels": max(wide.values()),
                     }
                 )
-                panels.append((f"{prefix}.{name}", posed))
+                panels.append(posed)
                 print(
-                    f"{prefix}.{name:14s} worstCollar={max(collar.values()):4d}  "
-                    f"worstWide={max(wide.values()):4d}  holes={holes:5d}  "
-                    f"revealed={revealed:5d}"
+                    f"{name}.{phase:14s} slit={slit:5d} (no offsets {bare:5d})  "
+                    f"holes={holes:5d}  revealed={revealed:5d}"
                 )
+
         if arguments.sheet:
             columns = 4
             rows = (len(panels) + columns - 1) // columns
-            sheet = Image.new(
-                "RGBA", (columns * 512, rows * 512), (51, 47, 66, 255)
-            )
-            for index, (_, panel) in enumerate(panels):
+            sheet = Image.new("RGBA", (columns * 512, rows * 512), (51, 47, 66, 255))
+            for index, panel in enumerate(panels):
                 sheet.alpha_composite(
                     panel, ((index % columns) * 512, (index // columns) * 512)
                 )

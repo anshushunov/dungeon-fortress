@@ -1,0 +1,663 @@
+{
+  "rig": "src/DungeonFortress.Game/assets/generated/goblins/cutout_v1/goblin_cutout_rig_v1.json",
+  "sourceToRuntimeScale": 0.509091,
+  "slitReachSourcePixels": 45,
+  "restSlitPixels": 0,
+  "restHolePixels": 65,
+  "sweep": [
+    {
+      "part": "arm_near",
+      "degrees": -30,
+      "slitPixels": 21,
+      "holePixels": 0,
+      "revealedPixels": 3385
+    },
+    {
+      "part": "arm_near",
+      "degrees": -20,
+      "slitPixels": 22,
+      "holePixels": 0,
+      "revealedPixels": 2568
+    },
+    {
+      "part": "arm_near",
+      "degrees": -15,
+      "slitPixels": 55,
+      "holePixels": 2,
+      "revealedPixels": 1998
+    },
+    {
+      "part": "arm_near",
+      "degrees": -10,
+      "slitPixels": 48,
+      "holePixels": 38,
+      "revealedPixels": 1370
+    },
+    {
+      "part": "arm_near",
+      "degrees": -5,
+      "slitPixels": 29,
+      "holePixels": 65,
+      "revealedPixels": 714
+    },
+    {
+      "part": "arm_near",
+      "degrees": 5,
+      "slitPixels": 639,
+      "holePixels": 65,
+      "revealedPixels": 712
+    },
+    {
+      "part": "arm_near",
+      "degrees": 10,
+      "slitPixels": 1227,
+      "holePixels": 65,
+      "revealedPixels": 1379
+    },
+    {
+      "part": "arm_near",
+      "degrees": 15,
+      "slitPixels": 1715,
+      "holePixels": 65,
+      "revealedPixels": 2004
+    },
+    {
+      "part": "arm_near",
+      "degrees": 20,
+      "slitPixels": 2136,
+      "holePixels": 67,
+      "revealedPixels": 2570
+    },
+    {
+      "part": "arm_near",
+      "degrees": 30,
+      "slitPixels": 2393,
+      "holePixels": 65,
+      "revealedPixels": 3384
+    },
+    {
+      "part": "arm_far",
+      "degrees": -30,
+      "slitPixels": 769,
+      "holePixels": 66,
+      "revealedPixels": 1261
+    },
+    {
+      "part": "arm_far",
+      "degrees": -20,
+      "slitPixels": 759,
+      "holePixels": 65,
+      "revealedPixels": 979
+    },
+    {
+      "part": "arm_far",
+      "degrees": -15,
+      "slitPixels": 582,
+      "holePixels": 65,
+      "revealedPixels": 703
+    },
+    {
+      "part": "arm_far",
+      "degrees": -10,
+      "slitPixels": 373,
+      "holePixels": 65,
+      "revealedPixels": 430
+    },
+    {
+      "part": "arm_far",
+      "degrees": -5,
+      "slitPixels": 176,
+      "holePixels": 65,
+      "revealedPixels": 198
+    },
+    {
+      "part": "arm_far",
+      "degrees": 5,
+      "slitPixels": 2,
+      "holePixels": 66,
+      "revealedPixels": 412
+    },
+    {
+      "part": "arm_far",
+      "degrees": 10,
+      "slitPixels": 0,
+      "holePixels": 65,
+      "revealedPixels": 787
+    },
+    {
+      "part": "arm_far",
+      "degrees": 15,
+      "slitPixels": 1,
+      "holePixels": 65,
+      "revealedPixels": 1088
+    },
+    {
+      "part": "arm_far",
+      "degrees": 20,
+      "slitPixels": 0,
+      "holePixels": 65,
+      "revealedPixels": 1278
+    },
+    {
+      "part": "arm_far",
+      "degrees": 30,
+      "slitPixels": 0,
+      "holePixels": 65,
+      "revealedPixels": 1302
+    },
+    {
+      "part": "torso",
+      "degrees": -30,
+      "slitPixels": 1101,
+      "holePixels": 69,
+      "revealedPixels": 15776
+    },
+    {
+      "part": "torso",
+      "degrees": -20,
+      "slitPixels": 1342,
+      "holePixels": 64,
+      "revealedPixels": 11609
+    },
+    {
+      "part": "torso",
+      "degrees": -15,
+      "slitPixels": 1175,
+      "holePixels": 68,
+      "revealedPixels": 9259
+    },
+    {
+      "part": "torso",
+      "degrees": -10,
+      "slitPixels": 950,
+      "holePixels": 65,
+      "revealedPixels": 6914
+    },
+    {
+      "part": "torso",
+      "degrees": -5,
+      "slitPixels": 731,
+      "holePixels": 66,
+      "revealedPixels": 4085
+    },
+    {
+      "part": "torso",
+      "degrees": 5,
+      "slitPixels": 617,
+      "holePixels": 65,
+      "revealedPixels": 4083
+    },
+    {
+      "part": "torso",
+      "degrees": 10,
+      "slitPixels": 924,
+      "holePixels": 65,
+      "revealedPixels": 6911
+    },
+    {
+      "part": "torso",
+      "degrees": 15,
+      "slitPixels": 1282,
+      "holePixels": 65,
+      "revealedPixels": 9240
+    },
+    {
+      "part": "torso",
+      "degrees": 20,
+      "slitPixels": 1465,
+      "holePixels": 64,
+      "revealedPixels": 11609
+    },
+    {
+      "part": "torso",
+      "degrees": 30,
+      "slitPixels": 1423,
+      "holePixels": 67,
+      "revealedPixels": 15775
+    },
+    {
+      "part": "head",
+      "degrees": -30,
+      "slitPixels": 641,
+      "holePixels": 343,
+      "revealedPixels": 6212
+    },
+    {
+      "part": "head",
+      "degrees": -20,
+      "slitPixels": 806,
+      "holePixels": 268,
+      "revealedPixels": 4714
+    },
+    {
+      "part": "head",
+      "degrees": -15,
+      "slitPixels": 668,
+      "holePixels": 227,
+      "revealedPixels": 4095
+    },
+    {
+      "part": "head",
+      "degrees": -10,
+      "slitPixels": 563,
+      "holePixels": 180,
+      "revealedPixels": 3343
+    },
+    {
+      "part": "head",
+      "degrees": -5,
+      "slitPixels": 483,
+      "holePixels": 122,
+      "revealedPixels": 2018
+    },
+    {
+      "part": "head",
+      "degrees": 5,
+      "slitPixels": 564,
+      "holePixels": 232,
+      "revealedPixels": 1927
+    },
+    {
+      "part": "head",
+      "degrees": 10,
+      "slitPixels": 827,
+      "holePixels": 401,
+      "revealedPixels": 3239
+    },
+    {
+      "part": "head",
+      "degrees": 15,
+      "slitPixels": 1140,
+      "holePixels": 68,
+      "revealedPixels": 4077
+    },
+    {
+      "part": "head",
+      "degrees": 20,
+      "slitPixels": 1494,
+      "holePixels": 68,
+      "revealedPixels": 4781
+    },
+    {
+      "part": "head",
+      "degrees": 30,
+      "slitPixels": 1702,
+      "holePixels": 68,
+      "revealedPixels": 6423
+    },
+    {
+      "part": "leg_near",
+      "degrees": -30,
+      "slitPixels": 792,
+      "holePixels": 568,
+      "revealedPixels": 2448
+    },
+    {
+      "part": "leg_near",
+      "degrees": -20,
+      "slitPixels": 604,
+      "holePixels": 398,
+      "revealedPixels": 1740
+    },
+    {
+      "part": "leg_near",
+      "degrees": -15,
+      "slitPixels": 485,
+      "holePixels": 316,
+      "revealedPixels": 1342
+    },
+    {
+      "part": "leg_near",
+      "degrees": -10,
+      "slitPixels": 360,
+      "holePixels": 240,
+      "revealedPixels": 914
+    },
+    {
+      "part": "leg_near",
+      "degrees": -5,
+      "slitPixels": 220,
+      "holePixels": 156,
+      "revealedPixels": 490
+    },
+    {
+      "part": "leg_near",
+      "degrees": 5,
+      "slitPixels": 110,
+      "holePixels": 72,
+      "revealedPixels": 457
+    },
+    {
+      "part": "leg_near",
+      "degrees": 10,
+      "slitPixels": 135,
+      "holePixels": 72,
+      "revealedPixels": 849
+    },
+    {
+      "part": "leg_near",
+      "degrees": 15,
+      "slitPixels": 190,
+      "holePixels": 68,
+      "revealedPixels": 1251
+    },
+    {
+      "part": "leg_near",
+      "degrees": 20,
+      "slitPixels": 260,
+      "holePixels": 69,
+      "revealedPixels": 1636
+    },
+    {
+      "part": "leg_near",
+      "degrees": 30,
+      "slitPixels": 411,
+      "holePixels": 65,
+      "revealedPixels": 2337
+    },
+    {
+      "part": "leg_far",
+      "degrees": -30,
+      "slitPixels": 282,
+      "holePixels": 65,
+      "revealedPixels": 1282
+    },
+    {
+      "part": "leg_far",
+      "degrees": -20,
+      "slitPixels": 196,
+      "holePixels": 65,
+      "revealedPixels": 898
+    },
+    {
+      "part": "leg_far",
+      "degrees": -15,
+      "slitPixels": 163,
+      "holePixels": 68,
+      "revealedPixels": 693
+    },
+    {
+      "part": "leg_far",
+      "degrees": -10,
+      "slitPixels": 109,
+      "holePixels": 68,
+      "revealedPixels": 472
+    },
+    {
+      "part": "leg_far",
+      "degrees": -5,
+      "slitPixels": 61,
+      "holePixels": 68,
+      "revealedPixels": 248
+    },
+    {
+      "part": "leg_far",
+      "degrees": 5,
+      "slitPixels": 33,
+      "holePixels": 87,
+      "revealedPixels": 278
+    },
+    {
+      "part": "leg_far",
+      "degrees": 10,
+      "slitPixels": 51,
+      "holePixels": 107,
+      "revealedPixels": 530
+    },
+    {
+      "part": "leg_far",
+      "degrees": 15,
+      "slitPixels": 67,
+      "holePixels": 124,
+      "revealedPixels": 767
+    },
+    {
+      "part": "leg_far",
+      "degrees": 20,
+      "slitPixels": 86,
+      "holePixels": 142,
+      "revealedPixels": 988
+    },
+    {
+      "part": "leg_far",
+      "degrees": 30,
+      "slitPixels": 106,
+      "holePixels": 65,
+      "revealedPixels": 1398
+    }
+  ],
+  "chain": [
+    {
+      "chain": "strike",
+      "phase": "Stance",
+      "angles": {},
+      "offsets": {},
+      "slitPixels": 0,
+      "slitPixelsWithoutOffsets": 0,
+      "holePixels": 65,
+      "revealedPixels": 0
+    },
+    {
+      "chain": "strike",
+      "phase": "Windup",
+      "angles": {
+        "head": 3,
+        "arm_near": -30,
+        "arm_far": -6,
+        "leg_near": 6,
+        "leg_far": -5
+      },
+      "offsets": {
+        "head": [
+          -6,
+          1
+        ],
+        "arm_near": [
+          -8,
+          -8
+        ],
+        "arm_far": [
+          -8,
+          8
+        ],
+        "leg_near": [
+          4,
+          1
+        ],
+        "leg_far": [
+          -4,
+          -6
+        ]
+      },
+      "slitPixels": 224,
+      "slitPixelsWithoutOffsets": 758,
+      "holePixels": 30,
+      "revealedPixels": 4774
+    },
+    {
+      "chain": "strike",
+      "phase": "Strike",
+      "angles": {
+        "head": -4,
+        "arm_near": 8,
+        "arm_far": 10,
+        "leg_near": 9,
+        "leg_far": -7
+      },
+      "offsets": {
+        "head": [
+          7,
+          1
+        ],
+        "arm_near": [
+          8,
+          8
+        ],
+        "arm_far": [
+          -8,
+          -8
+        ],
+        "leg_near": [
+          1,
+          1
+        ],
+        "leg_far": [
+          -8,
+          6
+        ]
+      },
+      "slitPixels": 534,
+      "slitPixelsWithoutOffsets": 1510,
+      "holePixels": 252,
+      "revealedPixels": 3923
+    },
+    {
+      "chain": "strike",
+      "phase": "FollowThrough",
+      "angles": {
+        "head": -3,
+        "arm_near": 12,
+        "arm_far": 7,
+        "leg_near": 6,
+        "leg_far": -5
+      },
+      "offsets": {
+        "head": [
+          5,
+          0
+        ],
+        "arm_near": [
+          8,
+          8
+        ],
+        "arm_far": [
+          -8,
+          1
+        ],
+        "leg_near": [
+          -8,
+          -8
+        ],
+        "leg_far": [
+          -5,
+          0
+        ]
+      },
+      "slitPixels": 782,
+      "slitPixelsWithoutOffsets": 1888,
+      "holePixels": 228,
+      "revealedPixels": 4150
+    },
+    {
+      "chain": "strike",
+      "phase": "Recover",
+      "angles": {
+        "head": -1,
+        "arm_near": 3,
+        "arm_far": 2,
+        "leg_near": 2,
+        "leg_far": -1
+      },
+      "offsets": {
+        "head": [
+          2,
+          0
+        ],
+        "arm_near": [
+          8,
+          -1
+        ],
+        "arm_far": [
+          -5,
+          6
+        ],
+        "leg_near": [
+          1,
+          0
+        ],
+        "leg_far": [
+          -2,
+          0
+        ]
+      },
+      "slitPixels": 90,
+      "slitPixelsWithoutOffsets": 551,
+      "holePixels": 78,
+      "revealedPixels": 1828
+    },
+    {
+      "chain": "flinch",
+      "phase": "Impact",
+      "angles": {
+        "head": -7,
+        "arm_near": -8,
+        "arm_far": 6,
+        "leg_near": -4,
+        "leg_far": 5
+      },
+      "offsets": {
+        "head": [
+          8,
+          -1
+        ],
+        "arm_near": [
+          8,
+          4
+        ],
+        "arm_far": [
+          -5,
+          3
+        ],
+        "leg_near": [
+          -1,
+          1
+        ],
+        "leg_far": [
+          -1,
+          1
+        ]
+      },
+      "slitPixels": 405,
+      "slitPixelsWithoutOffsets": 607,
+      "holePixels": 56,
+      "revealedPixels": 5103
+    },
+    {
+      "chain": "flinch",
+      "phase": "Settle",
+      "angles": {
+        "head": -3,
+        "arm_near": -4,
+        "arm_far": 3,
+        "leg_near": -2,
+        "leg_far": 2
+      },
+      "offsets": {
+        "head": [
+          5,
+          0
+        ],
+        "arm_near": [
+          8,
+          -3
+        ],
+        "arm_far": [
+          -2,
+          8
+        ],
+        "leg_near": [
+          0,
+          0
+        ],
+        "leg_far": [
+          -7,
+          1
+        ]
+      },
+      "slitPixels": 279,
+      "slitPixelsWithoutOffsets": 419,
+      "holePixels": 49,
+      "revealedPixels": 3513
+    }
+  ]
+}
