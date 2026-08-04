@@ -180,10 +180,10 @@ public static class InspectorText
     ///
     /// This line replaced the <c>zones</c> line rather than joining it, and the
     /// budget is why. The panel is measured by the HUD overflow guard at every
-    /// viewport the game supports, and it refused the frame of the demo blueprint
-    /// outright: sixteen lines needed, fifteen available at 2048x1440. The guard is
-    /// right — text that does not fit is dropped or drawn over the panel below —
-    /// and the cheapest honest answer was that the two lines said the same thing.
+    /// viewport the game supports, and the two lines together overflowed the
+    /// frame of the demo blueprint. The guard is right — text that does not fit
+    /// is dropped or drawn over the panel below — and the cheapest honest answer
+    /// was that the two lines said the same thing.
     /// Every painted zone is a room, so <c>zones TrainingGround</c> and
     /// <c>room TRAIN · no post [trainingGround@25,2]</c> name the same fact, and
     /// only the second one says how it is doing.
@@ -265,9 +265,10 @@ public static class InspectorText
     /// <summary>
     /// What this creature will not go back to, and why (Issue #117).
     ///
-    /// It is on the panel and not only in the feed because the feed scrolls: a
-    /// player who asks "why is this one standing about" a hundred ticks after the
-    /// wave needs the answer where they are looking. Empty for a creature that
+    /// It is on the panel and not only in the feed because the feed is a digest
+    /// (Issue #145), not a ticker: a player who asks "why is this one standing
+    /// about" a hundred ticks after the wave needs the answer where they are
+    /// looking. Empty for a creature that
     /// has been through nothing, which is most of them for most of a party.
     ///
     /// One line, and the newest place first. It was three lines with a heading

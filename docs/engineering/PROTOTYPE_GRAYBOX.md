@@ -1010,9 +1010,13 @@ taken deliberately and `The_shipped_map_pays_for_the_exception_in_two_cells_of_t
 pins both halves of it by name; the asymmetry is a finding for the debt ledger
 rather than something to argue away here.
 
-The other visible change is smaller and is a correction rather than a price: the
-part of an east or west edge that is *behind* a wall in front — above the tail that
-closes the corner — is no longer drawn over that wall's face.
+There is no second visible change: a part of an east or west edge that is *behind*
+a wall in front — above the tail that closes the corner — does not exist. The
+vertical stroke strip sits at `inset ± 1.0` reference pixels from the cell
+boundary, and `inset ≥ 2.625`, so in x it is always strictly inside the cell;
+the wall's top and its bright seam run the full width, so any point of the
+vertical inside the wall's paint is covered entirely and drawn above the depth
+pass.
 
 ## Memory of place (Issue #117)
 
@@ -1033,7 +1037,8 @@ that to the player, and none of them needs the log:
   line rather than a heading and a line per place because the HUD overflow guard
   refused the taller version: the panel fits sixteen lines at 1280x720 and a
   creature carrying three memories needed eighteen. It is on the panel and not
-  only in the feed because the feed scrolls, and the question "why is this one
+  only in the feed because the feed is a digest (Issue #145), not a ticker: its
+  top can stand still for hundreds of ticks, and the question "why is this one
   standing about" is asked long after;
 - **the event feed**, as a sentence. Since this step the feed no longer prints
   reason codes at all: `DungeonFortress.Presentation.EventNarration` turns the
