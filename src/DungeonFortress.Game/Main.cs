@@ -115,6 +115,12 @@ public partial class Main : Node2D
     // DungeonFortress.Presentation.BlowReadout.
     private readonly Dictionary<int, int> _creatureHitPointsBefore = [];
     private BlowReading _blows = BlowReading.Empty;
+    // Which way each body is turned. Presentation state of the same kind again:
+    // it is written from the step a snapshot shows and from the blows read off
+    // the canonical journal, and nothing reads it back. It has to be remembered
+    // rather than recomputed per frame because a facing outlives the step that
+    // set it — see BodyMotion.Turn.
+    private readonly Dictionary<BodyRef, BodyFacing> _bodyFacing = [];
     private string _checksum = string.Empty;
     private int _screenshotFramesRemaining;
     private int _fallbackSpriteDraws;
@@ -2250,7 +2256,10 @@ public partial class Main : Node2D
         _fixtureLog = PrototypeCommandDocument.Load(FixturePath(fixture));
         _playerCommands.Clear();
         var world = new PrototypeWorld(_fixtureLog);
-        world.RunTicks(Math.Clamp(ticks, 0, PrototypeTuning.SessionTicks));
+        var target = Math.Clamp(ticks, 0, PrototypeTuning.SessionTicks);
+        // All of it but the last tick. The last one runs on its own below, so the
+        // frame knows which way every body just stepped.
+        world.RunTicks(Math.Max(0, target - 1));
         _world = world;
         _fixture = fixture;
         _paused = true;
@@ -2261,7 +2270,25 @@ public partial class Main : Node2D
         // hit points against. The journal still names every blow of the last tick,
         // which is what a captured frame is drawn from.
         _creatureHitPointsBefore.Clear();
+        _creatureMotionOrigin.Clear();
+        _raiderMotionOrigin.Clear();
+        _motionOriginPending = false;
+        _bodyFacing.Clear();
         RefreshState();
+
+        // The last tick, with the previous cells kept. A captured frame is drawn
+        // at alpha 1 — the canonical position — so this changes nothing about
+        // where a body is; what it changes is that the picture can now tell a
+        // body that has just walked from one that is standing still, which is the
+        // whole of the procedural motion this Issue adds. Canonical state does not
+        // notice: the same number of ticks is run either way, and the checksum the
+        // capture prints is the evidence (evidence/221-after.json).
+        if (target > 0 && !world.IsComplete)
+        {
+            RememberMotionOrigin();
+            world.RunTicks(1);
+            RefreshState();
+        }
     }
 
     private void Advance(int ticks)
@@ -2307,14 +2334,29 @@ public partial class Main : Node2D
         // output — so they cannot be looking at four moments of the same tick.
         _projection = MapProjection.Of(_state);
         // Only a refresh that follows RememberMotionOrigin has something to lerp
-        // from. Everything else — loading a fixture, a single STEP, an accepted
-        // command, a replay — is drawn at the canonical position straight away.
+        // from: a single STEP, an accepted command and a replay are drawn at the
+        // canonical position straight away.
+        //
+        // Loading a fixture used to be in that list and is not any more. Its last
+        // tick runs on its own (LoadFixture), so a freshly loaded world does have
+        // a previous cell for every body — which is the whole point, because a
+        // captured frame is drawn from one. It changes no drawn position while the
+        // load is paused, and a load is always paused: MotionAlpha answers 1 while
+        // _paused, which is the canonical position. What it does change is the
+        // first tick's worth of frames after RUN is pressed, which are now
+        // interpolated from that cell like every other tick's; that is the whole
+        // of the +4 frames at 20 fps and +10 at 60 fps the frame-pacing probe
+        // reports in evidence/221-invariants.json — one tick that became
+        // interpolated, not one extra tick of the world.
         _interpolatesMotion = _motionOriginPending;
         _motionOriginPending = false;
         // Once per tick and not once per frame: the journal is the whole party's
         // history and the reading is the same for every frame drawn from this
         // state.
         _blows = BlowReadout.Of(_state, _creatureHitPointsBefore);
+        // After the reading, because a body that strikes turns towards what it
+        // struck, and that answer comes from the reading.
+        TurnBodies();
         _checksum = PrototypeScenario.Capture(_world).Checksum;
         UpdateHud();
         UpdateCreatureLabels();
@@ -3691,34 +3733,51 @@ public partial class Main : Node2D
         // The body and its carried item hang off the interpolated point supplied
         // to Y-order. Informational affordances are projected in a later pass so
         // wall volume can occlude the body without erasing its state.
-        DrawSidedBody(center, CrewSpriteKey(creature), BodyRelation.Own);
+        var body = new BodyRef(BodyKind.Creature, creature.Id);
+        DrawSidedBody(center, CrewSpriteKey(creature), BodyRelation.Own, body);
+        if (creature.Carrying is null)
+        {
+            return;
+        }
+
+        // In the body's own frame, because a load is carried by the body: left
+        // outside it, a mushroom would hang in the air beside a walking creature
+        // and stay on its right while the creature faced left.
+        PushBodyPose(center, body);
+        var carried = BodyLocalCenter();
         if (creature.Carrying is ResourceKind.Stone)
         {
             // Stone rides as a rimmed grey square, the same shape a stockpile pip
             // uses, so "carrying" and "stored" read as the same material.
             DrawRect(
-                new Rect2(center + ScaleWorld(3, -9), ScaleWorld(6, 6)),
+                new Rect2(carried + ScaleWorld(3, -9), ScaleWorld(6, 6)),
                 new Color("#e2e8f0"));
             DrawRect(
-                new Rect2(center + ScaleWorld(3, -9), ScaleWorld(6, 6)),
+                new Rect2(carried + ScaleWorld(3, -9), ScaleWorld(6, 6)),
                 new Color("#0f172a"),
                 false,
                 ScaleWorld(1.0f));
         }
-        else if (creature.Carrying is not null)
+        else
         {
             DrawCircle(
-                center + ScaleWorld(6, -6),
+                carried + ScaleWorld(6, -6),
                 ScaleWorld(2.5f),
                 creature.Carrying == ResourceKind.Meal
                     ? new Color("#fde68a")
                     : new Color("#a3e635"));
         }
+
+        ClearBodyPose();
     }
 
     private void DrawRaider(PrototypeRaiderSnapshot raider, Vector2 center)
     {
-        DrawSidedBody(center, RaiderSpriteKey(raider), BodyRelation.Hostile);
+        DrawSidedBody(
+            center,
+            RaiderSpriteKey(raider),
+            BodyRelation.Hostile,
+            new BodyRef(BodyKind.Raider, raider.Id));
     }
 
     /// <summary>
@@ -3734,10 +3793,19 @@ public partial class Main : Node2D
     /// индикацию без ручной разметки. Спека — docs/design/SIDE_INDICATOR.md.
     /// </para>
     /// </summary>
-    private void DrawSidedBody(Vector2 center, string key, BodyRelation relation)
+    private void DrawSidedBody(
+        Vector2 center,
+        string key,
+        BodyRelation relation,
+        BodyRef body)
     {
-        DrawGoblinOutline(center, key, relation);
-        DrawGoblin(center, key);
+        // Both drawings go into the body's own frame, so the outline is the
+        // silhouette of the body as it is actually turned rather than of the body
+        // the art was drawn as.
+        PushBodyPose(center, body);
+        DrawGoblinOutline(key, relation);
+        DrawGoblin(key);
+        ClearBodyPose();
     }
 
     /// <summary>
@@ -3746,7 +3814,7 @@ public partial class Main : Node2D
     /// выглядит сторона, потому что решение, принятое здесь, принято там, где
     /// его не проверяет джоб «Pure .NET» (ADR 0011).
     /// </summary>
-    private void DrawGoblinOutline(Vector2 center, string key, BodyRelation relation)
+    private void DrawGoblinOutline(string key, BodyRelation relation)
     {
         var color = new Color(SideOutline.Color(relation));
         var width = ScaleWorld(SideOutline.WidthRef(relation));
@@ -3758,13 +3826,11 @@ public partial class Main : Node2D
             // задачи её рисовал DrawArc безусловно, и терять признак на том
             // самом пути, ради которого существует счётчик
             // _fallbackSpriteDraws, было бы регрессией.
-            DrawArc(center, ScaleWorld(9), 0, Mathf.Tau, 16, color, width);
+            DrawArc(BodyLocalCenter(), ScaleWorld(9), 0, Mathf.Tau, 16, color, width);
             return;
         }
 
-        var rect = ToRect2(CameraView.GoblinDrawRect(
-            new ViewPoint(center.X, center.Y),
-            _tileSize));
+        var rect = BodyLocalRect();
         foreach (var (x, y) in SideOutline.Offsets)
         {
             DrawTextureRect(
@@ -3852,11 +3918,12 @@ public partial class Main : Node2D
         {
             A = (float)BlowEffects.FlashAlpha(MotionAlpha()),
         };
-        DrawTextureRect(
-            silhouette,
-            ToRect2(CameraView.GoblinDrawRect(new ViewPoint(center.X, center.Y), _tileSize)),
-            false,
-            colour);
+        // The same frame the body itself is drawn in, and for the same reason the
+        // silhouette is the pose's: a flash that ignored the flip would light up
+        // a body facing the other way.
+        PushBodyPose(center, body);
+        DrawTextureRect(silhouette, BodyLocalRect(), false, colour);
+        ClearBodyPose();
     }
 
     /// <summary>
@@ -5704,25 +5771,162 @@ public partial class Main : Node2D
     private BodyActionPhase BodyPhase(BodyKind kind, int id) =>
         _blows.PhaseOf(new BodyRef(kind, id));
 
-    private void DrawGoblin(Vector2 center, string key)
+    /// <summary>
+    /// Which way every body is turned on the tick that has just been read.
+    ///
+    /// <para>
+    /// Both answers come from what the view already had: the step is the
+    /// difference between the cell a body came from — the motion buffer
+    /// <see cref="RememberMotionOrigin"/> keeps — and the cell the snapshot puts
+    /// it on, and the blow is the reading <see cref="BlowReadout"/> builds from
+    /// the canonical journal. No new field on a snapshot, and nothing written
+    /// back to one.
+    /// </para>
+    /// </summary>
+    private void TurnBodies()
+    {
+        foreach (var creature in _state!.Creatures)
+        {
+            TurnBody(
+                new BodyRef(BodyKind.Creature, creature.Id),
+                SidewaysStep(creature.Position, _creatureMotionOrigin, creature.Id));
+        }
+
+        foreach (var raider in _state.Raiders)
+        {
+            TurnBody(
+                new BodyRef(BodyKind.Raider, raider.Id),
+                SidewaysStep(raider.Position, _raiderMotionOrigin, raider.Id));
+        }
+
+        // A blow wins over a step. A body that both moved and struck on one tick
+        // is turned towards what it struck, for the reason the flinch pose beats
+        // the wind-up in BlowReading.PhaseOf: the blow is the thing the player is
+        // being asked to read.
+        foreach (var blow in _blows.Blows)
+        {
+            if (blow.Attacker is { } attacker &&
+                BodyPosition(attacker) is { } from &&
+                BodyPosition(blow.Target) is { } to)
+            {
+                TurnBody(attacker, to.X - from.X);
+            }
+        }
+    }
+
+    private void TurnBody(BodyRef body, double dx) =>
+        _bodyFacing[body] = BodyMotion.Turn(BodyFacingOf(body), dx);
+
+    private BodyFacing BodyFacingOf(BodyRef body) =>
+        _bodyFacing.TryGetValue(body, out var facing) ? facing : BodyMotion.RestingFacing;
+
+    /// <summary>
+    /// How far sideways a body moved into the cell it is on. Zero when it stood
+    /// still, and zero when the step was straight up or down — which is a facing
+    /// this method has nothing to say about rather than a facing to the right.
+    /// </summary>
+    private static int SidewaysStep(
+        GridPoint position,
+        Dictionary<int, GridPoint> origins,
+        int id) =>
+        origins.TryGetValue(id, out var origin) ? position.X - origin.X : 0;
+
+    private GridPoint? BodyPosition(BodyRef body) =>
+        body.Kind == BodyKind.Creature
+            ? _state!.Creatures
+                .FirstOrDefault(creature => creature.Id == body.Id)?.Position
+            : _state!.Raiders
+                .FirstOrDefault(raider => raider.Id == body.Id)?.Position;
+
+    /// <summary>
+    /// Puts the canvas into the frame one body is drawn in: the origin on its
+    /// feet, and the body turned the way <see cref="TurnBodies"/> last left it.
+    ///
+    /// <para>
+    /// It is a transform rather than a rectangle computed per call because the
+    /// same frame has to hold three drawings of the same body — the side outline,
+    /// the sprite and the blow flash — and they are made in two different passes
+    /// (<see cref="WorldDrawOrder"/>). A flip applied to one of them and not to
+    /// the others is a body wearing somebody else's silhouette, which is exactly
+    /// the defect <c>BlowAdapterTests</c> already holds the flash to.
+    /// </para>
+    ///
+    /// <para>
+    /// The feet are the pivot for the same reason <see cref="CameraView.GoblinDrawRect"/>
+    /// stands the sprite on <see cref="CameraView.GoblinFootLine"/>: a body may
+    /// grow, turn and lean, but the ground it stands on is not the drawing's to
+    /// move.
+    /// </para>
+    /// </summary>
+    private void PushBodyPose(Vector2 center, BodyRef body)
+    {
+        var (from, to) = BodyStep(body);
+        var alpha = MotionAlpha();
+        var phase = BodyPhase(body.Kind, body.Id);
+        var bob = ScaleWorld((float)BodyMotion.BobOffsetRef(
+            BodyMotion.PathCells(from, to, alpha),
+            from != to));
+        DrawSetTransform(
+            center + new Vector2(0f, (float)CameraView.GoblinFootLine(_tileSize) + bob),
+            (float)BodyMotion.LeanRadians(to.X - from.X),
+            new Vector2(
+                (float)(BodyMotion.FlipScale(BodyFacingOf(body)) *
+                    BodyMotion.BlowWidthScale(phase, alpha)),
+                (float)BodyMotion.BlowHeightScale(phase, alpha)));
+    }
+
+    /// <summary>
+    /// The step a body is in the middle of: the cell it left when the tick being
+    /// drawn started, and the cell the snapshot puts it on. They are the same cell
+    /// when the body did not move, and that is what "walking" means here — the
+    /// body's own two cells, not a mode, not a clock.
+    /// </summary>
+    private (GridPoint From, GridPoint To) BodyStep(BodyRef body)
+    {
+        var to = BodyPosition(body) ?? default;
+        var origins = body.Kind == BodyKind.Creature
+            ? _creatureMotionOrigin
+            : _raiderMotionOrigin;
+        return (origins.TryGetValue(body.Id, out var from) ? from : to, to);
+    }
+
+    /// <summary>Back to the canvas everything else is drawn in.</summary>
+    private void ClearBodyPose() => DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+
+    /// <summary>
+    /// The rectangle a body's sprite is drawn into, in the frame
+    /// <see cref="PushBodyPose"/> establishes — the same
+    /// <see cref="CameraView.GoblinDrawRect"/> as before, asked about a body whose
+    /// feet are at the origin.
+    /// </summary>
+    private Rect2 BodyLocalRect() =>
+        ToRect2(CameraView.GoblinDrawRect(
+            new ViewPoint(0.0, -CameraView.GoblinFootLine(_tileSize)),
+            _tileSize));
+
+    /// <summary>
+    /// The render centre of a body in that same frame. The two fallbacks below —
+    /// the circle drawn when a pose has no sprite and the ring drawn around it —
+    /// are still centred exactly where they were before the frame moved to the
+    /// feet.
+    /// </summary>
+    private Vector2 BodyLocalCenter() =>
+        new(0f, -(float)CameraView.GoblinFootLine(_tileSize));
+
+    private void DrawGoblin(string key)
     {
         if (_goblinSprites.TryGetValue(key, out var sprite))
         {
             // Where the rectangle goes is CameraView's answer, not this method's,
             // so that Issue #77's 170 %, the placement it grows by and the 17:12
             // shape of the connected pack can be measured without the engine.
-            DrawTextureRect(
-                sprite,
-                ToRect2(CameraView.GoblinDrawRect(
-                    new ViewPoint(center.X, center.Y),
-                    _tileSize)),
-                false);
+            DrawTextureRect(sprite, BodyLocalRect(), false);
             return;
         }
 
         // Missing exploratory art must not prevent a deterministic playable build.
         _fallbackSpriteDraws++;
-        DrawCircle(center, ScaleWorld(6), new Color("#84cc16"));
+        DrawCircle(BodyLocalCenter(), ScaleWorld(6), new Color("#84cc16"));
     }
 
     private void DrawHpBar(Vector2 topLeft, int hp, int maxHp, Color color)

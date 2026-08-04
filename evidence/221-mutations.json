@@ -1,0 +1,86 @@
+{
+  "issue": 221,
+  "checkpoint": 5,
+  "rule": "По одному мутанту на половину задачи (правило 21). Каждая подстановка записана дословно — текстом, который надо подставить, а не прозой: проза, исполненная буквально, на #186 не собиралась. Мутант накладывается на закоммиченное состояние и откатывается командой git checkout -- src/DungeonFortress.Game/Main.cs.",
+  "rounds": [
+    {
+      "round": 1,
+      "commit": "ee4906e89d8d9eae665a017d7f1a6ec9f416ed9d",
+      "mutants": ["m1", "m2"],
+      "whatItMissed": "Оба назначенных брифом мутанта проверяли наличие механизма, а не его знак. Независимый review собрал на этом же коммите m3 и m4 и показал, что подмена направления проходит насквозь: 592 пройдено, 0 не пройдено. Это и была блокирующая находка круга 1."
+    },
+    {
+      "round": 2,
+      "commit": "eed5f3a548bd323ec1fa4438ebc7354003a58820",
+      "mutants": ["m1", "m2", "m3", "m4"],
+      "what": "Гард поворота закрыт по полярности; все четыре мутанта прогнаны заново на закоммиченном состоянии круга 2, каждый по отдельности, с откатом между прогонами."
+    }
+  ],
+  "baseline": {
+    "commit": "eed5f3a548bd323ec1fa4438ebc7354003a58820",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release",
+    "result": "пройдено 592, не пройдено 0"
+  },
+  "mutations": [
+    {
+      "id": "m1",
+      "half": "facing и flip",
+      "whatItRollsBack": "тело всегда смотрит в одну сторону: множитель отражения убран из кадра тела, остаётся только ширина от удара",
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "inMethod": "PushBodyPose",
+      "replace": "                (float)(BodyMotion.FlipScale(BodyFacingOf(body)) *\n                    BodyMotion.BlowWidthScale(phase, alpha)),\n",
+      "with": "                (float)BodyMotion.BlowWidthScale(phase, alpha),\n",
+      "occurrences": 1,
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release",
+      "result": "пройдено 591, не пройдено 1",
+      "redTest": "DungeonFortress.Presentation.Tests.BodyMotionAdapterTests.The_frame_a_body_is_drawn_in_takes_the_flip_from_that_body_s_facing",
+      "greenHalf": "проверки покачивания остались зелёными — The_bob_takes_its_phase_from_the_path_the_body_has_walked прошла"
+    },
+    {
+      "id": "m2",
+      "half": "покачивание при ходьбе",
+      "whatItRollsBack": "константа вместо функции пройденного пути: фаза покачивания больше не зависит ни от клетки, ни от alpha",
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "inMethod": "PushBodyPose",
+      "replace": "            BodyMotion.PathCells(from, to, alpha),\n",
+      "with": "            0.0,\n",
+      "occurrences": 1,
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release",
+      "result": "пройдено 591, не пройдено 1",
+      "redTest": "DungeonFortress.Presentation.Tests.BodyMotionAdapterTests.The_bob_takes_its_phase_from_the_path_the_body_has_walked",
+      "greenHalf": "проверки поворота остались зелёными — The_frame_a_body_is_drawn_in_takes_the_flip_from_that_body_s_facing прошла"
+    },
+    {
+      "id": "m3",
+      "author": "независимый review, круг 1",
+      "half": "полярность поворота к цели удара",
+      "whatItRollsBack": "тело отворачивается от того, кого бьёт: разность клеток в ветке удара взята наоборот",
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "inMethod": "TurnBodies",
+      "replace": "                TurnBody(attacker, to.X - from.X);\n",
+      "with": "                TurnBody(attacker, from.X - to.X);\n",
+      "occurrences": 1,
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release",
+      "resultBefore": "на коммите ee4906e — пройдено 592, не пройдено 0: дыра, названная review блокирующей",
+      "result": "на коммите eed5f3a — пройдено 591, не пройдено 1",
+      "redTest": "DungeonFortress.Presentation.Tests.BodyMotionAdapterTests.The_facing_is_turned_by_the_step_and_by_the_blow",
+      "whyNoOtherWitness": "ни один удар первой волны shipped-журнала не направлен влево, поэтому кадром знак не виден ни до, ни после; литерал в гарде — единственный свидетель, какой в репозитории возможен"
+    },
+    {
+      "id": "m4",
+      "author": "независимый review, круг 1",
+      "half": "полярность поворота на этаж выше — там, где разность отдаётся политике",
+      "whatItRollsBack": "вся партия смотрит задом наперёд: знак переворачивается при передаче в BodyMotion.Turn",
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "inMethod": "TurnBody",
+      "replace": "        _bodyFacing[body] = BodyMotion.Turn(BodyFacingOf(body), dx);\n",
+      "with": "        _bodyFacing[body] = BodyMotion.Turn(BodyFacingOf(body), -dx);\n",
+      "occurrences": 1,
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release",
+      "resultBefore": "на коммите ee4906e — пройдено 592, не пройдено 0",
+      "result": "на коммите eed5f3a — пройдено 591, не пройдено 1",
+      "redTest": "DungeonFortress.Presentation.Tests.BodyMotionAdapterTests.The_facing_is_turned_by_the_step_and_by_the_blow"
+    }
+  ],
+  "verdict": "Все четыре мутанта краснеют, каждый ровно на одной проверке. m1 и m2 держат наличие механизма и красят свои разные гарды; m3 и m4 держат его знак и красят гард поворота. Урок круга 1 записан отдельно: мутант «убрать вызов» и мутант «перевернуть знак» — разные мутанты, и первый не подразумевает второго."
+}
