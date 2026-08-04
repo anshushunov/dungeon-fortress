@@ -1,11 +1,19 @@
 {
   "schemaVersion": 2,
   "issue": 228,
-  "when": "2026-08-04, on the branch of this issue at checkpoint 4",
-  "what": "Criterion 3 of Issue #228: which of the three candidate mechanisms holds the group in the quarters, named with a number, and how the other two are excluded.",
+  "when": "2026-08-04, checkpoint 4; two statements corrected on 2026-08-04 after the independent review of PR #236",
+  "what": "Criterion 3 of Issue #228: which of the three candidate mechanisms holds the group in the quarters, named with a number, and what happens to the other two.",
   "command": "dotnet test tests/DungeonFortress.Simulation.Tests/DungeonFortress.Simulation.Tests.csproj --filter \"FullyQualifiedName~PrototypeQuartersIdleTests\" -v q --logger \"console;verbosity=detailed\"",
+  "correctedAfterTheFirstRound": {
+    "what": [
+      "«the three commonest tiles a step was refused onto are three of the four bunks» was FALSE. The report printed the six commonest tiles; with every tile printed, the three commonest are (22,4)=454, (22,3)=320 and (23,3)=216, and two of those three are not bunks. The four bunks rank 1st, 4th, 6th and nowhere — (20,3) takes no refused step at all over the whole matrix. The arithmetic 454 + 204 + 180 = 838 was honest, because it is an identity of the classifier rather than a selected sample, but the statement about ranks was not — and the list that refutes it was printed one line above it in this very file. That is the shape of self-refuting claim the review of PR #217 already caught once on «1,49».",
+      "«mechanism (1) is excluded» was NOT supported by the numbers, and the same run shows the opposite. Corrected below under whereMechanismOneStandsAfterMeasurement, which replaces the field that used to be called howMechanismOneIsExcluded."
+    ],
+    "whatWasNotWrong": "the verdict itself. The proximate mechanism is the refused step, the owner's symptom is explained, and every load-bearing number was reproduced by the review's own run. What changed is the scope of the conclusion, not the conclusion.",
+    "whatTheReportNowDoes": "prints every tile instead of the head of the distribution, marks the bunks in place, and names each bunk with its count and its rank — including the zero. A report that shows only a head invites a claim about the head that the tail refutes, and that is what happened."
+  },
   "theVerdict": {
-    "mechanism": "(2) — «выход заперт телами», waiting_blocked_by_other. It is Issue #76, cell occupancy, in a place the off-duty rule of Issue #201 created.",
+    "mechanism": "(2) — «выход заперт телами», waiting_blocked_by_other, as the PROXIMATE mechanism of the symptom the owner watched. It is Issue #76, cell occupancy, in a place the off-duty rule of Issue #201 created. Proximate and not sole — see whereMechanismOneStandsAfterMeasurement.",
     "theNumber": "1897 of the 4657 creature-ticks the cohort spends in the quarters (40.7 %) are ticks on which the creature was refused a step. Before the merge of PR #217 the same figure was 101 of 1630 (6.2 %); per creature-tick spent in the quarters that is 0.062 -> 0.407, a factor of 6.6.",
     "theOwnersSentenceCorrected": "«возможно из-за того что поле боя блокировало» is not what the numbers say, and the correction is the useful part. It is not the way out that is blocked and it is not the battlefield: 1376 of the 1897 refusals (72.5 %) are steps towards the creature's own off-duty tile — the group is still trying to get IN. Before the rule that class of refused step numbered 0, because before it nobody was walking to a tile chosen by identifier."
   },
@@ -17,25 +25,33 @@
       "nobody; the arbitration refused it": 49,
       "a creature that walked on this very tick": 13
     },
-    "theChokeTilesAreTheBunks": {
-      "refusedOnto": {"(22,4)": 454, "(22,3)": 320, "(23,3)": 216, "(21,3)": 204, "(21,2)": 201, "(21,4)": 180},
-      "bunksOfTheAuthoredMap": ["(20,3)", "(21,3)", "(21,4)", "(22,4)"],
-      "arithmetic": "454 + 204 + 180 = 838, which is exactly the count of refusals onto a creature lying on a bunk. The three commonest tiles a step was refused onto are three of the four bunks."
+    "theTilesAStepWasRefusedOnto": {
+      "everyTile": {"(22,4)": 454, "(22,3)": 320, "(23,3)": 216, "(21,3)": 204, "(21,2)": 201, "(21,4)": 180, "(22,2)": 95, "(23,2)": 66, "(21,5)": 54, "(23,4)": 51, "(23,5)": 3, "(24,6)": 1, "(21,7)": 1, "(22,7)": 1, "(23,7)": 1},
+      "total": 1848,
+      "bunksOfTheAuthoredMap": {"(20,3)": "0, rank none", "(21,3)": "204, rank 4", "(21,4)": "180, rank 6", "(22,4)": "454, rank 1"},
+      "theCorrectStatement": "838 of the 1848 refusals whose blocker was identified — 45.3 %, a plurality and not a majority — were onto a tile with a creature lying on a bunk. The commonest tile of all is a bunk, (22,4) with 454; the next two, (22,3) with 320 and (23,3) with 216, are ordinary floor; the remaining three bunks take 204, 180 and none at all.",
+      "whyTheBunksMatterAnyway": "not because they dominate the count but because of where they are. 454 + 204 + 180 = 838 is an identity of the classifier — the same 838 ticks counted by tile and by blocker — so the bunks that do block, block a lot: one tile alone carries a quarter of every refusal in the room."
     },
     "theShape": "The quarters are the rectangle (19,2)-(23,5), twenty passable tiles, and four of them — (20,3), (21,3), (21,4), (22,4) — are bunks laid diagonally across the middle. The off-duty rule excludes bunks as DESTINATIONS (Issue #201 measured that exclusion red) but the pathfinder is blind to bodies and routes THROUGH them, because the contract's own rule in 4.1 says a path 'учитывает камень и Forbidden, но не считает существ статическими препятствиями'. A creature asleep on a bunk therefore stops the traffic across the room, and the cohort alone spends 947 creature-ticks of the matrix asleep in the quarters.",
     "andTheWayRoundWasThere": "1235 of the 1848 refusals that could be tested (66.8 %) had a route to the same destination at most four steps longer once every other body counted as a wall, and 748 of those routes were strictly longer than the blind one, so the second search is genuinely seeing the bodies rather than re-deriving the first. 110 (6.0 %) were walled in with no route at all. Two thirds of the jam is the pathfinder not looking, which is the same diagnosis Issue #186 reached for the ticks after a fight (93,1 % there) and the same Issue #76.",
     "andItDoesNotEndOnItsOwn": "the longest unbroken run of refused steps by one creature is 183 ticks, against 64 before the merge of PR #217; the mean over the 27 creature-windows that have any run at all is 45.7 ticks, against 9.4 over 10 before. That is the observable form of «не могли оттуда выйти»."
   },
-  "howMechanismOneIsExcluded": {
+  "whereMechanismOneStandsAfterMeasurement": {
     "claim": "«работы действительно нет» — the behaviour is correct and only looks wrong; the subject belongs to the economy, Issue #72.",
-    "excludedBy": [
-      "size: Cause.NoWork holds 1129 of the 4657 quarters creature-ticks (24.2 %), against 1897 (40.7 %) for the refused step. 'No work' is real and is the second largest cause, but it is not the largest and it cannot be the mechanism behind «не могли оттуда выйти» — a creature with nothing to do and a free tile in front of it walks to its tile and stops, which takes 33 ticks (Issue #201) rather than 183.",
-      "the response: when work that the creature could take did appear, the creature took it on the next tick in 31 of 33 cases and after 3 ticks at worst, and stepped towards it within 2 ticks. Work is not being withheld and the creature is not slow to answer — evidence/228-response.json.",
-      "the direction of the change: 'no work' grew from 435 to 1129 ticks between the two trees, a factor of 2.6, while the refused step grew from 101 to 1897, a factor of 18.8. The quantity that moved is the jam."
-    ]
+    "verdict": "NOT excluded. It is present on the same ticks as the refused step, and the two are links of one chain rather than competing explanations.",
+    "theNumber": "on 1376 of the 1897 refusal ticks the matching had already written that creature, on that same tick, a code from the 'there is no work' set. Together with the 1129 ticks of Cause.NoWork that is 2505 of 4657 creature-ticks in the quarters — 53.8 % — on which the matching had nothing to give. Counted directly by `blockedWithNoWorkOnTheSameTick` rather than read off the head of a histogram.",
+    "whyTheLadderHidIt": "Classify is a ladder ordered by what HELD the tick, and the BlockedByOthers rung takes the tick first. That ordering answers the question Issue #228 asked and is not wrong; what was wrong was reading its output as if the buckets were rival causes. The order of causation runs the other way: there is no work -> the rule of Issue #201 sends the creature to its own tile -> the step is refused by a body.",
+    "whyTheFirstRoundsArgumentsDoNotHold": [
+      "«1129 against 1897» compares an effect with its cause: the 1897 are ticks the creature spent walking because of the 1129-and-more.",
+      "«the response is one tick in 31 of 33 cases» is measured on the condition that work appeared. It says nothing about the ticks on which none did, which is what mechanism (1) is about.",
+      "the first round also wrote «at least 1373 ... the matching had already told the creature there was no work on that same tick» in evidence/228-decomposition.json, one file away from the claim that mechanism (1) was excluded. The exact figure is 1376."
+    ],
+    "theArgumentThatDoesHold": "the off-duty rule neither created the shortage of work nor removed it. The share of quarters ticks under Cause.NoWork barely moved between the two trees — 435/1630 = 26.7 % -> 1129/4657 = 24.2 % — while the share under a refused step went from 101/1630 = 6.2 % to 1897/4657 = 40.7 %. What the rule changed is the jam; what it did not change is the shortage.",
+    "whoOwnsIt": "Issue #72."
   },
   "howMechanismThreeIsExcluded": {
     "claim": "«зона недостижима» — refused_zone_unreachable, the fifth of the idle time Issue #201 deliberately carried out of its own scope.",
+    "verdict": "excluded, by composition rather than by size. This is the one mechanism of the three that measurement rules out.",
     "excludedBy": [
       "size and kind: refused_zone_unreachable accounts for 389 of 4657 quarters creature-ticks (8.4 %), and every one of the 389 carries JobKind.Haul (287 alone, 102 together with refused_rule_reserve). It is the matching's diagnostic «the zone of the work I would otherwise have taken cannot be reached», not «the quarters cannot be reached».",
       "the two flavours that would have meant the quarters are both empty over the whole matrix: Cause.RouteUnreachable — PrototypeWorld.Move finding no path at all to the tile it was told to walk to — is 0, and Cause.LarderUnreachable — TryStartEating finding no larder it can walk to — is 0. If the quarters or the way to them were unreachable, the first of those would be non-zero by construction, because that is the exact branch a failed off-duty step takes.",
@@ -46,8 +62,14 @@
     "claim": "Issue #228 allows a fix in this same task if the culprit is the rule that packs an overflowing quarters into one cluster of tiles. It is not, and this is counted rather than reasoned.",
     "measured": "The quarters hold 16 tiles that are not bunks and the party has 9 creatures, so `creature.Id < standing.Count` holds for every creature and the overflow branch of OffDutyTargetFor — the one that walks out of the zone and orders tiles by distance to it — is never reached. Asserted by The_quarters_never_overflow_on_this_map rather than left as a remark, so a map or population change that made it reachable turns the assertion red instead of silently invalidating this paragraph."
   },
+  "howConcentratedTheSampleIs": {
+    "what": "where the 1897 refusals actually come from, named because the shares above rest on it",
+    "measured": "1755 of the 1897 (92.5 %) fall in two windows of the sixteen: wave 1 of baseline/20260726 (889) and wave 1 of baseline/20260728 (866). baseline/20260727 contributes 63 across its three windows and all three prepared parties contribute 77 between them.",
+    "howToReadIt": "the criterion «on the matrix and not on one seed» is met and the flatness of prepared is itself a measured control — those three parties are identical tick for tick on both trees. But the shares quoted for the jam are carried by two runs, and a balance or layout change that altered either would move them."
+  },
   "whatFollowsFromTheVerdict": {
     "noFixHere": "Issue #228 permits a fix in the same task for exactly two culprits — refused_zone_unreachable and the overflow rule — and the culprit is neither. The task therefore ends with the number and the verdict, which is what the issue says it should. Fixing what was found means making the pathfinder see bodies, and that is Issue #76, left on slice 6 by the owner's decision of 2026-08-03 and named as a non-goal of this issue.",
-    "whatIsNewForTheOwnerToDecide": "the finding is not «#76 exists», which was known. It is that the off-duty rule multiplied its cost in one room by 18.8 and made it visible as a group that never leaves: nine creatures are sent to nine tiles chosen by identifier, in a room of twenty tiles whose middle four are the bunks the same rule refuses to stand on, and the path to those tiles runs across the sleepers. The cheapest thing that would change the picture without touching the pathfinder is where the rule parks people; that is a change to «куда девается бывший боец», which this issue lists as a non-goal, so it is named for the owner rather than done."
+    "whatIsNewForTheOwnerToDecide": "the finding is not «#76 exists», which was known. It is that the off-duty rule multiplied its cost in one room by 18.8 and made it visible as a group that never leaves: nine creatures are sent to nine tiles chosen by identifier, in a room of twenty tiles whose middle four are the bunks the same rule refuses to stand on, and the path to those tiles runs across the sleepers.",
+    "andWhatTheCheapFixWouldNotBuy": "the cheapest thing that would change the picture without touching the pathfinder is where the rule parks people. After the correction above that option has to be offered with its limit stated: it would remove the jam and would NOT remove the picture the owner described, because on 53.8 % of the quarters ticks the matching has nothing to give and that is Issue #72, not Issue #76. Both are changes this issue lists as non-goals, so both are named for the owner rather than done."
   }
 }

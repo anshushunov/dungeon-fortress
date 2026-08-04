@@ -59,7 +59,7 @@
       "waiting_stock_sufficient:Cook + waiting_blocked_by_other": 87,
       "waiting_blocked_by_other:Rest": 12,
       "chosen_need_hunger + waiting_blocked_by_other": 7,
-      "reading": "on at least 1373 of the 1897 (995 + 291 + 87, the rows above that carry both a matching diagnostic and the refusal) the matching had already told the creature there was no work on that same tick. It was refused a step it took because it had nothing else to do — the off-duty walk — and not because it was hurrying somewhere. 'At least' because the report prints the eight commonest combinations per cause and eight ticks of this cause fall below that cut."
+      "reading": "on 1376 of the 1897 the matching had already told the creature there was no work on that same tick. It was refused a step it took because it had nothing else to do — the off-duty walk — and not because it was hurrying somewhere. The first round of this issue wrote «at least 1373» here, derived by adding the three visible rows (995 + 291 + 87) with the rest hidden under the report's eight-row cut; the exact figure is now counted directly by `blockedWithNoWorkOnTheSameTick` and printed on the MATRIX line. Independent review of PR #236 used the same number to return the claim that mechanism (1) had been excluded — see evidence/228-mechanism.json, whereMechanismOneStandsAfterMeasurement."
     },
     "NoWork": {
       "waiting_stock_sufficient:Harvest": 698,

@@ -663,6 +663,7 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
         var tooLong = matrix.Sum(party => party.WayRoundTooLong);
         report.Append(CultureInfo.InvariantCulture,
             $" | blockedTowardsAnOffDutyTile={matrix.Sum(party => party.BlockedTowardsAnOffDutyTile)}" +
+            $" blockedWithNoWorkOnTheSameTick={matrix.Sum(party => party.BlockedWithNoWorkOnTheSameTick)}" +
             $" wayRound={wayRound} wayRoundStrictlyLonger={matrix.Sum(party => party.WayRoundStrictlyLonger)}" +
             $" wayRoundTooLong={tooLong} walledIn={walledIn}" +
             $" wayRoundShare={(wayRound + walledIn + tooLong == 0 ? 0 : (double)wayRound / (wayRound + walledIn + tooLong)):F3}");
@@ -680,14 +681,37 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
                 $" | inTheWay[{who.Key}]={who.Sum(pair => pair.Value)}");
         }
 
-        foreach (var tile in matrix
-                     .SelectMany(party => party.BlockedOn)
-                     .GroupBy(pair => pair.Key)
-                     .OrderByDescending(group => group.Sum(pair => pair.Value))
-                     .Take(6))
+        // Every tile, ranked, and the bunks named separately whatever their rank
+        // turns out to be. It used to print the six commonest, and that cut is
+        // exactly how the first round of this issue came to claim that the three
+        // commonest tiles were bunks: two of the top three are not, and the fourth
+        // bunk never appears at all. A report that shows only the head of a
+        // distribution invites a claim about the head that the tail refutes, so
+        // the head is no longer all it shows.
+        var tiles = matrix
+            .SelectMany(party => party.BlockedOn)
+            .GroupBy(pair => pair.Key)
+            .Select(group => new { Tile = group.Key, Count = group.Sum(pair => pair.Value) })
+            .OrderByDescending(item => item.Count)
+            .ThenBy(item => item.Tile)
+            .ToArray();
+        foreach (var tile in tiles)
         {
+            var mark = Bunks.Contains(tile.Tile) ? "[bunk]" : string.Empty;
             report.Append(CultureInfo.InvariantCulture,
-                $" | refusedOnto({tile.Key.X},{tile.Key.Y})={tile.Sum(pair => pair.Value)}");
+                $" | refusedOnto({tile.Tile.X},{tile.Tile.Y})={tile.Count}{mark}");
+        }
+
+        report.Append(CultureInfo.InvariantCulture,
+            $" | refusedOntoTotal={tiles.Sum(item => item.Count)}" +
+            $" ontoABunk={tiles.Where(item => Bunks.Contains(item.Tile)).Sum(item => item.Count)}");
+        foreach (var bunk in Bunks.Order())
+        {
+            var index = Array.FindIndex(tiles, item => item.Tile == bunk);
+            var count = index < 0 ? 0 : tiles[index].Count;
+            var rank = index < 0 ? "none" : (index + 1).ToString(CultureInfo.InvariantCulture);
+            report.Append(CultureInfo.InvariantCulture,
+                $" | bunk({bunk.X},{bunk.Y})={count}@rank{rank}");
         }
 
         report.Append(CultureInfo.InvariantCulture,
@@ -889,6 +913,7 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
         private readonly Dictionary<int, int> _blockedStreak = [];
         private readonly Dictionary<int, int> _longestBlockedStreak = [];
         private int _blockedTowardsAnOffDutyTile;
+        private int _blockedWithNoWorkOnTheSameTick;
         private int _offerTickTotal;
         private int _joblessTicks;
         private int _joblessAndInThePool;
@@ -981,6 +1006,21 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
                 if (cause == Cause.BlockedByOthers)
                 {
                     WhoWasInTheWay(current, creature, codes, parking);
+
+                    // The overlap between the two candidate mechanisms, counted
+                    // exactly instead of being read off the head of a histogram.
+                    // The ladder gives this tick to the refused step, which is the
+                    // proximate cause; the matching had already told the same
+                    // creature on the same tick that it had nothing to give, which
+                    // is why the creature was walking to its off-duty tile at all.
+                    // Two links of one chain, not two competing explanations —
+                    // and without this counter the first round of Issue #228 read
+                    // the ladder as if it were the latter.
+                    if (codes.Any(code => MatchingHadNothing.Contains(code.ReasonCode)))
+                    {
+                        _blockedWithNoWorkOnTheSameTick++;
+                    }
+
                     var streak = _blockedStreak.GetValueOrDefault(id) + 1;
                     _blockedStreak[id] = streak;
                     _longestBlockedStreak[id] = Math.Max(
@@ -1248,6 +1288,7 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
                 new Dictionary<string, int>(_whoWasInTheWay),
                 new Dictionary<GridPoint, int>(_blockedOn),
                 _blockedTowardsAnOffDutyTile,
+                _blockedWithNoWorkOnTheSameTick,
                 _wayRound,
                 _wayRoundStrictlyLonger,
                 _wayRoundTooLong,
@@ -1556,6 +1597,9 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
         public int BlockedTowardsAnOffDutyTile =>
             Windows.Sum(window => window.BlockedTowardsAnOffDutyTile);
 
+        public int BlockedWithNoWorkOnTheSameTick =>
+            Windows.Sum(window => window.BlockedWithNoWorkOnTheSameTick);
+
         public int WayRound => Windows.Sum(window => window.WayRound);
 
         public int WayRoundStrictlyLonger => Windows.Sum(window => window.WayRoundStrictlyLonger);
@@ -1626,6 +1670,7 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
         IReadOnlyDictionary<string, int> WhoWasInTheWay,
         IReadOnlyDictionary<GridPoint, int> BlockedOn,
         int BlockedTowardsAnOffDutyTile,
+        int BlockedWithNoWorkOnTheSameTick,
         int WayRound,
         int WayRoundStrictlyLonger,
         int WayRoundTooLong,
@@ -1636,7 +1681,7 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
             CultureInfo.InvariantCulture,
             $"wave={Wave} end={EndTick} cohort={CohortSize} observed={ObservedTicks} " +
             $"cohortTicks={CohortTicks} inZone={ZoneTicks} inHalo={HaloTicks} " +
-            $"mustering={MusteringTicks} " +
+            $"mustering={MusteringTicks} blocked={Causes.GetValueOrDefault(Cause.BlockedByOthers)} " +
             $"{string.Join(" ", Causes.OrderByDescending(pair => pair.Value).Select(pair => $"{pair.Key}={pair.Value}"))}");
     }
 
