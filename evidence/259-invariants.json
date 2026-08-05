@@ -1,0 +1,52 @@
+{
+  "issue": 259,
+  "claim": "Направление тела — свойство представления: разворот обеих сторон размена не меняет ни канонический checksum, ни поведение кадра относительно тика (ADR 0011).",
+  "measuredOn": "2026-08-05",
+  "commit": "902f90509707cc82654829c41b316729685b595f",
+  "duelScene": {
+    "how": "scripts/run-game.ps1 -Fixture prepared -DemoDuel -DuelFrame <n> -ScreenshotPath evidence/<file>.png -CameraZoom 2.0 -CameraPosition 560,320 -FrameSize 1280x720 -UiScale 1.0 -TileSize 40",
+    "tick": 2061,
+    "before": {
+      "duelFrame2": "1fae2007cd00c342e547a76d1a4792b04c3f9d1871126d221ccd420341af5c82",
+      "duelFrame5": "1fae2007cd00c342e547a76d1a4792b04c3f9d1871126d221ccd420341af5c82"
+    },
+    "after": {
+      "duelFrame2": "1fae2007cd00c342e547a76d1a4792b04c3f9d1871126d221ccd420341af5c82",
+      "duelFrame5": "1fae2007cd00c342e547a76d1a4792b04c3f9d1871126d221ccd420341af5c82"
+    },
+    "reading": "Четыре прогона — один checksum: картинка изменилась, каноническое состояние нет."
+  },
+  "framePacing": {
+    "how": "Godot --headless --fixed-fps <fps> --path src/DungeonFortress.Game -- --fixture prepared --frame-pacing 1400, через одноразовый драйвер .artifacts/259/pacing.ps1 вокруг scripts/GodotTools.ps1 (тот же приём, что у #244).",
+    "fixture": "prepared",
+    "targetTick": 1400,
+    "runs": [
+      {
+        "fixedFps": 20,
+        "tick": 1400,
+        "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "frames": 4665,
+        "interpolatedFrames": 4665,
+        "interpolationLeadViolations": 0,
+        "maxRenderStepPixels": 18.462
+      },
+      {
+        "fixedFps": 60,
+        "tick": 1400,
+        "checksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "replayChecksum": "18fdcdb30fb338ae85ecb6398529c8eb0aebd23e3b9c0819e9f4d423ee503002",
+        "frames": 13992,
+        "interpolatedFrames": 12593,
+        "interpolationLeadViolations": 0,
+        "maxRenderStepPixels": 6.154
+      }
+    ],
+    "reading": [
+      "20 и 60 fps дают один checksum, и он равен checksum безкадрового реплея того же лога.",
+      "Тот же checksum записан как состояние «до» в evidence/244-invariants.json (main, до этой правки), то есть до и после совпали.",
+      "Частоты кадров действительно разные: 4665 кадров против 13992.",
+      "interpolationLeadViolations = 0, максимальный шаг тела за кадр 18.462 px при клетке 40 — не изменился."
+    ]
+  }
+}
