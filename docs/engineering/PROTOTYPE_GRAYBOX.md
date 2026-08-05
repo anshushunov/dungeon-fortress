@@ -802,6 +802,87 @@ The before/after pictures of the change are
 `evidence/244-before-contact.png` and `evidence/244-after-contact.png` — the same
 duel, the same tick, the same camera, differing in the body and in nothing else.
 
+### How much of a blow is visible, measured (Issue #263)
+
+The owner played the duel scene twice. After Issue #244: «на демке плохо видно,
+но движения в целом ок». After Issue #259, and sharper: «нет плавности движения,
+очень быстрые удары даже на скорости 0.5 (должны быть сильно медленнее), не
+хватает кадров как будто, просто две позы». He then decided that combat gets a
+ceiling — **readable rather than beautiful** — and that the visual branch stops
+here. So this section is the measurement that decision rests on, and there is no
+change of behaviour to go with it: the chain described above is the chain that
+ships.
+
+`evidence/263-measure-strike-readability.py` composites the rig the way
+`evidence/244-measure-rig-gaps.py` does, puts it through the rest of what
+`Main.PushBodyPose` does to a body — the lean, the squash and stretch, the throw —
+and reduces the result to the size a body has on screen **at the working zoom**.
+That last part matters: `--demo-duel` forces the largest declared zoom (2.0) and
+does not give it back, so every evidence frame this repository has of a blow is
+twice the size the map is played at. At zoom 1.0 a goblin is 54.1 px tall and
+1533 px of silhouette.
+
+```powershell
+python evidence/263-measure-strike-readability.py --readability --timing `
+  --budget --gaps --rigid --sweep-wide --json evidence/263-measurement.json
+```
+
+**A blow is one tick, and that is the binding constraint.** At
+`TicksPerSecond = 6.0` the whole exchange lasts 167 ms at speed 1 and 333 ms at
+speed 0.5 — 58 ms and 117 ms of it before contact, since `ContactShare` is 0.35.
+Against the reference a melee swing is usually given (150–250 ms of anticipation,
+200–300 ms of recovery, 500–800 ms in all) the exchange is short by **3.0–4.8
+times at speed 1 and 1.5–2.4 times at speed 0.5**. Nothing inside `StrikeChain`
+can change that: the chain is a function of the share of *its own tick* that has
+been drawn.
+
+**«Просто две позы» is arithmetic, not taste.** A 60 Hz display draws that tick in
+ten frames at speed 1 and twenty at speed 0.5. The wind-up keyframe sits at 0.28
+and contact at 0.35 — seven hundredths of a tick, i.e. 12 ms — so at speed 0.5
+exactly **one drawn frame of twenty** changes more than half as much silhouette as
+the busiest one (404 px against neighbours of about 130). The eye gets the pose
+before that frame and the pose after it.
+
+**And the body's own outline barely moves.** At the widest point of the chain the
+whole figure changes 1087 px of silhouette, but with the lean, the throw and the
+stretch taken out — i.e. counting only what the parts do — the body without its
+striking arm changes **151 px**, a tenth of its own standing area. Nearly
+everything an eye sees is the figure sliding and tilting rigidly. The trunk is one
+PNG with no waist joint, so the arched back the flat pack's `windup` was drawn
+with is not reachable by posing at all. The A/B is
+`evidence/263-frames-working-zoom.png`: the same three moments of the same tick,
+drawn by the rig and by the flat pack, reduced to the working zoom.
+
+Two things the measurement found that nobody had asked about:
+
+- **The amplitude of the rig is not spent.** Issue #244 swept ±30° and stopped;
+  past that, the far arm swings backwards to +60° for **0 px²** of seam and the
+  near arm rises to −60° for 53. Whatever is wrong with the blow, it is not that
+  the cutout has run out of angles.
+- **The seam measurement cannot tell a rigid turn from a tear.** `torso` is the
+  rig's root and every part hangs off it, so an angle on the root turns the whole
+  figure and no joint can open — yet `slit_pixels` prices it at 617–1423 px²,
+  because it compares against an *unturned* rest pose. Turn the rest pose the same
+  way and the same poses measure **0**. That is a caveat on every `torso` row of
+  `evidence/244-rig-gaps.json`, and it is why the lean turns the drawing frame
+  instead of the part.
+
+The worst seam anywhere on the shipped chain — sampled between the keyframes and
+not only at them, which nothing had done before — is **782 px²**, on the striker's
+follow-through at alpha 0.52. That is the reference point to compare against if
+the angles are ever touched again.
+
+**What "приятно смотреть" runs into.** Both limits are real and they are not
+equal. The cutout limit is real but narrow: the trunk cannot bend, so the body's
+own outline is stuck near the 151 px it moves today, and lifting that needs art
+(a waist joint, or a redrawn trunk). The tick limit is the binding one: an
+exchange that lives inside one tick has 167 ms at speed 1, three to five times
+under the reference, and no amount of posing buys time the tick does not have.
+Treating it would mean drawing a tick or two behind the simulation — presentation
+lag, which would give the animation a 500–1000 ms window and is presentation-only,
+touching neither the snapshot nor the checksum. That is an architecture decision
+under ADR 0011 and the owner has **deferred** it rather than refused it.
+
 ## Wall volume and depth order (Issue #83)
 
 Rock is rendered in immediate mode rather than through `TileMapLayer`. This is

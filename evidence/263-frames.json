@@ -1,0 +1,46 @@
+{
+  "issue": 263,
+  "what": "Кадры дуэльной сцены на состоянии main (коммит 8850209): риг против плоского пака, три момента одного тика.",
+  "scene": {
+    "fixture": "prepared",
+    "tick": 2061,
+    "attacker": "crew #0 (BodyKind.Creature, id 0)",
+    "target": "raider #15 (BodyKind.Raider, id 15)",
+    "cameraZoom": 2.0,
+    "note": "--demo-duel принудительно ставит наибольший объявленный зум 2.0 и не отдаёт его обратно: ApplyDemoDuel перезаписывает _cameraZoom после разбора --camera-zoom (Main.cs). Кадра дуэли на зуме 1.0 движок выдать не может, поэтому рабочий зум получен уменьшением кропа вдвое — см. workingZoomSheet."
+  },
+  "how": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture prepared -DemoDuel -DuelFrame <n> [-FlatBody] -ScreenshotPath evidence/<file>.png -CameraZoom 2.0 -CameraPosition 560,320 -FrameSize 1280x720 -UiScale 1.0 -TileSize 40 -TemporaryRoot C:\\gamedev\\_dftmp263 -GodotPath C:\\gamedev\\Godot_v4.7.1-stable_mono_win64\\Godot_v4.7.1-stable_mono_win64_console.exe",
+    "note": "-ScreenshotPath складывает кадр в .artifacts/evidence/, файл скопирован оттуда в evidence/ — так же, как кадры #244 и #259.",
+    "duelFrames": {
+      "3": "замах, strikeScrub 0.25 — до StrikeChain.ContactShare (0.35)",
+      "5": "контакт, strikeScrub 0.4166666666666667 — первая двенадцатая после ContactShare",
+      "7": "проводка, strikeScrub 0.5833333333333334 — после FollowThroughShare (0.52)"
+    }
+  },
+  "frames": [
+    { "file": "evidence/263-rig-f3.png", "duelFrame": 3, "body": "rig" },
+    { "file": "evidence/263-rig-f5.png", "duelFrame": 5, "body": "rig" },
+    { "file": "evidence/263-rig-f7.png", "duelFrame": 7, "body": "rig" },
+    { "file": "evidence/263-flat-f3.png", "duelFrame": 3, "body": "flat" },
+    { "file": "evidence/263-flat-f5.png", "duelFrame": 5, "body": "flat" },
+    { "file": "evidence/263-flat-f7.png", "duelFrame": 7, "body": "flat" }
+  ],
+  "checksum": {
+    "value": "1fae2007cd00c342e547a76d1a4792b04c3f9d1871126d221ccd420341af5c82",
+    "reading": "Все шесть прогонов печатают один канонический checksum: ни риг, ни плоский пак, ни момент скраба не входят в снапшот (ADR 0011). Снят из строки события godot_graybox_screenshot каждого прогона."
+  },
+  "sheets": {
+    "duelZoom": {
+      "file": "evidence/263-frames-duel-zoom.png",
+      "command": "python evidence/263-measure-strike-readability.py --frame-sheet evidence/263-frames-duel-zoom.png --frames evidence/263-rig-f3.png evidence/263-rig-f5.png evidence/263-rig-f7.png evidence/263-flat-f3.png evidence/263-flat-f5.png evidence/263-flat-f7.png",
+      "reading": "Кроп (300,180)-(700,440) кадров 1280x720 как есть, зум 2.0. Верхний ряд — риг, нижний — плоский пак; столбцы — кадры 3, 5, 7."
+    },
+    "workingZoom": {
+      "file": "evidence/263-frames-working-zoom.png",
+      "command": "python evidence/263-measure-strike-readability.py --frame-sheet evidence/263-frames-working-zoom.png --working-zoom --frames evidence/263-rig-f3.png evidence/263-rig-f5.png evidence/263-rig-f7.png evidence/263-flat-f3.png evidence/263-flat-f5.png evidence/263-flat-f7.png",
+      "reading": "Тот же кроп, уменьшенный вдвое: геометрически это рабочий зум 1.0, на котором играется карта. Это уменьшение кадра зума 2.0, а не съёмка на зуме 1.0 — фильтрация текстур не та же самая, и называть его «кадром зума 1.0» нельзя.",
+      "whatItShows": "У плоского пака три момента — три отчётливо разные позы: тело в замахе согнуто, в контакте развёрнуто. У рига три момента различаются положением копья; силуэт тела на всех трёх практически один. Это и есть «размах руки читается, силуэт тела почти нет» в виде картинки."
+    }
+  }
+}

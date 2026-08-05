@@ -1,0 +1,261 @@
+{
+  "issue": 263,
+  "what": "Цепочка удара, как её играет main на коммите 8850209 — транскрипция StrikeChain.cs для замера #263. Углы задачей не менялись.",
+  "source": "src/DungeonFortress.Presentation/StrikeChain.cs, коммит 8850209",
+  "interpolation": "linear",
+  "attacker": [
+    {
+      "at": 0.0,
+      "label": "Stance",
+      "lean": 0.0,
+      "recoil": 0.0,
+      "angles": {},
+      "offsets": {}
+    },
+    {
+      "at": 0.28,
+      "label": "Windup",
+      "lean": -7.0,
+      "recoil": -2.5,
+      "angles": {
+        "head": 3,
+        "arm_near": -30,
+        "arm_far": -6,
+        "leg_near": 6,
+        "leg_far": -5
+      },
+      "offsets": {
+        "head": [
+          -6,
+          1
+        ],
+        "arm_near": [
+          -8,
+          -8
+        ],
+        "arm_far": [
+          -8,
+          8
+        ],
+        "leg_near": [
+          4,
+          1
+        ],
+        "leg_far": [
+          -4,
+          -6
+        ]
+      }
+    },
+    {
+      "at": 0.35,
+      "label": "Strike",
+      "lean": 9.0,
+      "recoil": 3.5,
+      "angles": {
+        "head": -4,
+        "arm_near": 8,
+        "arm_far": 10,
+        "leg_near": 9,
+        "leg_far": -7
+      },
+      "offsets": {
+        "head": [
+          7,
+          1
+        ],
+        "arm_near": [
+          8,
+          8
+        ],
+        "arm_far": [
+          -8,
+          -8
+        ],
+        "leg_near": [
+          1,
+          1
+        ],
+        "leg_far": [
+          -8,
+          6
+        ]
+      }
+    },
+    {
+      "at": 0.52,
+      "label": "FollowThrough",
+      "lean": 6.0,
+      "recoil": -4.5,
+      "angles": {
+        "head": -3,
+        "arm_near": 12,
+        "arm_far": 7,
+        "leg_near": 6,
+        "leg_far": -5
+      },
+      "offsets": {
+        "head": [
+          5,
+          0
+        ],
+        "arm_near": [
+          8,
+          8
+        ],
+        "arm_far": [
+          -8,
+          1
+        ],
+        "leg_near": [
+          -8,
+          -8
+        ],
+        "leg_far": [
+          -5,
+          0
+        ]
+      }
+    },
+    {
+      "at": 0.78,
+      "label": "Recover",
+      "lean": 2.0,
+      "recoil": -1.5,
+      "angles": {
+        "head": -1,
+        "arm_near": 3,
+        "arm_far": 2,
+        "leg_near": 2,
+        "leg_far": -1
+      },
+      "offsets": {
+        "head": [
+          2,
+          0
+        ],
+        "arm_near": [
+          8,
+          -1
+        ],
+        "arm_far": [
+          -5,
+          6
+        ],
+        "leg_near": [
+          1,
+          0
+        ],
+        "leg_far": [
+          -2,
+          0
+        ]
+      }
+    },
+    {
+      "at": 1.0,
+      "label": "Rest",
+      "lean": 0.0,
+      "recoil": 0.0,
+      "angles": {},
+      "offsets": {}
+    }
+  ],
+  "target": [
+    {
+      "at": 0.0,
+      "label": "Stance",
+      "lean": 0.0,
+      "recoil": 0.0,
+      "angles": {},
+      "offsets": {}
+    },
+    {
+      "at": 0.33,
+      "label": "Ready",
+      "lean": 0.0,
+      "recoil": 0.0,
+      "angles": {},
+      "offsets": {}
+    },
+    {
+      "at": 0.38,
+      "label": "Impact",
+      "lean": -11.0,
+      "recoil": 6.0,
+      "angles": {
+        "head": -7,
+        "arm_near": -8,
+        "arm_far": 6,
+        "leg_near": -4,
+        "leg_far": 5
+      },
+      "offsets": {
+        "head": [
+          8,
+          -1
+        ],
+        "arm_near": [
+          8,
+          4
+        ],
+        "arm_far": [
+          -5,
+          3
+        ],
+        "leg_near": [
+          -1,
+          1
+        ],
+        "leg_far": [
+          -1,
+          1
+        ]
+      }
+    },
+    {
+      "at": 0.62,
+      "label": "Settle",
+      "lean": -4.0,
+      "recoil": 2.5,
+      "angles": {
+        "head": -3,
+        "arm_near": -4,
+        "arm_far": 3,
+        "leg_near": -2,
+        "leg_far": 2
+      },
+      "offsets": {
+        "head": [
+          5,
+          0
+        ],
+        "arm_near": [
+          8,
+          -3
+        ],
+        "arm_far": [
+          -2,
+          8
+        ],
+        "leg_near": [
+          0,
+          0
+        ],
+        "leg_far": [
+          -7,
+          1
+        ]
+      }
+    },
+    {
+      "at": 1.0,
+      "label": "Rest",
+      "lean": 0.0,
+      "recoil": 0.0,
+      "angles": {},
+      "offsets": {}
+    }
+  ],
+  "note": "Порядок ключей и значения — AttackerChain и TargetChain; lean — LeanDegrees, recoil — RecoilRef в опорных пикселях; offsets — источниковые пиксели ячейки 512x512."
+}
