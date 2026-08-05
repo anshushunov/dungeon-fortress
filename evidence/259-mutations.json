@@ -1,0 +1,114 @@
+{
+  "issue": 259,
+  "rule": "Правило 32: мутант назначается на каждое утверждение отдельно. Прецедент — PR #235, где гард был доволен телом, повёрнутым не в ту сторону.",
+  "committedState": "902f90509707cc82654829c41b316729685b595f",
+  "howRun": "Мутанты прогнаны на закоммиченном состоянии; откат каждого — git checkout -- <файл>. Прогон: dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj",
+  "clean": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj",
+    "result": "не пройдено 0, пройдено 624, пропущено 0, всего 624"
+  },
+  "mutants": [
+    {
+      "n": 1,
+      "kind": "отсутствие",
+      "file": "src/DungeonFortress.Presentation/BodyMotion.cs",
+      "member": "BodyMotion.TurnToExchange",
+      "claim": "Цель удара вообще разворачивается.",
+      "before": "        > 0 or < 0 => new ExchangeFacing(Turn(attacker, dx), Turn(target, -dx)),",
+      "after": "        > 0 or < 0 => new ExchangeFacing(Turn(attacker, dx), target),",
+      "result": "не пройдено 2, пройдено 622",
+      "redTests": [
+        "BodyMotionTests.Both_bodies_of_a_blow_are_turned_towards_each_other(dx: 1, attacker: Right, target: Left)",
+        "BodyMotionTests.Both_bodies_of_a_blow_are_turned_towards_each_other(dx: 4, attacker: Right, target: Left)"
+      ],
+      "note": "A_struck_body_already_facing_the_striker_is_left_facing_it остаётся зелёным — именно поэтому мутант 2 нужен отдельно."
+    },
+    {
+      "n": 2,
+      "kind": "полярность",
+      "file": "src/DungeonFortress.Presentation/BodyMotion.cs",
+      "member": "BodyMotion.TurnToExchange",
+      "claim": "Цель разворачивается к бьющему, а не от него.",
+      "before": "        > 0 or < 0 => new ExchangeFacing(Turn(attacker, dx), Turn(target, -dx)),",
+      "after": "        > 0 or < 0 => new ExchangeFacing(Turn(attacker, dx), Turn(target, dx)),",
+      "result": "не пройдено 6, пройдено 618",
+      "redTests": [
+        "BodyMotionTests.A_struck_body_already_facing_the_striker_is_left_facing_it(dx: -4, already: Right)",
+        "BodyMotionTests.A_struck_body_already_facing_the_striker_is_left_facing_it(dx: 4, already: Left)",
+        "BodyMotionTests.Both_bodies_of_a_blow_are_turned_towards_each_other(dx: -4, attacker: Left, target: Right)",
+        "BodyMotionTests.Both_bodies_of_a_blow_are_turned_towards_each_other(dx: 1, attacker: Right, target: Left)",
+        "BodyMotionTests.Both_bodies_of_a_blow_are_turned_towards_each_other(dx: -1, attacker: Left, target: Right)",
+        "BodyMotionTests.Both_bodies_of_a_blow_are_turned_towards_each_other(dx: 4, attacker: Right, target: Left)"
+      ],
+      "note": "Красит A_struck_body_already_facing_the_striker_is_left_facing_it — проверку, которую мутант 1 оставил зелёной. Это и есть «краснеет отдельно от первой»: там цель, уже смотрящая на бьющего, отличает разворот в неверную сторону от отсутствия разворота, потому что унаследованное значение и неверный ответ там разные."
+    },
+    {
+      "n": 3,
+      "kind": "вырожденный случай",
+      "file": "src/DungeonFortress.Presentation/BodyMotion.cs",
+      "member": "BodyMotion.VerticalExchangeFacing",
+      "claim": "Удар в одной колонке (dx == 0) поворачивает обе стороны в авторскую сторону.",
+      "before": "    public const BodyFacing VerticalExchangeFacing = AuthoredFacing;",
+      "after": "    public const BodyFacing VerticalExchangeFacing = BodyFacing.Left;",
+      "result": "не пройдено 4, пройдено 620",
+      "redTests": [
+        "BodyMotionTests.A_blow_struck_along_a_column_turns_both_bodies_the_authored_way(attacker: Left, target: Left)",
+        "BodyMotionTests.A_blow_struck_along_a_column_turns_both_bodies_the_authored_way(attacker: Right, target: Right)",
+        "BodyMotionTests.A_blow_struck_along_a_column_turns_both_bodies_the_authored_way(attacker: Right, target: Left)",
+        "BodyMotionTests.A_blow_struck_along_a_column_turns_both_bodies_the_authored_way(attacker: Left, target: Right)"
+      ]
+    },
+    {
+      "n": "2b",
+      "kind": "полярность, дословная подстановка из Issue",
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "member": "Main.TurnBodies",
+      "claim": "Адаптер отдаёт политике разницу колонок цели и бьющего, а не наоборот.",
+      "before": "                TurnExchange(attacker, blow.Target, to.X - from.X);",
+      "after": "                TurnExchange(attacker, blow.Target, from.X - to.X);",
+      "result": "не пройдено 1, пройдено 623",
+      "redTests": [
+        "BodyMotionAdapterTests.The_facing_is_turned_by_the_step_and_by_the_blow"
+      ],
+      "note": "Issue назвала подстановку полярности как «from.X - to.X вместо to.X - from.X», то есть в Main.cs. В принятой конструкции эта строка — общая для обеих сторон, и её перестановка разворачивает пару целиком; собственно полярность цели живёт в политике и проверяется сравнением значений (мутант 2), потому что Main.cs — адаптер, куда value-проверка не достаёт (ADR 0011). Прогнаны оба, чтобы у обеих формулировок был свой убитый мутант."
+    },
+    {
+      "n": "R1",
+      "kind": "перестановка половин пары",
+      "source": "собран независимым review PR #268; на прежнем гарде был зелёным — 624 пройдено, 0 не пройдено",
+      "committedState": "9d4e731b91e95e5ed29315bf3967dafb77deff15",
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "member": "Main.TurnExchange",
+      "claim": "Пара распаковывается так же, как упакована: бьющему достаётся половина бьющего.",
+      "before": "        _bodyFacing[attacker] = facing.Attacker;\n        _bodyFacing[target] = facing.Target;",
+      "after": "        _bodyFacing[attacker] = facing.Target;\n        _bodyFacing[target] = facing.Attacker;",
+      "inGame": "Оба тела отворачиваются друг от друга — спина к спине, хуже состояния «до» #259.",
+      "result": "не пройдено 1, пройдено 623",
+      "redTests": [
+        "BodyMotionAdapterTests.The_facing_is_turned_by_the_step_and_by_the_blow"
+      ]
+    },
+    {
+      "n": "R2",
+      "kind": "отсутствие на уровне адаптера",
+      "source": "собран независимым review PR #268; на прежнем гарде был зелёным — 624 пройдено, 0 не пройдено",
+      "committedState": "9d4e731b91e95e5ed29315bf3967dafb77deff15",
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "member": "Main.TurnExchange",
+      "claim": "Цель получает свою половину ответа, а не только бьющий.",
+      "before": "        _bodyFacing[attacker] = facing.Attacker;\n        _bodyFacing[target] = facing.Target;",
+      "after": "        _bodyFacing[attacker] = facing.Attacker;",
+      "inGame": "Ровно дефект #259: цель удара своего разворота не получает.",
+      "result": "не пройдено 1, пройдено 623",
+      "redTests": [
+        "BodyMotionAdapterTests.The_facing_is_turned_by_the_step_and_by_the_blow"
+      ]
+    }
+  ],
+  "reviewRound": {
+    "why": "Первые четыре мутанта проверяли политику и вызов, но не распаковку пары в адаптере: обе подстановки review проходили гард. Критерий готовности 3 был исполнен на уровне политики и не исполнен на уровне того, что видит владелец — дословно прецедент PR #235.",
+    "fix": "BodyMotionAdapterTests.The_facing_is_turned_by_the_step_and_by_the_blow пинит текстом оба присваивания в теле TurnExchange — тем же приёмом, каким там уже пинится position.X - origin.X.",
+    "cleanAfterFix": "dotnet test tests/DungeonFortress.Presentation.Tests -> не пройдено 0, пройдено 624",
+    "note": "Мутанты R1 и R2 прогнаны на состоянии 9d4e731 (после правки гарда); первые четыре — на 902f905, гард их не касался и его правка их результата не меняет."
+  }
+}

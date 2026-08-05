@@ -6482,23 +6482,44 @@ public partial class Main : Node2D
                 SidewaysStep(raider.Position, _raiderMotionOrigin, raider.Id));
         }
 
-        // A blow wins over a step. A body that both moved and struck on one tick
-        // is turned towards what it struck, for the reason the flinch pose beats
-        // the wind-up in BlowReading.PhaseOf: the blow is the thing the player is
-        // being asked to read.
+        // A blow wins over a step, and it wins for both bodies it names. A body
+        // that both moved and struck on one tick is turned towards what it struck,
+        // for the reason the flinch pose beats the wind-up in
+        // BlowReading.PhaseOf: the blow is the thing the player is being asked to
+        // read. The body being struck is turned by the same rule and for the same
+        // reason — until Issue #259 it kept whatever its own step had left it
+        // with, which on the duel scene is a body standing with its back to the
+        // spear.
         foreach (var blow in _blows.Blows)
         {
             if (blow.Attacker is { } attacker &&
                 BodyPosition(attacker) is { } from &&
                 BodyPosition(blow.Target) is { } to)
             {
-                TurnBody(attacker, to.X - from.X);
+                TurnExchange(attacker, blow.Target, to.X - from.X);
             }
         }
     }
 
     private void TurnBody(BodyRef body, double dx) =>
         _bodyFacing[body] = BodyMotion.Turn(BodyFacingOf(body), dx);
+
+    /// <summary>
+    /// Turns the two bodies of one blow. The decision is
+    /// <see cref="BodyMotion.TurnToExchange"/>'s, including what a blow struck
+    /// along a column answers; this hands it the two facings and the difference
+    /// between the struck body's cell and the striker's, and writes back the pair
+    /// it gets.
+    /// </summary>
+    private void TurnExchange(BodyRef attacker, BodyRef target, double dx)
+    {
+        var facing = BodyMotion.TurnToExchange(
+            BodyFacingOf(attacker),
+            BodyFacingOf(target),
+            dx);
+        _bodyFacing[attacker] = facing.Attacker;
+        _bodyFacing[target] = facing.Target;
+    }
 
     private BodyFacing BodyFacingOf(BodyRef body) =>
         _bodyFacing.TryGetValue(body, out var facing) ? facing : BodyMotion.RestingFacing;

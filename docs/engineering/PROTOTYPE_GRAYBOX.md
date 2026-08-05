@@ -540,10 +540,41 @@ reading that rides up and down with the body is harder to read, not easier.
 
 | Motion | What it is taken from | What decides it |
 |---|---|---|
-| facing and flip | the sideways part of the step, and the cell of the body a blow was landed on | `BodyMotion.Turn`, `BodyMotion.FlipScale` |
+| facing and flip | the sideways part of the step, and the two cells a blow names — for both bodies of it | `BodyMotion.Turn`, `BodyMotion.TurnToExchange`, `BodyMotion.FlipScale` |
 | bob | how far the body has walked, in cells | `BodyMotion.PathCells`, `BodyMotion.BobOffsetRef` |
 | lean | the sideways part of the step | `BodyMotion.LeanRadians` |
 | squash and stretch | the pose the blow reading gives this body | `BodyMotion.BlowHeightScale`, `BodyMotion.BlowWidthScale` |
+
+**A blow turns both of the bodies it names** (Issue #259). A step turns the body
+that took it; a blow turns the one that struck *and* the one that was struck,
+towards each other, and it wins over the step for both of them. Until the owner's
+duel playtest of ADR 0020's probe found it, only the striker was turned: the
+struck body kept whatever its own step had left it with, which on the duel scene
+is a body standing with its back to the spear. A blow struck **along a column**
+has no sideways part at all, so neither facing points at the other body; there the
+answer is the pair's rather than each body's memory — both are drawn the way the
+pack is authored (`BodyMotion.VerticalExchangeFacing`), because inheriting would
+leave one arrangement out of four with the two standing back to back, which is the
+picture the Issue exists to remove.
+
+**That answer is written into a memory and lives after the blow.** The facing is
+one value per body, and every rule that decides a facing writes it there, so a
+body that walked left and then struck — or was struck — straight up or down is
+turned to the authored side and stays that way until its next step with a sideways
+part; `BodyMotion.Turn` keeps a facing when the step has none. It changes the
+**striker** too, which no earlier rule did: before Issue #259 a blow along a
+column left both bodies alone. Nothing in the repository can run into it — the
+duel scene picks a blow struck sideways on purpose, so no frame here shows a
+vertical exchange at all — so it is registered in
+[`DEBT_LEDGER.md`](DEBT_LEDGER.md) with the condition that promotes it: the first
+mass-combat frame of Issue #260 on which a body after a vertical exchange faces
+away from where it was going.
+
+**One facing cannot answer two blows.** A body struck twice in the same tick is
+turned by the last of them in journal order. That is a limit of keeping one facing
+per body, not an unfinished rule: when both strikers are on the same side every
+rule gives the same answer, and when they are on opposite sides every rule leaves
+somebody looking at a back.
 
 **The walk phase is the path and not the clock.** A phase taken from elapsed
 time keeps running while a body stands still, and a captured frame — always

@@ -13,6 +13,16 @@ public enum BodyFacing
 }
 
 /// <summary>
+/// Which way the two bodies of one blow are turned: the one that struck and the
+/// one that was struck, answered together because the two answers are one
+/// decision — they are turned towards each other or the exchange is not read as
+/// an exchange at all.
+/// </summary>
+/// <param name="Attacker">The facing of the body that struck.</param>
+/// <param name="Target">The facing of the body it struck.</param>
+public readonly record struct ExchangeFacing(BodyFacing Attacker, BodyFacing Target);
+
+/// <summary>
 /// How a body moves while the picture is drawn: which way it is turned, how it
 /// rides up and down as it walks, how far it leans into the step and how a blow
 /// squashes it.
@@ -76,6 +86,77 @@ public static class BodyMotion
         > 0 => BodyFacing.Right,
         < 0 => BodyFacing.Left,
         _ => current,
+    };
+
+    /// <summary>
+    /// Which way both bodies of a blow struck along a column are turned — a blow
+    /// whose striker and target stand in the same column, so neither
+    /// <see cref="BodyFacing.Left"/> nor <see cref="BodyFacing.Right"/> points at
+    /// the other body at all.
+    ///
+    /// <para>
+    /// <b>The pair is answered for, not each body on its own.</b> Keeping what
+    /// each had — which is what <see cref="Turn"/> does at a zero step, and
+    /// rightly, because a walk has a memory — means the two are turned by whatever
+    /// each happened to be doing before, and one arrangement out of the four is
+    /// the pair standing back to back. That is the very picture Issue #259 is
+    /// about, so a vertical exchange gets a definite answer rather than an
+    /// inherited one: both bodies are drawn the way the art is authored, and the
+    /// pair reads as two bodies seen from the same side.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>And that answer is written into the facing, which is a memory.</b> The
+    /// adapter keeps one facing per body and every rule that decides a facing
+    /// writes it there, so this one lives on after the blow: a body that walked
+    /// left and then struck — or was struck — straight up or down is turned to the
+    /// authored side and <em>stays</em> turned that way until its next step with a
+    /// sideways part, because <see cref="Turn"/> keeps a facing at a zero step.
+    /// This is a change to the striker as well, which no earlier rule made: before
+    /// Issue #259 a blow along a column left both bodies alone. Named here because
+    /// it is a visible consequence and nothing in the repository can run into it —
+    /// the duel scene deliberately picks a blow struck sideways, so no frame shows
+    /// a vertical exchange at all (registered in
+    /// <c>docs/engineering/DEBT_LEDGER.md</c>, condition: the first mass-combat
+    /// frame of Issue #260 on which a body after a vertical exchange faces away
+    /// from where it was going).
+    /// </para>
+    /// </summary>
+    public const BodyFacing VerticalExchangeFacing = AuthoredFacing;
+
+    /// <summary>
+    /// Where the two bodies of one blow are turned, <paramref name="dx"/> being
+    /// how far the struck body stands to the side of the one that struck it —
+    /// the target's column minus the striker's.
+    ///
+    /// <para>
+    /// <b>Both sides, not one.</b> A blow used to turn only the body that struck;
+    /// the body being struck kept whatever its own step had left it with, and on
+    /// the duel scene of ADR 0020 that is a body standing with its back to the
+    /// spear (Issue #259). The two are mirror answers to the same difference:
+    /// the striker turns towards <paramref name="dx"/> and the struck body turns
+    /// against it, because the striker is on its other side.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Today's answer never depends on the two facings passed in</b>, and the
+    /// signature keeps them anyway — named here so the promise is not read as one:
+    /// <see cref="Turn"/> ignores its current facing whenever there is a sideways
+    /// part, and the vertical branch answers with a constant. They are kept
+    /// because "the struck body keeps what it had" is exactly the wrong answer
+    /// this policy exists to refuse, and a policy that cannot be handed that
+    /// answer cannot be checked for refusing it: the mutant of
+    /// <c>evidence/259-mutations.json</c> that returns <paramref name="target"/>
+    /// unchanged is only expressible while the parameter is there.
+    /// </para>
+    /// </summary>
+    public static ExchangeFacing TurnToExchange(
+        BodyFacing attacker,
+        BodyFacing target,
+        double dx) => dx switch
+    {
+        > 0 or < 0 => new ExchangeFacing(Turn(attacker, dx), Turn(target, -dx)),
+        _ => new ExchangeFacing(VerticalExchangeFacing, VerticalExchangeFacing),
     };
 
     /// <summary>

@@ -1,0 +1,50 @@
+{
+  "issue": 259,
+  "what": "Кадры дуэльной сцены до и после разворота цели удара к бьющему.",
+  "scene": {
+    "fixture": "prepared",
+    "tick": 2061,
+    "attacker": "crew #0 (BodyKind.Creature, id 0)",
+    "target": "raider #15 (BodyKind.Raider, id 15)",
+    "note": "Цель стоит левее бьющего, поэтому bx = to.X - from.X отрицателен: бьющий смотрит влево. На кадрах «до» цель тоже смотрит влево — то есть спиной к бьющему."
+  },
+  "how": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture prepared -DemoDuel -DuelFrame <n> -ScreenshotPath evidence/<file>.png -CameraZoom 2.0 -CameraPosition 560,320 -FrameSize 1280x720 -UiScale 1.0 -TileSize 40 -TemporaryRoot C:\\gamedev\\_dftmp259 -GodotPath C:\\gamedev\\Godot_v4.7.1-stable_mono_win64\\Godot_v4.7.1-stable_mono_win64_console.exe",
+    "note": "-ScreenshotPath складывает кадр в .artifacts/evidence/, файл скопирован оттуда в evidence/ — так же, как кадры #244.",
+    "duelFrames": {
+      "2": "замах, strikeScrub 0.16666666666666666 — до StrikeChain.ContactShare (0.35)",
+      "5": "контакт, strikeScrub 0.4166666666666667 — первая двенадцатая после ContactShare"
+    }
+  },
+  "frames": [
+    {
+      "file": "evidence/259-before-windup.png",
+      "duelFrame": 2,
+      "when": "before",
+      "checksum": "1fae2007cd00c342e547a76d1a4792b04c3f9d1871126d221ccd420341af5c82",
+      "reading": "Бьющий (свои #0, бирюзовый контур, справа) повёрнут влево, к цели. Цель (налётчик #15, красный контур, слева) повёрнута влево же — спиной к бьющему."
+    },
+    {
+      "file": "evidence/259-before-contact.png",
+      "duelFrame": 5,
+      "when": "before",
+      "checksum": "1fae2007cd00c342e547a76d1a4792b04c3f9d1871126d221ccd420341af5c82",
+      "reading": "Тот же разворот в момент контакта: вспышка накрывает тело, стоящее к удару спиной."
+    },
+    {
+      "file": "evidence/259-after-windup.png",
+      "duelFrame": 2,
+      "when": "after",
+      "checksum": "1fae2007cd00c342e547a76d1a4792b04c3f9d1871126d221ccd420341af5c82",
+      "reading": "Цель зеркальна кадру «до»: повёрнута вправо, к бьющему. Бьющий по-прежнему повёрнут влево. Тела обращены друг к другу."
+    },
+    {
+      "file": "evidence/259-after-contact.png",
+      "duelFrame": 5,
+      "when": "after",
+      "checksum": "1fae2007cd00c342e547a76d1a4792b04c3f9d1871126d221ccd420341af5c82",
+      "reading": "В момент контакта тело, которое бьют, обращено к копью, а не спиной к нему."
+    }
+  ],
+  "checksum": "Все четыре кадра печатают один checksum 1fae2007cd00c342e547a76d1a4792b04c3f9d1871126d221ccd420341af5c82: направление меняет пиксели и ничего больше (ADR 0011)."
+}
