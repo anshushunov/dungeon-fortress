@@ -104,6 +104,23 @@ public static class BodyMotion
     /// inherited one: both bodies are drawn the way the art is authored, and the
     /// pair reads as two bodies seen from the same side.
     /// </para>
+    ///
+    /// <para>
+    /// <b>And that answer is written into the facing, which is a memory.</b> The
+    /// adapter keeps one facing per body and every rule that decides a facing
+    /// writes it there, so this one lives on after the blow: a body that walked
+    /// left and then struck — or was struck — straight up or down is turned to the
+    /// authored side and <em>stays</em> turned that way until its next step with a
+    /// sideways part, because <see cref="Turn"/> keeps a facing at a zero step.
+    /// This is a change to the striker as well, which no earlier rule made: before
+    /// Issue #259 a blow along a column left both bodies alone. Named here because
+    /// it is a visible consequence and nothing in the repository can run into it —
+    /// the duel scene deliberately picks a blow struck sideways, so no frame shows
+    /// a vertical exchange at all (registered in
+    /// <c>docs/engineering/DEBT_LEDGER.md</c>, condition: the first mass-combat
+    /// frame of Issue #260 on which a body after a vertical exchange faces away
+    /// from where it was going).
+    /// </para>
     /// </summary>
     public const BodyFacing VerticalExchangeFacing = AuthoredFacing;
 
@@ -119,6 +136,18 @@ public static class BodyMotion
     /// spear (Issue #259). The two are mirror answers to the same difference:
     /// the striker turns towards <paramref name="dx"/> and the struck body turns
     /// against it, because the striker is on its other side.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Today's answer never depends on the two facings passed in</b>, and the
+    /// signature keeps them anyway — named here so the promise is not read as one:
+    /// <see cref="Turn"/> ignores its current facing whenever there is a sideways
+    /// part, and the vertical branch answers with a constant. They are kept
+    /// because "the struck body keeps what it had" is exactly the wrong answer
+    /// this policy exists to refuse, and a policy that cannot be handed that
+    /// answer cannot be checked for refusing it: the mutant of
+    /// <c>evidence/259-mutations.json</c> that returns <paramref name="target"/>
+    /// unchanged is only expressible while the parameter is there.
     /// </para>
     /// </summary>
     public static ExchangeFacing TurnToExchange(

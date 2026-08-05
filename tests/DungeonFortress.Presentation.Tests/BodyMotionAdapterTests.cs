@@ -94,6 +94,25 @@ public sealed class BodyMotionAdapterTests
         Assert.Contains("BodyFacingOf(attacker", pair.Arguments[0], StringComparison.Ordinal);
         Assert.Contains("BodyFacingOf(target", pair.Arguments[1], StringComparison.Ordinal);
         Assert.Equal("dx", pair.Arguments[2]);
+
+        // And the pair is unpacked the way it was packed. Independent review of
+        // PR #268 built the two mutants this holds, and both were green without
+        // it: swapping the halves turns the two bodies away from each other — back
+        // to back, which is worse than the defect Issue #259 was opened about —
+        // and dropping the second line restores that defect exactly. Neither is
+        // visible to any value check, because the policy goes on answering
+        // correctly; what changes is which body is given which half of the answer,
+        // and that is a fact about this file. Pinned as text for the same reason
+        // the step's own subtraction above is.
+        var unpack = AdapterSource.Body("TurnExchange");
+        Assert.Contains(
+            $"_bodyFacing[attacker] = facing.{nameof(ExchangeFacing.Attacker)};",
+            unpack,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"_bodyFacing[target] = facing.{nameof(ExchangeFacing.Target)};",
+            unpack,
+            StringComparison.Ordinal);
     }
 
     /// <summary>

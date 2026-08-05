@@ -557,6 +557,25 @@ pack is authored (`BodyMotion.VerticalExchangeFacing`), because inheriting would
 leave one arrangement out of four with the two standing back to back, which is the
 picture the Issue exists to remove.
 
+**That answer is written into a memory and lives after the blow.** The facing is
+one value per body, and every rule that decides a facing writes it there, so a
+body that walked left and then struck — or was struck — straight up or down is
+turned to the authored side and stays that way until its next step with a sideways
+part; `BodyMotion.Turn` keeps a facing when the step has none. It changes the
+**striker** too, which no earlier rule did: before Issue #259 a blow along a
+column left both bodies alone. Nothing in the repository can run into it — the
+duel scene picks a blow struck sideways on purpose, so no frame here shows a
+vertical exchange at all — so it is registered in
+[`DEBT_LEDGER.md`](DEBT_LEDGER.md) with the condition that promotes it: the first
+mass-combat frame of Issue #260 on which a body after a vertical exchange faces
+away from where it was going.
+
+**One facing cannot answer two blows.** A body struck twice in the same tick is
+turned by the last of them in journal order. That is a limit of keeping one facing
+per body, not an unfinished rule: when both strikers are on the same side every
+rule gives the same answer, and when they are on opposite sides every rule leaves
+somebody looking at a back.
+
 **The walk phase is the path and not the clock.** A phase taken from elapsed
 time keeps running while a body stands still, and a captured frame — always
 drawn at alpha 1 with time stopped — would show every body at whatever phase the
