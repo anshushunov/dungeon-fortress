@@ -135,6 +135,18 @@ Expected: Отсутствует
         throw "Cyrillic claim absent from output did not mismatch. exit=$($result.ExitCode) output=$($result.Output)"
     }
 
+    $noLanguageBody = @'
+```
+git log --oneline -1
+```
+Expected: anything
+'@
+    $result = Invoke-ClaimChecker -BodyText $noLanguageBody
+    if ($result.ExitCode -ne 0 -or $result.Output -notmatch '"status":"not-runnable"' -or
+        $result.Output -notmatch 'fence language is missing') {
+        throw "Language-less fenced block was not reported as not-runnable. exit=$($result.ExitCode) output=$($result.Output)"
+    }
+
     $multiBody = @'
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\probe.ps1
@@ -270,6 +282,7 @@ Expected: 0
         russianClaimPrefixAccepted = $true
         cyrillicClaimMatch = $true
         cyrillicClaimMismatch = $true
+        noLanguageFenceReported = $true
         multipleBlocksReported = $true
         inlineCommandRejected = $true
         aliasRejected = $true
