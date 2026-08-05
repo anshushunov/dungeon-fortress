@@ -71,6 +71,44 @@
         "BodyMotionAdapterTests.The_facing_is_turned_by_the_step_and_by_the_blow"
       ],
       "note": "Issue назвала подстановку полярности как «from.X - to.X вместо to.X - from.X», то есть в Main.cs. В принятой конструкции эта строка — общая для обеих сторон, и её перестановка разворачивает пару целиком; собственно полярность цели живёт в политике и проверяется сравнением значений (мутант 2), потому что Main.cs — адаптер, куда value-проверка не достаёт (ADR 0011). Прогнаны оба, чтобы у обеих формулировок был свой убитый мутант."
+    },
+    {
+      "n": "R1",
+      "kind": "перестановка половин пары",
+      "source": "собран независимым review PR #268; на прежнем гарде был зелёным — 624 пройдено, 0 не пройдено",
+      "committedState": "9d4e731b91e95e5ed29315bf3967dafb77deff15",
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "member": "Main.TurnExchange",
+      "claim": "Пара распаковывается так же, как упакована: бьющему достаётся половина бьющего.",
+      "before": "        _bodyFacing[attacker] = facing.Attacker;\n        _bodyFacing[target] = facing.Target;",
+      "after": "        _bodyFacing[attacker] = facing.Target;\n        _bodyFacing[target] = facing.Attacker;",
+      "inGame": "Оба тела отворачиваются друг от друга — спина к спине, хуже состояния «до» #259.",
+      "result": "не пройдено 1, пройдено 623",
+      "redTests": [
+        "BodyMotionAdapterTests.The_facing_is_turned_by_the_step_and_by_the_blow"
+      ]
+    },
+    {
+      "n": "R2",
+      "kind": "отсутствие на уровне адаптера",
+      "source": "собран независимым review PR #268; на прежнем гарде был зелёным — 624 пройдено, 0 не пройдено",
+      "committedState": "9d4e731b91e95e5ed29315bf3967dafb77deff15",
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "member": "Main.TurnExchange",
+      "claim": "Цель получает свою половину ответа, а не только бьющий.",
+      "before": "        _bodyFacing[attacker] = facing.Attacker;\n        _bodyFacing[target] = facing.Target;",
+      "after": "        _bodyFacing[attacker] = facing.Attacker;",
+      "inGame": "Ровно дефект #259: цель удара своего разворота не получает.",
+      "result": "не пройдено 1, пройдено 623",
+      "redTests": [
+        "BodyMotionAdapterTests.The_facing_is_turned_by_the_step_and_by_the_blow"
+      ]
     }
-  ]
+  ],
+  "reviewRound": {
+    "why": "Первые четыре мутанта проверяли политику и вызов, но не распаковку пары в адаптере: обе подстановки review проходили гард. Критерий готовности 3 был исполнен на уровне политики и не исполнен на уровне того, что видит владелец — дословно прецедент PR #235.",
+    "fix": "BodyMotionAdapterTests.The_facing_is_turned_by_the_step_and_by_the_blow пинит текстом оба присваивания в теле TurnExchange — тем же приёмом, каким там уже пинится position.X - origin.X.",
+    "cleanAfterFix": "dotnet test tests/DungeonFortress.Presentation.Tests -> не пройдено 0, пройдено 624",
+    "note": "Мутанты R1 и R2 прогнаны на состоянии 9d4e731 (после правки гарда); первые четыре — на 902f905, гард их не касался и его правка их результата не меняет."
+  }
 }
