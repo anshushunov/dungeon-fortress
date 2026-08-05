@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 
 Set-StrictMode -Version Latest
@@ -104,6 +104,35 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\probe.ps1
     $result = Invoke-ClaimChecker -BodyText $russianBody
     if ($result.ExitCode -ne 0 -or $result.Output -notmatch '"status":"match"') {
         throw "Russian claim prefix did not match. exit=$($result.ExitCode) output=$($result.Output)"
+    }
+
+    $probeCyrillic = Join-Path $testRoot "probe-cyrillic.ps1"
+    [IO.File]::WriteAllText($probeCyrillic, @'
+$s = -join @([char]0x0411, [char]0x043b, [char]0x043e, [char]0x043a)
+$bytes = [Text.Encoding]::UTF8.GetBytes($s)
+[Console]::OpenStandardOutput().Write($bytes, 0, $bytes.Length)
+'@, $utf8)
+
+    $cyrillicMatchBody = @'
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\probe-cyrillic.ps1
+```
+Expected: Блок
+'@
+    $result = Invoke-ClaimChecker -BodyText $cyrillicMatchBody
+    if ($result.ExitCode -ne 0 -or $result.Output -notmatch '"status":"match"') {
+        throw "Cyrillic claim present in output did not match. exit=$($result.ExitCode) output=$($result.Output)"
+    }
+
+    $cyrillicMismatchBody = @'
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\probe-cyrillic.ps1
+```
+Expected: Отсутствует
+'@
+    $result = Invoke-ClaimChecker -BodyText $cyrillicMismatchBody
+    if ($result.ExitCode -ne 1 -or $result.Output -notmatch '"status":"mismatch"') {
+        throw "Cyrillic claim absent from output did not mismatch. exit=$($result.ExitCode) output=$($result.Output)"
     }
 
     $multiBody = @'
@@ -239,6 +268,8 @@ Expected: 0
         missingClaimReported = $true
         unterminatedFenceReported = $true
         russianClaimPrefixAccepted = $true
+        cyrillicClaimMatch = $true
+        cyrillicClaimMismatch = $true
         multipleBlocksReported = $true
         inlineCommandRejected = $true
         aliasRejected = $true

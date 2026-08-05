@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$BodyFile,
@@ -8,6 +8,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
 
 if (-not $RepoRoot) {
     $RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
