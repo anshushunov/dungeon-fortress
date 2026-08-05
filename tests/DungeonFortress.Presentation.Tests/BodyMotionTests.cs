@@ -36,6 +36,99 @@ public sealed class BodyMotionTests
         Assert.Equal(current, BodyMotion.Turn(current, 0.0));
 
     /// <summary>
+    /// Issue #259, the whole of it in values: both bodies of a blow end up facing
+    /// each other, whichever side the struck body stands on. The striker's half
+    /// was already true; the struck body's is what the owner's duel playtest found
+    /// missing.
+    ///
+    /// <para>
+    /// The two are compared with each other as well as with the direction they are
+    /// expected in, because "facing each other" is the property the picture is read
+    /// by: two bodies both turned right are a body attacking a back whatever the
+    /// two values are called.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(4.0, BodyFacing.Right, BodyFacing.Left)]
+    [InlineData(-4.0, BodyFacing.Left, BodyFacing.Right)]
+    [InlineData(1.0, BodyFacing.Right, BodyFacing.Left)]
+    [InlineData(-1.0, BodyFacing.Left, BodyFacing.Right)]
+    public void Both_bodies_of_a_blow_are_turned_towards_each_other(
+        double dx,
+        BodyFacing attacker,
+        BodyFacing target)
+    {
+        // Both start turned the way the pack is authored, which is what a body
+        // that has not stepped sideways yet is drawn in — and, on the duel scene,
+        // exactly the state the defect was seen in.
+        var exchange = BodyMotion.TurnToExchange(
+            BodyMotion.RestingFacing,
+            BodyMotion.RestingFacing,
+            dx);
+
+        Assert.Equal(attacker, exchange.Attacker);
+        Assert.Equal(target, exchange.Target);
+        Assert.NotEqual(exchange.Attacker, exchange.Target);
+    }
+
+    /// <summary>
+    /// And the struck body is turned by where the striker is, not by where it was
+    /// already looking: one that happens to face the striker already is left facing
+    /// it, instead of being turned to the striker's own side.
+    ///
+    /// <para>
+    /// This is the case that tells the two mutants apart. A build that turns the
+    /// struck body not at all passes this check and fails the one above; a build
+    /// that turns it <em>away</em> — with the striker's difference instead of the
+    /// mirror of it — fails this one, because here the inherited facing and the
+    /// wrong answer are different values. Rule 32 asks for a check per claim, and
+    /// on PR #235 a guard was content with a body turned the wrong way.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(4.0, BodyFacing.Left)]
+    [InlineData(-4.0, BodyFacing.Right)]
+    public void A_struck_body_already_facing_the_striker_is_left_facing_it(
+        double dx,
+        BodyFacing already)
+    {
+        var exchange = BodyMotion.TurnToExchange(BodyMotion.RestingFacing, already, dx);
+
+        Assert.Equal(already, exchange.Target);
+        Assert.NotEqual(exchange.Attacker, exchange.Target);
+    }
+
+    /// <summary>
+    /// A blow struck along a column — striker and target in the same column, one
+    /// above the other — turns both bodies the way the pack is authored, and the
+    /// answer is the pair's rather than each body's own memory.
+    ///
+    /// <para>
+    /// Neither facing points at the other body here, so there is nothing to be
+    /// "towards"; what is left to decide is whether the two are drawn from the same
+    /// side. Inheriting would leave one arrangement out of four with the two
+    /// standing back to back, which is the picture this Issue exists to remove, so
+    /// the rule is named (<see cref="BodyMotion.VerticalExchangeFacing"/>) instead
+    /// of falling through to <see cref="BodyMotion.Turn"/>'s memory.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(BodyFacing.Left, BodyFacing.Left)]
+    [InlineData(BodyFacing.Left, BodyFacing.Right)]
+    [InlineData(BodyFacing.Right, BodyFacing.Left)]
+    [InlineData(BodyFacing.Right, BodyFacing.Right)]
+    public void A_blow_struck_along_a_column_turns_both_bodies_the_authored_way(
+        BodyFacing attacker,
+        BodyFacing target)
+    {
+        var exchange = BodyMotion.TurnToExchange(attacker, target, 0.0);
+
+        Assert.Equal(BodyMotion.AuthoredFacing, exchange.Attacker);
+        Assert.Equal(BodyMotion.AuthoredFacing, exchange.Target);
+        Assert.Equal(exchange.Attacker, exchange.Target);
+    }
+
+    /// <summary>
     /// The flip is what the facing costs the drawing: nothing at all while the
     /// body faces the way the pack was authored, and a mirrored width when it does
     /// not. Both halves matter — a flip that never returned 1 would mirror a body

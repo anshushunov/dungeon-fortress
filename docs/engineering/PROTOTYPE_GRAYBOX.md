@@ -540,10 +540,22 @@ reading that rides up and down with the body is harder to read, not easier.
 
 | Motion | What it is taken from | What decides it |
 |---|---|---|
-| facing and flip | the sideways part of the step, and the cell of the body a blow was landed on | `BodyMotion.Turn`, `BodyMotion.FlipScale` |
+| facing and flip | the sideways part of the step, and the two cells a blow names — for both bodies of it | `BodyMotion.Turn`, `BodyMotion.TurnToExchange`, `BodyMotion.FlipScale` |
 | bob | how far the body has walked, in cells | `BodyMotion.PathCells`, `BodyMotion.BobOffsetRef` |
 | lean | the sideways part of the step | `BodyMotion.LeanRadians` |
 | squash and stretch | the pose the blow reading gives this body | `BodyMotion.BlowHeightScale`, `BodyMotion.BlowWidthScale` |
+
+**A blow turns both of the bodies it names** (Issue #259). A step turns the body
+that took it; a blow turns the one that struck *and* the one that was struck,
+towards each other, and it wins over the step for both of them. Until the owner's
+duel playtest of ADR 0020's probe found it, only the striker was turned: the
+struck body kept whatever its own step had left it with, which on the duel scene
+is a body standing with its back to the spear. A blow struck **along a column**
+has no sideways part at all, so neither facing points at the other body; there the
+answer is the pair's rather than each body's memory — both are drawn the way the
+pack is authored (`BodyMotion.VerticalExchangeFacing`), because inheriting would
+leave one arrangement out of four with the two standing back to back, which is the
+picture the Issue exists to remove.
 
 **The walk phase is the path and not the clock.** A phase taken from elapsed
 time keeps running while a body stands still, and a captured frame — always

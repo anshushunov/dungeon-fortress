@@ -30,11 +30,18 @@ public sealed class BodyMotionAdapterTests
     /// showed what that misses: subtracting the two cells the other way round — in
     /// the blow branch, or one floor up where the difference is handed to the
     /// policy — turns every body away from what it is doing, compiles, draws a
-    /// whole party and leaves the whole suite green. There is no other witness in
-    /// the repository for the blow branch: no blow of the shipped journal's first
-    /// wave travels left, so a frame cannot tell the two signs apart either. Hence
-    /// the literal difference is pinned here, exactly as it already was for the
-    /// step and the lean.
+    /// whole party and leaves the whole suite green. Hence the literal difference
+    /// is pinned here, exactly as it already was for the step and the lean.
+    /// </para>
+    ///
+    /// <para>
+    /// Since Issue #259 the blow no longer has to be argued from text alone: which
+    /// way each of the two bodies of an exchange ends up turned is a value question
+    /// asked of <see cref="BodyMotion.TurnToExchange"/> in
+    /// <see cref="BodyMotionTests"/>, where a target turned away from its striker
+    /// fails a comparison of values. What is left for this file is the part no
+    /// value can hold — that the adapter asks that question at all, about these two
+    /// bodies, with the difference the right way round.
     /// </para>
     /// </summary>
     [Fact]
@@ -48,7 +55,7 @@ public sealed class BodyMotionAdapterTests
         Assert.Contains($"_blows.{nameof(BlowReading.Blows)}", turn, StringComparison.Ordinal);
 
         var turns = AdapterSource.CallsTo(turn, "TurnBody");
-        Assert.Equal(3, turns.Count);
+        Assert.Equal(2, turns.Count);
 
         // The step is the difference between the cell the body came from and the
         // cell it is on. Measured the other way round the whole crew would face
@@ -56,15 +63,19 @@ public sealed class BodyMotionAdapterTests
         var step = AdapterSource.Body("SidewaysStep");
         Assert.Contains("position.X - origin.X", step, StringComparison.Ordinal);
 
-        // A body that struck turns towards what it struck, and "towards" is the
-        // target's cell minus the striker's. The other way round is the mutation
-        // review found nothing catching: a striker turning its back on its target.
-        var struck = Assert.Single(turns.Where(call =>
-            call.Arguments.Count == 2 &&
-            string.Equals(call.Arguments[0], "attacker", StringComparison.Ordinal)));
-        Assert.Equal("to.X - from.X", struck.Arguments[1]);
+        // A blow turns the two bodies it names, and the difference it is turned by
+        // is the target's cell minus the striker's. The other way round is the
+        // mutation review found nothing catching: a striker turning its back on its
+        // target. Which way each of the two ends up facing is a value question and
+        // is asked of the policy in BodyMotionTests; what belongs here is that the
+        // adapter hands over these two bodies and this difference.
+        var exchange = Assert.Single(AdapterSource.CallsTo(turn, "TurnExchange"));
+        Assert.Equal(3, exchange.Arguments.Count);
+        Assert.Equal("attacker", exchange.Arguments[0]);
+        Assert.Equal($"blow.{nameof(Blow.Target)}", exchange.Arguments[1]);
+        Assert.Equal("to.X - from.X", exchange.Arguments[2]);
 
-        // And the decision itself is the policy's, not this file's — with the
+        // And both decisions are the policy's, not this file's — with the
         // difference handed over untouched. A minus sign here would turn the whole
         // party backwards while every check above stayed green.
         var decision = Assert.Single(AdapterSource.CallsTo(
@@ -73,6 +84,16 @@ public sealed class BodyMotionAdapterTests
         Assert.Equal(2, decision.Arguments.Count);
         Assert.Contains("BodyFacingOf(", decision.Arguments[0], StringComparison.Ordinal);
         Assert.Equal("dx", decision.Arguments[1]);
+
+        // The blow's decision is one call for the pair, so the two answers cannot
+        // be given by two different rules, and the striker is the first of them.
+        var pair = Assert.Single(AdapterSource.CallsTo(
+            AdapterSource.Body("TurnExchange"),
+            $"{nameof(BodyMotion)}.{nameof(BodyMotion.TurnToExchange)}"));
+        Assert.Equal(3, pair.Arguments.Count);
+        Assert.Contains("BodyFacingOf(attacker", pair.Arguments[0], StringComparison.Ordinal);
+        Assert.Contains("BodyFacingOf(target", pair.Arguments[1], StringComparison.Ordinal);
+        Assert.Equal("dx", pair.Arguments[2]);
     }
 
     /// <summary>
