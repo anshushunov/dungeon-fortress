@@ -16,6 +16,11 @@
     },
     "reading": "Четыре прогона — один checksum: картинка изменилась, каноническое состояние нет."
   },
+  "fullVerify": {
+    "how": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -GodotPath <godot-console> -TemporaryRoot C:\\gamedev\\_dftmp259",
+    "onCommit": "9df39ec — состояние с правкой, тестами, мутантами и кадрами; единственное, что добавлено после прогона, это сама запись о нём в этом файле",
+    "result": "{\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"full\",\"stagesExecuted\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\"],\"stagesNotRun\":[],\"seed\":424242,\"deterministicChecksum\":\"e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f\",\"changedSeedChecksum\":\"cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2\",\"loadChecksum\":\"7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045\",\"godotVersion\":\"4.7.1.stable.mono.official.a13da4feb\",\"godotExitCode\":0,\"screenshotRepeatable\":true}"
+  },
   "framePacing": {
     "how": "Godot --headless --fixed-fps <fps> --path src/DungeonFortress.Game -- --fixture prepared --frame-pacing 1400, через одноразовый драйвер .artifacts/259/pacing.ps1 вокруг scripts/GodotTools.ps1 (тот же приём, что у #244).",
     "fixture": "prepared",
