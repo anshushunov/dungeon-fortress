@@ -1,0 +1,124 @@
+{
+  "issue": 285,
+  "question": "Which of the nine verify.ps1 stages actually require the Godot engine to be resolvable, and why?",
+  "method": [
+    "Read every stage body in scripts/verify.ps1 (stageCatalog) and traced which Initialize-* prerequisites each one reaches, directly or transitively.",
+    "Confirmed empirically that this shell (spawned from the agent's bash session) has no Godot on PATH and no $env:GODOT4_CONSOLE, even though the machine has a real Godot 4.7.1 .NET install at C:\\gamedev\\Godot_v4.7.1-stable_mono_win64 registered only in the Windows user environment block, which child processes of this shell do not inherit.",
+    "Reproduced the reported bug on that basis: 'verify.ps1 -Stage scripts' fails at failedPhase=preflight with the unmodified script.",
+    "Ran 'verify.ps1 -Stage scripts -GodotPath <the real engine>' to confirm the scripts stage itself passes once the only blocker (engine resolution) is out of the way - proving nothing else in its body needs dotnet or Godot.",
+    "Measured whether the whole-solution restore/build that build/tests/mcp/sim/load all reach can succeed without the engine at all, using an isolated NuGet profile (fresh APPDATA/NUGET_PACKAGES, no pre-existing cache) with only nuget.org as a package source - i.e. the same isolation model verify.ps1 already uses, minus the engine-bundled source."
+  ],
+  "environment": {
+    "shell": "git bash spawned from the coordinating Claude session, no inherited GODOT4_CONSOLE, no godot4_console/godot4/godot on PATH",
+    "godotInstalledButNotInherited": "C:\\gamedev\\Godot_v4.7.1-stable_mono_win64\\Godot_v4.7.1-stable_mono_win64_console.exe (real install, GODOT4_CONSOLE set only in the Windows *user* environment block, which this bash-derived process tree does not see)"
+  },
+  "reproduction": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage scripts -TemporaryRoot C:\\gdftmp285",
+    "result": {
+      "event": "verification_result",
+      "status": "error",
+      "scope": "partial",
+      "failedPhase": "preflight",
+      "failedStage": null,
+      "stagesExecuted": [],
+      "reason": "Godot 4.7.1 .NET was not found. Use one of:\n  -GodotPath <console executable>\n  $env:GODOT4_CONSOLE=<console executable>\n  add godot4_console, godot4, or godot to PATH"
+    }
+  },
+  "positiveControl": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage scripts -TemporaryRoot C:\\gdftmp285 -GodotPath C:\\gamedev\\Godot_v4.7.1-stable_mono_win64\\Godot_v4.7.1-stable_mono_win64_console.exe",
+    "result": "verification_result status=ok, stagesExecuted=[scripts], elapsedSeconds=30.3 - confirms the scripts stage body itself has no other dependency on dotnet or Godot once the preflight's engine resolution is satisfied"
+  },
+  "nugetIsolationMeasurement": {
+    "why": "The comment guarding the unconditional engine resolve (verify.ps1, ~line 998) argues a partial run must not fall back to machine-wide NuGet state and must not check something other than what a full run checks, because the .NET builds' NuGet profile is written from the engine's bundled package source. This measures whether that is a hard technical requirement (Godot.NET.Sdk unresolvable without the local bundle) or a deliberate isolation choice (the bundle is used even though nuget.org would also work).",
+    "isolatedRestoreCommand": "APPDATA/LOCALAPPDATA/NUGET_PACKAGES/NUGET_HTTP_CACHE_PATH/DOTNET_CLI_HOME all repointed at a fresh, empty .artifacts/measure-isolated tree; NuGet.Config cleared and set to only nuget.org (no godot-local source); then 'dotnet restore DungeonFortress.sln'",
+    "isolatedRestoreResult": "Restored all 8 projects, including src/DungeonFortress.Game/DungeonFortress.Game.csproj (Sdk=\"Godot.NET.Sdk/4.7.1\"), with zero errors - Godot.NET.Sdk and GodotSharp are public nuget.org packages",
+    "isolatedBuildCommand": "same isolated profile, 'dotnet build DungeonFortress.sln --configuration Release --no-restore'",
+    "isolatedBuildResult": "Built all 8 projects with 0 warnings, 0 errors, including DungeonFortress.Game.dll, in 5.73s",
+    "conclusion": "Technically, build/tests/mcp/sim/load could restore and build without the engine present at all, sourcing Godot.NET.Sdk from nuget.org instead of the engine's bundled nupkgs. This is NOT adopted: substituting the package source is exactly 'checking something other than what a full run checks' in the sense the original design forbids, regardless of today's byte-for-byte equivalence, and the task's own instructions prohibit weakening NuGet isolation to satisfy a readiness criterion. The finding below treats this as a postановка correction instead: the readiness criterion asking for '-Stage scripts,build,tests' to run engine-free is not achievable without that prohibited trade-off, so only 'scripts' is made engine-free."
+  },
+  "stageTable": [
+    {
+      "stage": "scripts",
+      "needsEngine": false,
+      "evidence": "Its Body (scripts\\verify.ps1 stageCatalog.scripts) invokes only powershell -File on nine dependency-free test-*.ps1 scripts (test-verify-stages.ps1, test-temporary-root.ps1, test-godot-output-guard.ps1, test-screenshot-output-path.ps1, test-evidence-tools.ps1, test-check-claimed-sha256.ps1, test-search-codex-sessions.ps1, test-check-base-stale.ps1, test-github-auth-tools.ps1, test-ivan-mcp-config.ps1, test-domain-mcp-config.ps1, agent\\test-take-task.ps1). None of them call dotnet or resolve a real Godot executable: grep of -GodotPath/dotnet in those files turns up only synthetic strings used as test fixtures (e.g. test-godot-output-guard.ps1 passes a fake -GodotPath pointing at powershell.exe itself; test-domain-mcp-config.ps1 only asserts a config file's text does not contain the literal command \"dotnet\"). Confirmed by running the real stage with the engine hidden (reproduction above) and with it supplied (positive control above): the only failure without the engine is the preflight's own Resolve-GodotExecutable call."
+    },
+    {
+      "stage": "build",
+      "needsEngine": true,
+      "evidence": "stageCatalog.build calls Initialize-SolutionRestore then Initialize-SolutionBuild (scripts\\verify.ps1 lines 322-328), both of which run against DungeonFortress.sln, which includes src\\DungeonFortress.Game\\DungeonFortress.Game.csproj (Sdk=\"Godot.NET.Sdk/4.7.1\"). Per nugetIsolationMeasurement above, restoring that SDK does not strictly require the local engine bundle, but the codebase deliberately pins the source to the engine's own nupkgs so a partial run cannot silently substitute nuget.org for it; this stage is therefore engine-requiring by design, not by hard necessity."
+    },
+    {
+      "stage": "tests",
+      "needsEngine": true,
+      "evidence": "stageCatalog.tests calls Initialize-SolutionBuild (line 334) before running dotnet test on Simulation/Presentation/DomainMcp.Tests. Same whole-solution build as 'build', same reasoning."
+    },
+    {
+      "stage": "mcp",
+      "needsEngine": true,
+      "evidence": "stageCatalog.mcp calls Initialize-SolutionBuild (line 354) before starting the domain MCP launcher and verify-domain-mcp.ps1. Same whole-solution build."
+    },
+    {
+      "stage": "sim",
+      "needsEngine": true,
+      "evidence": "stageCatalog.sim calls Initialize-ScenarioAssembly (line 373), which - unless the 'solution-build' prerequisite already fired - calls Initialize-SolutionRestore (line 221, restores the whole DungeonFortress.sln, not just the scenario project) before building only tests\\DungeonFortress.Scenarios. The scenario project itself (Sdk=Microsoft.NET.Sdk, no Godot reference) would not need the engine on its own, but the whole-solution restore it triggers when run standalone does."
+    },
+    {
+      "stage": "load",
+      "needsEngine": true,
+      "evidence": "Identical path to 'sim': stageCatalog.load also calls Initialize-ScenarioAssembly (line 401)."
+    },
+    {
+      "stage": "godot",
+      "needsEngine": true,
+      "evidence": "stageCatalog.godot calls Initialize-GameHostBuild (line 423, restores+builds the Game project) and Initialize-EngineRuntime (line 430), which imports project assets by literally invoking $godot, then runs the headless smoke tests via Invoke-GodotChecked against $godot. Requires the actual executable, not just NuGet resolution."
+    },
+    {
+      "stage": "ui",
+      "needsEngine": true,
+      "evidence": "stageCatalog.ui calls Initialize-GameHostBuild and Initialize-EngineRuntime (lines 769-770), then captures golden UI frames by running $godot headless."
+    },
+    {
+      "stage": "screenshots",
+      "needsEngine": true,
+      "evidence": "stageCatalog.screenshots calls Initialize-GameHostBuild and Initialize-EngineRuntime (lines 799-800), then runs $godot to capture baseline and prepared-raid screenshots."
+    }
+  ],
+  "mutants": {
+    "round": 2,
+    "why": "Independent review of PR #289 applied A/B/C itself and found all three died on the same shared phrase assertion in scripts/test-verify-stages.ps1:210-215 (major finding 2), and that mutant A was recorded as prose here instead of a literal diff like B and C (minor finding 4). scripts/test-verify-stages.ps1 was restructured into four ordered, narrowly-scoped checks (commits ddeddda, a2f6bfe) so each mutation is caught by a distinct one; this section replaces the round-1 results with reruns against that restructured file.",
+    "method": "Applied each mutation as an uncommitted edit on top of commit a2f6bfe (the committed, restructured test file), ran 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-verify-stages.ps1', recorded exit code and the first thrown message, then reverted with 'git checkout -- scripts/verify.ps1' (confirmed clean via 'git status --short') before applying the next one.",
+    "A": {
+      "find": "    # The engine is resolved only when a selected stage actually needs it - see\n    # $engineFreeStages above for which ones do and why. A full run's refusal is\n    # unchanged: every stage but `scripts` needs the engine, so a full selection\n    # always falls into the \"requires it\" branch below and reports the same\n    # preflight failure it always has.\n    $engineRequiringStages = @($selectedStages | Where-Object { $_ -notin $engineFreeStages })\n    if ($engineRequiringStages.Count -gt 0) {\n        try {\n            $godot = Resolve-GodotExecutable -ExplicitPath $GodotPath\n            $godotVersion = Assert-GodotVersion -GodotPath $godot\n            $godotNuGetSource = Get-GodotNuGetSource -GodotPath $godot\n            Initialize-GodotNuGetEnvironment `\n                -ProfileRoot (Join-Path $artifactsRoot \"tool-profile\") `\n                -GodotNuGetSource $godotNuGetSource\n        }\n        catch {\n            if ($scope -eq \"full\") {\n                # Unchanged message: a full run has always needed the engine,\n                # so this is exactly the refusal it always reported.\n                throw\n            }\n            throw (\n                \"Stage(s) $($engineRequiringStages -join ', ') require the Godot \" +\n                \"engine and it could not be resolved: $($_.Exception.Message)\")\n        }\n    }",
+      "replace": "    # MUTANT A: unconditional resolve again.\n    $godot = Resolve-GodotExecutable -ExplicitPath $GodotPath\n    $godotVersion = Assert-GodotVersion -GodotPath $godot\n    $godotNuGetSource = Get-GodotNuGetSource -GodotPath $godot\n    Initialize-GodotNuGetEnvironment `\n        -ProfileRoot (Join-Path $artifactsRoot \"tool-profile\") `\n        -GodotNuGetSource $godotNuGetSource",
+      "caughtBy": "check 1 (-Stage scripts must succeed without the engine)",
+      "result": "red, exit 1. First thrown message: \"verify.ps1 -Stage scripts refused with a bogus -GodotPath even though its body never calls dotnet or Godot: ...reason\":\"Godot path from explicit -GodotPath override does not resolve to an executable: '...definitely-not-a-godot-binary-285.exe'.\"...\" - the unconditional resolve now applies to -Stage scripts too, so it is the first of the four checks to fail. Checks 2-4 never ran (script halts on first throw)."
+    },
+    "B": {
+      "find": "$engineFreeStages = @(\"scripts\")",
+      "replace": "$engineFreeStages = @(\"scripts\", \"godot\")",
+      "caughtBy": "check 2 (an engine-requiring stage must refuse in *preflight*, checked via failedPhase and stagesExecuted, not message wording)",
+      "result": "red, exit 1. First thrown message: \"verify.ps1 -Stage godot did not refuse in *preflight* - failedPhase was 'stage' and stagesExecuted was []. An engine-requiring stage that resolves the engine too late, or not at all, fails inside the stage body instead, which is what this catches.\" Preflight now succeeds for -Stage godot (godot is in the free set), and the stage body then crashes on its own unresolved $godot; check 1 (-Stage scripts) is unaffected and passes, so this is the first failure. Checks 3-4 never ran."
+    },
+    "C": {
+      "find": "            throw (\n                \"Stage(s) $($engineRequiringStages -join ', ') require the Godot \" +\n                \"engine and it could not be resolved: $($_.Exception.Message)\")",
+      "replace": "            throw (\n                \"A selected stage requires the Godot \" +\n                \"engine and it could not be resolved: $($_.Exception.Message)\")",
+      "caughtBy": "check 3 (the preflight refusal must name the stage)",
+      "result": "red, exit 1. First thrown message: \"verify.ps1 -Stage godot did not name the stage in its refusal. Expected to find 'Stage(s) godot require'; got: A selected stage requires the Godot engine and it could not be resolved: ...\" Checks 1 and 2 pass (scripts still succeeds; godot still refuses in preflight with empty stagesExecuted), so this is the first and only failure. Check 4 never ran."
+    },
+    "conclusion": "Each of A, B and C is now caught by its own check (1, 2 and 3 respectively), not by one shared assertion. A first round of this rerun (before commit a2f6bfe) found mutant B cascading into check 1 instead of check 2: check 1 spawns a real '-Stage scripts' child, whose body re-invokes test-verify-stages.ps1 on the same mutated verify.ps1, and only check 1 was gated against that recursion - so under mutant B the nested invocation's own check 2 failed, Invoke-Checked inside the scripts stage threw, and the outer check 1 reported failure instead of check 2. Fixed by gating all four checks behind the same recursion guard (commit a2f6bfe), confirmed by this rerun. Working tree restored to the committed state after each mutant ('git status --short' clean, verified after every revert)."
+  },
+  "fullVerifyRun": {
+    "why": "Major finding 3, independent review of PR #289: the PR body paraphrased the full run's verification_result ('status ok, scope full, all nine stages') without the raw JSON, so deterministicChecksum could not be checked against the value quoted elsewhere in the PR. This is that raw event, unedited except for line-wrapping for readability.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -GodotPath \"C:\\gamedev\\Godot_v4.7.1-stable_mono_win64\\Godot_v4.7.1-stable_mono_win64_console.exe\" -TemporaryRoot \"C:\\gdftmp285fin\"",
+    "ranAt": "commit 18a213b (before the round-2 test-verify-stages.ps1 changes in ddeddda/a2f6bfe; verify.ps1 itself is unchanged since c83e1db, so this run's engine-gate behavior still matches the current committed state)",
+    "rawEvent": "{\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"full\",\"stagesExecuted\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\"],\"stagesNotRun\":[],\"prerequisites\":[\"restore\",\"solution-build\",\"scenario-build\",\"game-host-build\",\"engine-runtime\"],\"seed\":424242,\"temporaryRoot\":\"C:\\\\gdftmp285fin\",\"deterministicChecksum\":\"e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f\",\"changedSeedChecksum\":\"cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2\",\"loadChecksum\":\"7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045\",\"loadElapsedMilliseconds\":[205.246,206.839],\"godotVersion\":\"4.7.1.stable.mono.official.a13da4feb\",\"godotExitCode\":0,\"godotControlsExitCode\":0,\"godotCameraExitCode\":0,\"invalidViewFailuresChecked\":5,\"hudGuardRegressionExitCode\":1,\"hudReadabilityRegressionExitCode\":1,\"hudSmallestPhysicalTextPixels\":{\"Authored\":8,\"OwnerMaximized\":16},\"cameraTransformRegressionExitCode\":1,\"cameraInputChecks\":15,\"cameraTransformChecks\":15,\"cameraBoundsChecks\":10,\"cameraPanChecks\":5,\"viewInvariantChecksum\":\"7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead\",\"viewCases\":[\"base\",\"overview-shifted\",\"detail-scaled-ui\",\"large-same-zoom\"],\"goblinScreenPixels\":{\"Overview\":30.909090909090907,\"Base\":61.818181818181813,\"Detail\":92.72727272727272},\"godotRaidExitCode\":0,\"screenshotRepeatable\":true,\"goldenUiFrames\":[\"stone-t190-loose-no-stockpile\",\"stone-t336-in-transit\",\"stone-t950-stockpile-full\"]}",
+    "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+    "log": "Kept locally at /tmp/full-verify-285.log (525 lines), not committed; the hudGuardRegressionExitCode/hudReadabilityRegressionExitCode/cameraTransformRegressionExitCode values of 1 above are expected - they are Invoke-GodotExpectedFailure negative fixtures inside the godot stage, not failures of the run itself."
+  },
+  "postановкаFinding": {
+    "issueCriterionAsWritten": "'-Stage scripts,build,tests' must run on a machine without Godot.",
+    "problem": "build and tests both reach Initialize-SolutionRestore/Initialize-SolutionBuild, which the codebase deliberately sources from the engine's bundled NuGet packages rather than nuget.org, specifically so a partial run cannot silently check a different package source than a full run does. nugetIsolationMeasurement above shows this substitution would technically work today, but adopting it to satisfy the criterion is the exact trade-off Issue #285's own instructions forbid ('Ослабление изоляции NuGet ради прохождения критерия - прямой запрет').",
+    "correctedCriterion": "Only '-Stage scripts' should run engine-free. Every other stage - including 'build' and 'tests' - still requires the engine, because all of them reach a whole-solution restore/build pinned to the engine's own NuGet source.",
+    "implementation": "verify.ps1 resolves the engine iff the selected stage set contains at least one stage other than 'scripts' ($engineFreeStages = @('scripts'))."
+  }
+}

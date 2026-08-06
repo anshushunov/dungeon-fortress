@@ -265,6 +265,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 `
 Стоило это двум агентам по нескольку неудачных прогонов, прежде чем факт попал
 в документ, — поэтому он записан здесь требованием, а не примечанием.
 
+**Исключение: `-Stage scripts`.** Единственная стадия, чьё тело не вызывает ни
+`dotnet`, ни движок (Issue #285; измерение — `evidence/285-stage-engine-need.json`
+в PR, закрывшем issue). Preflight резолвит движок, только если среди выбранных
+стадий есть хотя бы одна, кроме `scripts`, поэтому
+`.\scripts\verify.ps1 -Stage scripts -TemporaryRoot <каталог>` проходит без
+`-GodotPath` и без `GODOT4_CONSOLE`. Любая другая стадия — в том числе в
+сочетании со `scripts` — снова требует движок: `build`, `tests` и `mcp`
+собирают решение целиком, `sim` и `load` восстанавливают его через
+`Initialize-ScenarioAssembly`, а `godot`, `ui` и `screenshots` запускают сам
+исполняемый файл. Отказ по-прежнему называет стадию, которая потребовала
+движок, например `Stage(s) godot require the Godot engine...`.
+
 ### Обычный запуск
 
 Из корня репозитория:

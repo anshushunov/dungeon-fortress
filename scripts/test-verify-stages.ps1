@@ -5,6 +5,10 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "TemporaryRoot.ps1")
+# Dot-sourced so the engine-gate checks below can call Resolve-GodotExecutable
+# directly, in-process, to derive the expected full-scope refusal text from
+# the live function instead of a hand-copied string that could drift from it.
+. (Join-Path $PSScriptRoot "GodotTools.ps1")
 
 # Stages exist so that an agent can verify what it changed without paying for the
 # rest. That is only safe while three things hold, and none of them is visible in
@@ -1514,9 +1518,204 @@ Assert-VerifyRejects `
     -Arguments @("-Stage", $stageNames[0], "-Skip", $stageNames[0]) `
     -Message "verify.ps1 accepted an empty stage selection instead of failing."
 
-# --- the guard against itself ----------------------------------------------
+# --- the engine gate: only a selection that needs it may require it --------
+#
+# Issue #285. Before this, the preflight resolved the engine unconditionally,
+# so `-Stage scripts` refused on a machine without Godot even though nothing
+# in that stage's body calls dotnet or the engine - checked structurally
+# above (its own Summary says "Dependency-free"). Measured in
+# evidence/285-stage-engine-need.json: `scripts` is the only stage that
+# reaches neither Initialize-SolutionRestore / Initialize-SolutionBuild
+# (build, tests, mcp, and - through Initialize-ScenarioAssembly - sim and
+# load) nor the Godot executable itself (through Initialize-GameHostBuild and
+# Initialize-EngineRuntime - godot, ui, screenshots).
+#
+# A bogus -GodotPath makes every case below deterministic regardless of
+# whether the machine running this test happens to have Godot on PATH or in
+# $env:GODOT4_CONSOLE: Resolve-GodotExecutable rejects an explicit path that
+# does not resolve to an executable before it ever looks at the environment.
+#
+# Independent review of PR #289 applied the three mutants the Issue requires
+# (A: the unconditional resolve reinstated; B: the engine made optional for
+# `godot` specifically; C: the stage name stripped from the refusal message)
+# and found all three died on the *same* assertion below - the phrase check
+# in a shared loop - which proved coverage existed but not that each
+# mutation was caught for its own reason. The four checks below are ordered
+# and scoped so each of A, B and C is the first one to fail for its own
+# mutation:
+#   1. `-Stage scripts` must succeed without the engine - the property A
+#      removes (an unconditional resolve makes `scripts` stop being
+#      engine-free at all, so this is the first thing to break).
+#   2. an engine-requiring stage must refuse in *preflight*, not partway
+#      through its body - the property B removes (`godot` stops refusing in
+#      preflight and instead runs into its body, which then crashes on its
+#      own unresolved $godot; checked by failedPhase and an empty
+#      stagesExecuted, not by message wording, so a message-only mutation
+#      cannot satisfy it by accident).
+#   3. that preflight refusal must name the stage - the property C removes.
+#      Deliberately last and separate from check 2: a bare substring match on
+#      the stage name would still pass even with the naming wrapper deleted,
+#      because the underlying Godot-missing message already contains the
+#      word "Godot" - the engine's own name, not the stage's.
+#   4. a *full*-scope refusal is byte-for-byte the original message, with no
+#      "Stage(s) ... require" prefix ever. None of A, B or C touch this - it
+#      is Finding 1 from that same review: the guarantee existed only as a
+#      manual check in the PR body, so a future change that starts applying
+#      the stage-naming prefix to a full-scope refusal too would go
+#      unnoticed. The expected text is derived from the live
+#      Resolve-GodotExecutable rather than a hand-copied string, so it cannot
+#      drift from GodotTools.ps1 on its own.
 
 New-Item -ItemType Directory -Force -Path $sandbox | Out-Null
+$bogusGodotPath = Join-Path $sandbox "definitely-not-a-godot-binary-285.exe"
+
+function Get-VerifyRunResult {
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments
+    )
+
+    # Same pattern as Assert-VerifyRejects: the child's refusal goes to
+    # stderr, which this session has to read as output, not as its own
+    # terminating error.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $verifyScript @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Text = ($output | Out-String)
+    }
+}
+
+function Get-VerificationResultEvent {
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Text
+    )
+
+    # Parsed, not pattern-matched: failedPhase/stagesExecuted/scope/reason are
+    # read as structured fields so a check on one of them cannot be satisfied
+    # by wording that merely looks right elsewhere in the output.
+    $line = @($Text -split "\r?\n" | Where-Object {
+        $_ -match '"event":"verification_result"'
+    }) | Select-Object -Last 1
+    if ($null -eq $line) {
+        throw "No verification_result event in output: $Text"
+    }
+
+    return ($line | ConvertFrom-Json)
+}
+
+# All four checks below run only at the top level, never in a nested
+# invocation of this file. Check 1 spawns a real `-Stage scripts` run, whose
+# body invokes test-verify-stages.ps1 on the very same (possibly mutated)
+# verify.ps1 - so if checks 2-4 were not also gated here, a mutation that
+# breaks one of *them* would make that nested invocation fail too, cascading
+# up through Invoke-Checked inside the scripts stage and surfacing as check 1
+# going red instead of the check the mutation actually broke. Gating all four
+# the same way keeps them independent: the nested invocation (guard already
+# set) skips this whole section and only runs the rest of the file - the
+# structural checks below still cover the mutated script fully, just not via
+# a second, redundant pass through this section.
+if ($env:DUNGEON_FORTRESS_SKIP_ENGINE_GATE_SMOKE -ne "1") {
+    # --- check 1: `-Stage scripts` must succeed without the engine ---------
+    $env:DUNGEON_FORTRESS_SKIP_ENGINE_GATE_SMOKE = "1"
+    try {
+        $scriptsResult = Get-VerifyRunResult -Arguments @(
+            "-Stage", "scripts", "-TemporaryRoot", $sandbox, "-GodotPath", $bogusGodotPath
+        )
+    }
+    finally {
+        $env:DUNGEON_FORTRESS_SKIP_ENGINE_GATE_SMOKE = $null
+    }
+    if ($scriptsResult.ExitCode -ne 0) {
+        throw (
+            "verify.ps1 -Stage scripts refused with a bogus -GodotPath even " +
+            "though its body never calls dotnet or Godot: $($scriptsResult.Text)")
+    }
+    $scriptsEvent = Get-VerificationResultEvent -Text $scriptsResult.Text
+    if ([string]$scriptsEvent.status -ne "ok") {
+        throw (
+            "verify.ps1 -Stage scripts exited 0 but did not report a " +
+            "successful verification_result: $($scriptsResult.Text)")
+    }
+
+    # --- checks 2 and 3: preflight refusal, then its wording ---------------
+    foreach ($engineStage in @("godot", "build")) {
+        $result = Get-VerifyRunResult -Arguments @(
+            "-Stage", $engineStage, "-TemporaryRoot", $sandbox, "-GodotPath", $bogusGodotPath
+        )
+        if ($result.ExitCode -eq 0) {
+            throw (
+                "verify.ps1 -Stage $engineStage accepted a nonexistent -GodotPath " +
+                "instead of refusing in preflight.")
+        }
+
+        $event = Get-VerificationResultEvent -Text $result.Text
+        if ([string]$event.failedPhase -ne "preflight" -or @($event.stagesExecuted).Count -ne 0) {
+            throw (
+                "verify.ps1 -Stage $engineStage did not refuse in *preflight* - " +
+                "failedPhase was '$($event.failedPhase)' and stagesExecuted was " +
+                "[$($event.stagesExecuted -join ', ')]. An engine-requiring stage " +
+                "that resolves the engine too late, or not at all, fails inside " +
+                "the stage body instead, which is what this catches.")
+        }
+
+        $expectedPhrase = "Stage(s) $engineStage require"
+        if ([string]$event.reason -notmatch [regex]::Escape($expectedPhrase)) {
+            throw (
+                "verify.ps1 -Stage $engineStage did not name the stage in its " +
+                "refusal. Expected to find '$expectedPhrase'; got: $($event.reason)")
+        }
+    }
+
+    # --- check 4: a full-scope refusal is byte-for-byte the original message
+    $expectedFullScopeMessage = $null
+    try {
+        Resolve-GodotExecutable -ExplicitPath $bogusGodotPath | Out-Null
+        throw (
+            "Resolve-GodotExecutable unexpectedly succeeded against a bogus " +
+            "path; the full-scope byte-for-byte check has nothing to compare " +
+            "against.")
+    }
+    catch {
+        $expectedFullScopeMessage = $_.Exception.Message
+    }
+
+    $fullScopeResult = Get-VerifyRunResult -Arguments @(
+        "-TemporaryRoot", $sandbox, "-GodotPath", $bogusGodotPath
+    )
+    if ($fullScopeResult.ExitCode -eq 0) {
+        throw "verify.ps1 (full scope, no -Stage) accepted a nonexistent -GodotPath instead of refusing in preflight."
+    }
+    $fullScopeEvent = Get-VerificationResultEvent -Text $fullScopeResult.Text
+    if ([string]$fullScopeEvent.scope -ne "full") {
+        throw (
+            "verify.ps1 with no -Stage argument reported scope " +
+            "'$($fullScopeEvent.scope)', not 'full'; the byte-for-byte check " +
+            "needs a real full-scope run.")
+    }
+    if (-not [string]::Equals(
+            [string]$fullScopeEvent.reason, $expectedFullScopeMessage, [StringComparison]::Ordinal)) {
+        throw (
+            "verify.ps1's full-scope refusal is not byte-for-byte the " +
+            "original message.`nExpected: $expectedFullScopeMessage`n" +
+            "Got:      $($fullScopeEvent.reason)")
+    }
+}
+
+# --- the guard against itself ----------------------------------------------
 
 try {
     $mainFileName = [IO.Path]::GetFileName($verifyScript)
