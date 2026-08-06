@@ -19,6 +19,7 @@
       "Bash(git log *--output*)",
       "Bash(git show *--output*)",
       "Bash(rg *--pre*)",
+      "Bash(rg *--hostname-bin*)",
       "Bash(fd *--exec*)",
       "Bash(fd *-x*)",
       "Bash(fd *-X*)"
