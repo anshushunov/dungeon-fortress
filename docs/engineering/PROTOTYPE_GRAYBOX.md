@@ -820,7 +820,8 @@ The owner played the duel scene twice. After Issue #244: «на демке пл�
 хватает кадров как будто, просто две позы». Combat then got a ceiling —
 **readable rather than beautiful** — and the visual branch was wound up; that is
 an owner decision of 2026-08-06 and it is recorded in the gate log of
-[`docs/product/ROADMAP.md`](../product/ROADMAP.md), row «Потолок боя», which is
+[`docs/product/GATE_DECISIONS.md`](../product/GATE_DECISIONS.md), row «Потолок
+боя», which is
 where it is decided and amended. This section is the measurement it rests on, and
 there is no change of behaviour to go with it: the chain described above is the
 chain that ships.
@@ -916,7 +917,7 @@ lag, which would give the animation a 500–1000 ms window and is presentation-o
 touching neither the snapshot nor the checksum. That is an architecture decision
 under ADR 0011; it is **deferred and not refused**, and the decision, its ground
 and its candidate row live in the gate log of
-[`docs/product/ROADMAP.md`](../product/ROADMAP.md), row «Потолок боя» of
+[`docs/product/GATE_DECISIONS.md`](../product/GATE_DECISIONS.md), row «Потолок боя» of
 2026-08-06, not in this file.
 
 ## Wall volume and depth order (Issue #83)
@@ -2046,7 +2047,7 @@ How large a creature is against that grid is a second, separate question, and
 its answer is the owner's: `CameraView.BodyVisualScale = 1.70`, chosen on
 2026-08-01 from spike [#142](https://github.com/anshushunov/dungeon-fortress/issues/142)
 by clicking through the sizes in a live scene (gate log in
-[`ROADMAP.md`](../product/ROADMAP.md); 100 % was rejected outright, 200 % as too
+[`GATE_DECISIONS.md`](../product/GATE_DECISIONS.md); 100 % was rejected outright, 200 % as too
 large). A body is therefore drawn at `20 × 1.70 × tile / 22` world pixels —
 **61.82 px at the shipped 40 px tile**, 49.45 at 32 and 74.18 at 48 — which is
 30.91 screen pixels in the `0.5` overview and 123.64 at `2×`. Visual body size is

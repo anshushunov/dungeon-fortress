@@ -114,7 +114,7 @@ public static class CameraView
     ///
     /// <para>
     /// 1.70 is the owner's decision of 2026-08-01 on spike #142, recorded in the
-    /// gate log of <c>docs/product/ROADMAP.md</c>: he clicked through the sizes
+    /// gate log of <c>docs/product/GATE_DECISIONS.md</c>: he clicked through the sizes
     /// in a live scene and picked <em>170 % of the previous size</em>. 100 % was
     /// rejected outright and 200 % as too large; the trade he named is that at
     /// 150 % fighters in a corridor still have gaps between them and the grid
