@@ -13,6 +13,15 @@
       "Bash(gh pr list:*)",
       "Bash(git rev-parse:*)",
       "Bash(gh issue list:*)"
+    ],
+    "deny": [
+      "Bash(git diff *--output*)",
+      "Bash(git log *--output*)",
+      "Bash(git show *--output*)",
+      "Bash(rg *--pre*)",
+      "Bash(fd *--exec*)",
+      "Bash(fd *-x*)",
+      "Bash(fd *-X*)"
     ]
   }
 }
