@@ -109,6 +109,35 @@
           "revertedAndReverifiedGreen": true
         }
       ]
+    },
+    "d_theGuardOfTheReader": {
+      "description": "Added in the review round of PR #292. Finding F1: the guard that says 'the reader found the adapter' asserted File.Exists over paths it had just received from Directory.GetFiles, so it could not fail. The two mutants below are run on the committed state f6c3b20 and are what makes the replacement a check rather than a sentence.",
+      "mutants": [
+        {
+          "name": "d-i: an adapter file moves into a subfolder of the project",
+          "file": "src/DungeonFortress.Game/Main.Rendering.cs",
+          "line": null,
+          "edit": "git mv src/DungeonFortress.Game/Main.Rendering.cs src/DungeonFortress.Game/rendering/Main.Rendering.cs  (Directory.GetFiles is not recursive, so the reader stops seeing the file while it still compiles into the class)",
+          "commands": [
+            "dotnet build DungeonFortress.sln -c Release",
+            "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --no-build --filter FullyQualifiedName~The_source_reader_finds_the_adapter_and_its_bodies"
+          ],
+          "result": "RED. 1 of 1 failed: 'Main.Rendering.cs is one of the files every check below reads, and the reader did not open it. Found instead: Main.DrawBodies.cs, Main.DrawOverlays.cs, Main.DrawWorld.cs, Main.Frame.cs, Main.Hud.cs, Main.HudText.cs, Main.Player.cs, Main.Session.cs, Main.Verification.cs, Main.cs.' The build stays green, which is the point: the class is intact and only the reader's view of it shrank.",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "d-ii: the fix itself is reverted while the file is still moved",
+          "file": "tests/DungeonFortress.Presentation.Tests/WorldDrawPassGuardTests.cs",
+          "line": 93,
+          "edit": "the RequiredAdapterFiles loop and the ordinal-order assertion  ->  the pre-fix body: Assert.True(File.Exists(AdapterSource.FullPath()), ...); Assert.Contains(AdapterSource.FullPath(), AdapterSource.FullPaths()); foreach (var path in AdapterSource.FullPaths()) { Assert.True(File.Exists(path), ...); }",
+          "commands": [
+            "dotnet build DungeonFortress.sln -c Release",
+            "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --no-build --filter FullyQualifiedName~The_source_reader_finds_the_adapter_and_its_bodies"
+          ],
+          "result": "GREEN — 1 of 1 passed with the adapter file still hidden in the subfolder. This is the mutant that makes d-i mean something: without it, d-i would only show that some assertion fires, not that the new one is the reason. The pre-fix guard cannot see the loss, and that is finding F1 reproduced as a measurement.",
+          "revertedAndReverifiedGreen": true
+        }
+      ]
     }
   },
   "notCovered": [
