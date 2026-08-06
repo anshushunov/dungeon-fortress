@@ -83,6 +83,22 @@
       "evidence": "stageCatalog.screenshots calls Initialize-GameHostBuild and Initialize-EngineRuntime (lines 799-800), then runs $godot to capture baseline and prepared-raid screenshots."
     }
   ],
+  "mutants": {
+    "method": "Applied each mutation as an uncommitted edit on top of the committed fix (312671a), ran scripts/test-verify-stages.ps1, recorded exit code, then reverted with 'git checkout -- scripts/verify.ps1' before applying the next one.",
+    "A": {
+      "change": "Reverted the conditional preflight to the original unconditional 4-line Resolve-GodotExecutable/Assert-GodotVersion/Get-GodotNuGetSource/Initialize-GodotNuGetEnvironment block.",
+      "result": "red (exit 1) - the '-Stage godot did not name the stage in its refusal' assertion failed because the bogus -GodotPath now applies unconditionally and the refusal reverted to the bare not-found message with no 'Stage(s) godot require' prefix."
+    },
+    "B": {
+      "change": "$engineFreeStages = @('scripts', 'godot') - made the engine optional for the godot stage while leaving its body (Initialize-GameHostBuild, Initialize-EngineRuntime, direct $godot use) unchanged.",
+      "result": "red (exit 1) - preflight now passed for -Stage godot, but the stage body crashed on 'the variable \"$godot\" cannot be retrieved because it has not been set' (strict mode) at verify.ps1:427; the '-Stage godot did not name the stage in its refusal' assertion caught the mismatch because the expected 'Stage(s) godot require' phrase was never produced."
+    },
+    "C": {
+      "change": "Reworded the partial-run throw from 'Stage(s) $($engineRequiringStages -join ', ') require the Godot engine...' to a stage-name-free 'A selected stage requires the Godot engine...'.",
+      "result": "red (exit 1) - the '-Stage godot did not name the stage in its refusal' assertion failed to find 'Stage(s) godot require' in the output."
+    },
+    "conclusion": "All three mutants turn scripts/test-verify-stages.ps1 red on the committed fix; the working tree was restored to the committed state after each one ('git status --short' clean)."
+  },
   "postановкаFinding": {
     "issueCriterionAsWritten": "'-Stage scripts,build,tests' must run on a machine without Godot.",
     "problem": "build and tests both reach Initialize-SolutionRestore/Initialize-SolutionBuild, which the codebase deliberately sources from the engine's bundled NuGet packages rather than nuget.org, specifically so a partial run cannot silently check a different package source than a full run does. nugetIsolationMeasurement above shows this substitution would technically work today, but adopting it to satisfy the criterion is the exact trade-off Issue #285's own instructions forbid ('Ослабление изоляции NuGet ради прохождения критерия - прямой запрет').",
