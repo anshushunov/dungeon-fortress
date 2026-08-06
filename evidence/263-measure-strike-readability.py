@@ -779,6 +779,10 @@ def check_chain(source: str, effects: str) -> bool:
 
     agreed = True
     for chain in ("attacker", "target"):
+        # Per chain, so that a chain that matches says so even when the other one
+        # did not. The return value below is still the conjunction: the guard in
+        # `main` fails if either chain drifted.
+        matched = True
         left, right = shipped[chain], stated[chain]
         if len(left) != len(right):
             print(f"{chain}: {len(left)} keyframes in the source, {len(right)} stated")
@@ -791,16 +795,16 @@ def check_chain(source: str, effects: str) -> bool:
                         f"{chain} at {source_key['at']}: {field} is "
                         f"{source_key[field]} in the source and {stated_key[field]} "
                         "in the transcription")
-                    agreed = False
+                    agreed = matched = False
             if source_key["angles"] != dict(stated_key.get("angles", {})):
                 print(f"{chain} at {source_key['at']}: the angles differ")
-                agreed = False
+                agreed = matched = False
             if source_key["offsets"] != {
                     name: list(value)
                     for name, value in stated_key.get("offsets", {}).items()}:
                 print(f"{chain} at {source_key['at']}: the slides differ")
-                agreed = False
-        print(f"{chain}: {'matches' if agreed else 'DIFFERS FROM'} {source}")
+                agreed = matched = False
+        print(f"{chain}: {'matches' if matched else 'DIFFERS FROM'} {source}")
     return agreed
 
 
@@ -809,7 +813,13 @@ def check_chain(source: str, effects: str) -> bool:
 DUEL_CROP = (300, 180, 700, 440)
 
 
-def frame_sheet(captures: list[str], path: str, reduce_to_working_zoom: bool) -> None:
+def frame_sheet(
+    captures: list[str],
+    path: str,
+    reduce_to_working_zoom: bool,
+    crop: tuple[int, int, int, int] | None = None,
+    zoom: int = 1,
+) -> None:
     """A sheet out of frames the engine drew, cropped to the two bodies.
 
     `--demo-duel` forces the largest declared zoom, 2.0, and does not take
@@ -818,10 +828,17 @@ def frame_sheet(captures: list[str], path: str, reduce_to_working_zoom: bool) ->
     geometry a zoom of 1.0 gives; it is not the same resampling, and it is
     labelled as a reduction rather than as a capture for that reason.
     """
-    panels = [Image.open(name).crop(DUEL_CROP) for name in captures]
+    panels = [Image.open(name).crop(crop or DUEL_CROP) for name in captures]
     if reduce_to_working_zoom:
         panels = [
             panel.resize((panel.width // 2, panel.height // 2), Image.LANCZOS)
+            for panel in panels
+        ]
+    if zoom != 1:
+        # Nearest neighbour, so a magnified sheet shows the pixels the engine drew
+        # and not a resampling of them.
+        panels = [
+            panel.resize((panel.width * zoom, panel.height * zoom), Image.NEAREST)
             for panel in panels
         ]
     columns = 3
@@ -863,6 +880,8 @@ def main() -> None:
     parser.add_argument("--frame-sheet")
     parser.add_argument("--frames", nargs="*", default=[])
     parser.add_argument("--working-zoom", action="store_true")
+    parser.add_argument("--crop", help="x0,y0,x1,y1 in the captured frame")
+    parser.add_argument("--zoom", type=int, default=1)
     parser.add_argument("--json")
     arguments = parser.parse_args()
 
@@ -947,7 +966,13 @@ def main() -> None:
             rig, arguments.rig_dir, (-60, -50, -45, -40, -35, 35, 40, 45, 50, 60))
 
     if arguments.frame_sheet:
-        frame_sheet(arguments.frames, arguments.frame_sheet, arguments.working_zoom)
+        frame_sheet(
+            arguments.frames,
+            arguments.frame_sheet,
+            arguments.working_zoom,
+            (tuple(int(value) for value in arguments.crop.split(","))
+             if arguments.crop else None),
+            arguments.zoom)
 
     if arguments.sheet:
         contact_sheet(rig, arguments.rig_dir, arguments.sheet, arguments.steps)

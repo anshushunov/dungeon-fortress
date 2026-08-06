@@ -698,10 +698,20 @@ once, which compiles, animates and looks like a goblin sucked into the spear it
 just planted. That is why the direction is held by a structural guard over
 `Main.cs` and not by a value comparison inside a test.
 
-**The lean is a rotation of the whole frame**, not of the torso against the
-legs. That is a seam decision: turning the trunk against the lower body opens
-the widest gap of any joint in this rig, and turning the frame moves nothing
-relative to anything.
+**The lean is a rotation of the whole frame**, not an angle on the `torso` part.
+An earlier revision of this paragraph gave the reason as "turning the trunk
+against the lower body opens the widest gap of any joint in this rig", and that
+was wrong twice over. `torso` is the rig's **root** — `parent: null`, every other
+part is its descendant — so an angle on it turns the whole figure and cannot turn
+the trunk against anything; and by `evidence/244-rig-gaps.json` the worst seam
+`torso` reaches is 1465 px², *less* than `arm_near` (2393) and `head` (1702), so
+it is not the widest joint either. That second number is inflated anyway:
+`slit_pixels` compares a posed body with an **unturned** rest pose, so a figure
+that only moved reads as a figure that tore — turn the rest pose the same way and
+the same poses measure 0 (Issue #263, `evidence/263-measurement.json`,
+`rigidRotation`). The decision stands, for the reason that survives: a lean tips
+the body about its feet while the parts keep their places relative to each other,
+and the only thing in this rig that does that is the drawing frame.
 
 **One contact effect: a spark.** Eight rays from the point the blow arrives at,
 for the window between contact and the follow-through. The choice is
@@ -807,11 +817,13 @@ duel, the same tick, the same camera, differing in the body and in nothing else.
 The owner played the duel scene twice. After Issue #244: «на демке плохо видно,
 но движения в целом ок». After Issue #259, and sharper: «нет плавности движения,
 очень быстрые удары даже на скорости 0.5 (должны быть сильно медленнее), не
-хватает кадров как будто, просто две позы». He then decided that combat gets a
-ceiling — **readable rather than beautiful** — and that the visual branch stops
-here. So this section is the measurement that decision rests on, and there is no
-change of behaviour to go with it: the chain described above is the chain that
-ships.
+хватает кадров как будто, просто две позы». Combat then got a ceiling —
+**readable rather than beautiful** — and the visual branch was wound up; that is
+an owner decision of 2026-08-06 and it is recorded in the gate log of
+[`docs/product/ROADMAP.md`](../product/ROADMAP.md), row «Потолок боя», which is
+where it is decided and amended. This section is the measurement it rests on, and
+there is no change of behaviour to go with it: the chain described above is the
+chain that ships.
 
 `evidence/263-measure-strike-readability.py` composites the rig the way
 `evidence/244-measure-rig-gaps.py` does, puts it through the rest of what
@@ -837,28 +849,49 @@ can change that: the chain is a function of the share of *its own tick* that has
 been drawn.
 
 **«Просто две позы» is arithmetic, not taste.** A 60 Hz display draws that tick in
-ten frames at speed 1 and twenty at speed 0.5. The wind-up keyframe sits at 0.28
-and contact at 0.35 — seven hundredths of a tick, i.e. 12 ms — so at speed 0.5
-exactly **one drawn frame of twenty** changes more than half as much silhouette as
-the busiest one (404 px against neighbours of about 130). The eye gets the pose
-before that frame and the pose after it.
+ten frames at speed 1 and twenty at speed 0.5. At speed 0.5 exactly **one drawn
+frame of twenty** changes more than half as much silhouette as the busiest one:
+the profile is `153 159 152 139 126 185 404 61 60 65 …`, so the peak of 404 px
+stands between neighbours of **185 and 61**. The eye gets the pose before that
+frame and the pose after it.
 
-**And the body's own outline barely moves.** At the widest point of the chain the
-whole figure changes 1087 px of silhouette, but with the lean, the throw and the
-stretch taken out — i.e. counting only what the parts do — the body without its
-striking arm changes **151 px**, a tenth of its own standing area. Nearly
-everything an eye sees is the figure sliding and tilting rigidly. The trunk is one
-PNG with no waist joint, so the arched back the flat pack's `windup` was drawn
-with is not reachable by posing at all. The A/B is
+The cause is the interpolation, not the frame budget. The wind-up keyframe sits at
+0.28 and contact at 0.35 — seven hundredths of a tick, which is 11.7 ms at speed 1
+and **23.3 ms at speed 0.5, i.e. 1.4 drawn frames**, not less than one. What makes
+that span carry everything is that the chain is straight lines between keyframes:
+speed is constant inside a span and changes in one step at each keyframe, so the
+span with the largest change per unit of tick takes the whole movement and the
+others get almost none. The largest step of speed between neighbouring frames is
+**80–85 % of the peak**.
+
+**And the body's own outline barely moves.** At the busiest frame of the chain
+(frame 3, the wind-up) the whole figure changes 1087 px of silhouette, but with
+the lean, the throw and the stretch taken out — i.e. counting only what the parts
+do — the body without its striking arm changes **79 px**, 6 % of its own 1259 px
+standing area. Its widest point anywhere on the chain is 151 px (frame 6), 12 %.
+Nearly everything an eye sees is the figure sliding and tilting rigidly. The trunk
+is one PNG with no waist joint, so the arched back the flat pack's `windup` was
+drawn with is not reachable by posing at all. The A/B is
 `evidence/263-frames-working-zoom.png`: the same three moments of the same tick,
-drawn by the rig and by the flat pack, reduced to the working zoom.
+drawn by the rig and by the flat pack, reduced to the working zoom. Note what that
+sheet does **not** show — `BlowReadout` assigns a `BodyActionPhase` once per tick
+and the scrub does not enter the choice of sprite, so the flat striker is the same
+`windup` PNG on all three frames and only slides, tilts and squashes. Inside one
+tick the rig gives *more* change, not less; what the flat pack has and the rig
+cannot reach is the drawn turn of the trunk in that single PNG.
 
 Two things the measurement found that nobody had asked about:
 
-- **The amplitude of the rig is not spent.** Issue #244 swept ±30° and stopped;
-  past that, the far arm swings backwards to +60° for **0 px²** of seam and the
-  near arm rises to −60° for 53. Whatever is wrong with the blow, it is not that
-  the cutout has run out of angles.
+- **The near shoulder still has unused travel.** Issue #244 swept ±30° and
+  stopped; past that, `arm_near` rises to −35, −40, −50 and −60° for 25, 22, 36
+  and 53 px² of seam, while the shipped chain goes no further than −30°. The far
+  arm's `0 px²` at +30…+60° is **not** the same finding and must not be read as
+  one: `arm_far` is drawn *under* the trunk (`z_index` 1 against 2), so the free
+  angle buys the arm disappearing behind the body rather than a wider silhouette —
+  measured, the figure loses 1302 px of outline and gains 90, 143 and 188 at +30,
+  +45 and +60. The sweep also runs the body **unarmed** (`GAPS.compose` without
+  `show_weapon`), which is right for seams and says nothing about how a wind-up
+  reads with a spear in it.
 - **The seam measurement cannot tell a rigid turn from a tear.** `torso` is the
   rig's root and every part hangs off it, so an angle on the root turns the whole
   figure and no joint can open — yet `slit_pixels` prices it at 617–1423 px²,
@@ -874,14 +907,17 @@ the angles are ever touched again.
 
 **What "приятно смотреть" runs into.** Both limits are real and they are not
 equal. The cutout limit is real but narrow: the trunk cannot bend, so the body's
-own outline is stuck near the 151 px it moves today, and lifting that needs art
+own outline is stuck near the 79–151 px it moves today, and lifting that needs art
 (a waist joint, or a redrawn trunk). The tick limit is the binding one: an
 exchange that lives inside one tick has 167 ms at speed 1, three to five times
 under the reference, and no amount of posing buys time the tick does not have.
 Treating it would mean drawing a tick or two behind the simulation — presentation
 lag, which would give the animation a 500–1000 ms window and is presentation-only,
 touching neither the snapshot nor the checksum. That is an architecture decision
-under ADR 0011 and the owner has **deferred** it rather than refused it.
+under ADR 0011; it is **deferred and not refused**, and the decision, its ground
+and its candidate row live in the gate log of
+[`docs/product/ROADMAP.md`](../product/ROADMAP.md), row «Потолок боя» of
+2026-08-06, not in this file.
 
 ## Wall volume and depth order (Issue #83)
 
