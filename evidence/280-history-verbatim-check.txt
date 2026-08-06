@@ -1,0 +1,30 @@
+Source: git show 0beb5a9:docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md, lines 3157-3550 (1-indexed)
+Target: docs/design/PROTOTYPE_01_CONTRACT_HISTORY.md, lines 17-410 (after 16-line header)
+orig_block lines: 394
+new_block lines:  394
+differing opcodes: 7
+-- replace orig[0:1] new[0:1]
+   ORIG: #### Что изменилось в инвариантах 4 и 11 и по какому решению
+   NEW : ## Что изменилось в инвариантах 4 и 11 и по какому решению
+-- replace orig[109:110] new[109:110]
+   ORIG: #### Что сдвинуло правило подхода (10.3) — измерение под решением владельца 2026-08-01
+   NEW : ## Что сдвинуло правило подхода (10.3) — измерение под решением владельца 2026-08-01
+-- replace orig[146:147] new[146:147]
+   ORIG: #### Три канала, и ни один не покрывает оба падения
+   NEW : ## Три канала, и ни один не покрывает оба падения
+-- replace orig[200:201] new[200:201]
+   ORIG: #### Какой выход выбран и что стало с остальными
+   NEW : ## Какой выход выбран и что стало с остальными
+-- replace orig[227:228] new[227:228]
+   ORIG: #### Красных проверок семь, и три из них принадлежат этой же развилке
+   NEW : ## Красных проверок семь, и три из них принадлежат этой же развилке
+-- replace orig[278:279] new[278:279]
+   ORIG: #### Что было снято и почему
+   NEW : ## Что было снято и почему
+-- replace orig[337:338] new[337:338]
+   ORIG: #### Что измерено вне матрицы
+   NEW : ## Что измерено вне матрицы
+
+Result: 394/394 lines match; 7/394 lines differ, all seven are heading-level
+downgrades '#### ' -> '## ' at the seven subsection titles. No word of body
+text changed.
