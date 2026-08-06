@@ -19,7 +19,7 @@
   "briefIsWrongAboutWhichNumberMoves": {
     "finding": "The brief asks mutant A to move `deterministicChecksum` and mutant B to move `viewInvariantChecksum`. Neither is possible, and the reason is in the pipeline rather than in the cut.",
     "deterministicChecksum": "Produced by the `sim` stage from DungeonFortress.Simulation.SimulationWorld through SimulationScenario.Run — a different class in a file this change does not touch. Measured: with mutant A in place it stays at e65273aa..., byte for byte.",
-    "viewInvariantChecksum": "Produced by the `godot` stage as the canonical PrototypeWorld checksum, asserted equal across four camera/frame/UI-scale cases. It is by construction blind to everything the drawing files do — that is the property the stage exists to prove. Measured as mutant b-ii below.",
+    "viewInvariantChecksum": "Produced by the `godot` stage as the canonical PrototypeWorld checksum, asserted equal across four camera/frame/UI-scale cases. It is by construction blind to everything the drawing files do — that is the property the stage exists to prove. Measured as mutant b-ii below. It is NOT a null check overall, and saying so would be the opposite overclaim: it covers the simulation half, which mutant a-i moved (9df8c180.../b2572e4c... instead of 7e9fffa7...), and its first eight characters are pinned a second time inside the summary line of tests/golden/ui/stone-t190-loose-no-stockpile.json ('•  7e9fffa7  •'), with the other two golden frames pinning 4864e76a and aa16b043 the same way. Null on the drawing half, alive on the simulation half.",
     "consequence": "Mutant A was therefore measured against the checks that do cover the moved simulation code (`godot` stage and the Simulation test suite), and mutant B against the check that does cover a moved presentation value (`godot` stage HUD readability). Both are stated as run, not as asked."
   },
   "halves": {
@@ -59,7 +59,9 @@
           "commands": [
             "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify.ps1 -Stage godot,ui -TemporaryRoot C:\\df-tmp-281 -GodotPath <godot>"
           ],
-          "result": "GREEN — the mutant survives. viewInvariantChecksum unchanged at 7e9fffa7..., both stages ok. ProgressTicks in this branch is a counter that job completion does not read, so doubling it changes no canonical fact. Pre-existing, unrelated to the cut, and not fixed here.",
+          "result": "GREEN — the mutant survives. viewInvariantChecksum unchanged at 7e9fffa7..., both stages ok.",
+          "diagnosis": "Job completion does not read ProgressTicks in this branch — that much is true, and it was the whole of the original diagnosis. The conclusion drawn from it, 'so doubling it changes no canonical fact', is wrong and is corrected here after independent review of PR #292. The field IS canonical: PrototypeCanonical.cs writes it three times (line 356 for a dig designation, 394 for a build site, 489 for a job), and PrototypeWorld.State.cs projects it into PrototypeDigDesignationSnapshot and the build-site snapshot as progressTicks, as requiredTicks (ProgressTicks + RemainingTicks) and as the status 'dig_in_progress'. The mutant survives because the smoke run holds no unfinished Dig or Build job at the tick the snapshot is taken, so the doubled counter never reaches the document. That is a hole in the scenario, not a dead field, and the two diagnoses point at different next steps: the first would say 'delete the field', the second says 'the smoke run needs a tick with work in progress'.",
+          "note": "Pre-existing, unrelated to the cut, and not fixed here.",
           "revertedAndReverifiedGreen": true
         }
       ]

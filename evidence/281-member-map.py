@@ -14,10 +14,21 @@ Usage:
         src/DungeonFortress.Simulation/PrototypeWorld.cs PrototypeWorld \
         src/DungeonFortress.Game/Main.cs Main \
         > evidence/281-member-map.json
+
+    python evidence/281-member-map.py cohesion \
+        evidence/281-member-map.json evidence/281-split-verification.json \
+        > evidence/281-cohesion.json
+
+The `cohesion` subcommand answers one question about a chosen cut: how much of
+the class's own call graph it keeps inside a file, next to what an arithmetic
+cut would keep and what the best possible cut could keep. It takes the chosen
+boundaries from the split verification report rather than from a table of its
+own, so the numbers cannot drift away from the files that were actually written.
 """
 
 from __future__ import annotations
 
+import collections
 import json
 import re
 import sys
@@ -414,8 +425,199 @@ def analyse(path: str, class_name: str) -> dict:
     }
 
 
+CAP_BYTES = 80 * 1024
+
+
+def _graph(members: list[dict]) -> tuple[collections.Counter, dict]:
+    """Undirected weight between members that name each other, plus edges by index."""
+    index = {m["name"]: i for i, m in enumerate(members)}
+    weight: collections.Counter = collections.Counter()
+    for i, member in enumerate(members):
+        for other in member["references"]:
+            j = index.get(other)
+            if j is not None and j != i:
+                weight[(min(i, j), max(i, j))] += 1
+    edges = collections.defaultdict(list)
+    for (i, j), count in weight.items():
+        edges[j].append((i, count))
+    return weight, edges
+
+
+def _internal_table(members: list[dict], edges: dict) -> dict:
+    """internal[(a, b)] = weight of pairs entirely inside members[a:b]."""
+    n = len(members)
+    internal = {}
+    for a in range(n):
+        running = 0
+        for b in range(a + 1, n + 1):
+            for i, count in edges[b - 1]:
+                if i >= a:
+                    running += count
+            internal[(a, b)] = running
+    return internal
+
+
+def _prefix(members: list[dict]) -> list[int]:
+    out = [0]
+    for member in members:
+        out.append(out[-1] + member["bytes"])
+    return out
+
+
+def _score(internal: dict, groups: list[tuple[int, int]]) -> int:
+    return sum(internal[g] for g in groups)
+
+
+def _best_partition(
+    members: list[dict], internal: dict, groups: int, low: int, high: int
+) -> tuple[list[tuple[int, int]], int]:
+    """Contiguous partition into `groups` parts of size in [low, high], best score."""
+    n = len(members)
+    pre = _prefix(members)
+    neg = -(10**9)
+    best = [[neg] * (groups + 1) for _ in range(n + 1)]
+    cut = [[None] * (groups + 1) for _ in range(n + 1)]
+    best[0][0] = 0
+    for b in range(1, n + 1):
+        for k in range(1, groups + 1):
+            for a in range(b - 1, -1, -1):
+                size = pre[b] - pre[a]
+                if size > high:
+                    break
+                if size < low:
+                    continue
+                if best[a][k - 1] == neg:
+                    continue
+                value = best[a][k - 1] + internal[(a, b)]
+                if value > best[b][k]:
+                    best[b][k] = value
+                    cut[b][k] = a
+    result = []
+    b, k = n, groups
+    while k > 0:
+        a = cut[b][k]
+        result.append((a, b))
+        b, k = a, k - 1
+    return list(reversed(result)), best[n][groups]
+
+
+def _equal_byte_partition(members: list[dict], groups: int) -> list[tuple[int, int]]:
+    pre = _prefix(members)
+    target = pre[-1] / groups
+    out = []
+    a = 0
+    for k in range(1, groups):
+        b = min(range(a + 1, len(members) + 1), key=lambda x: abs(pre[x] - target * k))
+        out.append((a, b))
+        a = b
+    out.append((a, len(members)))
+    return out
+
+
+def cohesion(map_path: str, verification_path: str) -> dict:
+    """Score the cut recorded in the split verification report."""
+    member_map = json.load(open(map_path, encoding="utf-8"))
+    verification = json.load(open(verification_path, encoding="utf-8"))
+
+    chosen_by_source: dict[str, list[tuple[str, int, int]]] = {}
+    for entry in verification["files"]:
+        first, last = (int(part) for part in entry["source_lines"].split("-"))
+        chosen_by_source.setdefault(entry["source"], []).append(
+            (entry["file"], first, last)
+        )
+
+    report = {
+        "issue": 281,
+        "command": (
+            f"python evidence/281-member-map.py cohesion {map_path} "
+            f"{verification_path} > evidence/281-cohesion.json"
+        ),
+        "metric": (
+            "Share of the class's own member-to-member references that stay inside "
+            "one file. References come from the 'references' field of the member "
+            "map, which is a textual approximation, deliberately over- rather than "
+            "under-inclusive. A pair is counted once, undirected."
+        ),
+        "capBytes": CAP_BYTES,
+        "files": [],
+    }
+
+    for source in member_map["files"]:
+        members = source["members"]
+        chosen_ranges = sorted(chosen_by_source[source["file"]], key=lambda r: r[1])
+        starts = {m["line_start"]: i for i, m in enumerate(members)}
+        ends = {m["line_end"]: i for i, m in enumerate(members)}
+        chosen = [(starts[a], ends[b] + 1) for _, a, b in chosen_ranges]
+        weight, edges = _graph(members)
+        internal = _internal_table(members, edges)
+        pairs = sum(weight.values())
+        parts = len(chosen)
+        sizes = [_prefix(members)[b] - _prefix(members)[a] for a, b in chosen]
+
+        chosen_score = _score(internal, chosen)
+        arithmetic = _equal_byte_partition(members, parts)
+        arithmetic_score = _score(internal, arithmetic)
+        _, cap_score = _best_partition(members, internal, parts, 0, CAP_BYTES)
+        band_groups, band_score = _best_partition(
+            members, internal, parts, min(sizes), max(sizes)
+        )
+
+        def pct(value: int) -> float:
+            return round(value / pairs * 100, 1)
+
+        report["files"].append(
+            {
+                "source": source["file"],
+                "parts": parts,
+                "memberPairs": pairs,
+                "chosen": {
+                    "internalPairs": chosen_score,
+                    "internalPercent": pct(chosen_score),
+                    "partBytes": sizes,
+                    "files": [name for name, _, _ in chosen_ranges],
+                },
+                "arithmeticEqualBytes": {
+                    "internalPairs": arithmetic_score,
+                    "internalPercent": pct(arithmetic_score),
+                    "note": "Same number of parts, cut as close to equal bytes as member boundaries allow.",
+                },
+                "bestUnderTaskConstraint": {
+                    "internalPairs": cap_score,
+                    "internalPercent": pct(cap_score),
+                    "note": (
+                        "Same number of parts, only the task's own 80 KB ceiling. This is "
+                        "the honest ceiling of the metric, and it is degenerate: it is "
+                        "reached by a few parts at the ceiling next to parts of one member, "
+                        "which is not a cut anyone would ship. It is reported because a "
+                        "ceiling computed under a constraint borrowed from the chosen cut "
+                        "would flatter the choice."
+                    ),
+                },
+                "bestWithinChosenSizeBand": {
+                    "internalPairs": band_score,
+                    "internalPercent": pct(band_score),
+                    "band": [min(sizes), max(sizes)],
+                    "firstLines": [members[a]["line_start"] for a, _ in band_groups],
+                    "note": (
+                        "Same number of parts, each between the smallest and the largest "
+                        "part of the chosen cut. The band comes from the chosen cut itself, "
+                        "so this number describes the neighbourhood of that cut and cannot "
+                        "be used to justify it."
+                    ),
+                },
+            }
+        )
+    return report
+
+
 def main() -> None:
     args = sys.argv[1:]
+    if args and args[0] == "cohesion":
+        if len(args) != 3:
+            raise SystemExit(__doc__)
+        json.dump(cohesion(args[1], args[2]), sys.stdout, indent=2, ensure_ascii=False)
+        sys.stdout.write("\n")
+        return
     if not args or len(args) % 2:
         raise SystemExit(__doc__)
     result = {

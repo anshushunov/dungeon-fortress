@@ -1,0 +1,136 @@
+{
+  "issue": 281,
+  "command": "python evidence/281-member-map.py cohesion evidence/281-member-map.json evidence/281-split-verification.json > evidence/281-cohesion.json",
+  "metric": "Share of the class's own member-to-member references that stay inside one file. References come from the 'references' field of the member map, which is a textual approximation, deliberately over- rather than under-inclusive. A pair is counted once, undirected.",
+  "capBytes": 81920,
+  "files": [
+    {
+      "source": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "parts": 9,
+      "memberPairs": 786,
+      "chosen": {
+        "internalPairs": 219,
+        "internalPercent": 27.9,
+        "partBytes": [
+          26635,
+          13578,
+          26838,
+          23846,
+          11541,
+          35759,
+          25801,
+          29068,
+          21332
+        ],
+        "files": [
+          "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+          "src/DungeonFortress.Simulation/PrototypeWorld.Commands.cs",
+          "src/DungeonFortress.Simulation/PrototypeWorld.Planning.cs",
+          "src/DungeonFortress.Simulation/PrototypeWorld.Matching.cs",
+          "src/DungeonFortress.Simulation/PrototypeWorld.Acting.cs",
+          "src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs",
+          "src/DungeonFortress.Simulation/PrototypeWorld.Work.cs",
+          "src/DungeonFortress.Simulation/PrototypeWorld.Stores.cs",
+          "src/DungeonFortress.Simulation/PrototypeWorld.State.cs"
+        ]
+      },
+      "arithmeticEqualBytes": {
+        "internalPairs": 200,
+        "internalPercent": 25.4,
+        "note": "Same number of parts, cut as close to equal bytes as member boundaries allow."
+      },
+      "bestUnderTaskConstraint": {
+        "internalPairs": 382,
+        "internalPercent": 48.6,
+        "note": "Same number of parts, only the task's own 80 KB ceiling. This is the honest ceiling of the metric, and it is degenerate: it is reached by a few parts at the ceiling next to parts of one member, which is not a cut anyone would ship. It is reported because a ceiling computed under a constraint borrowed from the chosen cut would flatter the choice."
+      },
+      "bestWithinChosenSizeBand": {
+        "internalPairs": 255,
+        "internalPercent": 32.4,
+        "band": [
+          11541,
+          35759
+        ],
+        "firstLines": [
+          7,
+          886,
+          1254,
+          1747,
+          2344,
+          2630,
+          3385,
+          4418,
+          5256
+        ],
+        "note": "Same number of parts, each between the smallest and the largest part of the chosen cut. The band comes from the chosen cut itself, so this number describes the neighbourhood of that cut and cannot be used to justify it."
+      }
+    },
+    {
+      "source": "src/DungeonFortress.Game/Main.cs",
+      "parts": 11,
+      "memberPairs": 1123,
+      "chosen": {
+        "internalPairs": 326,
+        "internalPercent": 29.0,
+        "partBytes": [
+          38267,
+          25270,
+          29421,
+          17876,
+          28092,
+          28084,
+          25032,
+          22457,
+          24930,
+          26445,
+          24029
+        ],
+        "files": [
+          "src/DungeonFortress.Game/Main.cs",
+          "src/DungeonFortress.Game/Main.Frame.cs",
+          "src/DungeonFortress.Game/Main.Hud.cs",
+          "src/DungeonFortress.Game/Main.Session.cs",
+          "src/DungeonFortress.Game/Main.HudText.cs",
+          "src/DungeonFortress.Game/Main.DrawWorld.cs",
+          "src/DungeonFortress.Game/Main.DrawBodies.cs",
+          "src/DungeonFortress.Game/Main.DrawOverlays.cs",
+          "src/DungeonFortress.Game/Main.Player.cs",
+          "src/DungeonFortress.Game/Main.Verification.cs",
+          "src/DungeonFortress.Game/Main.Rendering.cs"
+        ]
+      },
+      "arithmeticEqualBytes": {
+        "internalPairs": 268,
+        "internalPercent": 23.9,
+        "note": "Same number of parts, cut as close to equal bytes as member boundaries allow."
+      },
+      "bestUnderTaskConstraint": {
+        "internalPairs": 494,
+        "internalPercent": 44.0,
+        "note": "Same number of parts, only the task's own 80 KB ceiling. This is the honest ceiling of the metric, and it is degenerate: it is reached by a few parts at the ceiling next to parts of one member, which is not a cut anyone would ship. It is reported because a ceiling computed under a constraint borrowed from the chosen cut would flatter the choice."
+      },
+      "bestWithinChosenSizeBand": {
+        "internalPairs": 342,
+        "internalPercent": 30.5,
+        "band": [
+          17876,
+          38267
+        ],
+        "firstLines": [
+          17,
+          939,
+          1610,
+          2072,
+          2605,
+          3265,
+          3749,
+          4645,
+          5141,
+          5987,
+          6432
+        ],
+        "note": "Same number of parts, each between the smallest and the largest part of the chosen cut. The band comes from the chosen cut itself, so this number describes the neighbourhood of that cut and cannot be used to justify it."
+      }
+    }
+  ]
+}
