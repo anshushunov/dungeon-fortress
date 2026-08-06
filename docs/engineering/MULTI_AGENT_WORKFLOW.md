@@ -876,6 +876,16 @@ PR из трёх файлов, ни строки кода, ни детермин
   (`.claude/commands/coord.md`): она собирает состояние репозитория, разбирает
   coordination inbox и выдаёт отчёт владельцу. Команда коммитится как адаптер и
   не ослабляет правила `AGENTS.md`.
+- `.claude/settings.json` коммитится и несёт **только read-only** allowlist
+  Bash-команд (`git status`, `git diff`, `gh pr view`, `rg`, ...), каждая — по
+  измеренной частоте вызовов из транскриптов. Что не попадает никогда: ничего
+  пишущего (`git push`, `git commit`, `rm`, правки файлов), ничего сетевого
+  сверх read-only `gh ... view/list`, никакой бланкетный префикс вида
+  `Bash(git:*)` или `Bash(gh:*)` — только точный подкоманд. Пополняет список
+  координатор той же мерой. `.claude/settings.local.json` остаётся локальным,
+  машинно-специфичным и в Git не идёт. Обоснование введения — мораторий
+  (правило 11 «Темпа разработки» [`ROADMAP.md`](../product/ROADMAP.md)), сжато
+  до ссылки: [Issue #286](https://github.com/anshushunov/dungeon-fortress/issues/286).
 
 ## Coordination inbox
 
