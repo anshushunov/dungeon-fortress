@@ -69,8 +69,12 @@ authentication и точный token usage handoff описаны в
 игрока, ни для запускаемой проверки, лежат в
 [`engineering/DEBT_LEDGER.md`](engineering/DEBT_LEDGER.md). Там же записано, при
 каком условии запись повышается до Issue и кто перечитывает реестр. Правила
-темпа разработки, которым он подчинён, — раздел «Темп разработки» «Правил
-движения» [`product/ROADMAP.md`](product/ROADMAP.md).
+темпа разработки, которым он подчинён, —
+[`engineering/DEVELOPMENT_PACE.md`](engineering/DEVELOPMENT_PACE.md).
+
+Решения владельца на decision gate — [`product/GATE_DECISIONS.md`](product/GATE_DECISIONS.md):
+дата, решение, исход и последствия. Критерий отказа в
+[`product/ROADMAP.md`](product/ROADMAP.md) опирается на этот журнал.
 
 ## Что где фиксировать
 
@@ -78,11 +82,12 @@ authentication и точный token usage handoff описаны в
 |---|---|
 | Стабильное видение и продуктовые принципы | `product/VISION.md` |
 | Главная идея и core gameplay | `product/PITCH.md` |
-| Текущее направление и owner decision gates | `product/ROADMAP.md` |
+| Текущее направление и очередь работ | `product/ROADMAP.md` |
+| Решение владельца на decision gate | `product/GATE_DECISIONS.md` |
 | Текущее устройство механики | `design/` |
 | Варианты, выбор и последствия важного решения | `decisions/` |
 | Незакрытый вопрос | `OPEN_QUESTIONS.md` |
-| Процессное правило: темп, review, параллелизм | `product/ROADMAP.md`, «Правила движения» |
+| Процессное правило: темп, review, параллелизм | `engineering/DEVELOPMENT_PACE.md` |
 | Находка review без наблюдаемого последствия | `engineering/DEBT_LEDGER.md` |
 | Замер расхода токенов и базовая линия | `engineering/TOKEN_BUDGET.md` |
 | Конкретная работа с критериями готовности | GitHub Issue |
