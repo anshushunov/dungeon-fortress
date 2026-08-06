@@ -1,0 +1,1013 @@
+{
+  "schemaVersion": 1,
+  "issue": 287,
+  "what": "Full inventory of every git worktree registered against this repository at the moment of measurement, taken before any deletion. Root working copy (C:/gamedev/Dungeon fortress) excluded from the list below because it is not a candidate for cleanup, but counted separately in scope.",
+  "measuredAt": "2026-08-07T02:40:00+03:00",
+  "commands": {
+    "listWorktreesPorcelain": "git -C \"C:/gamedev/Dungeon fortress\" worktree list --porcelain",
+    "openPrs": "gh pr list --state open --limit 100 --json number,headRefName,state,url",
+    "allPrsForBranchLookup": "gh pr list --state all --limit 300 --json number,headRefName,state,url",
+    "claimedIssues": "gh issue list --label claimed --limit 100 --json number,title,labels",
+    "perWorktreeUncommitted": "git -C \"<path>\" status --porcelain",
+    "perWorktreeAncestryNote": "git merge-base --is-ancestor <head> origin/main was measured but NOT used to decide merged status: GitHub squash-merge does not preserve branch commits as ancestors of main, so this check gives false \"no\" for almost every squash-merged branch. PR state from gh pr list (state field, matched by headRefName) is the source of truth used below instead."
+  },
+  "scope": {
+    "totalWorktreesIncludingRoot": 67,
+    "totalWorktreesExcludingRoot": 66,
+    "insideRootWorkingCopy": 32,
+    "codexToolWorktreesOutsideRepo": 3,
+    "commandForTotal": "git -C \"C:/gamedev/Dungeon fortress\" worktree list --porcelain | rg -c \"^worktree \""
+  },
+  "entries": [
+    {
+      "path": "C:/gamedev/_wt-130-pause-panel",
+      "branch": "agent/130-pause-panel",
+      "detached": false,
+      "headCommitDate": "2026-08-03T13:03:16+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 205
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #205"
+    },
+    {
+      "path": "C:/gamedev/_wt-159",
+      "branch": "agent/159-reestr-dolga-srok-godnosti-zapisi-negde-zapisat-i-pereformulirovki-ne-ogranicheny",
+      "detached": false,
+      "headCommitDate": "2026-08-03T23:29:42+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 223
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #223"
+    },
+    {
+      "path": "C:/gamedev/_wt-165-flinch-spear",
+      "branch": "agent/165-flinch-with-spear",
+      "detached": false,
+      "headCommitDate": "2026-08-02T12:17:17+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 175
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #175"
+    },
+    {
+      "path": "C:/gamedev/_wt-173-process-rules",
+      "branch": "agent/173-rules-27-28",
+      "detached": false,
+      "headCommitDate": "2026-08-03T00:21:03+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 200
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #200"
+    },
+    {
+      "path": "C:/gamedev/_wt-177-fix",
+      "branch": "agent/177-side-marker",
+      "detached": false,
+      "headCommitDate": "2026-08-03T12:33:21+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 203
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #203"
+    },
+    {
+      "path": "C:/gamedev/_wt-177-floor-disc",
+      "branch": "spike/177-floor-disc",
+      "detached": false,
+      "headCommitDate": "2026-08-03T15:31:48+03:00",
+      "pr": {
+        "state": "NONE",
+        "number": null
+      },
+      "uncommittedChanges": true,
+      "uncommittedFileCount": 1,
+      "insideRootWorkingCopy": false,
+      "decision": "keep",
+      "reason": "uncommitted spike work (DrawFloorDisc alternative to the merged side-ring fix for #177); real exploratory code, not build junk — left for owner/coordinator call"
+    },
+    {
+      "path": "C:/gamedev/_wt-182-fix",
+      "branch": "agent/182-take-task",
+      "detached": false,
+      "headCommitDate": "2026-08-03T14:26:17+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 195
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #195"
+    },
+    {
+      "path": "C:/gamedev/_wt-183",
+      "branch": "agent/183-oslablenie-adr-derzhitsya-na-poimennom-spiske-kotoryy-nado-vspomnit-mekhanizm-srabotal-nol-raz-iz-odnogo",
+      "detached": false,
+      "headCommitDate": "2026-08-03T23:35:45+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 224
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #224"
+    },
+    {
+      "path": "C:/gamedev/_wt-184-screenshots",
+      "branch": "agent/184-screenshots-stage",
+      "detached": false,
+      "headCommitDate": "2026-08-02T23:58:01+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 199
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #199"
+    },
+    {
+      "path": "C:/gamedev/_wt-186-post-combat",
+      "branch": "agent/186-post-combat-dispersal",
+      "detached": false,
+      "headCommitDate": "2026-08-03T01:29:22+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 198
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #198"
+    },
+    {
+      "path": "C:/gamedev/_wt-215",
+      "branch": "agent/215-tri-utverzhdeniya-dokumentov-o-repozitorii-lozhny-reestr-ikh-bol-she-ne-derzhit",
+      "detached": false,
+      "headCommitDate": "2026-08-04T12:19:23+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 247
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #247"
+    },
+    {
+      "path": "C:/gamedev/_wt-225",
+      "branch": "agent/225-agents-md-shag-zanyat-issue-metkoy-claimed-ne-zapisan-khotya-yavlyaetsya-pervym-deystviem-zapisyvayushhey-raboty",
+      "detached": false,
+      "headCommitDate": "2026-08-03T23:42:19+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 226
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #226"
+    },
+    {
+      "path": "C:/gamedev/_wt-232-r2-precheck",
+      "branch": null,
+      "detached": true,
+      "headCommitDate": "2026-08-04T01:07:26+03:00",
+      "pr": {
+        "state": "NONE",
+        "number": null
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "detached-HEAD review checkout for already-merged PR #232; content superseded by main, clean working tree"
+    },
+    {
+      "path": "C:/gamedev/_wt-275-token-budget",
+      "branch": "agent/275-token-budget-baseline",
+      "detached": false,
+      "headCommitDate": "2026-08-07T00:19:33+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 277
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #277"
+    },
+    {
+      "path": "C:/gamedev/_wt-276-roadmap-split",
+      "branch": "agent/276-roadmap-split",
+      "detached": false,
+      "headCommitDate": "2026-08-07T00:08:00+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 278
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #278"
+    },
+    {
+      "path": "C:/gamedev/_wt-279",
+      "branch": "agent/279-potolok-dliny-progona-agenta-odin-subagent-dal-9-raskhoda-proekta-za-schet-kvadratichnogo-rosta-konteksta",
+      "detached": false,
+      "headCommitDate": "2026-08-07T02:23:29+03:00",
+      "pr": {
+        "state": "OPEN",
+        "number": 293
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "keep",
+      "reason": "open PR #293, active work"
+    },
+    {
+      "path": "C:/gamedev/_wt-280",
+      "branch": "agent/280-prototype-01-prepare-for-raid-md-355-kb-vtoroy-po-razmeru-dokument-chitaetsya-98-raz",
+      "detached": false,
+      "headCommitDate": "2026-08-07T02:11:22+03:00",
+      "pr": {
+        "state": "OPEN",
+        "number": 290
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "keep",
+      "reason": "open PR #290, active work"
+    },
+    {
+      "path": "C:/gamedev/_wt-281",
+      "branch": "agent/281-main-cs-290-kb-i-prototypeworld-cs-215-kb-dva-fayla-dayut-447-chteniy-za-srez",
+      "detached": false,
+      "headCommitDate": "2026-08-07T02:04:37+03:00",
+      "pr": {
+        "state": "OPEN",
+        "number": 292
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "keep",
+      "reason": "open PR #292, active work"
+    },
+    {
+      "path": "C:/gamedev/_wt-283",
+      "branch": "agent/283-90-5-vyzovov-idut-na-opus-vklyuchaya-mekhanicheskuyu-rabotu",
+      "detached": false,
+      "headCommitDate": "2026-08-07T01:36:24+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 291
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #291"
+    },
+    {
+      "path": "C:/gamedev/_wt-284",
+      "branch": "agent/284-verify-ps1-pechataet-8-kb-json-s-dampom-ui-v-kontekst-kazhdogo-progona",
+      "detached": false,
+      "headCommitDate": "2026-08-07T02:29:32+03:00",
+      "pr": {
+        "state": "NONE",
+        "number": null
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "keep",
+      "reason": "actively claimed task in progress right now (named as living worktree in the task brief)"
+    },
+    {
+      "path": "C:/gamedev/_wt-285",
+      "branch": "agent/285-preflight-verify-ps1-trebuet-godot-dazhe-dlya-stadiy-kotorym-dvizhok-ne-nuzhen",
+      "detached": false,
+      "headCommitDate": "2026-08-07T01:55:50+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 289
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #289"
+    },
+    {
+      "path": "C:/gamedev/_wt-286",
+      "branch": "agent/286-allowlist-razresheniy-rutinnye-read-only-komandy-kazhdyy-raz-trebuyut-podtverzhdeniya",
+      "detached": false,
+      "headCommitDate": "2026-08-07T02:07:50+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 288
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #288"
+    },
+    {
+      "path": "C:/gamedev/_wt-287",
+      "branch": "agent/287-v-repozitorii-59-worktree-iz-nikh-32-vnutri-kornevoy-rabochey-kopii",
+      "detached": false,
+      "headCommitDate": "2026-08-07T02:31:58+03:00",
+      "pr": {
+        "state": "NONE",
+        "number": null
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "keep",
+      "reason": "actively claimed task in progress right now (named as living worktree in the task brief)"
+    },
+    {
+      "path": "C:/gamedev/_wt-coord-journal",
+      "branch": "agent/coord-gameplay-decisions",
+      "detached": false,
+      "headCommitDate": "2026-08-03T01:25:57+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 204
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #204"
+    },
+    {
+      "path": "C:/gamedev/_wt-coord-ledger",
+      "branch": "agent/coord-debt-ledger",
+      "detached": false,
+      "headCommitDate": "2026-08-03T01:44:48+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 206
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #206"
+    },
+    {
+      "path": "C:/gamedev/_wt-review-232-r2",
+      "branch": null,
+      "detached": true,
+      "headCommitDate": "2026-08-04T02:58:08+03:00",
+      "pr": {
+        "state": "NONE",
+        "number": null
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "detached-HEAD review checkout for already-merged PR #232; content superseded by main, clean working tree"
+    },
+    {
+      "path": "C:/gamedev/_wt-side-impl",
+      "branch": "feature/side-indicator",
+      "detached": false,
+      "headCommitDate": "2026-08-03T18:13:37+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 209
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #209"
+    },
+    {
+      "path": "C:/gamedev/_wt-tools",
+      "branch": "chore/agent-tooling",
+      "detached": false,
+      "headCommitDate": "2026-08-02T23:40:13+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 194
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "branch already merged via PR #194"
+    },
+    {
+      "path": "C:/gamedev/df-review-166",
+      "branch": null,
+      "detached": true,
+      "headCommitDate": "2026-08-01T19:11:50+03:00",
+      "pr": {
+        "state": "NONE",
+        "number": null
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "detached-HEAD review checkout for already-merged PR #166; content superseded by main, clean working tree"
+    },
+    {
+      "path": "C:/gamedev/df-review-166-base",
+      "branch": null,
+      "detached": true,
+      "headCommitDate": "2026-08-01T18:16:38+03:00",
+      "pr": {
+        "state": "NONE",
+        "number": null
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "detached-HEAD review checkout for already-merged PR #166; content superseded by main, clean working tree"
+    },
+    {
+      "path": "C:/gamedev/df-review-166b",
+      "branch": null,
+      "detached": true,
+      "headCommitDate": "2026-08-01T20:33:53+03:00",
+      "pr": {
+        "state": "NONE",
+        "number": null
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "delete",
+      "reason": "detached-HEAD review checkout for already-merged PR #166; content superseded by main, clean working tree"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-118-docs",
+      "branch": "agent/118-adr0018-and-block-documentation",
+      "detached": false,
+      "headCommitDate": "2026-07-31T17:54:15+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 121
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a01063ce4e1755f5f",
+      "branch": "agent/171-memory-of-place-cost",
+      "detached": false,
+      "headCommitDate": "2026-08-02T17:01:35+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 178
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a05e361bea73b3b8b",
+      "branch": "agent/117-memory-of-place-and-dungeon-layout",
+      "detached": false,
+      "headCommitDate": "2026-08-01T00:45:55+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 124
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a0c24e309e35f54e5",
+      "branch": "agent/77-body-scale-170",
+      "detached": false,
+      "headCommitDate": "2026-08-02T17:01:45+03:00",
+      "pr": {
+        "state": "CLOSED",
+        "number": 176
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a0c7efd44cab51594",
+      "branch": "agent/127-tooltip-readability",
+      "detached": false,
+      "headCommitDate": "2026-08-01T02:51:21+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 134
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a0f1d4cc730a5f48f",
+      "branch": "agent/40-staged-verify",
+      "detached": false,
+      "headCommitDate": "2026-07-29T13:10:29+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 70
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a1c7fb771631d684f",
+      "branch": "agent/147-room-border-vs-wall-edge",
+      "detached": false,
+      "headCommitDate": "2026-08-01T15:38:16+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 151
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a2ce07f3d6f28ef0b",
+      "branch": "agent/122-documentation-moratorium",
+      "detached": false,
+      "headCommitDate": "2026-07-31T19:19:56+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 123
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a2f4c45056d13ab45",
+      "branch": "agent/38-mcp-build-lock",
+      "detached": false,
+      "headCommitDate": "2026-07-29T00:00:44+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 63
+      },
+      "uncommittedChanges": true,
+      "uncommittedFileCount": 1,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a49fb6532c4a34d01",
+      "branch": "agent/140-significant-events",
+      "detached": false,
+      "headCommitDate": "2026-08-01T12:06:35+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 144
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a4be8caf42d97e9dc",
+      "branch": null,
+      "detached": true,
+      "headCommitDate": "2026-08-02T21:16:04+03:00",
+      "pr": {
+        "state": "NONE",
+        "number": null
+      },
+      "uncommittedChanges": true,
+      "uncommittedFileCount": 1,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a505fe52c0e8eb8fb",
+      "branch": "agent/142-scale-spike",
+      "detached": false,
+      "headCommitDate": "2026-08-01T11:38:45+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 143
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a52ef50c14086d863",
+      "branch": "agent/coord-autonomy-and-ledger",
+      "detached": false,
+      "headCommitDate": "2026-08-02T19:09:17+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 181
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a6060a8c77c1a0aec",
+      "branch": "agent/77-goblin-pack-v2",
+      "detached": false,
+      "headCommitDate": "2026-08-02T19:22:42+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 185
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a65862ce18a0e0193",
+      "branch": "agent/139-room-border-facade",
+      "detached": false,
+      "headCommitDate": "2026-08-01T12:37:22+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 148
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a6759ddfd17837e04",
+      "branch": "agent/128-125-creature-decision-history",
+      "detached": false,
+      "headCommitDate": "2026-08-01T03:41:21+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 136
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a67e9cd9ec432bb40",
+      "branch": "agent/52-room-readability",
+      "detached": false,
+      "headCommitDate": "2026-08-01T02:48:33+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 135
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a6c60765f3fc4e886",
+      "branch": "agent/145-domain-feed-significance",
+      "detached": false,
+      "headCommitDate": "2026-08-01T15:29:05+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 152
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a741617fb6bf00e0c",
+      "branch": "agent/party-score",
+      "detached": false,
+      "headCommitDate": "2026-07-30T18:10:40+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 96
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a82cea5b7e275a63d",
+      "branch": "agent/coord-block-close",
+      "detached": false,
+      "headCommitDate": "2026-08-02T20:45:15+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 189
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a9c42fcd86ac90f4d",
+      "branch": "agent/129-combat-approach-free-tile",
+      "detached": false,
+      "headCommitDate": "2026-08-02T00:43:59+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 164
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-aa081daa44c57c2ef",
+      "branch": "agent/160-adr-verdicts",
+      "detached": false,
+      "headCommitDate": "2026-08-02T01:02:40+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 161
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-aab360a7a5e1367e9",
+      "branch": "agent/156-room-border-under-creature",
+      "detached": false,
+      "headCommitDate": "2026-08-01T20:33:53+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 166
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-aabe9881af9e41d57",
+      "branch": "agent/68-slice-1-waves-and-renown",
+      "detached": false,
+      "headCommitDate": "2026-07-29T15:39:40+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 73
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-ab47070b3e369f03c",
+      "branch": "agent/64-uid-tracking-strategy",
+      "detached": false,
+      "headCommitDate": "2026-07-29T12:18:55+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 67
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-adebaf459f13bd979",
+      "branch": "agent/58-pause-designation",
+      "detached": false,
+      "headCommitDate": "2026-07-29T01:04:00+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 62
+      },
+      "uncommittedChanges": true,
+      "uncommittedFileCount": 1,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-issue100",
+      "branch": "agent/100-startup-frame-and-ui-scale",
+      "detached": false,
+      "headCommitDate": "2026-07-31T00:12:06+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 107
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-issue102",
+      "branch": "agent/102-stage-guard-gaps",
+      "detached": false,
+      "headCommitDate": "2026-07-31T00:05:16+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 108
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-issue103",
+      "branch": "agent/103-snapshot-versioning-rules",
+      "detached": false,
+      "headCommitDate": "2026-07-30T23:48:52+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 105
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-issue83",
+      "branch": "agent/adr0008-wall-volume-and-ysort",
+      "detached": false,
+      "headCommitDate": "2026-07-30T12:01:47+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 85
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-issue87",
+      "branch": "agent/87-evidence-publication-workflow",
+      "detached": false,
+      "headCommitDate": "2026-07-30T02:06:51+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 88
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-issue90",
+      "branch": "agent/90-99-presentation-rules-provable",
+      "detached": false,
+      "headCommitDate": "2026-07-31T00:45:21+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 110
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": true,
+      "decision": "delete",
+      "reason": "inside root working copy (.claude/worktrees/**) — violates rule 17 regardless of PR/merge status"
+    },
+    {
+      "path": "C:/Users/User/.codex/worktrees/3c92/Dungeon fortress",
+      "branch": null,
+      "detached": true,
+      "headCommitDate": "2026-07-26T16:41:19+03:00",
+      "pr": {
+        "state": "NONE",
+        "number": null
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "keep-out-of-scope",
+      "reason": "Codex tool-managed worktree in user home dir, outside the repo tree; removing it is a decision for the Codex tool/user, not repo cleanup (see PR body)"
+    },
+    {
+      "path": "C:/Users/User/.codex/worktrees/5972/Dungeon fortress",
+      "branch": "codex/issue-4-mcp-phase-b",
+      "detached": false,
+      "headCommitDate": "2026-07-26T20:18:46+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 7
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "keep-out-of-scope",
+      "reason": "Codex tool-managed worktree in user home dir, outside the repo tree; removing it is a decision for the Codex tool/user, not repo cleanup (see PR body)"
+    },
+    {
+      "path": "C:/Users/User/.codex/worktrees/c1fe/Dungeon fortress",
+      "branch": "codex/issue-3-godot-dotnet-spike",
+      "detached": false,
+      "headCommitDate": "2026-07-26T17:46:53+03:00",
+      "pr": {
+        "state": "MERGED",
+        "number": 5
+      },
+      "uncommittedChanges": false,
+      "uncommittedFileCount": 0,
+      "insideRootWorkingCopy": false,
+      "decision": "keep-out-of-scope",
+      "reason": "Codex tool-managed worktree in user home dir, outside the repo tree; removing it is a decision for the Codex tool/user, not repo cleanup (see PR body)"
+    }
+  ]
+}
