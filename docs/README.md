@@ -53,6 +53,11 @@ Prototype 1; `design/GDD.md` описывает игру шире и на уро
 authentication и точный token usage handoff описаны в
 `engineering/EVIDENCE_WORKFLOW.md`.
 
+Чем меряется расход токенов проекта и какова его базовая линия —
+[`engineering/TOKEN_BUDGET.md`](engineering/TOKEN_BUDGET.md): команды замера по
+транскриптам, разбивка по дням, сессиям и субагентам, и правило сравнивать
+расход на смерженный PR, а не абсолютный.
+
 Правила работы Codex, Claude Code и других агентов находятся в
 `engineering/MULTI_AGENT_WORKFLOW.md`.
 
@@ -79,6 +84,7 @@ authentication и точный token usage handoff описаны в
 | Незакрытый вопрос | `OPEN_QUESTIONS.md` |
 | Процессное правило: темп, review, параллелизм | `product/ROADMAP.md`, «Правила движения» |
 | Находка review без наблюдаемого последствия | `engineering/DEBT_LEDGER.md` |
+| Замер расхода токенов и базовая линия | `engineering/TOKEN_BUDGET.md` |
 | Конкретная работа с критериями готовности | GitHub Issue |
 | Группа задач и порядок выполнения | GitHub Project |
 | Обсуждение и проверка изменения | Pull Request |
