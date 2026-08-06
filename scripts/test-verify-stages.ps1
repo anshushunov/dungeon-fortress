@@ -1514,9 +1514,109 @@ Assert-VerifyRejects `
     -Arguments @("-Stage", $stageNames[0], "-Skip", $stageNames[0]) `
     -Message "verify.ps1 accepted an empty stage selection instead of failing."
 
-# --- the guard against itself ----------------------------------------------
+# --- the engine gate: only a selection that needs it may require it --------
+#
+# Issue #285. Before this, the preflight resolved the engine unconditionally,
+# so `-Stage scripts` refused on a machine without Godot even though nothing
+# in that stage's body calls dotnet or the engine - checked structurally
+# above (its own Summary says "Dependency-free"). Measured in
+# evidence/285-stage-engine-need.json: `scripts` is the only stage that
+# reaches neither Initialize-SolutionRestore / Initialize-SolutionBuild
+# (build, tests, mcp, and - through Initialize-ScenarioAssembly - sim and
+# load) nor the Godot executable itself (through Initialize-GameHostBuild and
+# Initialize-EngineRuntime - godot, ui, screenshots).
+#
+# A bogus -GodotPath makes every case below deterministic regardless of
+# whether the machine running this test happens to have Godot on PATH or in
+# $env:GODOT4_CONSOLE: Resolve-GodotExecutable rejects an explicit path that
+# does not resolve to an executable before it ever looks at the environment.
 
 New-Item -ItemType Directory -Force -Path $sandbox | Out-Null
+$bogusGodotPath = Join-Path $sandbox "definitely-not-a-godot-binary-285.exe"
+
+function Get-VerifyRunResult {
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments
+    )
+
+    # Same pattern as Assert-VerifyRejects: the child's refusal goes to
+    # stderr, which this session has to read as output, not as its own
+    # terminating error.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $verifyScript @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Text = ($output | Out-String)
+    }
+}
+
+# A stage that needs the engine still refuses in preflight, before any stage
+# body runs, and now names which selected stage needed it. The check is for
+# the phrase "Stage(s) <name> require", not a bare substring match on the
+# stage name: the underlying Godot-missing message already contains the word
+# "Godot" (it is the engine's own name), so a bare "godot" substring check
+# would still pass even if the stage-naming wrapper were deleted entirely -
+# which is exactly mutant C in the Issue.
+foreach ($engineStage in @("godot", "build")) {
+    $result = Get-VerifyRunResult -Arguments @(
+        "-Stage", $engineStage, "-TemporaryRoot", $sandbox, "-GodotPath", $bogusGodotPath
+    )
+    if ($result.ExitCode -eq 0) {
+        throw (
+            "verify.ps1 -Stage $engineStage accepted a nonexistent -GodotPath " +
+            "instead of refusing in preflight.")
+    }
+    $expectedPhrase = "Stage(s) $engineStage require"
+    if ($result.Text -notmatch [regex]::Escape($expectedPhrase)) {
+        throw (
+            "verify.ps1 -Stage $engineStage did not name the stage in its " +
+            "refusal. Expected to find '$expectedPhrase'; got: $($result.Text)")
+    }
+}
+
+# `scripts` is the one selection this preflight must not refuse on. This is
+# the runtime counterpart of the reasoning above: it proves the preflight
+# actually skips resolving the engine, not merely that the stage table says
+# it may. `-Stage scripts` also runs this very file (its body invokes
+# test-verify-stages.ps1), so spawning it naively would recurse forever. The
+# environment variable is the guard: this process sets it only on the child
+# it spawns, and a nested invocation of this file sees it already set and
+# does not spawn a grandchild - it still runs everything else in this file,
+# which is the coverage a real `-Stage scripts` run needs from it.
+if ($env:DUNGEON_FORTRESS_SKIP_ENGINE_GATE_SMOKE -ne "1") {
+    $env:DUNGEON_FORTRESS_SKIP_ENGINE_GATE_SMOKE = "1"
+    try {
+        $scriptsResult = Get-VerifyRunResult -Arguments @(
+            "-Stage", "scripts", "-TemporaryRoot", $sandbox, "-GodotPath", $bogusGodotPath
+        )
+    }
+    finally {
+        $env:DUNGEON_FORTRESS_SKIP_ENGINE_GATE_SMOKE = $null
+    }
+    if ($scriptsResult.ExitCode -ne 0) {
+        throw (
+            "verify.ps1 -Stage scripts refused with a bogus -GodotPath even " +
+            "though its body never calls dotnet or Godot: $($scriptsResult.Text)")
+    }
+    if ($scriptsResult.Text -notmatch '"event":"verification_result","status":"ok"') {
+        throw (
+            "verify.ps1 -Stage scripts exited 0 but did not report a " +
+            "successful verification_result: $($scriptsResult.Text)")
+    }
+}
+
+# --- the guard against itself ----------------------------------------------
 
 try {
     $mainFileName = [IO.Path]::GetFileName($verifyScript)

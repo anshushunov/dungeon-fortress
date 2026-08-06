@@ -900,6 +900,18 @@ $stageCatalog = [ordered]@{
 
 $allStages = @($stageCatalog.Keys)
 
+# The only stage whose body never calls dotnet or the Godot executable: it is
+# pure PowerShell script guards (see its Summary above). Every other stage
+# reaches Initialize-SolutionRestore or Initialize-SolutionBuild somewhere in
+# its body - directly (build, tests, mcp), through Initialize-ScenarioAssembly
+# (sim, load) or through Initialize-GameHostBuild (godot, ui, screenshots) -
+# and that restore's NuGet profile is deliberately sourced from the engine's
+# bundled packages rather than nuget.org, so a partial run does not silently
+# check a different source than a full run does. Measured, including why
+# nuget.org is not used instead, in evidence/285-stage-engine-need.json
+# (Issue #285).
+$engineFreeStages = @("scripts")
+
 function Expand-StageNames {
     param(
         [AllowNull()]
@@ -995,16 +1007,32 @@ try {
         source = $temporaryRootSelection.Source
     } | ConvertTo-Json -Compress | Write-Host
 
-    # The engine is resolved for every scope, including one without a Godot stage:
-    # the NuGet profile the .NET builds use is written from the engine's bundled
-    # package source, so a partial run must not fall back to machine-wide NuGet
-    # state and check something other than what a full run checks.
-    $godot = Resolve-GodotExecutable -ExplicitPath $GodotPath
-    $godotVersion = Assert-GodotVersion -GodotPath $godot
-    $godotNuGetSource = Get-GodotNuGetSource -GodotPath $godot
-    Initialize-GodotNuGetEnvironment `
-        -ProfileRoot (Join-Path $artifactsRoot "tool-profile") `
-        -GodotNuGetSource $godotNuGetSource
+    # The engine is resolved only when a selected stage actually needs it - see
+    # $engineFreeStages above for which ones do and why. A full run's refusal is
+    # unchanged: every stage but `scripts` needs the engine, so a full selection
+    # always falls into the "requires it" branch below and reports the same
+    # preflight failure it always has.
+    $engineRequiringStages = @($selectedStages | Where-Object { $_ -notin $engineFreeStages })
+    if ($engineRequiringStages.Count -gt 0) {
+        try {
+            $godot = Resolve-GodotExecutable -ExplicitPath $GodotPath
+            $godotVersion = Assert-GodotVersion -GodotPath $godot
+            $godotNuGetSource = Get-GodotNuGetSource -GodotPath $godot
+            Initialize-GodotNuGetEnvironment `
+                -ProfileRoot (Join-Path $artifactsRoot "tool-profile") `
+                -GodotNuGetSource $godotNuGetSource
+        }
+        catch {
+            if ($scope -eq "full") {
+                # Unchanged message: a full run has always needed the engine,
+                # so this is exactly the refusal it always reported.
+                throw
+            }
+            throw (
+                "Stage(s) $($engineRequiringStages -join ', ') require the Godot " +
+                "engine and it could not be resolved: $($_.Exception.Message)")
+        }
+    }
 
     foreach ($stageName in $selectedStages) {
         $currentPhase = "stage"
