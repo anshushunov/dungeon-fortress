@@ -49,16 +49,26 @@ public sealed class WorldDrawPassGuardTests
             .ToArray();
 
     /// <summary>
-    /// The reader has to be right about the file before anything it says about
-    /// the file means something. A body that came back empty, or a call list that
+    /// The reader has to be right about the files before anything it says about
+    /// them means something. A body that came back empty, or a call list that
     /// missed the engine primitives, would make every test below vacuously green.
+    /// The adapter is one class over several files, so "found the adapter" means
+    /// found all of them: a file the reader never opened would make every check
+    /// about a routine inside it vacuously green in exactly the same way.
     /// </summary>
     [Fact]
     public void The_source_reader_finds_the_adapter_and_its_bodies()
     {
         Assert.True(
             File.Exists(AdapterSource.FullPath()),
-            $"{AdapterSource.RelativePath} is the file every check below reads.");
+            $"{AdapterSource.RelativePath} is the first of the files every check below reads.");
+        Assert.Contains(
+            AdapterSource.FullPath(),
+            AdapterSource.FullPaths());
+        foreach (var path in AdapterSource.FullPaths())
+        {
+            Assert.True(File.Exists(path), $"{path} is one of the files every check below reads.");
+        }
 
         var map = AdapterSource.Body(WorldDrawOrder.Entry);
         Assert.Contains("rockTiles", map, StringComparison.Ordinal);

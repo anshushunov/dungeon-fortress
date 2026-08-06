@@ -35,11 +35,50 @@ internal static class AdapterSource
     internal const string RelativePath = "src/DungeonFortress.Game/Main.cs";
 
     /// <summary>
+    /// The directory the adapter's files live in, and the prefix that tells them
+    /// from every other type in the same folder.
+    /// </summary>
+    private const string AdapterDirectory = "src/DungeonFortress.Game";
+    private const string AdapterFilePrefix = "Main.";
+
+    /// <summary>
+    /// Every file of the adapter, in a fixed order.
+    ///
+    /// <c>Main</c> is one class spread over several files since Issue #281, and a
+    /// reader that opened only <c>Main.cs</c> would have gone on answering
+    /// questions about a routine it could no longer see — silently, because a
+    /// missing declaration reads the same as a declaration that was never there.
+    /// The set is discovered rather than listed so that a file added to the class
+    /// is guarded from the moment it exists, and it is ordinal-sorted so that an
+    /// offset into <see cref="Masked"/> means the same thing on every machine.
+    /// </summary>
+    internal static IReadOnlyList<string> FullPaths() => Files;
+
+    private static readonly string[] Files = Directory
+        .GetFiles(
+            Path.Combine(
+                PresentationFixtures.FindRepositoryRoot(),
+                AdapterDirectory.Replace('/', Path.DirectorySeparatorChar)),
+            "*.cs")
+        .Where(path => Path.GetFileName(path).StartsWith(AdapterFilePrefix, StringComparison.Ordinal))
+        .OrderBy(path => path, StringComparer.Ordinal)
+        .ToArray();
+
+    /// <summary>
     /// The adapter with comments, string literals and character literals blanked
     /// out, so a routine named in a doc comment is not mistaken for a call and a
     /// brace inside a string cannot end a method body.
     /// </summary>
-    internal static string Masked { get; } = Mask(File.ReadAllText(FullPath()));
+    internal static string Masked { get; } =
+        string.Join('\n', Files.Select(path => Mask(File.ReadAllText(path))));
+
+    /// <summary>
+    /// The adapter exactly as it is written, for the two checks that are about
+    /// what is inside a string literal and would be blanked by
+    /// <see cref="Masked"/>.
+    /// </summary>
+    internal static string Raw { get; } =
+        string.Join('\n', Files.Select(File.ReadAllText));
 
     internal static string FullPath() => Path.Combine(
         PresentationFixtures.FindRepositoryRoot(),
