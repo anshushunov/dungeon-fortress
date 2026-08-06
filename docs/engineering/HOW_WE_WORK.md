@@ -14,7 +14,8 @@
 
 | Что | Где живёт |
 |---|---|
-| Процессные правила, темп, полномочия | «Темп разработки» в [`ROADMAP.md`](../product/ROADMAP.md) |
+| Процессные правила, темп, полномочия | [`DEVELOPMENT_PACE.md`](DEVELOPMENT_PACE.md) |
+| Решения владельца на decision gate | [`GATE_DECISIONS.md`](../product/GATE_DECISIONS.md) |
 | Классы работы, партиция, потолки, review | [`MULTI_AGENT_WORKFLOW.md`](MULTI_AGENT_WORKFLOW.md) |
 | Общий контракт всех агентов | [`AGENTS.md`](../../AGENTS.md) |
 | Решения | [`docs/decisions/`](../decisions/) |
