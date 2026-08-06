@@ -1617,15 +1617,19 @@ function Get-VerificationResultEvent {
     return ($line | ConvertFrom-Json)
 }
 
-# --- check 1: `-Stage scripts` must succeed without the engine -------------
-#
-# `-Stage scripts` also runs this very file (its body invokes
-# test-verify-stages.ps1), so spawning it naively would recurse forever. The
-# environment variable is the guard: this process sets it only on the child
-# it spawns, and a nested invocation of this file sees it already set and
-# does not spawn a grandchild - it still runs everything else in this file,
-# which is the coverage a real `-Stage scripts` run needs from it.
+# All four checks below run only at the top level, never in a nested
+# invocation of this file. Check 1 spawns a real `-Stage scripts` run, whose
+# body invokes test-verify-stages.ps1 on the very same (possibly mutated)
+# verify.ps1 - so if checks 2-4 were not also gated here, a mutation that
+# breaks one of *them* would make that nested invocation fail too, cascading
+# up through Invoke-Checked inside the scripts stage and surfacing as check 1
+# going red instead of the check the mutation actually broke. Gating all four
+# the same way keeps them independent: the nested invocation (guard already
+# set) skips this whole section and only runs the rest of the file - the
+# structural checks below still cover the mutated script fully, just not via
+# a second, redundant pass through this section.
 if ($env:DUNGEON_FORTRESS_SKIP_ENGINE_GATE_SMOKE -ne "1") {
+    # --- check 1: `-Stage scripts` must succeed without the engine ---------
     $env:DUNGEON_FORTRESS_SKIP_ENGINE_GATE_SMOKE = "1"
     try {
         $scriptsResult = Get-VerifyRunResult -Arguments @(
@@ -1646,67 +1650,69 @@ if ($env:DUNGEON_FORTRESS_SKIP_ENGINE_GATE_SMOKE -ne "1") {
             "verify.ps1 -Stage scripts exited 0 but did not report a " +
             "successful verification_result: $($scriptsResult.Text)")
     }
-}
 
-# --- checks 2 and 3: preflight refusal, then its wording --------------------
-foreach ($engineStage in @("godot", "build")) {
-    $result = Get-VerifyRunResult -Arguments @(
-        "-Stage", $engineStage, "-TemporaryRoot", $sandbox, "-GodotPath", $bogusGodotPath
+    # --- checks 2 and 3: preflight refusal, then its wording ---------------
+    foreach ($engineStage in @("godot", "build")) {
+        $result = Get-VerifyRunResult -Arguments @(
+            "-Stage", $engineStage, "-TemporaryRoot", $sandbox, "-GodotPath", $bogusGodotPath
+        )
+        if ($result.ExitCode -eq 0) {
+            throw (
+                "verify.ps1 -Stage $engineStage accepted a nonexistent -GodotPath " +
+                "instead of refusing in preflight.")
+        }
+
+        $event = Get-VerificationResultEvent -Text $result.Text
+        if ([string]$event.failedPhase -ne "preflight" -or @($event.stagesExecuted).Count -ne 0) {
+            throw (
+                "verify.ps1 -Stage $engineStage did not refuse in *preflight* - " +
+                "failedPhase was '$($event.failedPhase)' and stagesExecuted was " +
+                "[$($event.stagesExecuted -join ', ')]. An engine-requiring stage " +
+                "that resolves the engine too late, or not at all, fails inside " +
+                "the stage body instead, which is what this catches.")
+        }
+
+        $expectedPhrase = "Stage(s) $engineStage require"
+        if ([string]$event.reason -notmatch [regex]::Escape($expectedPhrase)) {
+            throw (
+                "verify.ps1 -Stage $engineStage did not name the stage in its " +
+                "refusal. Expected to find '$expectedPhrase'; got: $($event.reason)")
+        }
+    }
+
+    # --- check 4: a full-scope refusal is byte-for-byte the original message
+    $expectedFullScopeMessage = $null
+    try {
+        Resolve-GodotExecutable -ExplicitPath $bogusGodotPath | Out-Null
+        throw (
+            "Resolve-GodotExecutable unexpectedly succeeded against a bogus " +
+            "path; the full-scope byte-for-byte check has nothing to compare " +
+            "against.")
+    }
+    catch {
+        $expectedFullScopeMessage = $_.Exception.Message
+    }
+
+    $fullScopeResult = Get-VerifyRunResult -Arguments @(
+        "-TemporaryRoot", $sandbox, "-GodotPath", $bogusGodotPath
     )
-    if ($result.ExitCode -eq 0) {
-        throw (
-            "verify.ps1 -Stage $engineStage accepted a nonexistent -GodotPath " +
-            "instead of refusing in preflight.")
+    if ($fullScopeResult.ExitCode -eq 0) {
+        throw "verify.ps1 (full scope, no -Stage) accepted a nonexistent -GodotPath instead of refusing in preflight."
     }
-
-    $event = Get-VerificationResultEvent -Text $result.Text
-    if ([string]$event.failedPhase -ne "preflight" -or @($event.stagesExecuted).Count -ne 0) {
+    $fullScopeEvent = Get-VerificationResultEvent -Text $fullScopeResult.Text
+    if ([string]$fullScopeEvent.scope -ne "full") {
         throw (
-            "verify.ps1 -Stage $engineStage did not refuse in *preflight* - " +
-            "failedPhase was '$($event.failedPhase)' and stagesExecuted was " +
-            "[$($event.stagesExecuted -join ', ')]. An engine-requiring stage " +
-            "that resolves the engine too late, or not at all, fails inside " +
-            "the stage body instead, which is what this catches.")
+            "verify.ps1 with no -Stage argument reported scope " +
+            "'$($fullScopeEvent.scope)', not 'full'; the byte-for-byte check " +
+            "needs a real full-scope run.")
     }
-
-    $expectedPhrase = "Stage(s) $engineStage require"
-    if ([string]$event.reason -notmatch [regex]::Escape($expectedPhrase)) {
+    if (-not [string]::Equals(
+            [string]$fullScopeEvent.reason, $expectedFullScopeMessage, [StringComparison]::Ordinal)) {
         throw (
-            "verify.ps1 -Stage $engineStage did not name the stage in its " +
-            "refusal. Expected to find '$expectedPhrase'; got: $($event.reason)")
+            "verify.ps1's full-scope refusal is not byte-for-byte the " +
+            "original message.`nExpected: $expectedFullScopeMessage`n" +
+            "Got:      $($fullScopeEvent.reason)")
     }
-}
-
-# --- check 4: a full-scope refusal is byte-for-byte the original message ---
-$expectedFullScopeMessage = $null
-try {
-    Resolve-GodotExecutable -ExplicitPath $bogusGodotPath | Out-Null
-    throw (
-        "Resolve-GodotExecutable unexpectedly succeeded against a bogus path; " +
-        "the full-scope byte-for-byte check has nothing to compare against.")
-}
-catch {
-    $expectedFullScopeMessage = $_.Exception.Message
-}
-
-$fullScopeResult = Get-VerifyRunResult -Arguments @(
-    "-TemporaryRoot", $sandbox, "-GodotPath", $bogusGodotPath
-)
-if ($fullScopeResult.ExitCode -eq 0) {
-    throw "verify.ps1 (full scope, no -Stage) accepted a nonexistent -GodotPath instead of refusing in preflight."
-}
-$fullScopeEvent = Get-VerificationResultEvent -Text $fullScopeResult.Text
-if ([string]$fullScopeEvent.scope -ne "full") {
-    throw (
-        "verify.ps1 with no -Stage argument reported scope " +
-        "'$($fullScopeEvent.scope)', not 'full'; the byte-for-byte check needs " +
-        "a real full-scope run.")
-}
-if (-not [string]::Equals(
-        [string]$fullScopeEvent.reason, $expectedFullScopeMessage, [StringComparison]::Ordinal)) {
-    throw (
-        "verify.ps1's full-scope refusal is not byte-for-byte the original " +
-        "message.`nExpected: $expectedFullScopeMessage`nGot:      $($fullScopeEvent.reason)")
 }
 
 # --- the guard against itself ----------------------------------------------
