@@ -1,5 +1,37 @@
 Set-StrictMode -Version Latest
 
+# Set by verify.ps1, once it knows its own run directory, to the file where
+# the verbose per-line dumps below should go instead of the console. Every
+# other caller of this file - run-game.ps1, capture-evidence.ps1,
+# update-golden-ui.ps1, test-goblin-sprite-import.ps1 - never touches this
+# variable, so for them it stays $null and Write-VerifyDiagnostic behaves
+# exactly like Write-Host always did (Issue #284).
+$script:VerifyStageLogPath = $null
+
+function Write-VerifyDiagnostic {
+    <#
+    Routes a line of output that only matters because a run happened - a raw
+    process dump, a compact "status":"ok" summary - to the caller's stage log
+    file when one is set, and to the console otherwise. A stage that actually
+    fails does not rely on this: the functions below still call Write-Host
+    directly, unconditionally, on their own failure paths, so stdout stays
+    diagnosable without opening that file (Issue #284).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$Text
+    )
+
+    if ([string]::IsNullOrEmpty($script:VerifyStageLogPath)) {
+        Write-Host $Text
+        return
+    }
+
+    Add-Content -LiteralPath $script:VerifyStageLogPath -Value $Text -Encoding UTF8
+}
+
 function Resolve-GodotExecutable {
     [CmdletBinding()]
     [OutputType([string])]
@@ -513,10 +545,17 @@ function Invoke-GodotChecked {
         $ErrorActionPreference = $previousErrorActionPreference
     }
 
-    $output | ForEach-Object { Write-Host $_ }
+    # Issue #284: this raw dump is what made a full green run's stdout
+    # hundreds of kilobytes - evidence/284-stdout-volume.json measured 96% of
+    # it as exactly this line, printed unconditionally on every call whether
+    # or not anything was wrong. The dump itself is unchanged; only its
+    # destination now depends on the outcome, decided below instead of here,
+    # so a failing call still prints loudly and a succeeding one does not.
     $errorLines = @(Get-GodotErrorLines -OutputLines $output)
 
     if ($errorLines.Count -gt 0) {
+        $output | ForEach-Object { Write-Host $_ }
+
         $report = [ordered]@{
             event = "godot_process_guard"
             status = "error"
@@ -543,6 +582,8 @@ function Invoke-GodotChecked {
     }
 
     if ($exitCode -ne 0) {
+        $output | ForEach-Object { Write-Host $_ }
+
         [ordered]@{
             event = "godot_process_guard"
             status = "error"
@@ -561,6 +602,8 @@ function Invoke-GodotChecked {
         } | Select-Object -Last 1
 
         if ($null -eq $successEvent) {
+            $output | ForEach-Object { Write-Host $_ }
+
             [ordered]@{
                 event = "godot_process_guard"
                 status = "error"
@@ -574,13 +617,14 @@ function Invoke-GodotChecked {
         }
     }
 
-    [ordered]@{
+    $output | ForEach-Object { Write-VerifyDiagnostic -Text $_ }
+    Write-VerifyDiagnostic -Text (([ordered]@{
         event = "godot_process_guard"
         status = "ok"
         exitCode = $exitCode
         engineErrorCount = 0
         expectedEvent = $ExpectedSuccessEvent
-    } | ConvertTo-Json -Compress | Write-Host
+    } | ConvertTo-Json -Compress))
 
     return [pscustomobject]@{
         ExitCode = $exitCode
@@ -646,36 +690,50 @@ function Invoke-GodotExpectedFailure {
         $stdout = @($stdoutTask.Result -split "\r?\n" | Where-Object { $_ -ne "" })
         $stderr = @($stderrTask.Result -split "\r?\n" | Where-Object { $_ -ne "" })
         $output = @($stdout) + @($stderr)
-        $output | ForEach-Object { Write-Host $_ }
 
-        if ($exitCode -ne 1) {
-            throw "Godot failure exited with code $exitCode; expected exactly 1."
+        # This whole invocation exists to prove Godot fails on purpose, so its
+        # raw output is the success case here, not the exception. Issue #284:
+        # dumping it unconditionally on every negative check across the godot
+        # stage's five invalid-startup cases plus its HUD/camera regressions
+        # is most of why a green run's stdout used to run into six figures of
+        # bytes (evidence/284-stdout-volume.json). It still prints loudly,
+        # unconditionally, the moment any of the checks below finds the
+        # failure was not the expected one.
+        try {
+            if ($exitCode -ne 1) {
+                throw "Godot failure exited with code $exitCode; expected exactly 1."
+            }
+
+            $eventPattern = '"event":"' + [Regex]::Escape($ExpectedErrorEvent) + '"'
+            $eventLine = $output | Where-Object {
+                $_ -match $eventPattern -and $_ -match '"status":"error"'
+            } | Select-Object -Last 1
+            if ($null -eq $eventLine) {
+                throw "Godot did not emit the expected '$ExpectedErrorEvent' error event."
+            }
+
+            $event = $eventLine | ConvertFrom-Json
+            if (-not [string]::IsNullOrWhiteSpace($MessagePattern) -and
+                [string]$event.message -notmatch $MessagePattern) {
+                throw (
+                    "Godot error event message '$($event.message)' did not match " +
+                    "'$MessagePattern'."
+                )
+            }
+        }
+        catch {
+            $output | ForEach-Object { Write-Host $_ }
+            throw
         }
 
-        $eventPattern = '"event":"' + [Regex]::Escape($ExpectedErrorEvent) + '"'
-        $eventLine = $output | Where-Object {
-            $_ -match $eventPattern -and $_ -match '"status":"error"'
-        } | Select-Object -Last 1
-        if ($null -eq $eventLine) {
-            throw "Godot did not emit the expected '$ExpectedErrorEvent' error event."
-        }
-
-        $event = $eventLine | ConvertFrom-Json
-        if (-not [string]::IsNullOrWhiteSpace($MessagePattern) -and
-            [string]$event.message -notmatch $MessagePattern) {
-            throw (
-                "Godot error event message '$($event.message)' did not match " +
-                "'$MessagePattern'."
-            )
-        }
-
-        [ordered]@{
+        $output | ForEach-Object { Write-VerifyDiagnostic -Text $_ }
+        Write-VerifyDiagnostic -Text (([ordered]@{
             event = "godot_expected_failure_guard"
             status = "ok"
             exitCode = $exitCode
             expectedEvent = $ExpectedErrorEvent
             message = $event.message
-        } | ConvertTo-Json -Compress | Write-Host
+        } | ConvertTo-Json -Compress))
 
         return [pscustomobject]@{
             ExitCode = $exitCode

@@ -176,7 +176,18 @@ $allowedOutsideStages = @(
     "Get-GodotNuGetSource",
     "Initialize-GodotNuGetEnvironment",
     # Cleanup of the run directory, which is best effort by design (Issue #89).
-    "Remove-TemporaryItemBestEffort"
+    "Remove-TemporaryItemBestEffort",
+    # Issue #284. Defined in GodotTools.ps1: routes a line to the run's stage
+    # log file when verify.ps1 set one, and to Write-Host otherwise. It never
+    # decides whether the repository is healthy - it only decides where a
+    # line that was going to be printed anyway ends up - so it is plumbing by
+    # the same reasoning as Write-Host itself, which is already on this list.
+    # The stage loop calls it directly (outside every stage, by definition,
+    # since it announces a stage before that stage's body runs); calls from
+    # inside Invoke-Checked, Invoke-Scenario, Invoke-GodotChecked and friends
+    # do not need this entry at all, because those functions are themselves
+    # reachable from a stage body and so is everything they call.
+    "Write-VerifyDiagnostic"
 )
 
 # Plumbing the run-setup bodies above may use on top of $allowedOutsideStages.
@@ -1715,6 +1726,195 @@ if ($env:DUNGEON_FORTRESS_SKIP_ENGINE_GATE_SMOKE -ne "1") {
     }
 }
 
+# --- stage output routing: raw dumps move to a file, failures stay loud ----
+#
+# Issue #284. Before this, Invoke-GodotChecked (and Invoke-GodotExpectedFailure,
+# Invoke-Checked, Invoke-Scenario, and the golden-UI/frame-pacing helpers)
+# printed every line of a stage's own work straight to Write-Host regardless
+# of the outcome, which is why a full green run's stdout was 352330 bytes -
+# evidence/284-stdout-volume.json measured 96% of that as exactly this dump,
+# on calls that succeeded and were never read. The fix routes it through
+# Write-VerifyDiagnostic in GodotTools.ps1: to the stage log file when
+# verify.ps1 set $script:VerifyStageLogPath, to Write-Host otherwise. A
+# failing call still writes its dump and its structured report with a plain,
+# unconditional Write-Host, on purpose, so a stage that actually fails stays
+# diagnosable from stdout without opening that file.
+#
+# This proves the routing itself, in-process against the real
+# Invoke-GodotChecked, with no real Godot and no dotnet build: $GodotPath is
+# a tiny PowerShell stub that prints fixed lines and exits with a fixed code,
+# invoked in a child process exactly the way Invoke-GodotChecked invokes the
+# real engine, and a *second* child process runs the stub run itself so this
+# session's own stdout stays uncontaminated by whatever the call under test
+# prints. That keeps this inside the dependency-free `scripts` stage.
+
+$stageOutputSandbox = Join-Path $sandbox "stage-output-284"
+New-Item -ItemType Directory -Force -Path $stageOutputSandbox | Out-Null
+
+$stageOutputRunnerPath = Join-Path $stageOutputSandbox "runner.ps1"
+[IO.File]::WriteAllText($stageOutputRunnerPath, @'
+param(
+    [Parameter(Mandatory = $true)]
+    [string]$GodotToolsPath,
+
+    [Parameter(Mandatory = $true)]
+    [string]$StubPath,
+
+    [Parameter(Mandatory = $true)]
+    [string]$LogPath,
+
+    [Parameter(Mandatory = $true)]
+    [string]$PowerShellPath
+)
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+. $GodotToolsPath
+$script:VerifyStageLogPath = $LogPath
+Invoke-GodotChecked -GodotPath $PowerShellPath `
+    -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $StubPath) `
+    -ExpectedSuccessEvent "godot_headless_smoke" | Out-Null
+'@, [Text.UTF8Encoding]::new($false))
+
+$stubGodotOkPath = Join-Path $stageOutputSandbox "stub-godot-ok.ps1"
+[IO.File]::WriteAllText($stubGodotOkPath, @'
+Write-Host (
+    '{"event":"godot_headless_smoke","status":"ok","tick":1,"checksum":"stub-ok-284"}')
+exit 0
+'@, [Text.UTF8Encoding]::new($false))
+
+$stubGodotErrorPath = Join-Path $stageOutputSandbox "stub-godot-error.ps1"
+[IO.File]::WriteAllText($stubGodotErrorPath, @'
+Write-Host (
+    '{"event":"godot_headless_smoke","status":"ok","tick":1,"checksum":"stub-partial-284"}')
+Write-Host "ERROR: stub engine failure line for issue 284 diagnostics test"
+exit 1
+'@, [Text.UTF8Encoding]::new($false))
+
+$stagePowerShellPath = (Get-Command "powershell" -CommandType Application -ErrorAction SilentlyContinue |
+    Select-Object -First 1).Source
+if ([string]::IsNullOrEmpty($stagePowerShellPath)) {
+    throw "Cannot find 'powershell' on PATH; the stage-output-routing test needs it to stand in for Godot."
+}
+$godotToolsPathForStageOutputTest = Join-Path $repoRoot "scripts\GodotTools.ps1"
+
+function Invoke-StageOutputRunner {
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$StubPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$LogPath
+    )
+
+    # Same reason as Assert-VerifyRejects and Get-VerifyRunResult above: the
+    # child's own failure goes to stderr, which this session has to read as
+    # output, not as its own terminating error.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $stageOutputRunnerPath `
+            -GodotToolsPath $godotToolsPathForStageOutputTest `
+            -StubPath $StubPath `
+            -LogPath $LogPath `
+            -PowerShellPath $stagePowerShellPath 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Text = ($output | Out-String)
+    }
+}
+
+# --- the success case: the dump and the compact summary both move to the file
+$stageOutputOkLog = Join-Path $stageOutputSandbox "ok.log"
+$stageOutputOkResult = Invoke-StageOutputRunner -StubPath $stubGodotOkPath -LogPath $stageOutputOkLog
+if ($stageOutputOkResult.ExitCode -ne 0) {
+    throw (
+        "The stage-output-routing success case failed unexpectedly: " +
+        $stageOutputOkResult.Text)
+}
+if ($stageOutputOkResult.Text -match [regex]::Escape("stub-ok-284")) {
+    throw (
+        "Invoke-GodotChecked printed its raw dump to stdout on a successful " +
+        "call even though a stage log path was set. Issue #284's whole point " +
+        "- a green run stays small - is not held: " + $stageOutputOkResult.Text)
+}
+if ($stageOutputOkResult.Text -match [regex]::Escape('"event":"godot_process_guard"')) {
+    throw (
+        "Invoke-GodotChecked printed its compact status event to stdout on a " +
+        "successful call even though a stage log path was set: " +
+        $stageOutputOkResult.Text)
+}
+if (-not (Test-Path -LiteralPath $stageOutputOkLog -PathType Leaf)) {
+    throw "Invoke-GodotChecked did not write to the stage log path at all on success."
+}
+$stageOutputOkLogText = [IO.File]::ReadAllText($stageOutputOkLog)
+if ($stageOutputOkLogText -notmatch [regex]::Escape("stub-ok-284") -or
+    $stageOutputOkLogText -notmatch [regex]::Escape('"event":"godot_process_guard"')) {
+    throw (
+        "The stage log file is missing the raw dump or the compact status " +
+        "event Invoke-GodotChecked was supposed to move there, so the " +
+        "content did not just move - it disappeared: $stageOutputOkLogText")
+}
+
+# --- the failure case: stdout must stay diagnosable without opening the file
+$stageOutputErrorLog = Join-Path $stageOutputSandbox "error.log"
+$stageOutputErrorResult = Invoke-StageOutputRunner -StubPath $stubGodotErrorPath -LogPath $stageOutputErrorLog
+if ($stageOutputErrorResult.ExitCode -eq 0) {
+    throw (
+        "The stage-output-routing failure case did not fail at all, so it " +
+        "proves nothing about diagnostics on failure: " + $stageOutputErrorResult.Text)
+}
+if ($stageOutputErrorResult.Text -notmatch [regex]::Escape(
+        "ERROR: stub engine failure line for issue 284 diagnostics test")) {
+    throw (
+        "A failing Invoke-GodotChecked call did not print the engine's own " +
+        "ERROR: line to stdout, even though a stage log path was set. A stage " +
+        "that fails has to stay diagnosable without opening the log file " +
+        "(Issue #284): " + $stageOutputErrorResult.Text)
+}
+if ($stageOutputErrorResult.Text -notmatch [regex]::Escape('"status":"error"')) {
+    throw (
+        "A failing Invoke-GodotChecked call did not print its structured " +
+        "godot_process_guard error report to stdout: " + $stageOutputErrorResult.Text)
+}
+
+# --- verification_result and its checksums must never be routed to the file
+#
+# A different failure mode from the two checks above on purpose: those prove
+# Invoke-GodotChecked's own routing behaves correctly at runtime; this one is
+# static, because the summary it protects is assembled once, at the very end
+# of a *full* run, and a full run needs a real Godot engine and a real
+# solution build - not available inside the dependency-free `scripts` stage
+# this test itself runs in.
+$verifyScriptTextForOutputCheck = [IO.File]::ReadAllText($verifyScript)
+if ($verifyScriptTextForOutputCheck -notmatch
+        '\$summary\s*\|\s*ConvertTo-Json\s+-Compress\s*\|\s*Write-Host') {
+    throw (
+        "verify.ps1's final verification_result summary is no longer printed " +
+        "with an unconditional Write-Host. It must never be routed to the " +
+        "stage log file - a run's checksums have to reach stdout regardless " +
+        "of the outcome (Issue #284).")
+}
+foreach ($requiredChecksumField in @(
+        '$summary["deterministicChecksum"]',
+        '$summary["changedSeedChecksum"]',
+        '$summary["loadChecksum"]',
+        '$summary["viewInvariantChecksum"]')) {
+    if (-not $verifyScriptTextForOutputCheck.Contains($requiredChecksumField)) {
+        throw (
+            "verify.ps1 no longer assigns $requiredChecksumField on the " +
+            "verification_result summary; a checksum went missing from " +
+            "stdout (Issue #284).")
+    }
+}
+
 # --- the guard against itself ----------------------------------------------
 
 try {
@@ -1994,6 +2194,7 @@ try {
         documentationCasesProven = @("foreign-table-ignored", "dropped-row-caught")
         emptySelectionRejected = $true
         unknownStageRejected = $true
+        stageOutputRoutingChecked = $true
     } | ConvertTo-Json -Compress | Write-Host
 }
 finally {
