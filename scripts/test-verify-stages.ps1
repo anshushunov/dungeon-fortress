@@ -1884,6 +1884,20 @@ if ($stageOutputErrorResult.Text -notmatch [regex]::Escape('"status":"error"')) 
         "A failing Invoke-GodotChecked call did not print its structured " +
         "godot_process_guard error report to stdout: " + $stageOutputErrorResult.Text)
 }
+# "stub-partial-284" only ever appears in the raw per-line dump, never in the
+# compact godot_process_guard report (whose own firstEngineError field would
+# still carry the ERROR: text above even if the raw dump itself were dropped,
+# which is exactly the gap a weaker version of this check missed - the report
+# alone could satisfy the two checks above without the dump ever running).
+# Requiring this line specifically pins the dump itself, not just one field
+# a compact report happens to duplicate it into.
+if ($stageOutputErrorResult.Text -notmatch [regex]::Escape("stub-partial-284")) {
+    throw (
+        "A failing Invoke-GodotChecked call did not print its raw pre-failure " +
+        "output (the stub's own godot_headless_smoke line) to stdout - only a " +
+        "compact report would not be enough to diagnose a real failure " +
+        "(Issue #284): " + $stageOutputErrorResult.Text)
+}
 
 # --- verification_result and its checksums must never be routed to the file
 #
