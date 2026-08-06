@@ -1,0 +1,681 @@
+{
+  "issue": 280,
+  "measuredFile": "docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md",
+  "measuredAtCommit": "HEAD (0beb5a9 at task start)",
+  "commands": {
+    "totalSize": "git show HEAD:docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md | wc -c",
+    "headingLines": "rg -n '^#{1,3} ' docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md",
+    "sectionBytes": "sed -n 'X,Yp' <файл> | wc -c  (per section, computed in Python over git show HEAD output for exact byte ranges; script embedded in evidence generation, see PR body)",
+    "readHistogramExtraction": "fd -e jsonl . \"$HOME/.claude/projects/C--gamedev-Dungeon-fortress\" | while read -r f; do jq -r 'select(.message.content != null) | .message.content[]? | select(.type==\"tool_use\" and .name==\"Read\") | [(.input.file_path // \"\"), (.input.offset // 1 | tostring), (.input.limit // \"full\" | tostring)] | @tsv' \"$f\"; done | rg -i 'PROTOTYPE_01_PREPARE_FOR_RAID\\.md'"
+  },
+  "totalBytesMeasured": 355390,
+  "totalBytesFromWc": 355390,
+  "readEvidence": {
+    "totalReadToolCallsAcrossAllTranscripts": 117,
+    "note": "Транскрипты C:/Users/User/.claude/projects/C--gamedev-Dungeon-fortress/ (включая subagents/*.jsonl), 177 файлов, включая читающие вызовы текущей сессии #280 (22 из 117) — исключить их из выборки нельзя, они уже записаны в тот же журнал, поэтому они тоже посчитаны и не выделены отдельно в столбцах ниже, кроме отдельной оговорки в теле PR.",
+    "narrowReadDefinition": "limit < 300 строк и limit не 'full' (100 из 117 вызовов); остальные 17 — широкие/полные чтения файла, размывающие гистограмму по всем разделам одинаково",
+    "zeroNarrowReadSections": [
+      "### 5.3. Потребности",
+      "## 6. Словарь непрямого управления",
+      "### 6.1. Принцип",
+      "### 6.2. Команды",
+      "## 12. Контрактные таблицы",
+      "### 12.1. Сущности",
+      "### 12.2. Ресурсы",
+      "### 12.4. Действия",
+      "### 12.5. Состояния существа",
+      "### 12.6. Команды игрока",
+      "## 17. Связь с решениями и документами"
+    ]
+  },
+  "sections": [
+    {
+      "startLine": 1,
+      "endLine": 28,
+      "bytes": 1874,
+      "title": "# Prototype 1 — «Подготовка к набегу»",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 2
+    },
+    {
+      "startLine": 29,
+      "endLine": 50,
+      "bytes": 2002,
+      "title": "## Как читать этот документ",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 2
+    },
+    {
+      "startLine": 51,
+      "endLine": 99,
+      "bytes": 4268,
+      "title": "## 1. Обещание игроку и доказываемая гипотеза",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 2
+    },
+    {
+      "startLine": 100,
+      "endLine": 101,
+      "bytes": 39,
+      "title": "## 2. Бюджет прототипа",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 2
+    },
+    {
+      "startLine": 102,
+      "endLine": 120,
+      "bytes": 2049,
+      "title": "### 2.1. Бюджет систем",
+      "readsOverlapAll": 9,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 121,
+      "endLine": 134,
+      "bytes": 731,
+      "title": "### 2.2. Бюджет контента",
+      "readsOverlapAll": 9,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 135,
+      "endLine": 154,
+      "bytes": 1690,
+      "title": "### 2.3. Non-goals",
+      "readsOverlapAll": 9,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 155,
+      "endLine": 156,
+      "bytes": 20,
+      "title": "## 3. Сессия",
+      "readsOverlapAll": 9,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 157,
+      "endLine": 176,
+      "bytes": 1292,
+      "title": "### 3.1. Единица времени",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 2
+    },
+    {
+      "startLine": 177,
+      "endLine": 269,
+      "bytes": 8710,
+      "title": "### 3.2. Партия как последовательность волн",
+      "readsOverlapAll": 12,
+      "readsOverlapNarrow_lt300": 4
+    },
+    {
+      "startLine": 270,
+      "endLine": 292,
+      "bytes": 1474,
+      "title": "### 3.3. Стартовое состояние",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 2
+    },
+    {
+      "startLine": 293,
+      "endLine": 294,
+      "bytes": 32,
+      "title": "## 4. Пространство",
+      "readsOverlapAll": 11,
+      "readsOverlapNarrow_lt300": 3
+    },
+    {
+      "startLine": 295,
+      "endLine": 589,
+      "bytes": 29517,
+      "title": "### 4.1. Карта",
+      "readsOverlapAll": 26,
+      "readsOverlapNarrow_lt300": 18
+    },
+    {
+      "startLine": 590,
+      "endLine": 602,
+      "bytes": 804,
+      "title": "### 4.2. Типы тайлов",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 3
+    },
+    {
+      "startLine": 603,
+      "endLine": 647,
+      "bytes": 3964,
+      "title": "### 4.3. Фичи карты",
+      "readsOverlapAll": 11,
+      "readsOverlapNarrow_lt300": 4
+    },
+    {
+      "startLine": 648,
+      "endLine": 750,
+      "bytes": 9515,
+      "title": "### 4.4. Зоны",
+      "readsOverlapAll": 15,
+      "readsOverlapNarrow_lt300": 8
+    },
+    {
+      "startLine": 751,
+      "endLine": 784,
+      "bytes": 2554,
+      "title": "### 4.5. Опорные расстояния",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 3
+    },
+    {
+      "startLine": 785,
+      "endLine": 786,
+      "bytes": 24,
+      "title": "## 5. Существа",
+      "readsOverlapAll": 9,
+      "readsOverlapNarrow_lt300": 2
+    },
+    {
+      "startLine": 787,
+      "endLine": 929,
+      "bytes": 14026,
+      "title": "### 5.1. Индивидуальные свойства",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 2
+    },
+    {
+      "startLine": 930,
+      "endLine": 958,
+      "bytes": 2125,
+      "title": "### 5.2. Состав населения",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 959,
+      "endLine": 979,
+      "bytes": 1591,
+      "title": "### 5.3. Потребности",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 0
+    },
+    {
+      "startLine": 980,
+      "endLine": 981,
+      "bytes": 62,
+      "title": "## 6. Словарь непрямого управления",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 0
+    },
+    {
+      "startLine": 982,
+      "endLine": 1001,
+      "bytes": 1876,
+      "title": "### 6.1. Принцип",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 0
+    },
+    {
+      "startLine": 1002,
+      "endLine": 1115,
+      "bytes": 10834,
+      "title": "### 6.2. Команды",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 0
+    },
+    {
+      "startLine": 1116,
+      "endLine": 1144,
+      "bytes": 1903,
+      "title": "### 6.3. Приоритеты",
+      "readsOverlapAll": 11,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 1145,
+      "endLine": 1186,
+      "bytes": 4022,
+      "title": "### 6.4. Правила владения",
+      "readsOverlapAll": 12,
+      "readsOverlapNarrow_lt300": 2
+    },
+    {
+      "startLine": 1187,
+      "endLine": 1188,
+      "bytes": 49,
+      "title": "## 7. Экономическая цепочка",
+      "readsOverlapAll": 12,
+      "readsOverlapNarrow_lt300": 2
+    },
+    {
+      "startLine": 1189,
+      "endLine": 1233,
+      "bytes": 3614,
+      "title": "### 7.1. Ресурсы",
+      "readsOverlapAll": 12,
+      "readsOverlapNarrow_lt300": 2
+    },
+    {
+      "startLine": 1234,
+      "endLine": 1351,
+      "bytes": 9970,
+      "title": "### 7.2. Полная цепочка",
+      "readsOverlapAll": 17,
+      "readsOverlapNarrow_lt300": 6
+    },
+    {
+      "startLine": 1352,
+      "endLine": 1408,
+      "bytes": 5391,
+      "title": "### 7.2a. Перевозка камня и материальный склад",
+      "readsOverlapAll": 16,
+      "readsOverlapNarrow_lt300": 6
+    },
+    {
+      "startLine": 1409,
+      "endLine": 1481,
+      "bytes": 6714,
+      "title": "### 7.2b. Blueprint, доставка и строительство",
+      "readsOverlapAll": 15,
+      "readsOverlapNarrow_lt300": 4
+    },
+    {
+      "startLine": 1482,
+      "endLine": 1565,
+      "bytes": 7049,
+      "title": "### 7.3. Где возникает дефицит",
+      "readsOverlapAll": 13,
+      "readsOverlapNarrow_lt300": 3
+    },
+    {
+      "startLine": 1566,
+      "endLine": 1599,
+      "bytes": 3219,
+      "title": "### 7.4. Тренировка — не вторая цепочка",
+      "readsOverlapAll": 13,
+      "readsOverlapNarrow_lt300": 4
+    },
+    {
+      "startLine": 1600,
+      "endLine": 1601,
+      "bytes": 52,
+      "title": "## 8. Автономный выбор работы",
+      "readsOverlapAll": 13,
+      "readsOverlapNarrow_lt300": 4
+    },
+    {
+      "startLine": 1602,
+      "endLine": 1665,
+      "bytes": 6085,
+      "title": "### 8.1. Порядок принятия решения",
+      "readsOverlapAll": 15,
+      "readsOverlapNarrow_lt300": 6
+    },
+    {
+      "startLine": 1666,
+      "endLine": 1734,
+      "bytes": 4680,
+      "title": "### 8.2. Скоринг",
+      "readsOverlapAll": 14,
+      "readsOverlapNarrow_lt300": 6
+    },
+    {
+      "startLine": 1735,
+      "endLine": 1748,
+      "bytes": 950,
+      "title": "### 8.3. Использование случайности",
+      "readsOverlapAll": 14,
+      "readsOverlapNarrow_lt300": 5
+    },
+    {
+      "startLine": 1749,
+      "endLine": 1750,
+      "bytes": 28,
+      "title": "## 9. Готовность",
+      "readsOverlapAll": 14,
+      "readsOverlapNarrow_lt300": 5
+    },
+    {
+      "startLine": 1751,
+      "endLine": 1782,
+      "bytes": 2682,
+      "title": "### 9.1. Формула",
+      "readsOverlapAll": 15,
+      "readsOverlapNarrow_lt300": 6
+    },
+    {
+      "startLine": 1783,
+      "endLine": 1813,
+      "bytes": 2708,
+      "title": "### 9.2. Три независимых канала «экономика → бой»",
+      "readsOverlapAll": 17,
+      "readsOverlapNarrow_lt300": 8
+    },
+    {
+      "startLine": 1814,
+      "endLine": 1815,
+      "bytes": 29,
+      "title": "## 10. Волны и бой",
+      "readsOverlapAll": 16,
+      "readsOverlapNarrow_lt300": 7
+    },
+    {
+      "startLine": 1816,
+      "endLine": 1851,
+      "bytes": 2668,
+      "title": "### 10.1. Угроза",
+      "readsOverlapAll": 17,
+      "readsOverlapNarrow_lt300": 8
+    },
+    {
+      "startLine": 1852,
+      "endLine": 1915,
+      "bytes": 5457,
+      "title": "### 10.2. Защитники",
+      "readsOverlapAll": 13,
+      "readsOverlapNarrow_lt300": 4
+    },
+    {
+      "startLine": 1916,
+      "endLine": 2115,
+      "bytes": 18978,
+      "title": "### 10.3. Разрешение боя",
+      "readsOverlapAll": 25,
+      "readsOverlapNarrow_lt300": 16
+    },
+    {
+      "startLine": 2116,
+      "endLine": 2146,
+      "bytes": 2845,
+      "title": "### 10.4. Исход волны",
+      "readsOverlapAll": 17,
+      "readsOverlapNarrow_lt300": 8
+    },
+    {
+      "startLine": 2147,
+      "endLine": 2176,
+      "bytes": 2502,
+      "title": "### 10.5. Между волнами: раны, беглецы и выбывшие",
+      "readsOverlapAll": 13,
+      "readsOverlapNarrow_lt300": 5
+    },
+    {
+      "startLine": 2177,
+      "endLine": 2212,
+      "bytes": 2629,
+      "title": "### 10.6. Дурная слава",
+      "readsOverlapAll": 12,
+      "readsOverlapNarrow_lt300": 4
+    },
+    {
+      "startLine": 2213,
+      "endLine": 2250,
+      "bytes": 3203,
+      "title": "### 10.7. Сила владения",
+      "readsOverlapAll": 13,
+      "readsOverlapNarrow_lt300": 5
+    },
+    {
+      "startLine": 2251,
+      "endLine": 2326,
+      "bytes": 6379,
+      "title": "### 10.8. Счёт партии",
+      "readsOverlapAll": 14,
+      "readsOverlapNarrow_lt300": 6
+    },
+    {
+      "startLine": 2327,
+      "endLine": 2328,
+      "bytes": 33,
+      "title": "## 11. Объяснимость",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 2
+    },
+    {
+      "startLine": 2329,
+      "endLine": 2511,
+      "bytes": 17796,
+      "title": "### 11.1. Обязательный минимум",
+      "readsOverlapAll": 15,
+      "readsOverlapNarrow_lt300": 7
+    },
+    {
+      "startLine": 2512,
+      "endLine": 2549,
+      "bytes": 3777,
+      "title": "### 11.2. Итоговая сводка",
+      "readsOverlapAll": 9,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 2550,
+      "endLine": 2551,
+      "bytes": 46,
+      "title": "## 12. Контрактные таблицы",
+      "readsOverlapAll": 7,
+      "readsOverlapNarrow_lt300": 0
+    },
+    {
+      "startLine": 2552,
+      "endLine": 2586,
+      "bytes": 3675,
+      "title": "### 12.1. Сущности",
+      "readsOverlapAll": 7,
+      "readsOverlapNarrow_lt300": 0
+    },
+    {
+      "startLine": 2587,
+      "endLine": 2594,
+      "bytes": 411,
+      "title": "### 12.2. Ресурсы",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 0
+    },
+    {
+      "startLine": 2595,
+      "endLine": 2613,
+      "bytes": 1399,
+      "title": "### 12.3. Зоны",
+      "readsOverlapAll": 9,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 2614,
+      "endLine": 2630,
+      "bytes": 1783,
+      "title": "### 12.4. Действия",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 0
+    },
+    {
+      "startLine": 2631,
+      "endLine": 2644,
+      "bytes": 556,
+      "title": "### 12.5. Состояния существа",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 0
+    },
+    {
+      "startLine": 2645,
+      "endLine": 2660,
+      "bytes": 868,
+      "title": "### 12.6. Команды игрока",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 0
+    },
+    {
+      "startLine": 2661,
+      "endLine": 2796,
+      "bytes": 10708,
+      "title": "### 12.7. Reason codes",
+      "readsOverlapAll": 11,
+      "readsOverlapNarrow_lt300": 2
+    },
+    {
+      "startLine": 2797,
+      "endLine": 2805,
+      "bytes": 594,
+      "title": "## 13. Сценарии",
+      "readsOverlapAll": 12,
+      "readsOverlapNarrow_lt300": 3
+    },
+    {
+      "startLine": 2806,
+      "endLine": 2813,
+      "bytes": 490,
+      "title": "### 13.1. `baseline` — владение живёт как жило",
+      "readsOverlapAll": 12,
+      "readsOverlapNarrow_lt300": 3
+    },
+    {
+      "startLine": 2814,
+      "endLine": 2885,
+      "bytes": 6275,
+      "title": "### 13.2. `prepared` — игрок готовится",
+      "readsOverlapAll": 12,
+      "readsOverlapNarrow_lt300": 3
+    },
+    {
+      "startLine": 2886,
+      "endLine": 2912,
+      "bytes": 1866,
+      "title": "### 13.3. `neglected` — игрок готовится неправильно",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 2913,
+      "endLine": 3551,
+      "bytes": 58641,
+      "title": "### 13.4. Ожидаемые наблюдаемые различия",
+      "readsOverlapAll": 23,
+      "readsOverlapNarrow_lt300": 14
+    },
+    {
+      "startLine": 3552,
+      "endLine": 3594,
+      "bytes": 11475,
+      "title": "## 14. Проверенный проход цикла",
+      "readsOverlapAll": 10,
+      "readsOverlapNarrow_lt300": 3
+    },
+    {
+      "startLine": 3595,
+      "endLine": 3599,
+      "bytes": 288,
+      "title": "## 15. Tuning values",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 3600,
+      "endLine": 3615,
+      "bytes": 1038,
+      "title": "### 15.1. Время и сессия",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 3616,
+      "endLine": 3635,
+      "bytes": 1125,
+      "title": "### 15.2. Экономика",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 3636,
+      "endLine": 3645,
+      "bytes": 658,
+      "title": "### 15.2a. Раскопка",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 3646,
+      "endLine": 3653,
+      "bytes": 499,
+      "title": "### 15.2b. Материальный склад",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 3654,
+      "endLine": 3662,
+      "bytes": 493,
+      "title": "### 15.2c. Строительство",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 3663,
+      "endLine": 3677,
+      "bytes": 1047,
+      "title": "### 15.3. Потребности и работа",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 3678,
+      "endLine": 3690,
+      "bytes": 803,
+      "title": "### 15.4. Подготовка",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 3691,
+      "endLine": 3775,
+      "bytes": 7854,
+      "title": "### 15.5. Выбор работы",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 3776,
+      "endLine": 3827,
+      "bytes": 5217,
+      "title": "### 15.6. Готовность и бой",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 3828,
+      "endLine": 3850,
+      "bytes": 1878,
+      "title": "### 15.7. Стартовая конфигурация и диапазоны",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 3851,
+      "endLine": 3875,
+      "bytes": 2173,
+      "title": "### 15.8. Волна, дурная слава и сила владения",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 3876,
+      "endLine": 3898,
+      "bytes": 1912,
+      "title": "### 15.9. Счёт партии",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 3899,
+      "endLine": 3924,
+      "bytes": 1988,
+      "title": "## 16. Что этот контракт не решает",
+      "readsOverlapAll": 8,
+      "readsOverlapNarrow_lt300": 1
+    },
+    {
+      "startLine": 3925,
+      "endLine": 3943,
+      "bytes": 3145,
+      "title": "## 17. Связь с решениями и документами",
+      "readsOverlapAll": 7,
+      "readsOverlapNarrow_lt300": 0
+    }
+  ]
+}
