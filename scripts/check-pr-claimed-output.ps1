@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$BodyFile,
@@ -8,6 +8,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
 
 if (-not $RepoRoot) {
     $RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
@@ -272,6 +274,7 @@ function Test-RunnableCommand {
         [string]$Command,
 
         [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
         [string]$Language,
 
         [Parameter(Mandatory = $true)]
@@ -281,7 +284,10 @@ function Test-RunnableCommand {
     if ($Command.Trim().Length -eq 0) {
         return [pscustomobject]@{ Runnable = $false; Reason = "empty command block" }
     }
-    if ($Language -notin @("powershell", "pwsh", "ps1", "")) {
+    if ([string]::IsNullOrEmpty($Language)) {
+        return [pscustomobject]@{ Runnable = $false; Reason = "fence language is missing" }
+    }
+    if ($Language -notin @("powershell", "pwsh", "ps1")) {
         return [pscustomobject]@{ Runnable = $false; Reason = "unsupported fence language '$Language'" }
     }
 
