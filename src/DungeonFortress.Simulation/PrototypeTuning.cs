@@ -279,18 +279,15 @@ public static class PrototypeTuning
     // one; a mended wound is the largest, because the domain spent a bunk and a
     // ration on it while a wave was coming.
     public const int LoyaltyBenefitFed = 2;
-    public const int LoyaltyBenefitDrilled = 3;
     public const int LoyaltyBenefitTended = 4;
     public const int LoyaltyBenefitFadePeriod = 60;
 
-    // Grudge as the delayed price of fear. Nothing is credited below the floor,
-    // so a domain nobody is afraid of accumulates no resentment; nothing is
-    // *acted on* at or above the release level, which is the "пока страх высок,
-    // обида не видна" half of the same sentence. The floor sits below the
-    // release level on purpose: there is a band in which a creature is being
-    // made to put up with things and is still too frightened to show it.
+    // Grudge as the delayed price of fear. Nothing is credited below this floor,
+    // so a domain nobody is afraid of accumulates no resentment at all. How much
+    // of what is accumulated is *acted on* is not a second constant: it is
+    // whatever the fear no longer covers (ReleasedGrudge), which is the "пока
+    // страх высок, обида не видна" half of the same sentence of pitch 6.3.
     public const int LoyaltyGrudgeFearFloor = 5;
-    public const int LoyaltyGrudgeReleaseFear = 10;
 
     // Ticks of one coercion that buy one point of resentment. Both are short
     // relative to a wave interval and long relative to a decision, so a passing
@@ -311,7 +308,7 @@ public static class PrototypeTuning
     // ADR 0019 requires the absence of a verdict to have a consequence.
     public const int LoyaltyVerdictRewardBenefit = 12;
     public const int LoyaltyVerdictPunishFear = 10;
-    public const int LoyaltyVerdictPunishUnfairGrudge = 8;
+    public const int LoyaltyVerdictPunishUnfairGrudge = 14;
     public const int LoyaltyGrudgeIgnored = 2;
 
     // How loyalty moves the choice of work. The cap is below one step of
@@ -320,6 +317,25 @@ public static class PrototypeTuning
     // asked the domain to care about. That bound is the executable half of "ни
     // одно значение не делает ни одно поведение неизбежным" (Issue #167).
     public const int LoyaltyWorkGrudgeDivisor = 3;
+
+    // How much fear buys one point of readiness to take the work on offer. It is
+    // the "работают голодными … терпят несправедливость" half of pitch 6.3, and
+    // it is the only reading fear has in ordinary life: nerve is deliberately
+    // closed to it, because there fear of the domain and fear of the fight would
+    // be added together and the second one means the opposite.
+    public const int LoyaltyWorkFearDivisor = 8;
+
+    // How much benefit buys one tile of forgiven distance, and how many tiles it
+    // may forgive at most. Six, because the upkeep a domain owes anyway — a
+    // portion now and then — must not buy anything: benefit from feeding alone
+    // hovers at nought to four over a party (evidence/312-loyalty-ledger.json),
+    // so an ordinary well-fed creature walks exactly as far as it did before this
+    // mechanic existed, and it is a verdict (twelve at a stroke) or a domain that
+    // trained somebody all party that moves it. Four tiles is the cap: it is the
+    // width of a room on this map, so a reward can take a creature into the next
+    // room and never across the dungeon.
+    public const int LoyaltyWorkReachDivisor = 3;
+    public const int LoyaltyWorkReachCap = 6;
     public const int LoyaltyWorkBiasCap = 20;
 
     // Whether resentment outweighs everything that holds a creature in the line

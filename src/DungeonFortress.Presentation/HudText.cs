@@ -342,7 +342,7 @@ public static class HudText
         "refused_place_of_panic" or "refused_place_of_wound"
             or "verdict_rewarded" or "verdict_punished"
             or "verdict_punished_without_fault" or "verdict_ignored"
-            or "combat_left_grudge" or "combat_refused_grudge" => 3,
+            or "combat_refused_grudge" => 3,
 
         "combat_fled_morale" or "combat_downed" or "injury_tended" or "injury_mending"
             or "injury_healed" => 2,

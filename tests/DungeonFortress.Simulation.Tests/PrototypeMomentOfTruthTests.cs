@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 using DungeonFortress.Simulation;
 
@@ -114,7 +115,7 @@ public sealed class PrototypeMomentOfTruthTests
         // unreadable term on a card is worse than no breakdown at all.
         string[] known =
         [
-            "benefit_drilled", "benefit_faded", "benefit_fed", "benefit_rewarded",
+            "benefit_faded", "benefit_fed", "benefit_rewarded",
             "benefit_tended", "fear_ally_downed", "fear_faded", "fear_panic",
             "fear_punished", "fear_wound", "grudge_hunger", "grudge_ignored",
             "grudge_punished_unfairly", "grudge_refused_place", "grudge_spent",
@@ -325,6 +326,124 @@ public sealed class PrototypeMomentOfTruthTests
         }
     }
 
+    /// <summary>
+    /// A card reports <b>this wave</b> and not the whole party. The rule is
+    /// section 2.2 of the design contract, and until independent review of
+    /// PR #328 it was held by nothing: review replaced every delta with the
+    /// running total and all 334 tests stayed green, because the only check that
+    /// touched the numbers ran on the <b>first</b> card of a party, where a delta
+    /// and a total are the same number.
+    ///
+    /// <para>So this one runs on the <b>second</b> card and recomputes what every
+    /// delta must be out of two published documents: where the creature stood
+    /// when the last card about it was shown, and where it stands now. It is a
+    /// check of the class and not of one substitution - any implementation that
+    /// reports totals fails it on every creature whose standing moved between two
+    /// cards, and the last assertion refuses to let the check pass at all unless
+    /// at least one of them did.</para>
+    /// </summary>
+    [Fact]
+    public void A_card_reports_the_wave_and_not_the_whole_party()
+    {
+        var cardsSeen = 0;
+        var comparedWithAHistory = 0;
+        foreach (var fixtureName in Fixtures)
+        {
+            foreach (var seed in MatrixSeeds)
+            {
+                Walk(fixtureName, seed, ref cardsSeen, ref comparedWithAHistory);
+            }
+        }
+
+        Assert.True(cardsSeen > 0, "the matrix never showed a card.");
+        Assert.True(
+            comparedWithAHistory > 0,
+            $"of the {cardsSeen} cards the matrix showed, not one was about a creature the " +
+            "domain had reported on before with a standing of its own — so every delta " +
+            "compared here equalled its own total and the check compared nothing.");
+    }
+
+    private static void Walk(
+        string fixtureName,
+        ulong seed,
+        ref int cardsSeen,
+        ref int comparedWithAHistory)
+    {
+        var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
+        var baselines = new Dictionary<int, (int Fear, int Benefit, int Grudge)>();
+        var wasWaiting = false;
+
+        while (!world.IsComplete)
+        {
+            world.Step();
+            if (!world.IsAwaitingVerdict || wasWaiting)
+            {
+                wasWaiting = world.IsAwaitingVerdict;
+                continue;
+            }
+
+            wasWaiting = true;
+            var state = world.GetSnapshot();
+            foreach (var card in state.MomentOfTruth.Cards)
+            {
+                cardsSeen++;
+                var now = state.Creatures.Single(item => item.Id == card.CreatureId).Loyalty;
+                var known = baselines.GetValueOrDefault(card.CreatureId);
+                if (known != default)
+                {
+                    comparedWithAHistory++;
+                }
+
+                var expectedFear = now.Fear - known.Fear;
+                var expectedBenefit = now.Benefit - known.Benefit;
+                var expectedGrudge = now.Grudge - known.Grudge;
+                Assert.True(
+                    expectedFear == card.FearThisWave &&
+                    expectedBenefit == card.BenefitThisWave &&
+                    expectedGrudge == card.GrudgeThisWave,
+                    $"{fixtureName}/{seed}, t{state.Tick}: the card about {card.Name} reports " +
+                    $"{card.FearThisWave}/{card.BenefitThisWave}/{card.GrudgeThisWave} where " +
+                    $"the wave moved it by {expectedFear}/{expectedBenefit}/{expectedGrudge} " +
+                    $"(it stood at {known.Fear}/{known.Benefit}/{known.Grudge} when the domain " +
+                    "last reported on it). A card that reports the whole party repeats the " +
+                    "story the player has already answered, and the verdict is asked about " +
+                    "the wrong thing.");
+
+                baselines[card.CreatureId] = (now.Fear, now.Benefit, now.Grudge);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A domain that punishes whoever it is shown, wave after wave, is eventually
+    /// refused. This is the one behaviour a grudge has left after independent
+    /// review of PR #328 showed the other one to be structurally unreachable, and
+    /// it is reached here by playing the story the mechanic is about rather than
+    /// by moving a constant.
+    /// </summary>
+    [Fact]
+    public void A_domain_that_punishes_without_cause_is_eventually_refused_the_line()
+    {
+        var state = PlayPunishingEveryCard("baseline");
+        var refusals = state.Events
+            .Where(item => item.ReasonCode == "combat_refused_grudge")
+            .ToArray();
+
+        Assert.True(
+            refusals.Length > 0,
+            "nobody ever refused to stand for a domain that punished every creature it was " +
+            "shown, so the only behaviour a grudge has left is unreachable - which is exactly " +
+            "what independent review found about the one that was removed. Best case over the " +
+            $"party: {Contest(state)}.");
+
+        var refusal = refusals[0];
+        Assert.True(refusal.Details.ContainsKey("grudge"));
+        Assert.True(refusal.Details.ContainsKey("holding"));
+        Assert.True(
+            refusal.Details["grudge"] > 0,
+            "the refusal names a grudge of zero, so it is not a refusal by grudge.");
+    }
+
     // ------------------------------------------------------------------
     // Criterion 5 — the command is accepted and refused by the contract.
     // ------------------------------------------------------------------
@@ -451,6 +570,69 @@ public sealed class PrototypeMomentOfTruthTests
     }
 
     // ------------------------------------------------------------------
+    // The contract and the code cannot drift apart on a number.
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Every tuning value of the slice appears in the contract's own table with
+    /// the value the code actually holds, and nothing appears in one and not the
+    /// other.
+    ///
+    /// <para>Independent review of PR #328 found two numbers where the contract
+    /// and the code disagreed, and one of them stood inside a formula the
+    /// contract asks the reader to apply. A table maintained by hand drifts; the
+    /// only fix that holds is to read both sides and compare them, which is what
+    /// this does. The names are mapped mechanically — <c>loyalty_fear_wound</c>
+    /// to <c>LoyaltyFearWound</c> — so a new constant cannot be added without a
+    /// row, and a row cannot be written for a constant that does not exist.</para>
+    /// </summary>
+    [Fact]
+    public void The_tuning_table_of_the_contract_carries_the_numbers_the_code_holds()
+    {
+        var root = FindRepositoryRoot();
+        var contract = File.ReadAllText(Path.Combine(
+            root, "docs", "design", "SLICE_03_MOMENT_OF_TRUTH.md"));
+        var tuning = File.ReadAllText(Path.Combine(
+            root, "src", "DungeonFortress.Simulation", "PrototypeTuning.cs"));
+
+        var documented = Regex
+            .Matches(contract, @"\|\s*`((?:loyalty|moment_of_truth)_[a-z_]+)`\s*\|\s*(-?\d+)\s*\|")
+            .ToDictionary(match => match.Groups[1].Value, match => match.Groups[2].Value);
+        var declared = Regex
+            .Matches(tuning, @"public const int ((?:Loyalty|MomentOfTruth)[A-Za-z]+) = (-?\d+);")
+            .ToDictionary(match => match.Groups[1].Value, match => match.Groups[2].Value);
+
+        Assert.NotEmpty(documented);
+        Assert.NotEmpty(declared);
+
+        var problems = new List<string>();
+        foreach (var (name, value) in documented.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            var constant = string.Concat(name.Split('_')
+                .Select(part => char.ToUpperInvariant(part[0]) + part[1..]));
+            if (!declared.TryGetValue(constant, out var actual))
+            {
+                problems.Add($"`{name}` is in the contract and there is no {constant} in the code");
+            }
+            else if (actual != value)
+            {
+                problems.Add($"`{name}`: contract says {value}, code holds {actual}");
+            }
+        }
+
+        foreach (var (constant, value) in declared.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            var name = Regex.Replace(constant, "(?<!^)(?=[A-Z])", "_").ToLowerInvariant();
+            if (!documented.ContainsKey(name))
+            {
+                problems.Add($"{constant} = {value} is in the code and not in the contract table");
+            }
+        }
+
+        Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
+    }
+
+    // ------------------------------------------------------------------
     // Criterion 7 — the consequence is reproduced by a scenario.
     // ------------------------------------------------------------------
 
@@ -460,6 +642,12 @@ public sealed class PrototypeMomentOfTruthTests
     /// difference visible in the journal rather than only in the numbers. The
     /// mutant M6 makes the effect of a verdict nothing and this goes red.
     /// </summary>
+    /// <para><b>Asked of both values of the enumeration.</b> Independent review
+    /// of PR #328 found that it used to be asked of <c>punish</c> alone, and that
+    /// <c>reward</c> had no second reading in behaviour at all — so criterion 7
+    /// of Issue #312 held for one value out of two. The reward's own channel
+    /// (<see cref="PrototypeWorld.LoyaltyReach"/>) is what this theory holds, and
+    /// the mutant M7 zeroes it.</para>
     [Fact]
     public void A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave()
     {
@@ -467,39 +655,85 @@ public sealed class PrototypeMomentOfTruthTests
         var atTick = open.CurrentTick;
         var subject = PrototypeScenario.Capture(open).State.MomentOfTruth.Cards[0].CreatureId;
 
-        var without = PlayOut(LoadFixture("baseline"));
-        var with = PlayOut(LoadFixture("baseline") with
+        var silent = PlayOut(LoadFixture("baseline"));
+        var punished = PlayOut(LoadFixture("baseline") with
         {
             Commands = [new VerdictCommand(atTick, subject, VerdictKind.Punish)],
         });
+        var rewarded = PlayOut(LoadFixture("baseline") with
+        {
+            Commands = [new VerdictCommand(atTick, subject, VerdictKind.Reward)],
+        });
 
-        // The verdict's own journal entry is excluded from the comparison, and
-        // that exclusion is the whole strength of this check. Left in, the two
-        // lists differ because one of them contains the line "was punished" —
-        // which says the command was recorded, not that anything came of it. The
-        // mutant M6 makes the effect of a verdict nothing and passes a
-        // comparison that counts its own announcement.
-        var mine = Decisions(with, subject);
-        var theirs = Decisions(without, subject);
+        // Three arms and not two, and the third one is what makes the check say
+        // something about the *verdict* rather than about the act of answering.
+        // Answering at all already changes the world — an answered card is not
+        // charged `grudge_ignored` — so "answered differs from unanswered" is
+        // true even of a verdict with no effect of its own. Comparing the two
+        // signs against each other removes that confound entirely: both arms
+        // answered the same card on the same tick, and the only difference left
+        // is what the player said.
+        //
+        // The verdict's own journal entry is excluded from every comparison for
+        // the same reason: left in, the lists differ because one of them says
+        // "was punished", which records that the command arrived and not that
+        // anything came of it. The mutant M6 makes the effect of a verdict
+        // nothing and M7 does the same to the reward's own channel; both are
+        // caught here.
+        var quiet = Decisions(silent, subject);
+        var harsh = Decisions(punished, subject);
+        var kind = Decisions(rewarded, subject);
+
         Assert.True(
-            !mine.SequenceEqual(theirs),
-            $"creature {subject} decided exactly the same things with the verdict and without " +
-            "it, so the verdict changed nothing that anybody can see.");
+            !harsh.SequenceEqual(kind),
+            $"creature {subject} decided exactly the same things whether the player rewarded " +
+            "it or punished it, so the sign of the verdict is not a decision about anything. " +
+            $"Who moved between the two: {Moved(punished, rewarded)}.");
+        Assert.True(
+            !harsh.SequenceEqual(quiet),
+            $"creature {subject} decided exactly the same things punished as ignored. " +
+            $"Who moved: {Moved(punished, silent)}.");
+        // A reward is asked of every creature the domain put on a card, and one
+        // witness is enough. Which of the three the reach moves is a fact about
+        // where they happen to be standing — a creature whose work nobody else
+        // is competing for takes it whether it has been rewarded or not — and
+        // demanding that all three move would be demanding that the mechanic
+        // override the matching rather than lean on it.
+        var witnesses = PrototypeScenario.Capture(open).State.MomentOfTruth.Cards
+            .Select(card => card.CreatureId)
+            .Where(id =>
+            {
+                var run = PlayOut(LoadFixture("baseline") with
+                {
+                    Commands = [new VerdictCommand(atTick, id, VerdictKind.Reward)],
+                });
+                return !Decisions(run, id).SequenceEqual(Decisions(silent, id));
+            })
+            .ToArray();
+        Assert.True(
+            witnesses.Length > 0,
+            "not one of the three creatures the domain reported on did anything differently " +
+            "for being rewarded, so `reward` is a command with no consequence and criterion 7 " +
+            "holds for one value of the enumeration out of two. Who moved when the first card " +
+            $"was rewarded: {Moved(rewarded, silent)}.");
 
-        // And the verdict itself is in the journal, in words.
-        Assert.Contains(
-            with.Events,
-            @event => @event.CreatureId == subject &&
-                @event.ReasonCode.StartsWith("verdict_", StringComparison.Ordinal));
+        // And each verdict is in the journal, in words.
+        foreach (var state in new[] { punished, rewarded })
+        {
+            Assert.Contains(
+                state.Events,
+                item => item.CreatureId == subject &&
+                    item.ReasonCode.StartsWith("verdict_", StringComparison.Ordinal));
+        }
 
         static List<string> Decisions(PrototypeSnapshot state, int creatureId) =>
         [
             .. state.Events
-                .Where(@event => @event.CreatureId == creatureId &&
-                    !@event.ReasonCode.StartsWith("verdict_", StringComparison.Ordinal))
-                .Select(@event => string.Create(
+                .Where(item => item.CreatureId == creatureId &&
+                    !item.ReasonCode.StartsWith("verdict_", StringComparison.Ordinal))
+                .Select(item => string.Create(
                     CultureInfo.InvariantCulture,
-                    $"t{@event.FirstTick} {@event.ReasonCode} x{@event.Repeats}")),
+                    $"t{item.FirstTick} {item.ReasonCode} x{item.Repeats}")),
         ];
     }
 
@@ -662,6 +896,141 @@ public sealed class PrototypeMomentOfTruthTests
             world.IsAwaitingVerdict,
             $"{fixtureName} played a whole party without ever stopping between two waves.");
         return world;
+    }
+
+    /// <summary>
+    /// Which creatures decided anything differently between two parties. It is
+    /// in the failure message rather than in a probe script, because "the verdict
+    /// moved nobody" and "the verdict moved somebody else" are different defects
+    /// and the message has to tell them apart.
+    /// </summary>
+    private static string Moved(PrototypeSnapshot with, PrototypeSnapshot without)
+    {
+        var lines = new List<string>();
+        foreach (var creature in with.Creatures)
+        {
+            var mine = Story(with, creature.Id);
+            var theirs = Story(without, creature.Id);
+            if (!mine.SequenceEqual(theirs))
+            {
+                lines.Add(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"#{creature.Id} {creature.Name} ({mine.Count} vs {theirs.Count} entries)"));
+            }
+        }
+
+        return lines.Count == 0 ? "nobody at all" : string.Join(", ", lines);
+
+        static List<string> Story(PrototypeSnapshot state, int creatureId) =>
+        [
+            .. state.Events
+                .Where(item => item.CreatureId == creatureId &&
+                    !item.ReasonCode.StartsWith("verdict_", StringComparison.Ordinal))
+                .Select(item => string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"t{item.FirstTick} {item.ReasonCode} x{item.Repeats}")),
+        ];
+    }
+
+    /// <summary>
+    /// The closest anybody in this party came to refusing the line, so that a
+    /// failure says how far off the contest was instead of only that it never
+    /// happened.
+    /// </summary>
+    private static string Contest(PrototypeSnapshot state)
+    {
+        var best = state.Creatures
+            .Select(creature => new
+            {
+                creature.Name,
+                Released = Math.Max(0, creature.Loyalty.Grudge - creature.Loyalty.Fear),
+                Holding = creature.Loyalty.Benefit + creature.Loyalty.Fear +
+                    creature.Grit * PrototypeTuning.LoyaltyRefuseGritWeight,
+                creature.Loyalty.Fear,
+                creature.Loyalty.Grudge,
+            })
+            .OrderByDescending(item => item.Released * PrototypeTuning.LoyaltyRefuseGrudgeWeight - item.Holding)
+            .First();
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{best.Name} released {best.Released} x{PrototypeTuning.LoyaltyRefuseGrudgeWeight} " +
+            $"= {best.Released * PrototypeTuning.LoyaltyRefuseGrudgeWeight} against holding " +
+            $"{best.Holding} (fear {best.Fear}, grudge {best.Grudge}) at the end of the party");
+    }
+
+    /// <summary>
+    /// Plays on from an open moment of truth until the next one opens.
+    /// </summary>
+    private static void RunToNextMomentOfTruth(PrototypeWorld world, string fixtureName)
+    {
+        while (world.IsAwaitingVerdict && !world.IsComplete)
+        {
+            world.Step();
+        }
+
+        while (!world.IsComplete && !world.IsAwaitingVerdict)
+        {
+            world.Step();
+        }
+
+        Assert.True(
+            world.IsAwaitingVerdict,
+            $"{fixtureName} never opened a second moment of truth, so nothing here compares a " +
+            "card with the one before it.");
+    }
+
+    /// <summary>
+    /// A whole party in which the player punishes the first creature of every
+    /// card the domain shows, whether or not it did anything wrong. The commands
+    /// are built one pause at a time, because the tick a wave ends on and the
+    /// creature a card is about are both emergent; each is an ordinary command of
+    /// the dictionary, applied on its own tick like any other.
+    /// </summary>
+    private static PrototypeSnapshot PlayPunishingEveryCard(string fixtureName)
+    {
+        var log = LoadFixture(fixtureName);
+        var issued = new List<PrototypeCommand>();
+        for (var round = 0; round < PrototypeTuning.WaveCount; round++)
+        {
+            var world = new PrototypeWorld(log with { Commands = [.. log.Commands, .. issued] });
+            var seen = 0;
+            var added = false;
+            while (!world.IsComplete && !added)
+            {
+                var wasWaiting = world.IsAwaitingVerdict;
+                world.Step();
+                if (!world.IsAwaitingVerdict || wasWaiting)
+                {
+                    continue;
+                }
+
+                seen++;
+                if (seen <= round)
+                {
+                    continue;
+                }
+
+                var pause = world.GetSnapshot().MomentOfTruth;
+                issued.Add(new VerdictCommand(
+                    world.CurrentTick,
+                    pause.Cards[0].CreatureId,
+                    VerdictKind.Punish));
+                added = true;
+            }
+
+            if (!added)
+            {
+                break;
+            }
+        }
+
+        var final = new PrototypeWorld(log with { Commands = [.. log.Commands, .. issued] });
+        while (!final.IsComplete)
+        {
+            final.Step();
+        }
+
+        return final.GetSnapshot();
     }
 
     private static void RunPastTheWindow(PrototypeWorld world)

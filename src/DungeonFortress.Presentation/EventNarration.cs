@@ -143,10 +143,6 @@ public static class EventNarration
                 $"would not stand for wave {Number(details, "wave", "?")}: " +
                 $"a grudge of {Number(details, "grudge", "?")} against " +
                 $"{Number(details, "holding", "?")} holding it.",
-            "combat_left_grudge" =>
-                $"walked out of the fight for wave {Number(details, "wave", "?")}: " +
-                $"a grudge of {Number(details, "grudge", "?")} against " +
-                $"{Number(details, "holding", "?")} holding it. Not fear — resentment.",
 
             // The moment of truth.
             "verdict_rewarded" =>

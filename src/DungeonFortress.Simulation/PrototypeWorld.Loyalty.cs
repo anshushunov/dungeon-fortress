@@ -156,17 +156,29 @@ public sealed partial class PrototypeWorld
     }
 
     /// <summary>
-    /// Whether this creature's grudge is currently visible in its behaviour.
+    /// How much of this creature's grudge is currently visible in its
+    /// behaviour: whatever the fear no longer covers.
     ///
-    /// Section 6.3 of the pitch: "Пока страх высок, обида не видна. Как только
-    /// он падает … накопленное выстреливает разом". So the grudge is always
-    /// accumulated and only sometimes acted on, and the switch is the creature's
-    /// own fear rather than a timer.
+    /// <para>Section 6.3 of the pitch: "Пока страх высок, обида не видна. Как
+    /// только он падает … накопленное выстреливает разом". So the grudge is
+    /// always accumulated and only sometimes acted on, and what holds it down is
+    /// the creature's own fear rather than a timer.</para>
+    ///
+    /// <para><b>A comparison and not a threshold, and the difference is
+    /// load-bearing.</b> The first version released the whole grudge below a
+    /// fixed fear and nothing above it, which made the mechanic unreachable from
+    /// its own main source: a punishment is the largest single grudge there is
+    /// and it raises fear by more than it raises the grudge, so a punished
+    /// creature was pinned on the wrong side of the threshold for the rest of
+    /// the party. Independent review of PR #328 measured the consequence —
+    /// <c>combat_refused_grudge</c> never fired in any shipped journal.
+    /// Subtracting one from the other makes the delayed price arrive when the
+    /// pitch says it does: fear fades one point per
+    /// <see cref="PrototypeTuning.LoyaltyFearFadePeriod"/> quiet ticks, and the
+    /// resentment underneath it surfaces as it goes.</para>
     /// </summary>
     private static int ReleasedGrudge(CreatureState creature) =>
-        creature.Loyalty.Fear < PrototypeTuning.LoyaltyGrudgeReleaseFear
-            ? creature.Loyalty.Grudge
-            : 0;
+        Math.Max(0, creature.Loyalty.Grudge - creature.Loyalty.Fear);
 
     /// <summary>
     /// The one sweep that credits everything the world itself produced this
@@ -264,6 +276,18 @@ public sealed partial class PrototypeWorld
     /// What the domain gave this creature since the previous tick: a portion
     /// eaten, form gained at a post, a wound tended.
     ///
+    /// <para><b>Training is deliberately not a benefit</b>, and the omission is
+    /// both a principle and a measurement. The principle: <c>martialForm</c> is
+    /// what a creature gains from its own labour, and it pays for it in satiety
+    /// and fatigue (<see cref="PrototypeTuning.DrillSatietyCost"/>,
+    /// <see cref="PrototypeTuning.DrillFatigue"/>) — what the domain gives is a
+    /// portion, a bunk and a verdict, not the work somebody did. The
+    /// measurement: with training counted, `prepared` carried up to 29 points of
+    /// benefit before the first wave had even landed against `baseline`'s one, so
+    /// the ledger of a drilling domain was thirty deep in routine and the twelve
+    /// points a reward is worth were lost inside it. Both readings say the same
+    /// thing: a reward has to be legible against the ledger it lands in.</para>
+    ///
     /// <para>"Выполненная работа" from the orienting list of Issue #312 is
     /// deliberately absent. There is no published per-creature fact that says "a
     /// job finished on this tick" — <c>workTicks</c> counts ticks and not
@@ -280,15 +304,6 @@ public sealed partial class PrototypeWorld
         {
             gained |= Accrue(
                 creature, LoyaltyAxis.Benefit, "benefit_fed", PrototypeTuning.LoyaltyBenefitFed);
-        }
-
-        if (creature.MartialForm > ledger.PreviousMartialForm)
-        {
-            gained |= Accrue(
-                creature,
-                LoyaltyAxis.Benefit,
-                "benefit_drilled",
-                PrototypeTuning.LoyaltyBenefitDrilled);
         }
 
         if (creature.Injury < ledger.PreviousInjury)
@@ -452,22 +467,66 @@ public sealed partial class PrototypeWorld
     /// the executable half of "ни одно значение не делает ни одно поведение
     /// неизбежным".
     ///
-    /// <para><b>Only released resentment is read here, and never benefit.</b>
-    /// The two axes are deliberately given different channels, and the split is
-    /// the pitch's own: benefit is "насколько ему выгодно здесь оставаться"
-    /// (6.2), which is a question about standing with the domain and is answered
-    /// where standing is tested — in the line, under <see cref="ApplyMorale"/>.
-    /// Resentment is what makes an ordinary day drag, and that is this channel.
-    /// The split also keeps the price of the slice where the slice's claim is:
-    /// grudge cannot exist before the first fight (it is gated on fear), so a
-    /// domain that has not been raided yet chooses its work exactly as it did
-    /// before this mechanic existed.</para>
+    /// <para><b>Fear and released resentment, and they are the two halves of one
+    /// sentence of the pitch.</b> Section 6.3: "Страх работает немедленно: под
+    /// страхом существа делают то, чего не хотят — работают голодными … терпят
+    /// несправедливость. Но каждое такое принуждение копит обиду." So fear makes
+    /// a creature readier to take what it is offered, resentment makes it drag,
+    /// and the second is bought by the first. Both are bounded by the same cap,
+    /// which sits below one step of affinity, so neither can outrank what the
+    /// player asked the domain to care about.</para>
+    ///
+    /// <para>Neither exists before the first fight, so a domain that has not been
+    /// raided yet chooses its work exactly as it did before this mechanic. What
+    /// benefit does to work is a different thing and has its own function,
+    /// <see cref="LoyaltyReach"/>.</para>
     /// </summary>
     private static int LoyaltyWorkBias(CreatureState creature)
     {
-        var bias = -(ReleasedGrudge(creature) / PrototypeTuning.LoyaltyWorkGrudgeDivisor);
-        return Math.Max(bias, -PrototypeTuning.LoyaltyWorkBiasCap);
+        var bias =
+            creature.Loyalty.Fear / PrototypeTuning.LoyaltyWorkFearDivisor -
+            ReleasedGrudge(creature) / PrototypeTuning.LoyaltyWorkGrudgeDivisor;
+        return Math.Clamp(
+            bias,
+            -PrototypeTuning.LoyaltyWorkBiasCap,
+            PrototypeTuning.LoyaltyWorkBiasCap);
     }
+
+    /// <summary>
+    /// How many tiles of the way to a job this creature is willing to stop
+    /// counting, because the domain has given it something.
+    ///
+    /// <para><b>Why benefit needed a second channel at all.</b> Independent
+    /// review of PR #328 found the two verdicts asymmetric: the grudge a
+    /// punishment buys was read in two places, and benefit in exactly one — the
+    /// holding side of <see cref="ResentmentOutweighsTheLine"/>, which is a
+    /// contest that almost never runs. So <c>reward</c> was a command with no
+    /// observable consequence, and criterion 7 of Issue #312 held for one value
+    /// of the enumeration out of two. The owner's decision of 2026-08-07 is that
+    /// benefit gets a second reading in behaviour, and names the shape:
+    /// готовность браться за тяжёлую или далёкую работу.</para>
+    ///
+    /// <para><b>Why distance and not nerve.</b> The symmetric answer — a term in
+    /// <see cref="ApplyMorale"/>, mirroring the grudge — was rejected, and for a
+    /// reason already measured on this branch rather than a taste: loyalty in
+    /// nerve was tried with fear and again with the grudge, and both times it
+    /// paid with an invariant (contract invariant 4 on seed 20260728, and the
+    /// readability of panic on prepared/20260727). Nerve answers "will it hold
+    /// when it is frightened", and a reward is not an answer to fear. Distance
+    /// answers "will it walk over there for you", which is what a creature that
+    /// owes the domain something actually does differently on an ordinary day —
+    /// and an ordinary day is where the pitch's section 6.11 puts the weight of
+    /// a reward.</para>
+    ///
+    /// <para>It forgives distance and never adds score: a creature that has been
+    /// treated well is willing to walk further, not to work harder in place. The
+    /// cap keeps the forgiveness below the reach of the map, so the far corner
+    /// never becomes as cheap as the next room.</para>
+    /// </summary>
+    private static int LoyaltyReach(CreatureState creature) =>
+        Math.Min(
+            creature.Loyalty.Benefit / PrototypeTuning.LoyaltyWorkReachDivisor,
+            PrototypeTuning.LoyaltyWorkReachCap);
 
     private PrototypeLoyaltySnapshot ToSnapshot(LoyaltyState ledger, bool released) =>
         new(

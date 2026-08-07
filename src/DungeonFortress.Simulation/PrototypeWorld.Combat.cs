@@ -84,35 +84,6 @@ public sealed partial class PrototypeWorld
             return;
         }
 
-        // Asked of the people already in the line as well, and asked first: a
-        // creature whose resentment has surfaced walks out of a fight it had
-        // joined. This is the "бегство" channel of Issue #312, and it is
-        // deliberately **not** a flight — nerve is not broken, the tile is not
-        // remembered as a place of panic and the wave does not count a defender
-        // who ran. A grudge is not panic, and the journal says which happened.
-        foreach (var creature in _creatures
-                     .Where(item => item.Mode == CreatureMode.Fighting)
-                     .OrderBy(item => item.Id)
-                     .ToArray())
-        {
-            if (!ResentmentOutweighsTheLine(creature))
-            {
-                continue;
-            }
-
-            creature.Mode = CreatureMode.Waiting;
-            creature.LeftTheFight = true;
-            creature.IdleTicks = 0;
-            var walkedOut = new Dictionary<string, int>
-            {
-                ["wave"] = wave.Number,
-                ["grudge"] = creature.Loyalty.Grudge,
-                ["holding"] = HoldingTheLine(creature),
-            };
-            SpendGrudge(creature);
-            RecordDecision(creature, "combat_left_grudge", walkedOut);
-        }
-
         foreach (var creature in _creatures.Where(c => c.Mode is not (CreatureMode.Fighting or CreatureMode.Fled or CreatureMode.Downed)).OrderBy(c => c.Id))
         {
             var failed = new Dictionary<string, int> { ["wave"] = wave.Number };
@@ -169,6 +140,17 @@ public sealed partial class PrototypeWorld
     /// own. A punishment adds fear, which both holds the creature and hides the
     /// grudge; a reward adds benefit on the other side of the same
     /// comparison.</para>
+    ///
+    /// <para><b>Asked only of creatures that are not in the line yet</b>, and the
+    /// omission is a finding rather than an oversight. A second pass over the
+    /// people already fighting existed and wrote <c>combat_left_grudge</c>;
+    /// independent review of PR #328 showed by probe that it is <b>structurally
+    /// unreachable</b>. Joining and leaving were decided by this very comparison,
+    /// and nothing inside a fight moves either side of it: a grudge is credited
+    /// by coercion and none happens in combat, while fear only grows there, so a
+    /// creature that passed the test on the way in can never fail it on the way
+    /// out. A term the mechanic cannot reach is a promise the contract does not
+    /// keep, so it was removed rather than argued for.</para>
     /// </summary>
     private static bool ResentmentOutweighsTheLine(CreatureState creature) =>
         ReleasedGrudge(creature) * PrototypeTuning.LoyaltyRefuseGrudgeWeight >
