@@ -93,8 +93,9 @@ public sealed class MemoryInspectorTests(ITestOutputHelper output)
             .ToArray();
         Assert.Equal(printed.OrderByDescending(tick => tick).ToArray(), printed);
 
-        // One line for all of them, not a heading and a line each: the panel fits
-        // sixteen lines at 1280x720 and the overflow guard refuses more.
+        // One line for all of them, not a heading and a line each: the HUD
+        // overflow guard refuses the taller, per-place layout the panel used to
+        // have (see InspectorText.DescribeMemory).
         Assert.Equal(1, line.Count(character => character == '\n'));
         output.WriteLine(panel);
     }
