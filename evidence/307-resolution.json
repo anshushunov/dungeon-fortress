@@ -1,0 +1,32 @@
+{
+  "issue": 307,
+  "question": "Resolve-GodotExecutable fails on a machine where GODOT4_CONSOLE and PATH are both configured for Godot 4.7.1 .NET. Why, and what does agent state look like when it fails?",
+  "environment": {
+    "machineUserSettings": {
+      "GODOT4_CONSOLE_User": "C:\\gamedev\\Godot_v4.7.1-stable_mono_win64\\Godot_v4.7.1-stable_mono_win64_console.exe",
+      "PATH_User_contains": "C:\\gamedev\\Godot_v4.7.1-stable_mono_win64",
+      "resolverCommandNames": "GodotTools.ps1:54, includes Godot_v4.7.1-stable_mono_win64_console"
+    },
+    "conclusion": "The variable, PATH entry and resolver name list are all present and correctly matched. The failure is not a configuration mistake."
+  },
+  "worktree": "C:/gamedev/_wt-307",
+  "repro": [
+    {
+      "step": "Confirm the agent's own shell does not see the user-level GODOT4_CONSOLE variable at all",
+      "command": "echo \"GODOT4_CONSOLE=[$GODOT4_CONSOLE]\" ; powershell -NoProfile -ExecutionPolicy Bypass -Command \"Write-Output ('env:GODOT4_CONSOLE=[' + $env:GODOT4_CONSOLE + ']')\"",
+      "output": "GODOT4_CONSOLE=[]\nenv:GODOT4_CONSOLE=[]"
+    },
+    {
+      "step": "Call Resolve-GodotExecutable directly with no override, no GODOT4_CONSOLE, relying only on PATH lookup by name",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \". ./scripts/GodotTools.ps1; try { Resolve-GodotExecutable } catch { Write-Output ('FAILED: ' + $_.Exception.Message) }\"",
+      "output": "FAILED: Godot 4.7.1 .NET was not found. Use one of:\n  -GodotPath <console executable>\n  $env:GODOT4_CONSOLE=<console executable>\n  add godot4_console, godot4, or godot to PATH"
+    },
+    {
+      "step": "Same failure surfaces end to end through verify.ps1's preflight for the godot stage",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage godot",
+      "output": "{\"event\":\"verification_result\",\"status\":\"error\",\"scope\":\"partial\",\"failedPhase\":\"preflight\",\"failedStage\":null,\"stagesExecuted\":[],\"stagesNotRun\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\"],\"reason\":\"Stage(s) godot require the Godot engine and it could not be resolved: Godot 4.7.1 .NET was not found. Use one of:\\n  -GodotPath <console executable>\\n  $env:GODOT4_CONSOLE=<console executable>\\n  add godot4_console, godot4, or godot to PATH\"}"
+    }
+  ],
+  "cause": "GODOT4_CONSOLE and the PATH entry are both set at the User scope on this machine, but the process tree the agent runs in was forked before those variables were written (or from a session that predates them), and Windows child processes never re-read a parent account's environment after they start - only new processes started after the variable was set inherit it. Resolve-GodotExecutable's first three tiers (-GodotPath, $env:GODOT4_CONSOLE, PATH lookup by name via Get-Command) are all environment-dependent, so all three come up empty in this process even though the machine is configured correctly. Restarting the shell fixes the symptom on this one machine but not the underlying gap: a clean machine, or the next developer's first session before their profile script has run, hits the identical refusal for the identical reason.",
+  "fixDirection": "Add a convention-based last resort to Resolve-GodotExecutable that finds the engine by disk layout (a Godot_v*-stable_mono_win64 directory next to the repository root) instead of through any environment variable, so resolution no longer depends on what this particular process happened to inherit."
+}

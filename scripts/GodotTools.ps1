@@ -63,6 +63,55 @@ function Resolve-GodotExecutable {
         }
     }
 
+    # Issue #307. Last resort, and deliberately last: the three tiers above all
+    # read from this process's own environment (-GodotPath is the caller's
+    # argument, GODOT4_CONSOLE and PATH are inherited variables), and a machine
+    # can have every one of them set correctly while this particular process
+    # still sees none of it - measured in evidence/307-resolution.json, where
+    # GODOT4_CONSOLE and the PATH entry both existed at User scope but neither
+    # reached the agent's process tree, which had forked before they were
+    # written. A directory laid out next to the repository root the way
+    # ENVIRONMENT_SETUP.md documents is read straight off disk instead, so it
+    # survives that gap on any machine using the documented layout - with no
+    # environment variable, and without this repository writing one either
+    # (AGENTS.md forbids that).
+    #
+    # $PSScriptRoot here is this file's own directory (scripts/), not the
+    # caller's - PowerShell binds it to where a function is *defined*, not
+    # where it is invoked from, confirmed for run-game.ps1, verify.ps1 and
+    # spikes/142-scale-spike/capture-scale-spike.ps1 alike. That makes the
+    # repository root one Join-Path away, the same computation verify.ps1
+    # itself uses for $repoRoot.
+    $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+    $parentDirectory = Split-Path -Parent $repositoryRoot
+
+    if (-not [string]::IsNullOrWhiteSpace($parentDirectory) -and
+        (Test-Path -LiteralPath $parentDirectory -PathType Container)) {
+
+        # Sorted newest-version-first by directory name, so that when more than
+        # one such directory exists side by side - as this repository's own
+        # development machine does, with a 4.6.1 and a 4.7.1 checkout both
+        # present - the tier prefers the higher version instead of whichever
+        # one the filesystem happens to enumerate first. This is a preference,
+        # not a correctness filter: a lone wrong-version directory is still
+        # returned (there is nothing else to return), so Assert-GodotVersion
+        # is the one that rejects it and names the version it found, exactly
+        # as it already does for every other tier above.
+        $candidateDirectories = @(
+            Get-ChildItem -LiteralPath $parentDirectory -Directory `
+                -Filter "Godot_v*-stable_mono_win64" -ErrorAction SilentlyContinue |
+            Sort-Object -Property Name -Descending)
+
+        foreach ($candidateDirectory in $candidateDirectories) {
+            $consoleExecutable = Get-ChildItem -LiteralPath $candidateDirectory.FullName `
+                -Filter "*_console.exe" -File -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+            if ($null -ne $consoleExecutable) {
+                return [IO.Path]::GetFullPath($consoleExecutable.FullName)
+            }
+        }
+    }
+
     throw @"
 Godot 4.7.1 .NET was not found. Use one of:
   -GodotPath <console executable>
