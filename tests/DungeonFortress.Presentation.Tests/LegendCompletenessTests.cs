@@ -37,8 +37,7 @@ namespace DungeonFortress.Presentation.Tests;
 /// </summary>
 public sealed class LegendCompletenessTests
 {
-    private static string Source { get; } =
-        File.ReadAllText(AdapterSource.FullPath());
+    private static string Source { get; } = AdapterSource.Raw;
 
     /// <summary>
     /// <see cref="Source"/> with every <c>//</c> and <c>/* */</c> comment

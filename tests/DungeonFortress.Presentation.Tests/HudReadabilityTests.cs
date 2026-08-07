@@ -237,12 +237,12 @@ public sealed class HudReadabilityTests
     public void The_inert_strict_hud_fit_flag_is_gone_from_the_adapter()
     {
         // Issue #49: the flag was parsed and ignored for three Issues. The raw
-        // file is read rather than AdapterSource.Masked, because the flag only
+        // source is read rather than AdapterSource.Masked, because the flag only
         // ever appeared inside a string literal and masking would hide it — and
         // the closing quote is part of the pattern for the same reason, so that
         // the doc comment recording why the flag is gone does not count as the
         // flag being back.
-        var source = File.ReadAllText(AdapterSource.FullPath());
+        var source = AdapterSource.Raw;
 
         Assert.DoesNotContain("\"--strict-hud-fit\"", source, StringComparison.Ordinal);
         Assert.DoesNotContain("strictHudFit", source, StringComparison.Ordinal);

@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "issue": 281,
+  "checkpoint": "4 — every half of the cut mutated on its own, on the committed state",
+  "rule": "A check does not count as done until it is shown to fail when the specific part of the change it is meant to catch is reverted, not the change as a whole.",
+  "procedure": "Every mutant was applied to the committed branch at 5ace847 with a python one-liner that asserts the exact line it is replacing, built with `dotnet build DungeonFortress.sln -c Release`, measured with the command shown, then reverted with `git checkout -- <file>` and the tree confirmed clean before the next one. Nothing was mutated in an uncommitted file: a revert of an uncommitted mutant deletes the change itself, which is what Issue #147 measured and paid an iteration for.",
+  "environment": {
+    "temporaryRoot": "C:\\df-tmp-281 (created for this run, removed after it)",
+    "godot": "C:\\gamedev\\Godot_v4.7.1-stable_mono_win64\\Godot_v4.7.1-stable_mono_win64_console.exe (4.7.1.stable.mono.official.a13da4feb)",
+    "note": "verify.ps1 needs -TemporaryRoot and -GodotPath on this machine; neither changes what the stages measure."
+  },
+  "baseline": {
+    "commit": "5ace847",
+    "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+    "viewInvariantChecksum": "7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead",
+    "simulationTests": "314 of 314 passed",
+    "presentationTests": "624 of 624 passed"
+  },
+  "briefIsWrongAboutWhichNumberMoves": {
+    "finding": "The brief asks mutant A to move `deterministicChecksum` and mutant B to move `viewInvariantChecksum`. Neither is possible, and the reason is in the pipeline rather than in the cut.",
+    "deterministicChecksum": "Produced by the `sim` stage from DungeonFortress.Simulation.SimulationWorld through SimulationScenario.Run — a different class in a file this change does not touch. Measured: with mutant A in place it stays at e65273aa..., byte for byte.",
+    "viewInvariantChecksum": "Produced by the `godot` stage as the canonical PrototypeWorld checksum, asserted equal across four camera/frame/UI-scale cases. It is by construction blind to everything the drawing files do — that is the property the stage exists to prove. Measured as mutant b-ii below. It is NOT a null check overall, and saying so would be the opposite overclaim: it covers the simulation half, which mutant a-i moved (9df8c180.../b2572e4c... instead of 7e9fffa7...), and its first eight characters are pinned a second time inside the summary line of tests/golden/ui/stone-t190-loose-no-stockpile.json ('•  7e9fffa7  •'), with the other two golden frames pinning 4864e76a and aa16b043 the same way. Null on the drawing half, alive on the simulation half.",
+    "consequence": "Mutant A was therefore measured against the checks that do cover the moved simulation code (`godot` stage and the Simulation test suite), and mutant B against the check that does cover a moved presentation value (`godot` stage HUD readability). Both are stated as run, not as asked."
+  },
+  "halves": {
+    "a_theSimulationHalf": {
+      "description": "src/DungeonFortress.Simulation/PrototypeWorld.Work.cs — a file the cut created, holding methods moved verbatim out of PrototypeWorld.cs. If the moved code were not really compiled into the same class and really executed, a change inside it would be invisible.",
+      "mutants": [
+        {
+          "name": "a-i: a dig yields one stone more",
+          "file": "src/DungeonFortress.Simulation/PrototypeWorld.Work.cs",
+          "line": 585,
+          "edit": "                AddLoose(job.Origin, ResourceKind.Stone, PrototypeTuning.DigStoneYield);  ->                 AddLoose(job.Origin, ResourceKind.Stone, PrototypeTuning.DigStoneYield + 1);",
+          "commands": [
+            "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify.ps1 -Stage godot,ui -TemporaryRoot C:\\df-tmp-281 -GodotPath <godot>",
+            "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --no-build",
+            "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify.ps1 -Stage sim -TemporaryRoot C:\\df-tmp-281 -GodotPath <godot>"
+          ],
+          "result": "RED. godot stage: verification_result status=error, failedStage=godot. The canonical checksum diverged before the abort — godot_headless_smoke reported 9df8c18004b95aa4a6acd45ec338acc63ffd453e669314183e4959bfc6c3bfc9 at tick 1 and godot_controls_smoke b2572e4c8a37b34e2d0e53aaa1329dab5ec61736b218f0e5e4fabc9b215aec29 at tick 50, neither of them 7e9fffa7...; the stage then failed on an unexpected engine ERROR, 'Stone conservation broke at tick 50: produced 1, loose 0, carried 2, stored 0'. Simulation tests: 19 of 314 failed. sim stage: GREEN and deterministicChecksum unchanged at e65273aa..., which is the measurement behind the finding above.",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "a-ii (weaker, kept because it is informative): the rest job ends one point of fatigue earlier",
+          "file": "src/DungeonFortress.Simulation/PrototypeWorld.Work.cs",
+          "line": 288,
+          "edit": "            if (creature.Fatigue <= PrototypeTuning.RestTarget &&  ->             if (creature.Fatigue < PrototypeTuning.RestTarget &&",
+          "commands": [
+            "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify.ps1 -Stage godot -TemporaryRoot C:\\df-tmp-281 -GodotPath <godot>",
+            "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --no-build"
+          ],
+          "result": "PARTLY RED. Simulation tests: 2 of 314 failed (PrototypeScenarioTests.Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party, PrototypePostCombatDispersalTests.Walking_round_reaches_more_of_the_clinch_than_a_yield_could). godot stage: GREEN, viewInvariantChecksum unchanged at 7e9fffa7.... The 336-tick smoke run never reaches the state this comparison decides, so the moved file is covered by the test suite here and not by the checksum.",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "a-iii (survivor, reported as a gap): work progress counted twice per tick",
+          "file": "src/DungeonFortress.Simulation/PrototypeWorld.Work.cs",
+          "line": 325,
+          "edit": "            job.ProgressTicks++;  ->             job.ProgressTicks += 2;",
+          "commands": [
+            "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify.ps1 -Stage godot,ui -TemporaryRoot C:\\df-tmp-281 -GodotPath <godot>"
+          ],
+          "result": "GREEN — the mutant survives. viewInvariantChecksum unchanged at 7e9fffa7..., both stages ok.",
+          "diagnosis": "Job completion does not read ProgressTicks in this branch — that much is true, and it was the whole of the original diagnosis. The conclusion drawn from it, 'so doubling it changes no canonical fact', is wrong and is corrected here after independent review of PR #292. The field IS canonical: PrototypeCanonical.cs writes it three times (line 356 for a dig designation, 394 for a build site, 489 for a job), and PrototypeWorld.State.cs projects it into PrototypeDigDesignationSnapshot and the build-site snapshot as progressTicks, as requiredTicks (ProgressTicks + RemainingTicks) and as the status 'dig_in_progress'. The mutant survives because the smoke run holds no unfinished Dig or Build job at the tick the snapshot is taken, so the doubled counter never reaches the document. That is a hole in the scenario, not a dead field, and the two diagnoses point at different next steps: the first would say 'delete the field', the second says 'the smoke run needs a tick with work in progress'.",
+          "note": "Pre-existing, unrelated to the cut, and not fixed here.",
+          "revertedAndReverifiedGreen": true
+        }
+      ]
+    },
+    "b_thePresentationHalf": {
+      "description": "src/DungeonFortress.Game/Main.Hud.cs and Main.DrawWorld.cs — files the cut created out of Main.cs. Same question on the drawing side: is the moved code really the code that draws.",
+      "mutants": [
+        {
+          "name": "b-i: every HUD label is drawn one point smaller",
+          "file": "src/DungeonFortress.Game/Main.Hud.cs",
+          "line": 657,
+          "edit": "        label.AddThemeFontSizeOverride(\"font_size\", fontSize);  ->         label.AddThemeFontSizeOverride(\"font_size\", fontSize - 1);",
+          "commands": [
+            "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify.ps1 -Stage godot,ui -TemporaryRoot C:\\df-tmp-281 -GodotPath <godot>"
+          ],
+          "result": "RED. godot stage: verification_result status=error, failedStage=godot, reason 'Godot emitted 1 unexpected ERROR line(s)' — 'HUD text is unreadable in 24 place(s): legend[0] is drawn at 7 physical pixels on frame 1280x720 at UI scale 1, under the 8 px floor'. The stage aborts before viewInvariantChecksum is computed, which is why that number cannot be the drawing-side detector even in principle.",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "b-ii (survivor, and the measurement behind the finding): every room border is inset three times as far",
+          "file": "src/DungeonFortress.Game/Main.DrawWorld.cs",
+          "line": 320,
+          "edit": "        var inset = ScaleWorld((float)purposeInset);  ->         var inset = ScaleWorld((float)purposeInset * 3f);",
+          "commands": [
+            "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify.ps1 -Stage godot,ui -TemporaryRoot C:\\df-tmp-281 -GodotPath <godot>",
+            "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --no-build"
+          ],
+          "result": "GREEN everywhere — the mutant survives. viewInvariantChecksum unchanged at 7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead, godot and ui stages ok, Presentation tests 624 of 624 passed. A purely geometric change to what the map draws is caught by nothing in the pipeline: the canonical checksum is view-invariant by design, golden UI pins HUD text rather than geometry, and the source guards pin which call is made rather than what number it is given. Pre-existing gap, unrelated to the cut, not fixed here.",
+          "revertedAndReverifiedGreen": true
+        }
+      ]
+    },
+    "c_theMechanismItself": {
+      "description": "The cut rests on one language feature. If a generated file were not actually part of the same class, it would compile as a second, separate type and everything above would be measuring the wrong thing.",
+      "mutants": [
+        {
+          "name": "c-i: one generated file stops declaring itself partial",
+          "file": "src/DungeonFortress.Simulation/PrototypeWorld.State.cs",
+          "line": 5,
+          "edit": "public sealed partial class PrototypeWorld  -> public sealed class PrototypeWorld",
+          "commands": [
+            "dotnet build DungeonFortress.sln -c Release"
+          ],
+          "result": "RED. Build failed with error CS0260: 'Отсутствует модификатор partial в объявлении типа \"PrototypeWorld\"; существует другое разделяемое объявление этого типа' (missing partial modifier on declaration of type 'PrototypeWorld'; another partial declaration of this type exists).",
+          "revertedAndReverifiedGreen": true
+        }
+      ]
+    },
+    "d_theGuardOfTheReader": {
+      "description": "Added in the review round of PR #292. Finding F1: the guard that says 'the reader found the adapter' asserted File.Exists over paths it had just received from Directory.GetFiles, so it could not fail. The two mutants below are run on the committed state f6c3b20 and are what makes the replacement a check rather than a sentence.",
+      "mutants": [
+        {
+          "name": "d-i: an adapter file moves into a subfolder of the project",
+          "file": "src/DungeonFortress.Game/Main.Rendering.cs",
+          "line": null,
+          "edit": "git mv src/DungeonFortress.Game/Main.Rendering.cs src/DungeonFortress.Game/rendering/Main.Rendering.cs  (Directory.GetFiles is not recursive, so the reader stops seeing the file while it still compiles into the class)",
+          "commands": [
+            "dotnet build DungeonFortress.sln -c Release",
+            "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --no-build --filter FullyQualifiedName~The_source_reader_finds_the_adapter_and_its_bodies"
+          ],
+          "result": "RED. 1 of 1 failed: 'Main.Rendering.cs is one of the files every check below reads, and the reader did not open it. Found instead: Main.DrawBodies.cs, Main.DrawOverlays.cs, Main.DrawWorld.cs, Main.Frame.cs, Main.Hud.cs, Main.HudText.cs, Main.Player.cs, Main.Session.cs, Main.Verification.cs, Main.cs.' The build stays green, which is the point: the class is intact and only the reader's view of it shrank.",
+          "revertedAndReverifiedGreen": true
+        },
+        {
+          "name": "d-ii: the fix itself is reverted while the file is still moved",
+          "file": "tests/DungeonFortress.Presentation.Tests/WorldDrawPassGuardTests.cs",
+          "line": 93,
+          "edit": "the RequiredAdapterFiles loop and the ordinal-order assertion  ->  the pre-fix body: Assert.True(File.Exists(AdapterSource.FullPath()), ...); Assert.Contains(AdapterSource.FullPath(), AdapterSource.FullPaths()); foreach (var path in AdapterSource.FullPaths()) { Assert.True(File.Exists(path), ...); }",
+          "commands": [
+            "dotnet build DungeonFortress.sln -c Release",
+            "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --no-build --filter FullyQualifiedName~The_source_reader_finds_the_adapter_and_its_bodies"
+          ],
+          "result": "GREEN — 1 of 1 passed with the adapter file still hidden in the subfolder. This is the mutant that makes d-i mean something: without it, d-i would only show that some assertion fires, not that the new one is the reason. The pre-fix guard cannot see the loss, and that is finding F1 reproduced as a measurement.",
+          "revertedAndReverifiedGreen": true
+        }
+      ]
+    }
+  },
+  "notCovered": [
+    "No mutant targets the file boundaries themselves. Moving a member from one generated file to another cannot change behaviour — that is exactly the property this change relies on — so there is nothing for a mutant to detect, and the guarantee comes from the byte-level diff in evidence/281-split-verification.json rather than from a test.",
+    "No mutant targets the order of field initialisers across files, because the cut leaves every initialiser whose order is observable in the first file of its class. The claim is checked by construction from evidence/281-member-map.json (has_initializer and const per member) rather than by a mutant: to mutate it one would first have to make the unsafe split the change refuses to make."
+  ],
+  "fullSuiteAfterAllReverts": "Recorded in the PR body: one full `verify.ps1` run on the final state, with both checksums."
+}

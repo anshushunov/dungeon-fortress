@@ -1,0 +1,267 @@
+{
+  "issue": 281,
+  "base": "9457d65",
+  "files": [
+    {
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "source": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "source_lines": "7-623",
+      "body_line_count": 617,
+      "body_differences": 0,
+      "header_line_count": 6,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.Commands.cs",
+      "source": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "source_lines": "625-1001",
+      "body_line_count": 377,
+      "body_differences": 0,
+      "header_line_count": 6,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.Planning.cs",
+      "source": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "source_lines": "1003-1745",
+      "body_line_count": 743,
+      "body_differences": 0,
+      "header_line_count": 6,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.Matching.cs",
+      "source": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "source_lines": "1747-2342",
+      "body_line_count": 596,
+      "body_differences": 0,
+      "header_line_count": 6,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.Acting.cs",
+      "source": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "source_lines": "2344-2607",
+      "body_line_count": 264,
+      "body_differences": 0,
+      "header_line_count": 6,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs",
+      "source": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "source_lines": "2609-3381",
+      "body_line_count": 773,
+      "body_differences": 0,
+      "header_line_count": 6,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.Work.cs",
+      "source": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "source_lines": "3383-4156",
+      "body_line_count": 774,
+      "body_differences": 0,
+      "header_line_count": 6,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.Stores.cs",
+      "source": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "source_lines": "4158-5002",
+      "body_line_count": 845,
+      "body_differences": 0,
+      "header_line_count": 6,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.State.cs",
+      "source": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "source_lines": "5004-5534",
+      "body_line_count": 531,
+      "body_differences": 0,
+      "header_line_count": 6,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Game/Main.cs",
+      "source": "src/DungeonFortress.Game/Main.cs",
+      "source_lines": "17-937",
+      "body_line_count": 921,
+      "body_differences": 0,
+      "header_line_count": 15,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Game/Main.Frame.cs",
+      "source": "src/DungeonFortress.Game/Main.cs",
+      "source_lines": "939-1551",
+      "body_line_count": 613,
+      "body_differences": 0,
+      "header_line_count": 11,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Game/Main.Hud.cs",
+      "source": "src/DungeonFortress.Game/Main.cs",
+      "source_lines": "1553-2213",
+      "body_line_count": 661,
+      "body_differences": 0,
+      "header_line_count": 11,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Game/Main.Session.cs",
+      "source": "src/DungeonFortress.Game/Main.cs",
+      "source_lines": "2215-2620",
+      "body_line_count": 406,
+      "body_differences": 0,
+      "header_line_count": 11,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Game/Main.HudText.cs",
+      "source": "src/DungeonFortress.Game/Main.cs",
+      "source_lines": "2622-3263",
+      "body_line_count": 642,
+      "body_differences": 0,
+      "header_line_count": 11,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Game/Main.DrawWorld.cs",
+      "source": "src/DungeonFortress.Game/Main.cs",
+      "source_lines": "3265-3911",
+      "body_line_count": 647,
+      "body_differences": 0,
+      "header_line_count": 11,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Game/Main.DrawBodies.cs",
+      "source": "src/DungeonFortress.Game/Main.cs",
+      "source_lines": "3913-4517",
+      "body_line_count": 605,
+      "body_differences": 0,
+      "header_line_count": 11,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Game/Main.DrawOverlays.cs",
+      "source": "src/DungeonFortress.Game/Main.cs",
+      "source_lines": "4519-5075",
+      "body_line_count": 557,
+      "body_differences": 0,
+      "header_line_count": 11,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Game/Main.Player.cs",
+      "source": "src/DungeonFortress.Game/Main.cs",
+      "source_lines": "5077-5700",
+      "body_line_count": 624,
+      "body_differences": 0,
+      "header_line_count": 11,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Game/Main.Verification.cs",
+      "source": "src/DungeonFortress.Game/Main.cs",
+      "source_lines": "5702-6329",
+      "body_line_count": 628,
+      "body_differences": 0,
+      "header_line_count": 14,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    },
+    {
+      "file": "src/DungeonFortress.Game/Main.Rendering.cs",
+      "source": "src/DungeonFortress.Game/Main.cs",
+      "source_lines": "6331-6876",
+      "body_line_count": 546,
+      "body_differences": 0,
+      "header_line_count": 12,
+      "tail": [
+        "}",
+        ""
+      ],
+      "verbatim": true
+    }
+  ],
+  "all_verbatim": true
+}

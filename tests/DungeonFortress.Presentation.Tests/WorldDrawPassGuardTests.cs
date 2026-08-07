@@ -49,16 +49,60 @@ public sealed class WorldDrawPassGuardTests
             .ToArray();
 
     /// <summary>
-    /// The reader has to be right about the file before anything it says about
-    /// the file means something. A body that came back empty, or a call list that
+    /// Every file of the adapter the reader is required to have opened.
+    ///
+    /// It is an <em>expected</em> set and not a description of the directory:
+    /// <see cref="AdapterSource.FullPaths"/> is itself the result of a
+    /// <c>Directory.GetFiles</c> call, so asking whether those files exist can
+    /// never fail and guards nothing. What can fail — and is the whole point —
+    /// is a file leaving the set: deleted, renamed, or moved into a subfolder
+    /// past the non-recursive enumeration. The reader would then quietly see
+    /// less of the class, <see cref="AdapterSource.DeclaredMethods"/> would
+    /// return fewer names, and every check about a routine inside the lost file
+    /// would pass by having nothing to say.
+    ///
+    /// Extra files are allowed on purpose: a file added to the class is read,
+    /// and therefore guarded, from the moment it exists, without a test edit.
+    /// </summary>
+    private static readonly string[] RequiredAdapterFiles =
+    [
+        "Main.cs",
+        "Main.DrawBodies.cs",
+        "Main.DrawOverlays.cs",
+        "Main.DrawWorld.cs",
+        "Main.Frame.cs",
+        "Main.Hud.cs",
+        "Main.HudText.cs",
+        "Main.Player.cs",
+        "Main.Rendering.cs",
+        "Main.Session.cs",
+        "Main.Verification.cs",
+    ];
+
+    /// <summary>
+    /// The reader has to be right about the files before anything it says about
+    /// them means something. A body that came back empty, or a call list that
     /// missed the engine primitives, would make every test below vacuously green.
+    /// The adapter is one class over several files, so "found the adapter" means
+    /// found all of them: a file the reader never opened would make every check
+    /// about a routine inside it vacuously green in exactly the same way.
     /// </summary>
     [Fact]
     public void The_source_reader_finds_the_adapter_and_its_bodies()
     {
-        Assert.True(
-            File.Exists(AdapterSource.FullPath()),
-            $"{AdapterSource.RelativePath} is the file every check below reads.");
+        var found = AdapterSource.FullPaths().Select(Path.GetFileName).ToArray();
+        foreach (var required in RequiredAdapterFiles)
+        {
+            Assert.True(
+                found.Contains(required, StringComparer.Ordinal),
+                $"{required} is one of the files every check below reads, and the reader " +
+                $"did not open it. Found instead: {string.Join(", ", found)}.");
+        }
+
+        // Ordinal order, not "Main.cs first": every '.'-suffixed name sorts
+        // before it, because every suffix starts with an upper-case letter and
+        // 'c' of ".cs" is above all of them.
+        Assert.Equal(AdapterSource.RelativePath.Split('/')[^1], found[^1]);
 
         var map = AdapterSource.Body(WorldDrawOrder.Entry);
         Assert.Contains("rockTiles", map, StringComparison.Ordinal);
