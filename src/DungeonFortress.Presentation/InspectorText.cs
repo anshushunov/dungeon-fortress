@@ -225,7 +225,7 @@ public static class InspectorText
         if (rooms.Length > 0)
         {
             var described = rooms
-                .Select(room => $"{RoomLabels.Caption(room)} [{room.Id}]")
+                .Select(room => $"{RoomLabels.Caption(room, view.State.Priorities)} [{room.Id}]")
                 .ToList();
             if (rooms.Any(room => room.Purpose == ZoneKind.Quarters))
             {

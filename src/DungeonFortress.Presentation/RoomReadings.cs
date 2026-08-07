@@ -148,18 +148,25 @@ public static class RoomLabels
     /// The caption of one room. A working room is its name and nothing else — the
     /// player is not made to read a status line for the ordinary case. Anything
     /// else says what is wrong, in the fewest words that are still an instruction:
-    /// "TRAIN · no post" is a thing to go and do.
+    /// "TRAIN · no post" is a thing to go and do, and "TRAIN · off (Drill 0)" is
+    /// the same — it names the work whose zero priority stopped the room, and the
+    /// number to raise.
     /// </summary>
-    public static string Caption(PrototypeRoomSnapshot room)
+    public static string Caption(
+        PrototypeRoomSnapshot room,
+        IReadOnlyDictionary<JobKind, int> priorities)
     {
         ArgumentNullException.ThrowIfNull(room);
+        ArgumentNullException.ThrowIfNull(priorities);
         var name = Name(room.Purpose);
         return room.StatusCode switch
         {
             "room_missing_feature" => PrototypeRooms.RequiredFeature(room.Purpose) is { } feature
                 ? $"{name} · no {FeatureName(feature)}"
                 : $"{name} · unfinished",
-            "room_blocked_priority" => $"{name} · off",
+            "room_blocked_priority" => PrototypeRooms.EnabledWork(room.Purpose) is { } work
+                ? $"{name} · off ({work} {priorities[work]})"
+                : $"{name} · off",
             "room_forbidden" => $"{name} · forbidden",
             _ => name,
         };

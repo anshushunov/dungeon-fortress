@@ -86,8 +86,8 @@ public sealed class RoomReadingTests
         var view = View(3, new ZonePaintCommand(1, ZoneKind.Watch, [EmptyFloorA]),
             new SetPriorityCommand(1, JobKind.Watch, 2));
 
-        Assert.Equal("WATCH", RoomLabels.Caption(Room(view, "watch@25,6")));
-        Assert.Equal("FARM", RoomLabels.Caption(Room(view, "farm@1,1")));
+        Assert.Equal("WATCH", RoomLabels.Caption(Room(view, "watch@25,6"), view.State.Priorities));
+        Assert.Equal("FARM", RoomLabels.Caption(Room(view, "farm@1,1"), view.State.Priorities));
     }
 
     [Fact]
@@ -96,16 +96,18 @@ public sealed class RoomReadingTests
         var unfinished = View(2, new ZonePaintCommand(1, ZoneKind.TrainingGround, [EmptyFloorA]));
         Assert.Equal(
             "TRAIN · no post",
-            RoomLabels.Caption(Room(unfinished, "trainingGround@25,6")));
+            RoomLabels.Caption(Room(unfinished, "trainingGround@25,6"), unfinished.State.Priorities));
 
         var blocked = View(2, new ZonePaintCommand(1, ZoneKind.TrainingGround, [LeftPost]));
-        Assert.Equal("TRAIN · off", RoomLabels.Caption(Room(blocked, "trainingGround@10,2")));
+        Assert.Equal(
+            "TRAIN · off (Drill 0)",
+            RoomLabels.Caption(Room(blocked, "trainingGround@10,2"), blocked.State.Priorities));
 
         var shut = View(
             3,
             new ZonePaintCommand(1, ZoneKind.Watch, [EmptyFloorA]),
             new ZonePaintCommand(2, ZoneKind.Forbidden, [EmptyFloorA]));
-        Assert.Equal("WATCH · forbidden", RoomLabels.Caption(Room(shut, "watch@25,6")));
+        Assert.Equal("WATCH · forbidden", RoomLabels.Caption(Room(shut, "watch@25,6"), shut.State.Priorities));
     }
 
     /// <summary>
@@ -131,11 +133,70 @@ public sealed class RoomReadingTests
             "room_missing_feature",
             Complete: false);
 
-        Assert.Equal(caption, RoomLabels.Caption(room));
+        Assert.Equal(caption, RoomLabels.Caption(room, Priorities()));
         Assert.Equal(
             RoomLabels.FeatureName(PrototypeRooms.RequiredFeature(purpose)!.Value),
             caption[(caption.IndexOf("no ", StringComparison.Ordinal) + 3)..]);
     }
+
+    /// <summary>
+    /// A complete room whose only reason not to work is the priority of the work
+    /// it enables names that work and the number that must be raised — the caption
+    /// is an instruction, not a verdict. The work is read from the simulation
+    /// rather than restated here, so a purpose whose enabled work moved cannot keep
+    /// a caption that names the old one.
+    /// </summary>
+    [Theory]
+    [InlineData(ZoneKind.Farm, "FARM · off (Harvest 0)")]
+    [InlineData(ZoneKind.Kitchen, "KITCHEN · off (Cook 0)")]
+    [InlineData(ZoneKind.Quarters, "QUARTERS · off (Rest 0)")]
+    [InlineData(ZoneKind.TrainingGround, "TRAIN · off (Drill 0)")]
+    [InlineData(ZoneKind.Watch, "WATCH · off (Watch 0)")]
+    [InlineData(ZoneKind.MaterialStockpile, "STOCKPILE · off (Haul 0)")]
+    public void A_room_blocked_by_a_priority_names_the_work_and_the_number_to_raise(
+        ZoneKind purpose,
+        string caption)
+    {
+        var room = new PrototypeRoomSnapshot(
+            "x@0,0",
+            purpose,
+            [new GridPoint(0, 0)],
+            [],
+            "room_blocked_priority",
+            Complete: true);
+
+        var priorities = Priorities();
+        var work = PrototypeRooms.EnabledWork(purpose)!.Value;
+        Assert.Equal(caption, RoomLabels.Caption(room, priorities));
+        Assert.Equal(
+            $"{work} {priorities[work]}",
+            caption[(caption.IndexOf('(') + 1)..caption.IndexOf(')')]);
+    }
+
+    /// <summary>
+    /// The caption names the work whose priority is 0, and the number to raise is
+    /// read from the published priorities rather than assumed — so the reading
+    /// stays honest the moment a priority the world already holds is queried.
+    /// </summary>
+    [Fact]
+    public void The_blocked_caption_names_the_actual_priority_of_the_enabled_work()
+    {
+        var room = new PrototypeRoomSnapshot(
+            "x@0,0",
+            ZoneKind.TrainingGround,
+            [new GridPoint(0, 0)],
+            [],
+            "room_blocked_priority",
+            Complete: true);
+
+        var raised = Priorities();
+        raised[JobKind.Drill] = 3;
+
+        Assert.Equal("TRAIN · off (Drill 3)", RoomLabels.Caption(room, raised));
+    }
+
+    private static Dictionary<JobKind, int> Priorities() =>
+        Enum.GetValues<JobKind>().ToDictionary(job => job, _ => 0);
 
     [Fact]
     public void Every_purpose_has_a_name()
