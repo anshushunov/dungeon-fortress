@@ -83,5 +83,31 @@
     "totalWorktreesExcludingRoot": 10,
     "insideRootWorkingCopy": 0,
     "note": "One worktree not present in the 'before' snapshot (_wt-294, agent/294-...) appeared during this task's run — another agent claimed Issue #294 in parallel. It is untouched, counted here only because it is present in the 'after' list; it is not part of this task's delete/keep decision set."
+  },
+  "mutantCheck": {
+    "what": "Proves scripts/check-no-worktrees-in-root.ps1 actually catches the violation it claims to catch, run after the cleanup commit (checkpoint 2).",
+    "steps": [
+      {
+        "step": "add mutant worktree inside root",
+        "command": "git -C \"C:/gamedev/Dungeon fortress\" worktree add \".claude/worktrees/mutant-287\" HEAD --detach"
+      },
+      {
+        "step": "red",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-no-worktrees-in-root.ps1 -RepoRoot \"C:/gamedev/Dungeon fortress\"",
+        "output": "{\"event\":\"worktrees_in_root_check\",\"repoRoot\":\"C:\\\\gamedev\\\\Dungeon fortress\",\"totalRegisteredWorktrees\":12,\"offenders\":[\"C:\\\\gamedev\\\\Dungeon fortress\\\\.claude\\\\worktrees\\\\mutant-287\"],\"status\":\"fail\"}",
+        "exitCode": 1
+      },
+      {
+        "step": "remove mutant worktree",
+        "command": "git -C \"C:/gamedev/Dungeon fortress\" worktree remove --force \".claude/worktrees/mutant-287\" && git -C \"C:/gamedev/Dungeon fortress\" worktree prune -v"
+      },
+      {
+        "step": "green",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-no-worktrees-in-root.ps1 -RepoRoot \"C:/gamedev/Dungeon fortress\"",
+        "output": "{\"event\":\"worktrees_in_root_check\",\"repoRoot\":\"C:\\\\gamedev\\\\Dungeon fortress\",\"totalRegisteredWorktrees\":11,\"offenders\":[],\"status\":\"ok\"}",
+        "exitCode": 0
+      }
+    ],
+    "result": "red then green, confirmed"
   }
 }
