@@ -11,6 +11,20 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Issue #284. Invoke-Checked below now captures every native command's output
+# (`2>&1`) instead of letting it flow straight through, so it can route a
+# successful run's text into the stage log file. That capture decodes the
+# child's bytes using [Console]::OutputEncoding, which on a machine whose
+# console codepage is not UTF-8 (measured here: cp866) turns a .NET 8 CLI's
+# UTF-8 non-ASCII text - e.g. its Russian-locale "Восстановлен ..." lines -
+# into mojibake, silently, the moment it is captured. The raw byte
+# pass-through this replaced never went through that decode step at all, so
+# it never showed the problem. Godot's own output is ASCII-only JSON, so
+# Invoke-GodotChecked's and Invoke-Scenario's pre-existing `2>&1` capture
+# never exposed this either. Setting it once, here, before anything is
+# captured, is enough for all three.
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+
 . (Join-Path $PSScriptRoot "GodotTools.ps1")
 . (Join-Path $PSScriptRoot "HudVerification.ps1")
 . (Join-Path $PSScriptRoot "TemporaryRoot.ps1")
@@ -67,10 +81,31 @@ function Invoke-Checked {
         [string[]]$Arguments
     )
 
-    & $FilePath @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "'$FilePath' failed with exit code $LASTEXITCODE."
+    # Issue #284: this used to run the command with its output flowing
+    # straight through to whatever this process's own stdout was, uncaptured
+    # - the reason 'dotnet restore'/'build'/'test' and every dependency-free
+    # test script's own console text used to land directly in a full run's
+    # stdout. Capturing it here and routing it below is the same pattern
+    # Invoke-GodotChecked already uses, including the -ErrorActionPreference
+    # guard: a native command's stderr text becomes PowerShell error records
+    # under 2>&1, and this script sets $ErrorActionPreference = "Stop" at the
+    # top, so without the guard a single warning line would abort the capture.
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = @(& $FilePath @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
     }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($exitCode -ne 0) {
+        $output | ForEach-Object { Write-Host $_ }
+        throw "'$FilePath' failed with exit code $exitCode."
+    }
+
+    $output | ForEach-Object { Write-VerifyDiagnostic -Text $_ }
 }
 
 function Invoke-Scenario {
@@ -97,19 +132,32 @@ function Invoke-Scenario {
         "--snapshot", $SnapshotPath
     )
 
-    $output = & dotnet @arguments 2>&1
-    $exitCode = $LASTEXITCODE
-    $output | ForEach-Object { Write-Host $_ }
+    # Same capture-and-route pattern as Invoke-Checked and Invoke-GodotChecked,
+    # and the same reason for the -ErrorActionPreference guard around it
+    # (Issue #284).
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = @(& dotnet @arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
     if ($exitCode -ne 0) {
+        $output | ForEach-Object { Write-Host $_ }
         throw "Scenario runner failed with exit code $exitCode."
     }
 
     $resultLine = $output | Where-Object { $_ -match '"event":"scenario_result"' } |
         Select-Object -Last 1
     if ($null -eq $resultLine) {
+        $output | ForEach-Object { Write-Host $_ }
         throw "Scenario runner did not emit a scenario_result event."
     }
 
+    $output | ForEach-Object { Write-VerifyDiagnostic -Text $_ }
     return $resultLine | ConvertFrom-Json
 }
 
@@ -188,7 +236,7 @@ function Initialize-SolutionRestore {
         return
     }
 
-    Write-Host "Restoring the .NET 8 solution..."
+    Write-VerifyDiagnostic -Text "Restoring the .NET 8 solution..."
     Invoke-Checked -FilePath "dotnet" -Arguments @(
         "restore", $solutionPath
     )
@@ -201,7 +249,7 @@ function Initialize-SolutionBuild {
     }
 
     Initialize-SolutionRestore
-    Write-Host "Building the .NET 8 solution in Release..."
+    Write-VerifyDiagnostic -Text "Building the .NET 8 solution in Release..."
     Invoke-Checked -FilePath "dotnet" -Arguments @(
         "build", $solutionPath, "--configuration", "Release", "--no-restore"
     )
@@ -219,7 +267,7 @@ function Initialize-ScenarioAssembly {
     # trusting whatever is left in bin\Release.
     if (-not (Test-Prerequisite -Name "solution-build")) {
         Initialize-SolutionRestore
-        Write-Host "Building the scenario runner in Release..."
+        Write-VerifyDiagnostic -Text "Building the scenario runner in Release..."
         Invoke-Checked -FilePath "dotnet" -Arguments @(
             "build", $scenarioProject, "--configuration", "Release", "--no-restore"
         )
@@ -238,7 +286,7 @@ function Initialize-GameHostBuild {
     }
 
     Initialize-SolutionRestore
-    Write-Host "Building the Godot host in Debug..."
+    Write-VerifyDiagnostic -Text "Building the Godot host in Debug..."
     Invoke-Checked -FilePath "dotnet" -Arguments @(
         "build", $gameProjectFile, "--configuration", "Debug", "--no-restore"
     )
@@ -372,7 +420,7 @@ $stageCatalog = [ordered]@{
         Body = {
             Initialize-ScenarioAssembly
 
-            Write-Host "Checking byte-for-byte deterministic snapshots..."
+            Write-VerifyDiagnostic -Text "Checking byte-for-byte deterministic snapshots..."
             $sameAPath = Join-Path $verifyRoot "same-a.json"
             $sameBPath = Join-Path $verifyRoot "same-b.json"
             $differentPath = Join-Path $verifyRoot "different.json"
@@ -400,7 +448,7 @@ $stageCatalog = [ordered]@{
         Body = {
             Initialize-ScenarioAssembly
 
-            Write-Host "Measuring and repeating 1,000 agents x 10,000 ticks..."
+            Write-VerifyDiagnostic -Text "Measuring and repeating 1,000 agents x 10,000 ticks..."
             $loadAPath = Join-Path $verifyRoot "load-a.json"
             $loadBPath = Join-Path $verifyRoot "load-b.json"
             $loadA = Invoke-Scenario -ScenarioSeed $Seed -AgentCount 1000 -TickCount 10000 -SnapshotPath $loadAPath
@@ -429,7 +477,7 @@ $stageCatalog = [ordered]@{
 
             Initialize-EngineRuntime
 
-            Write-Host "Running Godot headless smoke..."
+            Write-VerifyDiagnostic -Text "Running Godot headless smoke..."
             $godotResult = Invoke-GodotChecked `
                 -GodotPath $godot `
                 -Arguments @(
@@ -445,7 +493,7 @@ $stageCatalog = [ordered]@{
                 ) `
                 -ExpectedSuccessEvent "godot_controls_smoke"
 
-            Write-Host "Proving invalid startup parameters report JSON and exit instead of hanging..."
+            Write-VerifyDiagnostic -Text "Proving invalid startup parameters report JSON and exit instead of hanging..."
             $invalidViewCases = @(
                 [pscustomobject]@{
                     Name = "zoom"
@@ -484,7 +532,7 @@ $stageCatalog = [ordered]@{
                     -MessagePattern $invalidViewCase.Message | Out-Null
             }
 
-            Write-Host "Proving the HUD guard rejects overflow at logical width 1024..."
+            Write-VerifyDiagnostic -Text "Proving the HUD guard rejects overflow at logical width 1024..."
             $hudGuardFailure = Invoke-GodotExpectedFailure `
                 -GodotPath $godot `
                 -Arguments @(
@@ -504,7 +552,7 @@ $stageCatalog = [ordered]@{
             # proves the second reacts to text that fits perfectly and is too
             # small to read, which is the defect Issue #86 was opened about and
             # the one no check could see.
-            Write-Host "Proving the readability policy rejects HUD text under the physical floor..."
+            Write-VerifyDiagnostic -Text "Proving the readability policy rejects HUD text under the physical floor..."
             $hudReadabilityFailure = Invoke-GodotExpectedFailure `
                 -GodotPath $godot `
                 -Arguments @(
@@ -524,7 +572,7 @@ $stageCatalog = [ordered]@{
             # invisible sample of it. This is that guard's own negative run,
             # exact counterpart of the one above, shrinking the sample instead of
             # a legend row.
-            Write-Host "Proving the readability policy rejects an unreadable tooltip..."
+            Write-VerifyDiagnostic -Text "Proving the readability policy rejects an unreadable tooltip..."
             $hudTooltipReadabilityFailure = Invoke-GodotExpectedFailure `
                 -GodotPath $godot `
                 -Arguments @(
@@ -539,7 +587,7 @@ $stageCatalog = [ordered]@{
                 -ExpectedErrorEvent "godot_headless_smoke" `
                 -MessagePattern "Label\[TooltipBody\].*physical pixels"
 
-            Write-Host "Proving a misplaced Camera2D fails the independent transform check..."
+            Write-VerifyDiagnostic -Text "Proving a misplaced Camera2D fails the independent transform check..."
             $cameraTransformFailure = Invoke-GodotExpectedFailure `
                 -GodotPath $godot `
                 -Arguments @(
@@ -554,7 +602,7 @@ $stageCatalog = [ordered]@{
                 -ExpectedErrorEvent "godot_camera_smoke" `
                 -MessagePattern "Camera2D transform disagrees with CameraFrame"
 
-            Write-Host "Checking Camera2D input at every discrete zoom against the pure frame..."
+            Write-VerifyDiagnostic -Text "Checking Camera2D input at every discrete zoom against the pure frame..."
             $cameraResult = Invoke-GodotChecked `
                 -GodotPath $godot `
                 -Arguments @(
@@ -579,7 +627,7 @@ $stageCatalog = [ordered]@{
                 throw "Camera smoke did not prove live transform agreement, input mapping, map bounds, panning and HUD rejection."
             }
 
-            Write-Host "Comparing canonical checksum across camera, frame and UI parameters..."
+            Write-VerifyDiagnostic -Text "Comparing canonical checksum across camera, frame and UI parameters..."
             $viewCases = @(
                 [pscustomobject]@{
                     Name = "base"
@@ -690,7 +738,7 @@ $stageCatalog = [ordered]@{
             # 1280x720 pair has to stay exactly where it was, and the owner's
             # maximized 3044x1722 has to leave the 8-15 px band Issue #86 was
             # opened about.
-            Write-Host "Checking the physical size of HUD text on the supported frame matrix..."
+            Write-VerifyDiagnostic -Text "Checking the physical size of HUD text on the supported frame matrix..."
             $baseReadability = $viewEvents["base"].view.hudReadability
             if ([double]$baseReadability.uiScale -ne 1 -or
                 [double]$baseReadability.logicalDensity -ne 1 -or
@@ -729,7 +777,7 @@ $stageCatalog = [ordered]@{
             # Rendering was separated from the tick, so the simulation must not be able to
             # tell. The same fixture is driven through the real _Process loop at two frame
             # rates and both have to land on the checksum a frameless replay produces.
-            Write-Host "Comparing canonical state across frame rates..."
+            Write-VerifyDiagnostic -Text "Comparing canonical state across frame rates..."
             Assert-FramePacingIndependence `
                 -GodotPath $godot `
                 -ProjectPath $gameProjectPath `
@@ -774,7 +822,7 @@ $stageCatalog = [ordered]@{
             # true. The HUD overflow guard itself now runs inside every entry point and at
             # the live pair plus six fixed frame/UI-scale pairs, so there is nothing
             # left here to hold it to.
-            Write-Host "Comparing the golden UI state..."
+            Write-VerifyDiagnostic -Text "Comparing the golden UI state..."
             $goldenUiFrames = @()
             foreach ($frame in Get-GoldenUiFrames) {
                 $capture = Invoke-GoldenUiCapture `
@@ -984,6 +1032,19 @@ $temporaryRootPath = $null
 New-Item -ItemType Directory -Force -Path $verifyRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $env:DOTNET_CLI_HOME | Out-Null
 
+# Issue #284: a full green run used to print hundreds of kilobytes - almost
+# all of it the raw per-line dump of Godot process output, never read because
+# nothing failed - straight into whatever called this script. The full dump
+# still happens, every stage still writes everything it always did, but now
+# into this file; stdout keeps only a line per stage (status and time) and
+# the final verification_result with every checksum. Set here, once, before
+# any stage or run-setup function that might print something runs, so the
+# functions in GodotTools.ps1 and HudVerification.ps1 - dot-sourced above,
+# sharing this script's scope - see it from their first call.
+$stageLogPath = Join-Path $verifyRoot "stage-output.log"
+New-Item -ItemType File -Force -Path $stageLogPath | Out-Null
+$script:VerifyStageLogPath = $stageLogPath
+
 try {
     Write-Host ("Verification scope: {0} ({1} of {2} stages: {3})." -f
         $scope, $selectedStages.Count, $allStages.Count, ($selectedStages -join ", "))
@@ -991,6 +1052,11 @@ try {
         Write-Host ("Not running: {0}. A partial run does not replace a full one." -f
             ($notRunStages -join ", "))
     }
+    [ordered]@{
+        event = "verification_stage_output"
+        status = "ok"
+        path = $stageLogPath
+    } | ConvertTo-Json -Compress | Write-Host
 
     # The temporary directory is proven before anything else, because it is the
     # cheapest thing to check, no stage can repair it, and every stage depends on
@@ -1037,8 +1103,8 @@ try {
     foreach ($stageName in $selectedStages) {
         $currentPhase = "stage"
         $currentStage = $stageName
-        Write-Host ""
-        Write-Host ("--- stage {0}: {1}" -f $stageName, $stageCatalog[$stageName].Summary)
+        Write-VerifyDiagnostic -Text ""
+        Write-VerifyDiagnostic -Text ("--- stage {0}: {1}" -f $stageName, $stageCatalog[$stageName].Summary)
         $stageStopwatch = [Diagnostics.Stopwatch]::StartNew()
 
         # Dot-sourced on purpose: a stage body is part of this script, not a
@@ -1110,6 +1176,54 @@ try {
     $summary | ConvertTo-Json -Compress | Write-Host
 }
 catch {
+    # Issue #284: the raw per-line dump moved into $stageLogPath, which keeps
+    # a green run's stdout small, but a stage that fails partway through -
+    # after some of its own Invoke-GodotChecked/Invoke-Checked/Invoke-Scenario
+    # calls already succeeded and routed their output there - must not become
+    # harder to diagnose than before for that reason. Those calls already
+    # print loudly, unconditionally, on their own failure (still Write-Host,
+    # never routed away); this recovers the rest: whatever the failed stage
+    # itself had already written to the file, from its own "--- stage ...:"
+    # header onward, so a check that throws directly - a checksum comparison,
+    # a HUD/camera assertion - is not left with only the exception message
+    # below. $currentStage is $null for a preflight failure, before any stage
+    # (and its header) exists, so this is skipped for that case on purpose.
+    if ($null -ne $currentStage) {
+        if (Test-Path -LiteralPath $stageLogPath -PathType Leaf) {
+            $failedStageLogLines = @([IO.File]::ReadAllLines($stageLogPath))
+            $failedStageMarker = "--- stage " + $currentStage + ":"
+            $failedStageMarkerIndex = -1
+            for ($lineIndex = $failedStageLogLines.Count - 1; $lineIndex -ge 0; $lineIndex--) {
+                if ($failedStageLogLines[$lineIndex].StartsWith(
+                        $failedStageMarker, [StringComparison]::Ordinal)) {
+                    $failedStageMarkerIndex = $lineIndex
+                    break
+                }
+            }
+
+            if ($failedStageMarkerIndex -ge 0) {
+                $failedStageOutput = @($failedStageLogLines[
+                    $failedStageMarkerIndex..($failedStageLogLines.Count - 1)])
+                $failedStageErrorLines = @($failedStageOutput | Where-Object {
+                    $_ -match '"status":"error"'
+                })
+                $failedStageTailCount = [Math]::Min(40, $failedStageOutput.Count)
+                $failedStageTail = @($failedStageOutput[
+                    ($failedStageOutput.Count - $failedStageTailCount)..($failedStageOutput.Count - 1)])
+
+                Write-Host ""
+                Write-Host ("--- diagnostics for the failed stage '{0}' ({1} line(s) captured in {2}) ---" -f
+                    $currentStage, $failedStageOutput.Count, $stageLogPath)
+                if ($failedStageErrorLines.Count -gt 0) {
+                    Write-Host "Structured error event(s) reported during this stage:"
+                    $failedStageErrorLines | ForEach-Object { Write-Host $_ }
+                }
+                Write-Host ("Last {0} line(s) of this stage's captured output:" -f $failedStageTail.Count)
+                $failedStageTail | ForEach-Object { Write-Host $_ }
+            }
+        }
+    }
+
     # A run that died halfway is the one most likely to be reported as a pass, so
     # it gets the same structured line as a success, with the phase and stage that
     # failed and everything that never ran. `failedPhase` separates "the machine

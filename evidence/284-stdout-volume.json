@@ -1,0 +1,92 @@
+{
+  "issue": 284,
+  "question": "How many bytes does a full green scripts/verify.ps1 run print to stdout, which events account for them, and did the fix bring it under the 4 KiB acceptance bound?",
+  "criterion": "Full green run stdout must be at most 4096 bytes.",
+  "result": "met: after = 2569 bytes (2576 bytes captured minus the 7-byte 'EXIT:0\\n' line the measuring command itself appended, which is not verify.ps1's own output).",
+  "before": {
+    "measuredAgainstCommit": "09d295ff29f6917c7a3aeda421d76e9bf4d39fbb",
+    "method": [
+      "Ran the unmodified scripts/verify.ps1 (full scope, no -Stage) with an explicit -GodotPath and a short -TemporaryRoot outside the worktree (agent shell inherits neither GODOT4_CONSOLE nor a usable TMP/TEMP, per docs/engineering/ENVIRONMENT_SETUP.md), redirecting both stdout and stderr to one file so the capture matches exactly what an agent's context would receive from this command.",
+      "Counted total bytes with 'wc -c' on the captured file, matching the repository rule that a size claim names the command that produced it.",
+      "Parsed the same file with a short Python script: for every line, attributed it to the most recently seen '--- stage <name>:' marker (or 'preflight' before the first one), then classified the line as either a single-line JSON event (matched via '\"event\":\"<name>\"' and counted under that event name) or a non-JSON line (build/test/process narration). Summed UTF-8 byte length + 1 for the newline per line, then cross-checked the sum of all buckets against the independently measured file size (352330 vs 352331 - the 1-byte gap is the file's final line having no trailing newline, not a counting error).",
+      "The event and stage breakdown below is the direct output of that script; only the top-level 'command' fields were added by hand for reproducibility."
+    ],
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -GodotPath \"C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe\" -TemporaryRoot \"C:\\gdftmp284\" > baseline-full-run.log 2>&1 ; wc -c baseline-full-run.log",
+    "totalBytes": 352330,
+    "totalKiB": 344.07,
+    "nonJsonBytes": 48276,
+    "nonJsonLineCount": 437,
+    "finding": "95.99% of stdout (338187 of 352330 bytes) is the raw per-line dump of Godot process output in the godot, ui and screenshots stages - Invoke-GodotChecked and Invoke-GodotExpectedFailure in scripts/GodotTools.ps1 pipe every line the engine prints straight to Write-Host. Almost all of that is a small number of single-line JSON events the engine itself emits (godot_headless_smoke alone is 192246 bytes across 16 invocations, ~12 KB each - the per-resolution HUD/UI dump the Issue describes). The remaining 4% is dotnet restore/build/test output and PowerShell test-script narration that scripts/verify.ps1's own Invoke-Checked lets pass through uncaptured, plus progress Write-Host lines inside the stage bodies themselves.",
+    "byEvent": [
+      { "event": "godot_headless_smoke", "count": 16, "bytes": 192246 },
+      { "event": "godot_graybox_screenshot", "count": 3, "bytes": 46778 },
+      { "event": "godot_camera_smoke", "count": 2, "bytes": 31403 },
+      { "event": "godot_controls_smoke", "count": 1, "bytes": 15658 },
+      { "event": "godot_expected_failure_guard", "count": 9, "bytes": 4336 },
+      { "event": "godot_process_guard", "count": 17, "bytes": 1989 },
+      { "event": "scenario_result", "count": 7, "bytes": 1633 },
+      { "event": "verification_result", "count": 1, "bytes": 1466 },
+      { "event": "verify_stages_test", "count": 1, "bytes": 1438 },
+      { "event": "godot_frame_pacing", "count": 2, "bytes": 849 },
+      { "event": "verification_stage", "count": 9, "bytes": 743 },
+      { "event": "temporary_root_test", "count": 1, "bytes": 677 },
+      { "event": "domain_mcp_verification", "count": 1, "bytes": 494 },
+      { "event": "godot_runtime_profile", "count": 2, "bytes": 478 },
+      { "event": "godot_output_guard_test", "count": 1, "bytes": 461 },
+      { "event": "evidence_tools_test", "count": 1, "bytes": 373 },
+      { "event": "take_task_test", "count": 1, "bytes": 312 },
+      { "event": "temporary_cleanup", "count": 1, "bytes": 310 },
+      { "event": "github_auth_tools_test", "count": 1, "bytes": 280 },
+      { "event": "domain_mcp_config_test", "count": 1, "bytes": 277 },
+      { "event": "check_claimed_sha256_test", "count": 1, "bytes": 248 },
+      { "event": "domain_mcp_launcher_test", "count": 1, "bytes": 242 },
+      { "event": "frame_pacing", "count": 1, "bytes": 234 },
+      { "event": "golden_ui_state", "count": 3, "bytes": 234 },
+      { "event": "ivan_mcp_config_test", "count": 1, "bytes": 195 },
+      { "event": "search_codex_sessions_test", "count": 1, "bytes": 178 },
+      { "event": "screenshot_output_path_test", "count": 1, "bytes": 170 },
+      { "event": "goblin_sprite_import_test", "count": 1, "bytes": 145 },
+      { "event": "check_base_stale_test", "count": 1, "bytes": 105 },
+      { "event": "verification_temporary_root", "count": 1, "bytes": 103 }
+    ],
+    "byStage": [
+      { "stage": "godot", "bytes": 240442 },
+      { "stage": "screenshots", "bytes": 49384 },
+      { "stage": "ui", "bytes": 48361 },
+      { "stage": "scripts", "bytes": 5687 },
+      { "stage": "build", "bytes": 3189 },
+      { "stage": "tests", "bytes": 2031 },
+      { "stage": "mcp", "bytes": 1389 },
+      { "stage": "sim", "bytes": 927 },
+      { "stage": "load", "bytes": 712 },
+      { "stage": "preflight", "bytes": 209 }
+    ],
+    "attributionOfNonJsonBytes": [
+      "scripts stage (973 of 5687 bytes; the rest is the JSON test-result events listed above, one per dependency-free guard script Invoke-Checked runs) - blank lines and stage separators.",
+      "build stage (3189 bytes) - 'dotnet restore'/'dotnet build' console text, currently passed through because Invoke-Checked in scripts/verify.ps1 runs '& $FilePath @Arguments' without capturing output.",
+      "tests stage (2031 bytes) - 'dotnet test' console text for the same reason.",
+      "godot/ui/screenshots stages - progress narration ('Write-Host \"Running Godot headless smoke...\"' and similar) directly inside the stage bodies in scripts/verify.ps1."
+    ]
+  },
+  "after": {
+    "measuredAgainstCommit": "691d91b (this branch, tip at measurement time; full run also re-confirmed on the base named in the PR description)",
+    "method": [
+      "Same command shape and same measurement method as 'before': full-scope run, real Godot, stdout+stderr to one file, 'wc -c' for the total, the same Python event/stage classifier for the breakdown.",
+      "The run's own text is 2576 bytes; the measuring command appended one extra line, 'EXIT:$?\\n' (7 bytes, ASCII), which is not part of verify.ps1's own output and is excluded from the 2569-byte figure reported as the result above."
+    ],
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -GodotPath \"C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe\" -TemporaryRoot \"C:\\gdftmp284\" > truly-final-run.log 2>&1; echo \"EXIT:$?\" >> truly-final-run.log ; wc -c truly-final-run.log",
+    "totalBytesCaptured": 2576,
+    "verifyOwnOutputBytes": 2569,
+    "reductionFactor": "352330 / 2569 = ~137x",
+    "byEvent": [
+      { "event": "verification_result", "count": 1, "bytes": 1466 },
+      { "event": "verification_stage", "count": 9, "bytes": 742 },
+      { "event": "verification_stage_output", "count": 1, "bytes": 153 },
+      { "event": "verification_temporary_root", "count": 1, "bytes": 103 }
+    ],
+    "nonJsonLines": [
+      "Verification scope: full (9 of 9 stages: scripts, build, tests, mcp, sim, load, godot, ui, screenshots). (105 bytes)"
+    ],
+    "finding": "Every event that used to dump raw Godot process output or a compact per-call status line (godot_headless_smoke, godot_graybox_screenshot, godot_camera_smoke, godot_controls_smoke, godot_expected_failure_guard, godot_process_guard 'ok', scenario_result, godot_frame_pacing/frame_pacing, godot_runtime_profile, golden_ui_state 'ok', every dependency-free test script's own self-report, and dotnet restore/build/test console text) now goes to the run's stage log file instead - see evidence/284-real-stage-failure.json for what still reaches stdout when a stage actually fails. What remains on a green run is exactly the four kinds of line the Issue asked to keep: the log-file path announced once, the temp-root preflight line, one ok/elapsedSeconds line per stage, and the final verification_result with every checksum."
+  }
+}

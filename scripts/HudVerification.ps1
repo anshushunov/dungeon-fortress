@@ -239,11 +239,11 @@ function Assert-GoldenUiFrame {
         )
     }
 
-    [ordered]@{
+    Write-VerifyDiagnostic -Text (([ordered]@{
         event  = "golden_ui_state"
         status = "ok"
         frame  = $FrameName
-    } | ConvertTo-Json -Compress | Write-Host
+    } | ConvertTo-Json -Compress))
 }
 
 function Write-GoldenUiDocument {
@@ -386,6 +386,6 @@ function Assert-FramePacingIndependence {
         maxRenderStepPixels = @($runs | ForEach-Object { $_.MaxRenderStepPixels })
     }
 
-    $summary | ConvertTo-Json -Compress | Write-Host
+    Write-VerifyDiagnostic -Text ($summary | ConvertTo-Json -Compress)
     return $summary
 }
