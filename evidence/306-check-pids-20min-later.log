@@ -1,0 +1,12 @@
+PID 144688: alive, StartTime=07.08.2026 14:22:22
+PID 78008: alive, StartTime=07.08.2026 14:22:22
+PID 97660: alive, StartTime=07.08.2026 14:22:22
+PID 94468: alive, StartTime=07.08.2026 14:22:22
+PID 97696: alive, StartTime=07.08.2026 14:22:22
+PID 82992: alive, StartTime=07.08.2026 14:22:22
+PID 92352: alive, StartTime=07.08.2026 14:22:22
+PID 136732: alive, StartTime=07.08.2026 14:22:37
+  module: C:\WINDOWS\TEMP\VBCSCompiler\AnalyzerAssemblyLoader\71c23d8864a6495f9f5217fd133a6d15\a43a0b68-8f89-41d8-a0b1-0a2e6e58d141\Microsoft.Interop.SourceGeneration.dll
+  module: C:\WINDOWS\TEMP\VBCSCompiler\AnalyzerAssemblyLoader\71c23d8864a6495f9f5217fd133a6d15\a09e7d4b-8a07-4da1-8f0e-3067c11b7123\System.Text.Json.SourceGeneration.dll
+  module: C:\WINDOWS\TEMP\VBCSCompiler\AnalyzerAssemblyLoader\71c23d8864a6495f9f5217fd133a6d15\83e6d747-93be-4233-b27d-dfb0b9f69365\Microsoft.Extensions.Options.SourceGeneration.dll
+  module: C:\WINDOWS\TEMP\VBCSCompiler\AnalyzerAssemblyLoader\71c23d8864a6495f9f5217fd133a6d15\01d67060-9295-4ba4-8c2b-be3ff29a2543\System.Text.Json.SourceGeneration.dll

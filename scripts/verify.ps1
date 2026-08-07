@@ -72,6 +72,35 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
 # that day, out of 145 entries and 13302 characters.
 $env:DOTNET_ADD_GLOBAL_TOOLS_TO_PATH = "0"
 
+# Issue #306. MSBuild's default node reuse (`/nodeReuse:true`, the .NET CLI's
+# own default) keeps every worker node it spawns for a `dotnet restore`/
+# `dotnet build` call alive after that call returns, waiting to be handed the
+# next build. Measured today on this machine: a single `dotnet restore` +
+# `dotnet build` pair of this solution left seven `dotnet.exe` MSBuild worker
+# processes (command line `... MSBuild.dll /nologo /nodemode:1
+# /nodeReuse:true /low:false`) and one `dotnet.exe` Roslyn compiler-server
+# process (`exec ... VBCSCompiler.dll -pipename:...`) running afterward, none
+# exiting on their own even ~19 minutes later, and a concurrent-run
+# reproduction of evidence/302-concurrent-full-runs.json's own method left a
+# run's owned temporary root holding an empty NuGetScratch\lock directory
+# created the same second seven fresh node-reuse workers spawned for that
+# same run - evidence/306-nodereuse-repro.json. Setting this once, in the
+# environment every `dotnet` child of this script inherits, is the
+# `MSBUILDDISABLENODEREUSE=1` alternative Issue #306 names - equivalent to
+# passing `-nodeReuse:false` to every `dotnet build`/`dotnet restore`
+# invocation below without editing each call site, and it also reaches the
+# domain MCP launcher and verification script this run starts as children.
+# Confirmed live in evidence/306-nodereuse-repro.json: with this set, the
+# same MSBuild worker launch line reads `/nodeReuse:false`, and neither a
+# single `-Stage build` run nor a full 9-stage run left a single new
+# node-reuse or VBCSCompiler process behind. The CLI's own reuse exists to
+# amortise node-startup cost across separate invocations, so disabling it has
+# a real theoretical cost on repeated builds; two build-stage timing samples
+# each way on this shared, concurrently-loaded machine varied more between
+# samples of the *same* configuration than between configurations, so that
+# cost is not one this measurement could isolate from machine noise here.
+$env:MSBUILDDISABLENODEREUSE = "1"
+
 function Invoke-Checked {
     param(
         [Parameter(Mandatory = $true)]
