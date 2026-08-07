@@ -1,23 +1,7 @@
 {
   "issue": 310,
-  "question": "After wiring scripts/test-token-budget-report.ps1 into the `scripts` stage of verify.ps1 (same pattern as scripts/agent/test-take-task.ps1, Issue #182), does 'verify.ps1 -Stage scripts' still finish green, and does the new test run and emit its own event inside that stage?",
-  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage scripts",
-  "runs": [
-    {
-      "label": "first green run after wiring",
-      "exitCode": 0,
-      "elapsedSeconds": 474.3,
-      "finalEvent": "{\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"partial\",\"stagesExecuted\":[\"scripts\"],\"stagesNotRun\":[\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\"],\"prerequisites\":[],\"seed\":424242,\"godotVersion\":null}"
-    },
-    {
-      "label": "second green run, stage-output.log captured mid-run before its own cleanup",
-      "exitCode": 0,
-      "elapsedSeconds": 821.4,
-      "finalEvent": "{\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"partial\",\"stagesExecuted\":[\"scripts\"],\"stagesNotRun\":[\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\"],\"prerequisites\":[],\"seed\":424242,\"godotVersion\":null}",
-      "stageOutputLogTailBeforeCleanup": "...{\"event\":\"domain_mcp_config_test\",\"status\":\"ok\", ...}\nRolled back the claim on issue #5: removed 'claimed', restored 'ready'.\n{\"event\":\"take_task_test\",\"status\":\"ok\", ...}",
-      "note": "verify.ps1's finally block deletes its own .artifacts/verify-<guid> run directory (including stage-output.log) as soon as the stage finishes, so the log could only be read while the process was still running. Polling caught the log right after take_task_test (the last check before the newly wired token-budget-report test) but the process finished and cleaned up before a later poll caught the token_budget_report_test line itself. token_budget_report_test's own emission is instead evidenced directly in evidence/310-mutant.json's baselineDirectRun, and its presence inside this same stage (not skipped, not silently absorbed) is evidenced by the mutant in evidence/310-mutant.json turning this exact stage red."
-    }
-  ],
-  "elapsedSecondsContext": "Both runs are far above ENVIRONMENT_SETUP.md's documented ~25s (owner)/~50s (agent machine) for the `scripts` stage. The added time is scripts/test-token-budget-report.ps1 scanning this machine's real ~/.claude/projects/C--gamedev-Dungeon-fortress transcript history (Issue #303's own documented boundary: 'Замер локален.'), not a regression in any other check - the same 12 checks ran in both the pre-Issue-310 stage (11 checks, take-task last) and this stage (12 checks, token-budget-report last), and only the last one is new.",
-  "gitStateDuringRuns": "scripts/verify.ps1 carried only the Issue #310 wiring diff (new $tokenBudgetReportTestScript variable plus one Invoke-Checked call in the `scripts` stage body); scripts/test-token-budget-report.ps1 and scripts/test-verify-stages.ps1 were unmodified (committed content) for both green runs."
+  "supersedes": "evidence/310-scripts-stage-green-prerebase.json - snapped before the coordinator's rebase.",
+  "note": "A dedicated standalone '-Stage scripts' green run was not repeated after the rebase to avoid a fourth ~800 s run: the `scripts` stage's green, wired-in behaviour on the rebased base is already evidenced twice elsewhere - as part of the full nine-stage run (evidence/310-full-verify.json, stageElapsedSeconds.scripts = 824.1 s, exit 0) and as the mutant's own control state (evidence/310-mutant.json restores this exact state and its negative-control run, elapsedSeconds 121.7 s, confirms every other check in the stage passes independent of this Issue's wiring).",
+  "commandForReference": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage scripts",
+  "expectedResultOnRebasedBase": "exit 0, {\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"partial\",\"stagesExecuted\":[\"scripts\"],...} - see evidence/310-full-verify.json for the measured elapsedSeconds of this exact stage on this exact base."
 }

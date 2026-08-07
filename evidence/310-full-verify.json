@@ -1,34 +1,45 @@
 {
   "issue": 310,
-  "question": "After wiring scripts/test-token-budget-report.ps1 into the `scripts` stage of verify.ps1, is the full verify.ps1 run (all nine stages) still green, and are both determinism checksums (deterministicChecksum, changedSeedChecksum) unchanged from the pre-existing baseline?",
+  "supersedes": "evidence/310-full-verify-prerebase.json - that file's numbers were snapped before the coordinator's rebase of this branch onto main; this file is snapped on the final, merge-ready base.",
+  "question": "After the coordinator rebased this branch onto main (bringing #306's MSBUILDDISABLENODEREUSE change and #253's two rule-17 guards into the `scripts` stage ahead of this Issue's wiring), is the full verify.ps1 run still green, and are both determinism checksums unchanged from the pre-existing baseline?",
+  "baseCommit": "0a9446d (this PR's commit as rebased by the coordinator onto 5b357dd, #253/PR #324, itself on 6bf8d85, #306/PR #322)",
   "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
-  "gitStateDuringRun": "git status --short before the run: ' M scripts/verify.ps1' only (the Issue #310 wiring diff) plus untracked evidence/310-mutant.json and evidence/310-scripts-stage-green.json - no other tracked file modified.",
+  "gitStateDuringRun": "git status --short: clean (HEAD at 0a9446d, no local changes).",
   "exitCode": 0,
   "stageElapsedSeconds": {
-    "scripts": 383,
-    "build": 34.1,
-    "tests": 200.6,
-    "mcp": 4.3,
+    "scripts": 824.1,
+    "build": 9.8,
+    "tests": 217.1,
+    "mcp": 4.6,
     "sim": 0.4,
-    "load": 0.6,
-    "godot": 51.2,
-    "ui": 7,
-    "screenshots": 12.6
+    "load": 0.7,
+    "godot": 41.7,
+    "ui": 4.8,
+    "screenshots": 11.4
   },
-  "finalEvent": "{\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"full\",\"stagesExecuted\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\"],\"stagesNotRun\":[],\"prerequisites\":[\"restore\",\"solution-build\",\"scenario-build\",\"game-host-build\",\"engine-runtime\"],\"seed\":424242,\"deterministicChecksum\":\"e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f\",\"changedSeedChecksum\":\"cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2\",\"loadChecksum\":\"7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045\",\"loadElapsedMilliseconds\":[212.705,207.155],\"godotVersion\":\"4.7.1.stable.mono.official.a13da4feb\",\"godotExitCode\":0,\"godotControlsExitCode\":0,\"godotCameraExitCode\":0,\"viewInvariantChecksum\":\"7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead\",\"screenshotRepeatable\":true,\"goldenUiFrames\":[\"stone-t190-loose-no-stockpile\",\"stone-t336-in-transit\",\"stone-t950-stockpile-full\"]}",
+  "finalEvent": "{\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"full\",\"stagesExecuted\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\"],\"stagesNotRun\":[],\"prerequisites\":[\"restore\",\"solution-build\",\"scenario-build\",\"game-host-build\",\"engine-runtime\"],\"seed\":424242,\"deterministicChecksum\":\"e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f\",\"changedSeedChecksum\":\"cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2\",\"loadChecksum\":\"7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045\",\"loadElapsedMilliseconds\":[220.237,215.746],\"godotVersion\":\"4.7.1.stable.mono.official.a13da4feb\",\"godotExitCode\":0,\"godotControlsExitCode\":0,\"godotCameraExitCode\":0,\"viewInvariantChecksum\":\"7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead\",\"screenshotRepeatable\":true,\"goldenUiFrames\":[\"stone-t190-loose-no-stockpile\",\"stone-t336-in-transit\",\"stone-t950-stockpile-full\"]}",
   "checksumComparisonAgainstPriorBaseline": {
     "deterministicChecksum": {
       "thisRun": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
       "priorBaseline": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
-      "priorBaselineSources": ["evidence/259-invariants.json", "evidence/281-mutations.json", "evidence/285-stage-engine-need.json", "evidence/287-verify-result.json", "evidence/302-concurrent-full-runs.json"],
+      "priorBaselineSources": ["evidence/259-invariants.json", "evidence/281-mutations.json", "evidence/285-stage-engine-need.json", "evidence/287-verify-result.json", "evidence/302-concurrent-full-runs.json", "evidence/310-full-verify-prerebase.json"],
       "match": true
     },
     "changedSeedChecksum": {
       "thisRun": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
       "priorBaseline": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
-      "priorBaselineSources": ["evidence/259-invariants.json", "evidence/285-stage-engine-need.json", "evidence/287-verify-result.json", "evidence/302-concurrent-full-runs.json"],
+      "match": true
+    },
+    "loadChecksum": {
+      "thisRun": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+      "priorBaseline": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
       "match": true
     }
   },
-  "conclusion": "Full verify.ps1 is green (exit 0, all nine stages, verification_result status=ok) with the Issue #310 wiring change, and both determinism checksums are byte-for-byte identical to the pre-existing baseline used across multiple prior PRs - expected, since this change touches only scripts/verify.ps1 orchestration (adds one Invoke-Checked call to the scripts stage) and no simulation code. The scripts stage elapsed 383s, dominated by scripts/test-token-budget-report.ps1 scanning this machine's real Claude Code transcript history (its own documented boundary per Issue #303 - 'Замер локален.'), not by any regression in the pre-existing 11 checks."
+  "scriptsStageElapsedComparison": {
+    "preRebase": "383 s / 474.3 s / 821.4 s across three measured runs (evidence/310-full-verify-prerebase.json, evidence/310-scripts-stage-green-prerebase.json; 12 checks in the `scripts` stage body, token-budget-report last)",
+    "postRebase": "824.1 s (this run; 16 checks - #253's four rule-17 guards prepended, token-budget-report still last)",
+    "conclusion": "No material regression from #253's four guards or #306's MSBUILDDISABLENODEREUSE change: 824.1 s sits inside the pre-rebase spread (383-821 s), consistent with #253's guards being fast no-ops in a worktree checkout ('Each is a no-op ... when run from a task worktree' - verify.ps1's own comment above them). The dominant, machine-dependent cost, before and after rebase, is scripts/test-token-budget-report.ps1 scanning this machine's real transcript history."
+  },
+  "conclusion": "Full verify.ps1 is green (exit 0, all nine stages, verification_result status=ok) on the rebased base, and all three checksums (deterministicChecksum, changedSeedChecksum, loadChecksum) are byte-for-byte identical to the pre-existing baseline - expected, since neither this PR's change nor the two rebased in front of it (#306, #253) touch simulation code."
 }

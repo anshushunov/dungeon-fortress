@@ -1,0 +1,26 @@
+{
+  "issue": 310,
+  "question": "Does the `scripts` stage of verify.ps1 actually redden when scripts/test-token-budget-report.ps1 (wired in this Issue) fails, the same way it already does for scripts/agent/test-take-task.ps1?",
+  "baselineDirectRun": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-token-budget-report.ps1",
+    "exitCode": 0,
+    "stdout": "{\"event\":\"token_budget_report_test\",\"status\":\"ok\",\"stratificationRatio\":4.43,\"writerAgentCount\":47,\"reviewAgentCount\":80}",
+    "note": "Confirms the wired-in test itself still passes on this machine's real transcripts and emits its own event, before any mutation."
+  },
+  "method": "Verified clean via 'git status --short scripts/' before mutating (only scripts/verify.ps1 carried the Issue #310 wiring diff). Inserted a forced `throw` at the top of the committed scripts/test-token-budget-report.ps1 (after Set-StrictMode/$ErrorActionPreference, before any real check runs), ran 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage scripts', recorded the exit code and the failing diagnostics, then restored the committed file with 'git checkout -- scripts/test-token-budget-report.ps1' and re-verified 'git status --short scripts/' showed only the verify.ps1 wiring diff again.",
+  "mutant": {
+    "name": "forced failure at the top of test-token-budget-report.ps1",
+    "diff": {
+      "find": "Set-StrictMode -Version Latest\n$ErrorActionPreference = \"Stop\"",
+      "replace": "Set-StrictMode -Version Latest\n$ErrorActionPreference = \"Stop\"\n\n# MUTANT (Issue #310 evidence, reverted before commit): forced failure to\n# prove the `scripts` stage of verify.ps1 reddens when this test fails.\nthrow \"MUTANT-310: forced failure to prove the scripts stage reddens.\""
+    },
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage scripts",
+    "exitCode": 1,
+    "failingAssertion": "MUTANT-310: forced failure to prove the scripts stage reddens.\nAt C:\\gamedev\\_wt-310\\scripts\\test-token-budget-report.ps1:37 char:1",
+    "propagatedThrough": "Invoke-Checked (scripts/verify.ps1:106) rethrew as \"'powershell' failed with exit code 1.\"",
+    "finalEvent": "{\"event\":\"verification_result\",\"status\":\"error\",\"scope\":\"partial\",\"failedPhase\":\"stage\",\"failedStage\":\"scripts\",\"stagesExecuted\":[],\"stagesNotRun\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\"],\"reason\":\"'powershell' failed with exit code 1.\"}",
+    "sideEffectObserved": "The same mutation also failed the nested 'verify.ps1 -Stage scripts' smoke check that scripts/test-verify-stages.ps1 runs as part of its own engine-gate proof (scripts/test-verify-stages.ps1:1608, then :1665), because that nested run shares the same committed scripts/test-token-budget-report.ps1. Both failures are logged in /tmp/verify-scripts-mutant.log; this is expected (one mutation, two callers of the mutated file) and not a separate finding."
+  },
+  "restoredCommittedState": "git checkout -- scripts/test-token-budget-report.ps1, verified with 'git status --short scripts/' showing only scripts/verify.ps1 modified afterward (the Issue #310 wiring diff itself).",
+  "conclusion": "The scripts stage of verify.ps1 reddens (exit 1, verification_result status=error, failedStage=scripts) when scripts/test-token-budget-report.ps1 fails, propagated the same way as every other dependency-free guard in that stage via Invoke-Checked. Reverting the mutation restored a clean tree with only the intended wiring change."
+}
