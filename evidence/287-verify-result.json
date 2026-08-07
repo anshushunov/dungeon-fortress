@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "issue": 287,
+  "what": "Raw verification_result event from the one full scripts/verify.ps1 run made before creating PR #297, saved here because the PR body only quoted a truncated subset of fields (finding 3 of the PR #297 rework cycle).",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -TemporaryRoot \"C:/gamedev/_wt-287-tmp\" -GodotPath \"C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe\"",
+  "context": "-TemporaryRoot was required because the shared C:\\WINDOWS\\TEMP was in contention with another agent's concurrent run (preflight failure on a locked probe directory); -GodotPath was required because GODOT4_CONSOLE is not inherited by the agent shell (documented in ENVIRONMENT_SETUP.md).",
+  "measuredAt": "2026-08-07T03:11:00+03:00",
+  "rawEvent": {
+    "event": "verification_result",
+    "status": "ok",
+    "scope": "full",
+    "stagesExecuted": [
+      "scripts",
+      "build",
+      "tests",
+      "mcp",
+      "sim",
+      "load",
+      "godot",
+      "ui",
+      "screenshots"
+    ],
+    "stagesNotRun": [],
+    "prerequisites": [
+      "restore",
+      "solution-build",
+      "scenario-build",
+      "game-host-build",
+      "engine-runtime"
+    ],
+    "seed": 424242,
+    "temporaryRoot": "C:\\gamedev\\_wt-287-tmp",
+    "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+    "changedSeedChecksum": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
+    "loadChecksum": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+    "loadElapsedMilliseconds": [
+      200.756,
+      199.506
+    ],
+    "godotVersion": "4.7.1.stable.mono.official.a13da4feb",
+    "godotExitCode": 0,
+    "godotControlsExitCode": 0,
+    "godotCameraExitCode": 0,
+    "invalidViewFailuresChecked": 5,
+    "hudGuardRegressionExitCode": 1,
+    "hudReadabilityRegressionExitCode": 1,
+    "hudSmallestPhysicalTextPixels": {
+      "Authored": 8,
+      "OwnerMaximized": 16
+    },
+    "cameraTransformRegressionExitCode": 1,
+    "cameraInputChecks": 15,
+    "cameraTransformChecks": 15,
+    "cameraBoundsChecks": 10,
+    "cameraPanChecks": 5,
+    "viewInvariantChecksum": "7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead",
+    "viewCases": [
+      "base",
+      "overview-shifted",
+      "detail-scaled-ui",
+      "large-same-zoom"
+    ],
+    "goblinScreenPixels": {
+      "Overview": 30.909090909090907,
+      "Base": 61.81818181818181,
+      "Detail": 92.72727272727272
+    },
+    "godotRaidExitCode": 0,
+    "screenshotRepeatable": true,
+    "goldenUiFrames": [
+      "stone-t190-loose-no-stockpile",
+      "stone-t336-in-transit",
+      "stone-t950-stockpile-full"
+    ]
+  }
+}
