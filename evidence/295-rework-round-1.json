@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "issue": 295,
+  "pullRequest": 326,
+  "round": "круг доработки 1 — две находки независимого review",
+  "rule": "Правило 32: утверждение, чей мутант проходит, не проверено. Правило 27: находка -> правка -> команда, доказывающая правку.",
+  "procedure": "Правки закоммичены (75b2129) до применения мутантов. Каждый мутант применён скриптом, который сначала утверждает точную строку, которую заменяет; затем снят замер; затем мутант откачен обратной заменой и дерево подтверждено чистым. Ни один мутант не применялся к незакоммиченному файлу.",
+  "environment": {
+    "worktree": "C:\\gamedev\\_wt-295",
+    "baseCommit": "7d1370a (origin/main после rebase)",
+    "reworkCommit": "75b2129",
+    "temporaryRoot": "C:\\df-tmp-295",
+    "godot": "4.7.1.stable.mono.official.a13da4feb"
+  },
+  "finding1_journalDroppedArguments": {
+    "severity": "блокирующая",
+    "what": "WorldDrawJournal заявлял «every argument in it… nothing about a mark can move without moving it», а фактически не записывал alignment и ширину переноса (DrawString/DrawStringOutline), толщину обводки size, transpose (DrawTextureRect). Проверка на широту потока нашла ещё три пропуска того же рода: antialiased у Line, Arc и Polyline, и три флага text-server у обоих текстовых примитивов.",
+    "fix": "В поток пишется каждый аргумент каждого примитива, кроме двух названных поимённо: сама строка текста (её держит golden UI, tests/golden/ui) и объект Font (одна общая ThemeDB.FallbackFont без устойчивой идентичности). Докстринг сужен до этого же утверждения — теперь он описывает то, что действительно охраняется.",
+    "mechanismNotPromise": {
+      "test": "DungeonFortress.Presentation.Tests.WorldGeometryJournalGuardTests.A_hidden_primitive_hands_the_journal_every_argument_it_was_given",
+      "how": "Берёт имена параметров каждой подмены прямо из исходника адаптера (AdapterSource.ParameterNames) и требует, чтобы каждое дошло до вызова журнала. Исключения — список ArgumentsDeliberatelyNotRecorded, у каждого написана причина.",
+      "negativeRun": {
+        "mutant": "В journal.Text(\"String\", pos, alignment, …) аргумент alignment заменён константой HorizontalAlignment.Left — ровно тот пропуск, который review нашёл.",
+        "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter FullyQualifiedName~WorldGeometryJournalGuardTests",
+        "result": "RED. A_hidden_primitive_hands_the_journal_every_argument_it_was_given [FAIL], сообщение «'DrawString' is given 'alignment' and does not hand it to the journal…». Не пройдено 1, пройдено 6, всего 7.",
+        "revertedAndReverifiedGreen": true
+      }
+    },
+    "reviewMutantNowRed": {
+      "mutant": "src/DungeonFortress.Game/Main.DrawOverlays.cs, DrawSelectionCount",
+      "edit": "            HorizontalAlignment.Left,  ->             HorizontalAlignment.Center,",
+      "whyItMatters": "Подпись выравнивается внутри бокса шириной width - ScaleWorld(6); аргумент позиции при этом не двигается вообще, поэтому старый журнал видел ровно то же самое.",
+      "commands": [
+        "Godot_v4.7.1-stable_mono_win64_console.exe --headless --path src/DungeonFortress.Game -- --smoke-controls",
+        "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify.ps1 -Stage godot -TemporaryRoot C:\\df-tmp-295"
+      ],
+      "resultDirect": "RED. «The map is drawn with different geometry than the committed record of it (tests/golden/world/draw-calls.json): line 104 committed \"digest\": \"bd24022c7fbc37b9\" / run \"digest\": \"7084d0d775f97f8e\"» — проход Interaction, где рисуется подпись выделения.",
+      "resultStage": "RED. verification_result status=error, failedPhase=stage, failedStage=godot, reason «Godot emitted 1 unexpected ERROR line(s).»",
+      "beforeThisRound": "На том же мутанте до правки world_geometry_reference отвечал status=ok — это и есть находка review.",
+      "revertedAndTreeClean": true
+    }
+  },
+  "finding2_simulationChecksumInsideTheReference": {
+    "severity": "возврат",
+    "what": "canonicalChecksum симуляции лежал внутри сравниваемого текста эталона. Первый же merge задачи, пишущей в src/DungeonFortress.Simulation/**, покрасил бы стадию godot словами «The map is drawn with different geometry» при неизменной отрисовке. Такая задача идёт прямо сейчас — #312.",
+    "fix": "Сумма убрана из документа эталона и печатается в событии world_geometry_reference (и в status=ok, и в status=written). Читатель падения по-прежнему видит, какого мира был кадр; сравнение её больше не касается.",
+    "whyMechanismAndNotSchedule": "Развести merge по времени — договорённость, которая живёт до первой забывчивости. Убрать число из сравнения — механизм, который держится сам.",
+    "mechanismNotPromise": {
+      "test": "WorldGeometryJournalGuardTests.The_reference_holds_nothing_but_geometry",
+      "how": "Читает закоммиченный эталон и запрещает и слово checksum в любом регистре, и любой 64-символьный hex — то есть каноническую сумму под каким угодно именем, которое ей дадут позже. Шестнадцатисимвольные дайджесты проходов короче этого намеренно.",
+      "negativeRun": {
+        "mutant": "canonicalChecksum = _checksum возвращён в заголовок сравниваемого документа, эталон перегенерирован.",
+        "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter FullyQualifiedName~WorldGeometryJournalGuardTests",
+        "result": "RED. The_reference_holds_nothing_but_geometry [FAIL]. Не пройдено 1, пройдено 6, всего 7.",
+        "revertedAndReverifiedGreen": true
+      }
+    },
+    "substitutionProof": {
+      "question": "Красит ли теперь стадию godot подмена канонической суммы — и красит ли по-прежнему мутант геометрии?",
+      "checksumMutant": {
+        "file": "src/DungeonFortress.Simulation/PrototypeCanonical.cs",
+        "edit": "    public const int SchemaVersion = 3;  ->     public const int SchemaVersion = 4;",
+        "whyThisOne": "SchemaVersion пишется в каноничный JSON первым полем, поэтому меняет сумму каждого снапшота и не меняет ни одного нарисованного числа. Это самая чистая подстановка «правка снапшота» из доступных.",
+        "commands": [
+          "Godot_v4.7.1-stable_mono_win64_console.exe --headless --path src/DungeonFortress.Game -- --smoke-controls",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify.ps1 -Stage godot -TemporaryRoot C:\\df-tmp-295"
+        ],
+        "canonicalChecksumBefore": "2934fac1b74263ed81ed1635ba43c0d45725f42c8872e03d05c8b2eb6d834eae",
+        "canonicalChecksumAfter": "6872e58bba4e846a68005273af2c3a2054a560b9bb085f5eef9377e9faa63e9b",
+        "resultDirect": "GREEN. {\"event\":\"world_geometry_reference\",\"status\":\"ok\",\"passes\":4,\"calls\":2371,\"fixture\":\"baseline\",\"tick\":1,\"canonicalChecksum\":\"6872e58b…\"} — сумма сдвинулась, геометрия не шелохнулась, проверка молчит.",
+        "resultStage": "GREEN. verification_stage status=ok stage=godot elapsedSeconds=49.8; verification_result status=ok, EXIT=0.",
+        "revertedAndTreeClean": true
+      },
+      "geometryMutantStillRed": {
+        "file": "src/DungeonFortress.Game/Main.DrawWorld.cs, DrawRoomBorder",
+        "edit": "        var inset = ScaleWorld((float)purposeInset);  ->         var inset = ScaleWorld((float)purposeInset * 3f);",
+        "command": "Godot_v4.7.1-stable_mono_win64_console.exe --headless --path src/DungeonFortress.Game -- --smoke-controls",
+        "result": "RED. line 11 committed \"calls\": 444 / run 448; line 14 committed \"Line\": 68 / run 72; line 27 committed \"digest\": \"c54c65f52e15f439\" / run другой.",
+        "revertedAndTreeClean": true
+      },
+      "reading": "Две подстановки в одну сторону и в другую: сумма симуляции ушла из поля зрения проверки, геометрия осталась в нём."
+    }
+  },
+  "finding3_measuredCoverageOfTheReference": {
+    "severity": "не блокер",
+    "what": "Тело PR называло охват уже, чем он есть на деле.",
+    "measuredCoverage": {
+      "source": "tests/golden/world/draw-calls.json на коммите 75b2129",
+      "BelowDepth": {
+        "calls": 444,
+        "primitives": {
+          "Circle": 8,
+          "Line": 68,
+          "Rect": 368
+        }
+      },
+      "Depth": {
+        "calls": 1761,
+        "primitives": {
+          "Line": 418,
+          "Rect": 268,
+          "SetTransform": 585,
+          "String": 4,
+          "TextureRect": 486
+        }
+      },
+      "Informational": {
+        "calls": 72,
+        "primitives": {
+          "Arc": 5,
+          "Circle": 9,
+          "Line": 35,
+          "Rect": 19,
+          "String": 4
+        }
+      },
+      "Interaction": {
+        "calls": 94,
+        "primitives": {
+          "Polyline": 1,
+          "Rect": 92,
+          "String": 1
+        }
+      },
+      "total": 2371,
+      "reading": "486 TextureRect и 585 SetTransform прохода Depth — это тела, собранные из рига: файлы BodyMotion.cs и Main.DrawBodies.cs отданы задаче #237. Её правки будут двигать этот эталон, и координатор должен это знать, придерживая #237."
+    },
+    "assetImportDependency": {
+      "claim": "Эталон зависит не только от кода, но и от импорта ассетов: без импортированных ресурсов проверка краснеет на неизменном коде.",
+      "command": "mv src/DungeonFortress.Game/.godot/imported /tmp/df-imported-backup && Godot_v4.7.1-stable_mono_win64_console.exe --headless --path src/DungeonFortress.Game -- --smoke-controls; mv /tmp/df-imported-backup src/DungeonFortress.Game/.godot/imported",
+      "result": "RED на неизменном коде, процесс завершился с кодом 1. bodyRig.loaded 0 из 7 частей, проход Depth сжался с 1761 вызова до 726 и потерял TextureRect целиком. Кэш импорта восстановлен, дерево чисто.",
+      "consequence": "Стадия godot вызывает Initialize-EngineRuntime и тест импорта спрайтов до smoke, поэтому в конвейере импорт всегда есть. Но ручной прогон --smoke-controls на свежем клоне без импорта покажет красное, и причина будет не в геометрии. Названо в теле PR как ограничение."
+    }
+  },
+  "finding4_unreproducibleTestCount": {
+    "severity": "мелочь",
+    "what": "В теле PR стояло «не пройдено 1, пройдено 16», а команда рядом (--filter с двумя классами через |) этого числа не даёт.",
+    "fix": "Все негативные прогоны этого круга сняты одной однозначной командой по одному классу, и числа приведены её собственным выводом.",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter FullyQualifiedName~WorldGeometryJournalGuardTests",
+    "cleanRun": "Пройден!: не пройдено 0, пройдено 7, всего 7, длительность 12 ms.",
+    "negativeRuns": [
+      "alignment выброшен из журнала -> не пройдено 1, пройдено 6, всего 7",
+      "canonicalChecksum возвращён в эталон -> не пройдено 1, пройдено 6, всего 7",
+      "base.DrawRect(...) вставлен в DrawWall -> не пройдено 1, пройдено 6, всего 7 (A_hidden_primitive_forwards_to_the_engine_and_nowhere_else)"
+    ]
+  },
+  "suiteAfterTheRound": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release",
+    "result": "Пройден!: не пройдено 0, пройдено 631, всего 631, длительность 20 s.",
+    "history": "624 до задачи -> 629 после первого круга -> 631 после этого."
+  },
+  "fullRunAfterTheRound": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$sw=[Diagnostics.Stopwatch]::StartNew(); & '.\\scripts\\verify.ps1' -TemporaryRoot 'C:\\df-tmp-295'; $c=$LASTEXITCODE; $sw.Stop(); Write-Host ('TOTAL_SECONDS=' + $sw.Elapsed.TotalSeconds + ' EXIT=' + $c)\"",
+    "base": "7d1370a (behind 0, ahead 5)",
+    "result": "GREEN. status=ok, scope=full, 9 из 9, EXIT=0, TOTAL_SECONDS=396.8350695.",
+    "stageSeconds": {
+      "scripts": 155.9,
+      "build": 6.3,
+      "tests": 177.7,
+      "mcp": 4.2,
+      "sim": 0.4,
+      "load": 0.6,
+      "godot": 37.2,
+      "ui": 4.6,
+      "screenshots": 9.3
+    },
+    "godotStageSpread": "37,2 c в этом прогоне против 39,0 / 45,5 / 49,4 / 69,6 c в прежних прогонах той же стадии на этой машине. Разброс стадии по-прежнему на порядок больше атрибутируемой стоимости проверки (0,23 c), и стадийное число по-прежнему не выдаётся за замер.",
+    "checksums": "deterministicChecksum e65273aa..., viewInvariantChecksum 7e9fffa7..., loadChecksum 7ec0f2d6..., три golden UI кадра, screenshotRepeatable true — всё совпало с базой: отрисовка не изменилась."
+  }
+}
