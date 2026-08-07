@@ -58,9 +58,10 @@ authentication и точный token usage handoff описаны в
 `engineering/EVIDENCE_WORKFLOW.md`.
 
 Чем меряется расход токенов проекта и какова его базовая линия —
-[`engineering/TOKEN_BUDGET.md`](engineering/TOKEN_BUDGET.md): команды замера по
-транскриптам, разбивка по дням, сессиям и субагентам, и правило сравнивать
-расход на смерженный PR, а не абсолютный.
+[`engineering/TOKEN_BUDGET.md`](engineering/TOKEN_BUDGET.md): разбивка по
+дням, сессиям и субагентам, и правило сравнивать расход на смерженный PR, а не
+абсолютный. Сам замер — один вызов `scripts/token-budget-report.ps1`
+(стратификация writer/review на агента, отказ по незакрытому срезу).
 
 Правила работы Codex, Claude Code и других агентов находятся в
 `engineering/MULTI_AGENT_WORKFLOW.md`.
