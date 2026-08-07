@@ -11,6 +11,20 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Issue #284. Invoke-Checked below now captures every native command's output
+# (`2>&1`) instead of letting it flow straight through, so it can route a
+# successful run's text into the stage log file. That capture decodes the
+# child's bytes using [Console]::OutputEncoding, which on a machine whose
+# console codepage is not UTF-8 (measured here: cp866) turns a .NET 8 CLI's
+# UTF-8 non-ASCII text - e.g. its Russian-locale "Восстановлен ..." lines -
+# into mojibake, silently, the moment it is captured. The raw byte
+# pass-through this replaced never went through that decode step at all, so
+# it never showed the problem. Godot's own output is ASCII-only JSON, so
+# Invoke-GodotChecked's and Invoke-Scenario's pre-existing `2>&1` capture
+# never exposed this either. Setting it once, here, before anything is
+# captured, is enough for all three.
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+
 . (Join-Path $PSScriptRoot "GodotTools.ps1")
 . (Join-Path $PSScriptRoot "HudVerification.ps1")
 . (Join-Path $PSScriptRoot "TemporaryRoot.ps1")

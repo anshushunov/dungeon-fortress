@@ -391,7 +391,7 @@ function Initialize-GodotRuntimeEnvironment {
     # Printed on success as well as measured. Two scripts that start the engine
     # can now be compared by their own output rather than by reading both of
     # them, which is how the comparison in Issue #184 had to be made.
-    [ordered]@{
+    Write-VerifyDiagnostic -Text (([ordered]@{
         event = "godot_runtime_profile"
         status = "ok"
         path = $env:APPDATA
@@ -399,7 +399,7 @@ function Initialize-GodotRuntimeEnvironment {
         longestShaderCachePathLength = $measurement.LongestPathLength
         maximumEnterablePathLength = $measurement.MaximumEnterablePathLength
         headroom = $measurement.Headroom
-    } | ConvertTo-Json -Compress | Write-Host
+    } | ConvertTo-Json -Compress))
 }
 
 function Import-GodotProjectAssets {
@@ -421,7 +421,7 @@ function Import-GodotProjectAssets {
     # Godot's editor import pass is incremental: on an up-to-date project this
     # exits without rebuilding assets, while a fresh checkout gets its required
     # .godot/imported entries before ResourceLoader is used at runtime.
-    Write-Host "Importing Godot project assets (incremental)..."
+    Write-VerifyDiagnostic -Text "Importing Godot project assets (incremental)..."
     $result = Invoke-GodotChecked `
         -GodotPath $GodotPath `
         -Arguments @("--headless", "--editor", "--quit", "--path", $resolvedProjectPath)
