@@ -69,6 +69,64 @@ public sealed class PrototypeMomentOfTruthTests
     }
 
     /// <summary>
+    /// Every magnitude is built out of the named sources the design contract
+    /// lists, and each of the sources a four-wave party can reach is actually
+    /// reached. The mutant M1 zeroes one accrual and this goes red, which is
+    /// what stops a magnitude from being published, deterministic and empty.
+    /// </summary>
+    [Fact]
+    public void Every_named_source_of_the_three_magnitudes_is_reached_over_the_matrix()
+    {
+        var seen = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var fixtureName in Fixtures)
+        {
+            foreach (var seed in MatrixSeeds)
+            {
+                var state = PlayOut(LoadFixture(fixtureName) with { Seed = seed });
+                foreach (var creature in state.Creatures)
+                {
+                    foreach (var term in creature.Loyalty.FearTerms
+                                 .Concat(creature.Loyalty.BenefitTerms)
+                                 .Concat(creature.Loyalty.GrudgeTerms))
+                    {
+                        seen.Add(term.Code);
+                    }
+                }
+            }
+        }
+
+        // The sources a party reaches without a single verdict in its log. The
+        // four terms a verdict writes are exercised by the tests above; they
+        // cannot appear here, because no shipped fixture contains a verdict.
+        string[] required =
+        [
+            "benefit_faded", "benefit_fed", "benefit_tended",
+            "fear_ally_downed", "fear_faded", "fear_panic", "fear_wound",
+            "grudge_ignored",
+        ];
+        var missing = required.Except(seen, StringComparer.Ordinal).ToArray();
+        Assert.True(
+            missing.Length == 0,
+            $"the whole matrix never credited [{string.Join(", ", missing)}], so those sources " +
+            "of standing are documented and dead. Seen: " + string.Join(", ", seen));
+
+        // And nothing was credited that the panel has no wording for: an
+        // unreadable term on a card is worse than no breakdown at all.
+        string[] known =
+        [
+            "benefit_drilled", "benefit_faded", "benefit_fed", "benefit_rewarded",
+            "benefit_tended", "fear_ally_downed", "fear_faded", "fear_panic",
+            "fear_punished", "fear_wound", "grudge_hunger", "grudge_ignored",
+            "grudge_punished_unfairly", "grudge_refused_place", "grudge_spent",
+        ];
+        var unknown = seen.Except(known, StringComparer.Ordinal).ToArray();
+        Assert.True(
+            unknown.Length == 0,
+            $"the party credited [{string.Join(", ", unknown)}], which the contract does not " +
+            "list and the panel cannot render.");
+    }
+
+    /// <summary>
     /// Criterion 4, and the mutant M4 is aimed here: the named terms add up to
     /// the number printed beside them, on every creature, on every tick of a
     /// whole party. The totals and the ledgers are two representations written by
