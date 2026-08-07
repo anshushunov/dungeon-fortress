@@ -1,0 +1,58 @@
+{
+  "issue": 312,
+  "what": "Обе контрольные суммы всех трёх поставляемых журналов до и после среза 3.",
+  "commands": [
+    "git worktree add .artifacts/main-base origin/main",
+    "dotnet run --project tests/DungeonFortress.Scenarios -c Release -- --prototype --commands scenarios/prototype1/<fixture>.commands.v2.json --ticks 2700 --snapshot <file>",
+    "stateChecksum — поле `checksum` строки prototype_result (SHA-256 канонического снапшота).",
+    "eventLogChecksum — SHA-256 документа {\"schemaVersion\":3,\"events\":[...]}, собранного из массива `events` того же снапшота: это побайтно то, что отдаёт PrototypeCanonical.SerializeEvents."
+  ],
+  "base": "origin/main на момент замера",
+  "runs": {
+    "before": {
+      "baseline": {
+        "ticks": 2422,
+        "outcome": "raided",
+        "stateChecksum": "8305505e68c3d0425c6f5afdd2f7b8322c2287913344d7e85d127d56b04fc9d5",
+        "eventLogChecksum": "0331939d630e1c014e786a9b0fd2a976c4f87c6b5f9b200c26af08a45ac3029a"
+      },
+      "prepared": {
+        "ticks": 2424,
+        "outcome": "raided",
+        "stateChecksum": "8ce96e89751627727481d36ddc2c6485487ce1d53fd6193f9e08db28f39bcf13",
+        "eventLogChecksum": "0adc3ad0bc7994fdb4485ea39867e146ee101396bb62812bb93559d691334527"
+      },
+      "neglected": {
+        "ticks": 615,
+        "outcome": "fallen",
+        "stateChecksum": "0c169dfef4da6b6f0cf5e553005ccf6e5022469c033d01ac50a21d70e8e8c6bc",
+        "eventLogChecksum": "fbc029220d7534699d0915ea05d7f1ea9a933243c3ebacb0e2ea7f86a4137c81"
+      }
+    },
+    "after": {
+      "baseline": {
+        "ticks": 2422,
+        "outcome": "raided",
+        "stateChecksum": "2917a1556e279f3cc59afa97e867dd5840c26e8056e0754b4be2d28a3311498b",
+        "eventLogChecksum": "09e927ab84e448c316f7aa6f684ca9115e84adad5eca7b56306090f9e6d8ed7f"
+      },
+      "prepared": {
+        "ticks": 2424,
+        "outcome": "raided",
+        "stateChecksum": "c408369e404b6ae2a2e8a5b4ae5e25ece7a470d46c121312f8df71c46f842f09",
+        "eventLogChecksum": "3554775cf208e298f275a224a1e934f9b8265c95bc33b4512a43e5c023174bb5"
+      },
+      "neglected": {
+        "ticks": 615,
+        "outcome": "fallen",
+        "stateChecksum": "db876416eceb1863ba869e57d0557ae5fe91f8672178dfa5831424765895a216",
+        "eventLogChecksum": "fbc029220d7534699d0915ea05d7f1ea9a933243c3ebacb0e2ea7f86a4137c81"
+      }
+    }
+  },
+  "reading": [
+    "Тик окончания и исход партии совпадают до и после у всех трёх журналов: 2422/raided, 2424/raided, 615/fallen. Партия без вердиктов идёт ровно как прежде.",
+    "Контрольная сумма состояния сдвинулась у всех трёх: у каждого существа с тика 0 появился объект `loyalty`, а у документа — секция `momentOfTruth`. Это ожидаемо и объяснено: аддитивное расширение снапшота двигает checksum каждого кадра (PROTOTYPE_HEADLESS.md, «Версионирование канонического снапшота»), версия схемы при этом не поднимается.",
+    "Контрольная сумма журнала событий сдвинулась у baseline и prepared и НЕ сдвинулась у neglected (fbc029220d7534699d0915ea05d7f1ea9a933243c3ebacb0e2ea7f86a4137c81 с обеих сторон). Это ровно то, чего требует конструкция: neglected падает на тике 615, до первой волны, поэтому ни одной карточки, ни одного `verdict_ignored` и ни одного `combat_left_grudge` в нём нет — а значит новых событий тоже нет."
+  ]
+}

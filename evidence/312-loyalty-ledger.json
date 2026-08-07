@@ -1,0 +1,207 @@
+{
+  "issue": 312,
+  "what": "Реестр лояльности всех девяти существ на конце партии prepared/20260726 — то, что игрок читает на карточке.",
+  "command": "dotnet run --project tests/DungeonFortress.Scenarios -c Release -- --prototype --commands scenarios/prototype1/prepared.commands.v2.json --ticks 2700 --snapshot .artifacts/prepared.json",
+  "tick": 2424,
+  "outcome": "raided",
+  "ledger": [
+    {
+      "id": 0,
+      "name": "Брусок",
+      "fear": 20,
+      "benefit": 6,
+      "grudge": 0,
+      "grudgeReleased": false,
+      "fearTerms": {
+        "fear_ally_downed": 15,
+        "fear_faded": -10,
+        "fear_panic": 15
+      },
+      "benefitTerms": {
+        "benefit_drilled": 3,
+        "benefit_faded": -17,
+        "benefit_fed": 16,
+        "benefit_tended": 4
+      },
+      "grudgeTerms": {}
+    },
+    {
+      "id": 1,
+      "name": "Кремень",
+      "fear": 16,
+      "benefit": 23,
+      "grudge": 4,
+      "grudgeReleased": false,
+      "fearTerms": {
+        "fear_ally_downed": 3,
+        "fear_faded": -11,
+        "fear_wound": 24
+      },
+      "benefitTerms": {
+        "benefit_drilled": 21,
+        "benefit_faded": -26,
+        "benefit_fed": 16,
+        "benefit_tended": 12
+      },
+      "grudgeTerms": {
+        "grudge_ignored": 4
+      }
+    },
+    {
+      "id": 2,
+      "name": "Мотылёк",
+      "fear": 17,
+      "benefit": 0,
+      "grudge": 0,
+      "grudgeReleased": false,
+      "fearTerms": {
+        "fear_ally_downed": 12,
+        "fear_faded": -15,
+        "fear_panic": 20
+      },
+      "benefitTerms": {
+        "benefit_drilled": 9,
+        "benefit_faded": -25,
+        "benefit_fed": 16
+      },
+      "grudgeTerms": {}
+    },
+    {
+      "id": 3,
+      "name": "Смола",
+      "fear": 13,
+      "benefit": 5,
+      "grudge": 4,
+      "grudgeReleased": false,
+      "fearTerms": {
+        "fear_ally_downed": 9,
+        "fear_faded": -16,
+        "fear_panic": 20
+      },
+      "benefitTerms": {
+        "benefit_drilled": 15,
+        "benefit_faded": -30,
+        "benefit_fed": 16,
+        "benefit_tended": 4
+      },
+      "grudgeTerms": {
+        "grudge_ignored": 4
+      }
+    },
+    {
+      "id": 4,
+      "name": "Дёготь",
+      "fear": 17,
+      "benefit": 14,
+      "grudge": 3,
+      "grudgeReleased": false,
+      "fearTerms": {
+        "fear_ally_downed": 12,
+        "fear_faded": -10,
+        "fear_panic": 15
+      },
+      "benefitTerms": {
+        "benefit_drilled": 21,
+        "benefit_faded": -27,
+        "benefit_fed": 16,
+        "benefit_tended": 4
+      },
+      "grudgeTerms": {
+        "grudge_ignored": 2,
+        "grudge_refused_place": 1
+      }
+    },
+    {
+      "id": 5,
+      "name": "Уголёк",
+      "fear": 6,
+      "benefit": 12,
+      "grudge": 2,
+      "grudgeReleased": true,
+      "fearTerms": {
+        "fear_ally_downed": 12,
+        "fear_faded": -11,
+        "fear_panic": 5
+      },
+      "benefitTerms": {
+        "benefit_drilled": 27,
+        "benefit_faded": -29,
+        "benefit_fed": 14
+      },
+      "grudgeTerms": {
+        "grudge_hunger": 2
+      }
+    },
+    {
+      "id": 6,
+      "name": "Прель",
+      "fear": 19,
+      "benefit": 10,
+      "grudge": 1,
+      "grudgeReleased": false,
+      "fearTerms": {
+        "fear_ally_downed": 12,
+        "fear_faded": -11,
+        "fear_panic": 10,
+        "fear_wound": 8
+      },
+      "benefitTerms": {
+        "benefit_drilled": 9,
+        "benefit_faded": -15,
+        "benefit_fed": 16
+      },
+      "grudgeTerms": {
+        "grudge_refused_place": 1
+      }
+    },
+    {
+      "id": 7,
+      "name": "Обух",
+      "fear": 6,
+      "benefit": 1,
+      "grudge": 6,
+      "grudgeReleased": true,
+      "fearTerms": {
+        "fear_ally_downed": 12,
+        "fear_faded": -11,
+        "fear_panic": 5
+      },
+      "benefitTerms": {
+        "benefit_drilled": 15,
+        "benefit_faded": -28,
+        "benefit_fed": 14
+      },
+      "grudgeTerms": {
+        "grudge_ignored": 4,
+        "grudge_refused_place": 2
+      }
+    },
+    {
+      "id": 8,
+      "name": "Тишина",
+      "fear": 6,
+      "benefit": 11,
+      "grudge": 4,
+      "grudgeReleased": true,
+      "fearTerms": {
+        "fear_ally_downed": 9,
+        "fear_faded": -11,
+        "fear_wound": 8
+      },
+      "benefitTerms": {
+        "benefit_drilled": 21,
+        "benefit_faded": -24,
+        "benefit_fed": 14
+      },
+      "grudgeTerms": {
+        "grudge_ignored": 4
+      }
+    }
+  ],
+  "reading": [
+    "Величины держатся в читаемом диапазоне: страх 0..11, выгода 0..22, обида 0..8. Ни одна не убегает в сотни, то есть разбор на карточке помещается в строку.",
+    "Сходимость видна глазами и проверяется тестом: сумма слагаемых каждой оси равна итогу.",
+    "Обида выпущена у трёх существ из девяти — это и есть §6.3 питча в работе: у Кремня и Уголька страх успел упасть ниже порога выпуска, у Тишины страха не осталось вовсе.",
+    "grudge_spent с отрицательным знаком стоит у четверых: накопленное сработало и разрядилось, а не осталось вечным штрафом."
+  ]
+}
