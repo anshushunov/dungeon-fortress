@@ -1,0 +1,7 @@
+{
+  "issue": 310,
+  "supersedes": "evidence/310-scripts-stage-green-prerebase.json - snapped before the coordinator's rebase.",
+  "note": "A dedicated standalone '-Stage scripts' green run was not repeated after the rebase to avoid a fourth ~800 s run: the `scripts` stage's green, wired-in behaviour on the rebased base is already evidenced twice elsewhere - as part of the full nine-stage run (evidence/310-full-verify.json, stageElapsedSeconds.scripts = 824.1 s, exit 0) and as the mutant's own control state (evidence/310-mutant.json restores this exact state and its negative-control run, elapsedSeconds 121.7 s, confirms every other check in the stage passes independent of this Issue's wiring).",
+  "commandForReference": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage scripts",
+  "expectedResultOnRebasedBase": "exit 0, {\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"partial\",\"stagesExecuted\":[\"scripts\"],...} - see evidence/310-full-verify.json for the measured elapsedSeconds of this exact stage on this exact base."
+}

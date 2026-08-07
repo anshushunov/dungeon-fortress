@@ -1,0 +1,17 @@
+{
+  "issue": 310,
+  "supersedes": "evidence/310-mutant-in-scripts-stage.json - that file's mutant ran against the `scripts` stage and needed a negative-control experiment to isolate causation because of an ordering artifact in test-verify-stages.ps1's own engine-gate check. This file re-runs the same mutant against the new `token-budget` stage; the full detail (setup, diff, restoration) lives in evidence/310-token-budget-stage.json's `mutantAgainstNewStage` section - this file is the short-form pointer requested for the PR body table's \"команда, которая это докажет\" column.",
+  "question": "Does the `token-budget` stage redden when scripts/test-token-budget-report.ps1 fails, cleanly attributed - no masking, no ordering artifact - now that it is the only check in its own stage?",
+  "mutant": {
+    "diff": {
+      "find": "Set-StrictMode -Version Latest\n$ErrorActionPreference = \"Stop\"",
+      "replace": "Set-StrictMode -Version Latest\n$ErrorActionPreference = \"Stop\"\n\n# MUTANT (Issue #310 evidence, reverted before commit): forced failure to\n# prove the `token-budget` stage of verify.ps1 reddens when this test fails.\nthrow \"MUTANT-310: forced failure to prove the token-budget stage reddens.\""
+    },
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage token-budget",
+    "exitCode": 1,
+    "finalEvent": "{\"event\":\"verification_result\",\"status\":\"error\",\"scope\":\"partial\",\"failedPhase\":\"stage\",\"failedStage\":\"token-budget\",\"stagesExecuted\":[],\"stagesNotRun\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\",\"token-budget\"],\"reason\":\"'powershell' failed with exit code 1.\"}",
+    "failingAssertion": "MUTANT-310: forced failure to prove the token-budget stage reddens.\nAt C:\\gamedev\\_wt-310\\scripts\\test-token-budget-report.ps1:37 char:1"
+  },
+  "gitStateBeforeAndAfter": "git status --short clean (only this round's committed-pending diff) before mutating; git checkout -- scripts/test-token-budget-report.ps1 then git status --short clean again after.",
+  "conclusion": "The `token-budget` stage reddens (exit 1, verification_result status=error, failedStage=token-budget) when scripts/test-token-budget-report.ps1 fails. Unlike the prior round's mutant, this is a single, unambiguous failure - no nested-subprocess ordering artifact, because `token-budget` has exactly one check and test-verify-stages.ps1's own engine-gate smoke check spawns a nested `-Stage scripts` run, not `-Stage token-budget`, so it can no longer incidentally reach this test at all."
+}
