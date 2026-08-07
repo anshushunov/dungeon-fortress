@@ -56,6 +56,10 @@ $domainMcpConfigTestScript = Join-Path $repoRoot "scripts\test-domain-mcp-config
 $domainMcpLauncherTestScript = Join-Path $repoRoot "scripts\test-domain-mcp-launcher.ps1"
 $domainMcpVerificationScript = Join-Path $repoRoot "scripts\verify-domain-mcp.ps1"
 $takeTaskTestScript = Join-Path $repoRoot "scripts\agent\test-take-task.ps1"
+$noWorktreesInRootScript = Join-Path $repoRoot "scripts\check-no-worktrees-in-root.ps1"
+$noWorktreesInRootTestScript = Join-Path $repoRoot "scripts\test-check-no-worktrees-in-root.ps1"
+$rootOnMainScript = Join-Path $repoRoot "scripts\check-root-on-main.ps1"
+$rootOnMainTestScript = Join-Path $repoRoot "scripts\test-check-root-on-main.ps1"
 
 $env:DOTNET_CLI_HOME = Join-Path $artifactsRoot "dotnet-home"
 $env:DOTNET_NOLOGO = "1"
@@ -313,6 +317,35 @@ $stageCatalog = [ordered]@{
     scripts = [pscustomobject]@{
         Summary = "Dependency-free script guards: stage selection, temporary directory, Godot output, screenshot/evidence paths, GitHub auth diagnostics, Ivan and domain MCP config, take-task behavioural test."
         Body = {
+            # Issue #253 (rule 17, AGENTS.md "Работа нескольких агентов"): the root
+            # working copy belongs to the coordination session, and three measured
+            # incidents in four days show text alone does not hold that boundary.
+            # These two guards run for real against *this* invocation's own
+            # checkout (whichever one $repoRoot resolves to) before anything else
+            # in a full run, so a violation is reported before any long stage
+            # starts, not after. Each is a no-op (exit 0, "not applicable") when
+            # run from a task worktree, which is what every agent's own verify.ps1
+            # run actually is - the invariant only binds the one checkout that is
+            # the root itself. check-no-worktrees-in-root.ps1 already existed
+            # (Issue #287) but was never wired into anything; check-root-on-main.ps1
+            # is new. Full rationale, the three historical cases and why this
+            # mechanism was chosen over -take-task.ps1 guard/.gitignore live in
+            # docs/engineering/ENVIRONMENT_SETUP.md.
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $noWorktreesInRootScript,
+                "-RepoRoot", $repoRoot
+            )
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $rootOnMainScript,
+                "-RepoRoot", $repoRoot
+            )
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $noWorktreesInRootTestScript
+            )
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $rootOnMainTestScript
+            )
+
             # Stage selection is only honest while every check lives in a stage and
             # the documented table matches this script. Neither is visible in a green
             # run, so it is checked first and without a build.

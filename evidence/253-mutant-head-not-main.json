@@ -1,0 +1,48 @@
+{
+  "issue": 253,
+  "question": "Does scripts/check-root-on-main.ps1 turn red when the root working copy's HEAD is switched off 'main' (the observable trace shared by the 2026-08-01 and 2026-08-03/#202 incidents), and does it turn green again once the state is legitimate (root on 'main')?",
+  "mechanism": "scripts/check-root-on-main.ps1, committed on this branch before this evidence was collected.",
+  "method": "Built a disposable fixture git repository under .artifacts/evidence-253-fixture (never the real root at 'C:/gamedev/Dungeon fortress'), with an absolute-path sibling worktree next to it so the fixture matches the real project's layout ('git worktree add ../_wt-NNN ...', AGENTS.md rule 17). Ran the committed scripts/check-root-on-main.ps1 against the fixture root before, during and after the substitution. Commands and output recorded verbatim below, not paraphrased.",
+  "fixtureSetup": [
+    "git init -q -b main <fixture>/root",
+    "git -C <fixture>/root config user.email test@example.com / user.name Test / commit.gpgsign false",
+    "echo one > <fixture>/root/a.txt && git -C <fixture>/root add a.txt && git -C <fixture>/root commit -q -m one",
+    "git -C <fixture>/root worktree add -q <fixture>/sibling-wt -b agent/task-branch"
+  ],
+  "beforeSubstitution": {
+    "command": "git -C <fixture>/root branch --show-current",
+    "output": "main",
+    "guardCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-root-on-main.ps1 -RepoRoot <fixture>/root",
+    "guardOutput": "{\"event\":\"root_on_main_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-253\\\\.artifacts\\\\evidence-253-fixture\\\\root\",\"applicable\":true,\"headBranch\":\"main\",\"status\":\"ok\"}",
+    "exitCode": 0
+  },
+  "substitution": {
+    "description": "Reproduces the observable trace of the 2026-08-01 (art task switched the root's HEAD to its own branch twice) and 2026-08-03 (#202 committed on branch agent/202-worktree-command in the root copy, per its reflog and the DEBT_LEDGER.md entry review PR #213/#214 added) incidents named in Issue #253: the root working copy's own HEAD is on a branch other than 'main'.",
+    "command": "git -C <fixture>/root checkout -q -b agent/202-worktree-command",
+    "verifiedSwitch": {
+      "command": "git -C <fixture>/root branch --show-current",
+      "output": "agent/202-worktree-command"
+    },
+    "guardCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-root-on-main.ps1 -RepoRoot <fixture>/root",
+    "guardOutput": "{\"event\":\"root_on_main_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-253\\\\.artifacts\\\\evidence-253-fixture\\\\root\",\"applicable\":true,\"headBranch\":\"agent/202-worktree-command\",\"status\":\"fail\"}",
+    "guardStderrMessage": "The root working copy's HEAD is on 'agent/202-worktree-command', not 'main'. Rule 17 (AGENTS.md, 'Работа нескольких агентов') reserves the root working copy for the coordination session; a records-writing agent must not switch its branch or commit from it. Fix: 'git -C <root> checkout main' from the coordination session, after making sure no uncommitted work on 'agent/202-worktree-command' is lost - it belongs in its own worktree instead ('git worktree add ../_wt-<slug> -b <branch> origin/main').",
+    "exitCode": 1,
+    "result": "RED, as required"
+  },
+  "restoredLegitimateState": {
+    "description": "Separate mutant required by Issue #253's criteria: the mechanism must not turn red on legitimate state (root on 'main'). Restoring the fixture root to 'main' and rerunning the same guard proves this, on the same fixture the substitution above just turned red.",
+    "command": "git -C <fixture>/root checkout -q main",
+    "guardCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-root-on-main.ps1 -RepoRoot <fixture>/root",
+    "guardOutput": "{\"event\":\"root_on_main_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-253\\\\.artifacts\\\\evidence-253-fixture\\\\root\",\"applicable\":true,\"headBranch\":\"main\",\"status\":\"ok\"}",
+    "exitCode": 0,
+    "result": "GREEN, as required"
+  },
+  "realRootReadOnlyCheck": {
+    "description": "In addition to the fixture, the committed guard was run read-only (no git mutation: rev-parse and worktree list only) against the actual coordination root 'C:/gamedev/Dungeon fortress' to confirm today's real state is legitimate. This does not switch branch or commit from the root, which AGENTS.md rule 17 forbids for a records-writing agent - it only reads git's own state.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-root-on-main.ps1 -RepoRoot \"C:/gamedev/Dungeon fortress\"",
+    "output": "{\"event\":\"root_on_main_check\",\"repoRoot\":\"C:\\\\gamedev\\\\Dungeon fortress\",\"applicable\":true,\"headBranch\":\"main\",\"status\":\"ok\"}",
+    "exitCode": 0
+  },
+  "cleanup": "rm -rf .artifacts/evidence-253-fixture after the run (plus 'git worktree prune' on the fixture root first); .artifacts/ is gitignored and the fixture never touched the real repository's git state.",
+  "conclusion": "The substitution reproducing the 2026-08-01/#202 violation shape (root HEAD off 'main') turns scripts/check-root-on-main.ps1 red (exit 1, status fail, names the offending branch); restoring the legitimate state (root on 'main') turns it green again (exit 0, status ok) on the same fixture; and the real coordination root is independently confirmed legitimate today by the same guard, read-only."
+}
