@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "issue": 296,
+  "what": "Coverage of the two verify.ps1 game-state checksums (deterministicChecksum, viewInvariantChecksum), re-measured on current main because the addresses quoted in the Issue #296 body were taken against PR #292 and the tree has since been cut several times (PR #300, #305, #308, #309).",
+  "measuredAtCommit": "a44e14d82caff103859f14ec01e9130b482ba52c",
+  "measuredAt": "2026-08-07",
+  "findings": [
+    {
+      "claim": "scripts/verify.ps1 never passes --prototype to the scenario runner",
+      "command": "rg -c -- '--prototype' scripts/verify.ps1",
+      "observedOutput": "(no matches; rg exits 1)"
+    },
+    {
+      "claim": "deterministicChecksum comes from Invoke-Scenario's non-prototype run, assigned in the sim stage",
+      "command": "rg -n \"DeterministicChecksum\" scripts/verify.ps1",
+      "observedOutput": "440:                DeterministicChecksum = $sameA.checksum\n1152:        $summary[\"deterministicChecksum\"] = $simResult.DeterministicChecksum"
+    },
+    {
+      "claim": "without --prototype, Program.cs runs SimulationScenario.Run over SimulationWorld and prints result.Checksum as scenario_result.checksum",
+      "command": "rg -n \"SimulationScenario.Run|checksum = result.Checksum\" tests/DungeonFortress.Scenarios/Program.cs",
+      "observedOutput": "33:            var result = SimulationScenario.Run(config, options.TickCount, commands);\n57:                checksum = result.Checksum,\n138:            checksum = result.Checksum,"
+    },
+    {
+      "claim": "viewInvariantChecksum comes from the godot stage's four-camera-case comparison",
+      "command": "rg -n \"viewInvariantChecksum\" scripts/verify.ps1",
+      "observedOutput": "1176:        $summary[\"viewInvariantChecksum\"] = $godotStageResult.ViewChecksum"
+    },
+    {
+      "claim": "the compared checksum is PrototypeWorld state, assigned once in Main.Session.cs via PrototypeScenario.Capture(_world)",
+      "command": "rg -n \"_checksum\" src/DungeonFortress.Game/Main.Session.cs",
+      "observedOutput": "312:        _checksum = PrototypeScenario.Capture(_world).Checksum;\n410:        _checksum,"
+    },
+    {
+      "claim": "_world is declared as PrototypeWorld",
+      "command": "rg -n \"PrototypeWorld\\? _world\" src/DungeonFortress.Game/Main.cs",
+      "observedOutput": "44:    private PrototypeWorld? _world;"
+    }
+  ],
+  "liveExample": {
+    "issue": 281,
+    "partition": [
+      "src/DungeonFortress.Game/Main.cs",
+      "src/DungeonFortress.Simulation/PrototypeWorld.cs"
+    ],
+    "structurallyNullCriterion": "deterministicChecksum",
+    "reason": "Issue #281's partition contains no file on the SimulationScenario.Run path; SimulationWorld is untouched by construction, so no mutant inside Main.cs or PrototypeWorld.cs could move deterministicChecksum.",
+    "corroboratingValues": {
+      "note": "The same deterministicChecksum and viewInvariantChecksum values quoted in the Issue #281 body still match a full verify.ps1 run recorded on 2026-08-07 for a different issue (#287), consistent with deterministicChecksum being blind to the #281 partition.",
+      "source": "evidence/287-verify-result.json",
+      "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+      "viewInvariantChecksum": "7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead"
+    }
+  }
+}
