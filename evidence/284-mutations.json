@@ -1,0 +1,55 @@
+{
+  "issue": 284,
+  "question": "Do the three required mutants each die on their own assert, rather than converging on one?",
+  "method": [
+    "Committed the real fix first (commits 657c635 and 12c9292 on this branch), then applied each mutation as an uncommitted edit on top of that committed state, ran scripts/test-verify-stages.ps1, recorded which assert fired, and reverted with 'git checkout -- <file>' before applying the next mutation - never two mutants uncommitted at once.",
+    "Control run after each revert confirmed scripts/test-verify-stages.ps1 is green again on the unmutated committed state, so a failure could only be attributed to the mutation just applied."
+  ],
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-verify-stages.ps1",
+  "mutants": [
+    {
+      "id": "A",
+      "description": "Full dump returns to stdout on a successful Godot call.",
+      "file": "scripts/GodotTools.ps1",
+      "function": "Invoke-GodotChecked",
+      "change": {
+        "from": "    $output | ForEach-Object { Write-VerifyDiagnostic -Text $_ }",
+        "to": "    $output | ForEach-Object { Write-Host $_ }"
+      },
+      "result": "red",
+      "exitCode": 1,
+      "assertMessage": "Invoke-GodotChecked printed its raw dump to stdout on a successful call even though a stage log path was set. Issue #284's whole point - a green run stays small - is not held: {\"event\":\"godot_headless_smoke\",\"status\":\"ok\",\"tick\":1,\"checksum\":\"stub-ok-284\"}",
+      "assertLocation": "scripts/test-verify-stages.ps1, the stage-output-routing success case (checks stdout does not contain 'stub-ok-284')"
+    },
+    {
+      "id": "B",
+      "description": "A checksum is removed from the verification_result summary.",
+      "file": "scripts/verify.ps1",
+      "function": "top-level summary assembly (after the stage loop)",
+      "change": {
+        "from": "        $summary[\"viewInvariantChecksum\"] = $godotStageResult.ViewChecksum\n",
+        "to": "(line deleted)"
+      },
+      "result": "red",
+      "exitCode": 1,
+      "assertMessage": "verify.ps1 no longer assigns $summary[\"viewInvariantChecksum\"] on the verification_result summary; a checksum went missing from stdout (Issue #284).",
+      "assertLocation": "scripts/test-verify-stages.ps1, the static verification_result/checksum text check (different mechanism from A and C: it reads verify.ps1's source text, not a runtime child process)"
+    },
+    {
+      "id": "C",
+      "description": "A failing stage stops printing diagnostics to stdout.",
+      "file": "scripts/GodotTools.ps1",
+      "function": "Invoke-GodotChecked",
+      "change": {
+        "from": "    if ($errorLines.Count -gt 0) {\n        $output | ForEach-Object { Write-Host $_ }\n\n        $report = [ordered]@{",
+        "to": "    if ($errorLines.Count -gt 0) {\n        $report = [ordered]@{"
+      },
+      "result": "red",
+      "exitCode": 1,
+      "assertMessage": "A failing Invoke-GodotChecked call did not print its raw pre-failure output (the stub's own godot_headless_smoke line) to stdout - only a compact report would not be enough to diagnose a real failure (Issue #284): ...",
+      "assertLocation": "scripts/test-verify-stages.ps1, the stage-output-routing failure case (checks stdout for 'stub-partial-284', a line that only ever appears in the raw dump, never in the compact godot_process_guard report)",
+      "note": "A weaker first version of this check only looked for the ERROR: line text in stdout, which still passed after this exact mutation because the compact error report's own 'firstEngineError' field duplicates that text verbatim. Strengthened in commit 12c9292 before running any mutant, by asserting on 'stub-partial-284' instead/in addition - content that exists only in the raw dump."
+    }
+  ],
+  "summary": "All three mutants turn scripts/test-verify-stages.ps1 red, each on a distinct assert message and, for A/C, a distinct code path (a runtime child-process test of Invoke-GodotChecked) versus B (a static text check of verify.ps1's own source). No two mutants died on the same assert."
+}
