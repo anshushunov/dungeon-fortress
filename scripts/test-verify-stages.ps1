@@ -204,6 +204,10 @@ $allowedOutsideStages = @(
 $allowedInsideRunSetup = @(
     # Finding the engine on PATH when no path was given.
     "Get-Command",
+    # Issue #307. Finding the engine by disk layout - a Godot_v*-stable_mono_win64
+    # directory next to the repository root, and the *_console.exe inside it -
+    # when neither an explicit path nor the environment resolved it.
+    "Get-ChildItem",
     # Collapsing the engine's --version output into one string.
     "Out-String",
     # The deciding delete of the temporary-directory probe, and the best-effort
