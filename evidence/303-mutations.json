@@ -1,0 +1,55 @@
+{
+  "issue": 303,
+  "question": "Do the three required mutants (stratification, unclosed-slice guard, per-agent normalization) each die on their own assert, rather than converging on one?",
+  "method": [
+    "Committed the real script and test first (commits 132e092, cb41a59 on this branch), then applied each mutation as an uncommitted one-line edit on top of that committed state, ran scripts/test-token-budget-report.ps1, recorded which assert fired and the exit code, then reverted with 'git checkout -- scripts/token-budget-report.ps1' before applying the next mutation - never two mutants uncommitted at once.",
+    "Control run after each revert confirmed scripts/test-token-budget-report.ps1 is green again on the unmutated committed state, so a failure could only be attributed to the mutation just applied."
+  ],
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-token-budget-report.ps1",
+  "mutants": [
+    {
+      "id": "A",
+      "description": "Stratification collapses into one bucket: every classified subagent becomes \"writer\", review population goes to zero.",
+      "file": "scripts/token-budget-report.ps1",
+      "function": "Read-TranscriptFile (role classification)",
+      "change": {
+        "from": "                    if ($firstLine -match $script:ReviewPattern) {\n                        $role = \"review\"\n                    }",
+        "to": "                    if ($firstLine -match $script:ReviewPattern) {\n                        $role = \"writer\"\n                    }"
+      },
+      "result": "red",
+      "exitCode": 1,
+      "assertMessage": "CHECK A (stratification) FAILED: writer=127 review=0 - both populations must be non-empty on the 2026-07-26..2026-08-05 slice (documented: 47 writer / 80 review). A zero here means the classifier put every subagent into one bucket.",
+      "assertLocation": "scripts/test-token-budget-report.ps1, Check A (writer/reviewCount both non-empty)"
+    },
+    {
+      "id": "B",
+      "description": "The unclosed-slice guard is disabled outright.",
+      "file": "scripts/token-budget-report.ps1",
+      "function": "main flow, refusal block",
+      "change": {
+        "from": "    # -- refuse an unclosed slice, first, before any file IO -----------------\n    if ($toDate -gt $closedCutoff) {",
+        "to": "    # -- refuse an unclosed slice, first, before any file IO -----------------\n    if ($false) {"
+      },
+      "result": "red",
+      "exitCode": 1,
+      "assertMessage": "CHECK B (unclosed-slice guard) FAILED: -To 2026-08-06 with -Now 2026-08-07 (one closed day of margin, not two) exited 0 instead of refusing. This exact slice measured 87.99% vs 86.85% opus share a few hours apart on PR #291 (evidence/283-model-share.json, evidence/303-unclosed-slice-refusal.json).",
+      "assertLocation": "scripts/test-token-budget-report.ps1, Check B (refusal exit code and REFUSED_UNCLOSED_SLICE marker) - a different mechanism from A and C: it inspects the exit code/stderr of a fresh child-process invocation, not a field in the parsed JSON result"
+    },
+    {
+      "id": "C",
+      "description": "Per-agent normalization for writer cache-read is swapped back to the raw sum (division dropped for one field).",
+      "file": "scripts/token-budget-report.ps1",
+      "function": "Get-PerAgent",
+      "change": {
+        "from": "    return [pscustomobject]@{\n        Calls      = $Agg.Calls / $AgentCount\n        CacheRead  = $Agg.CacheRead / $AgentCount\n        CacheWrite = $Agg.CacheWrite / $AgentCount\n        Output     = $Agg.Output / $AgentCount\n    }",
+        "to": "    return [pscustomobject]@{\n        Calls      = $Agg.Calls / $AgentCount\n        CacheRead  = $Agg.CacheRead\n        CacheWrite = $Agg.CacheWrite / $AgentCount\n        Output     = $Agg.Output / $AgentCount\n    }"
+      },
+      "result": "red",
+      "exitCode": 1,
+      "assertMessage": "CHECK C (per-agent normalization) FAILED: writer perAgent.cacheReadTokens = 3587475367, but total(3587475367) / agentCount(47) = 76329263.1276596 (diff 3511146103.87234 > tolerance 76329.2631276596). CHECK C (per-agent normalization) FAILED: writer perAgent.cacheReadTokens (3587475367) is within 1% of the raw total (3587475367) with agentCount=47 - looks like the raw sum was returned unchanged instead of being divided by the agent count.",
+      "assertLocation": "scripts/test-token-budget-report.ps1, Check C (perAgent equals total/agentCount, and perAgent is materially smaller than the raw total)"
+    }
+  ],
+  "controlRunsAfterEachRevert": "All three: {\"event\":\"token_budget_report_test\",\"status\":\"ok\",\"stratificationRatio\":4.43,\"writerAgentCount\":47,\"reviewAgentCount\":80}, exit 0.",
+  "summary": "All three mutants turn scripts/test-token-budget-report.ps1 red, each on its own check (A, B, C) with a distinct assert message and, for B, a distinct code path (exit code / stderr of a fresh process) versus A and C (fields of one parsed JSON result). No two mutants died on the same assert."
+}
