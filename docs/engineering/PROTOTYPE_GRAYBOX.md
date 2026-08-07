@@ -1361,11 +1361,11 @@ that to the player, and none of them needs the log:
   newest first, each naming the tile, the tick and which of the two things
   happened there — `AVOIDS (18,7) t1703 panic · (24,7) t1316 panic`. It is one
   line rather than a heading and a line per place because the HUD overflow guard
-  refused the taller version: the panel fits sixteen lines at 1280x720 and a
-  creature carrying three memories needed eighteen. It is on the panel and not
-  only in the feed because the feed is a digest (Issue #145), not a ticker: its
-  top can stand still for hundreds of ticks, and the question "why is this one
-  standing about" is asked long after;
+  refused the taller version: a creature carrying several remembered places
+  overflowed the panel. It is on the panel and not only in the feed because the
+  feed is a digest (Issue #145), not a ticker: its top can stand still for
+  hundreds of ticks, and the question "why is this one standing about" is asked
+  long after;
 - **the event feed**, as a sentence. Since this step the feed no longer prints
   reason codes at all: `DungeonFortress.Presentation.EventNarration` turns the
   code plus its own `details`, `jobKind` and `target` into a sentence with the
