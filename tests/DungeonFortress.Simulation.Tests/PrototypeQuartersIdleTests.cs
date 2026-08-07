@@ -742,7 +742,18 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
 
         while (!world.IsComplete)
         {
+            // A step is no longer always a tick (Issue #312): while a moment of
+            // truth is open the party stands still and `Step` spends the call
+            // waiting for a verdict. Counting such a call would add the whole
+            // window to the stay in the quarters and to the wait for work — a
+            // pause the domain took on purpose read as idleness it did not.
+            var beforeStep = world.CurrentTick;
             world.Step();
+            if (world.CurrentTick == beforeStep)
+            {
+                continue;
+            }
+
             var current = world.GetSnapshot();
             lastTick = current.Tick;
             var acted = current.Tick - 1;

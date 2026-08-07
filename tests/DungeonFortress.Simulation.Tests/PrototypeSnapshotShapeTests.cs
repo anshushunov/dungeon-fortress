@@ -68,25 +68,30 @@ public sealed class PrototypeSnapshotShapeTests
     /// rather than assumed: a section no sample reaches any more fails the test
     /// instead of quietly dropping out of the inventory.
     /// </summary>
-    private static readonly (string Name, string Fixture, int Ticks)[] Samples =
+    private static readonly (string Name, string Fixture, int Ticks, bool AtMomentOfTruth)[] Samples =
     [
         // Nothing applied yet, so the whole log is still pending.
-        ("build-demo @ 0", "build-demo", 0),
+        ("build-demo @ 0", "build-demo", 0, false),
         // Five dig designations, three of them reserved with a work tile.
-        ("dig-demo @ 5", "dig-demo", 5),
+        ("dig-demo @ 5", "dig-demo", 5, false),
         // Two stockpile cells and loose stone still waiting for a carrier.
-        ("stone-haul-demo @ 210", "stone-haul-demo", 210),
+        ("stone-haul-demo @ 210", "stone-haul-demo", 210, false),
         // A blueprint that nothing has been delivered to yet.
-        ("build-demo @ 1001", "build-demo", 1001),
+        ("build-demo @ 1001", "build-demo", 1001, false),
         // The first wave has landed, so there are raiders inside the domain.
-        ("prepared @ first raid + 5", "prepared", PrototypeTuning.FirstRaidTick + 5),
+        ("prepared @ first raid + 5", "prepared", PrototypeTuning.FirstRaidTick + 5, false),
         // A party that ended: the only state in which the score exists.
-        ("neglected @ session end", "neglected", PrototypeTuning.SessionTicks),
+        ("neglected @ session end", "neglected", PrototypeTuning.SessionTicks, false),
         // Far enough past the first wave that somebody has broken or been put
         // down, which is the only way a creature carries a remembered place
         // (Issue #117). Without it the array is present but never populated, and
         // the composition of its elements would go unrecorded.
-        ("baseline @ after the first wave", "baseline", PrototypeTuning.FirstRaidTick + 200),
+        ("baseline @ after the first wave", "baseline", PrototypeTuning.FirstRaidTick + 200, false),
+        // The party standing still between two waves, which is the only state in
+        // which the cards of the moment of truth exist (Issue #312). It is
+        // defined by the state it stops in and not by a tick number, because the
+        // tick a wave ends on is emergent and a balance change would move it.
+        ("baseline @ the moment of truth", "baseline", 0, true),
     ];
 
     /// <summary>
@@ -102,11 +107,15 @@ public sealed class PrototypeSnapshotShapeTests
     /// </summary>
     private static readonly string[] RecordedShape =
     [
-        "$ -> beds, buildSites, commandsApplied, creatures, digDesignations, domain, economy, events, jobs, labor, looseItems, map, materialStockpile, nextJobId, pendingCommands, priorities, raiders, rooms, rules, schemaVersion, seed, sessionResult, stations, stocks, threat, tick, waves, zones",
+        "$ -> beds, buildSites, commandsApplied, creatures, digDesignations, domain, economy, events, jobs, labor, looseItems, map, materialStockpile, momentOfTruth, nextJobId, pendingCommands, priorities, raiders, rooms, rules, schemaVersion, seed, sessionResult, stations, stocks, threat, tick, waves, zones",
         "$.beds[] -> growthProgress, position, ripe",
         "$.buildSites[] -> delivered, incomingReserved, jobId, progressTicks, reachable, required, requiredTicks, reservedBy, statusCode, tile",
-        "$.creatures[] -> affinities, blockedTicks, carryAmount, carrying, currentJobId, fatigue, grit, hp, id, injury, isMustering, lastDecision, lastMoveTick, lastYieldTick, martialForm, maxHp, mealReserved, mealTarget, mealTicksRemaining, might, mode, moveCount, musterNeedsRation, musterTarget, name, position, readiness, readinessAtRaid, recoveryTicks, rememberedPlaces, satiety, watchTicks, workTicks, yieldCount",
+        "$.creatures[] -> affinities, blockedTicks, carryAmount, carrying, currentJobId, fatigue, grit, hp, id, injury, isMustering, lastDecision, lastMoveTick, lastYieldTick, loyalty, martialForm, maxHp, mealReserved, mealTarget, mealTicksRemaining, might, mode, moveCount, musterNeedsRation, musterTarget, name, position, readiness, readinessAtRaid, recoveryTicks, rememberedPlaces, satiety, watchTicks, workTicks, yieldCount",
         "$.creatures[].lastDecision -> details, jobKind, reasonCode, target, tick",
+        "$.creatures[].loyalty -> benefit, benefitTerms, fear, fearTerms, grudge, grudgeReleased, grudgeTerms",
+        "$.creatures[].loyalty.benefitTerms[] -> amount, code",
+        "$.creatures[].loyalty.fearTerms[] -> amount, code",
+        "$.creatures[].loyalty.grudgeTerms[] -> amount, code",
         "$.creatures[].rememberedPlaces[] -> cause, place, tick",
         "$.digDesignations[] -> jobId, progressTicks, reachable, requiredTicks, reservedBy, statusCode, tile, workTile",
         "$.domain -> downedCreatures, injuredCreatures, livingCreatures, peakMeals, renown, renownAtPreviousWave, strength, strengthAtPreviousWave, waveCount, wavesArrived, wavesResolved",
@@ -117,7 +126,9 @@ public sealed class PrototypeSnapshotShapeTests
         "$.looseItems[] -> position, quantity, resource",
         "$.map -> buildFloorTiles, builtPostTiles, diggableTiles, excavatedTiles, rockTiles, stockpileFloorTiles",
         "$.materialStockpile[] -> capacity, incomingReserved, position, reachable, statusCode, stored",
-        "$.pendingCommands[] -> jobKind, kind, ruleId, tick, tiles, value, zoneKind",
+        "$.momentOfTruth -> cards, open, openedTick, waitedSteps, waveNumber, windowSteps",
+        "$.momentOfTruth.cards[] -> benefitThisWave, creatureId, dominantAxis, fearThisWave, grudgeThisWave, name, notability, raidersDowned, verdict",
+        "$.pendingCommands[] -> creatureId, jobKind, kind, ruleId, tick, tiles, value, verdict, zoneKind",
         "$.raiders[] -> carryingMeals, hp, id, might, mode, position, returningToGate, stealTicks, wave",
         "$.rooms[] -> complete, contents, id, perimeter, purpose, statusCode",
         "$.rooms[].contents[] -> kind, position",
@@ -136,9 +147,11 @@ public sealed class PrototypeSnapshotShapeTests
         var problems = new List<string>();
         var observed = new List<(string Name, bool PartyEnded, SnapshotShape Shape)>();
 
-        foreach (var (name, fixture, ticks) in Samples)
+        foreach (var (name, fixture, ticks, atMomentOfTruth) in Samples)
         {
-            var run = PrototypeScenario.Run(LoadFixture(fixture), ticks);
+            var run = atMomentOfTruth
+                ? RunToMomentOfTruth(fixture)
+                : PrototypeScenario.Run(LoadFixture(fixture), ticks);
             using var document = JsonDocument.Parse(run.CanonicalJson);
             var root = document.RootElement;
 
@@ -216,6 +229,26 @@ public sealed class PrototypeSnapshotShapeTests
 
         var actual = Render(union);
         Assert.True(RecordedShape.SequenceEqual(actual), Explain(actual));
+    }
+
+    /// <summary>
+    /// The party played until it stops by itself and waits for a verdict. The
+    /// stop is the sample: the tick a wave ends on is emergent, so a number
+    /// would be a balance value pretending to be a fixture.
+    /// </summary>
+    private static PrototypeRunResult RunToMomentOfTruth(string fixture)
+    {
+        var world = new PrototypeWorld(LoadFixture(fixture));
+        while (!world.IsComplete && !world.IsAwaitingVerdict)
+        {
+            world.Step();
+        }
+
+        Assert.True(
+            world.IsAwaitingVerdict,
+            $"{fixture} played a whole party without ever stopping between two waves, so the " +
+            "cards of the moment of truth were never recorded by any sample.");
+        return PrototypeScenario.Capture(world);
     }
 
     /// <summary>

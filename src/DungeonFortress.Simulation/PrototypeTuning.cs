@@ -254,6 +254,103 @@ public static class PrototypeTuning
     // creature has left.
     public const int MemoryYieldsSatiety = 30;
 
+    // ------------------------------------------------------------------
+    // Loyalty and the moment of truth (slice 3 of the pitch's order of proof).
+    // Design contract: docs/design/SLICE_03_MOMENT_OF_TRUTH.md. Everything here
+    // is tuning by ADR 0010; what is an invariant is stated in that document and
+    // not in these numbers.
+    // ------------------------------------------------------------------
+
+    // Fear. Being put down is the worst thing that can happen to a creature in
+    // this prototype and is weighted accordingly; a single blow barely registers
+    // on its own but accumulates over a long fight. Watching an ally fall is
+    // worth less than falling, and more than being hit.
+    public const int LoyaltyFearWound = 8;
+    public const int LoyaltyFearPanic = 5;
+    public const int LoyaltyFearAllyDowned = 3;
+
+    // Quiet ticks that buy back one point of fear. Sixty is deliberately shorter
+    // than WaveIntervalTicks = 350, so a domain that leaves its people alone
+    // between two waves gets a measurable part of the fright back — which is
+    // what lets a grudge surface at all (pitch 6.3).
+    public const int LoyaltyFearFadePeriod = 60;
+
+    // Benefit. A portion is the smallest ordinary kindness and the most frequent
+    // one; a mended wound is the largest, because the domain spent a bunk and a
+    // ration on it while a wave was coming.
+    public const int LoyaltyBenefitFed = 2;
+    public const int LoyaltyBenefitDrilled = 3;
+    public const int LoyaltyBenefitTended = 4;
+    public const int LoyaltyBenefitFadePeriod = 60;
+
+    // Grudge as the delayed price of fear. Nothing is credited below the floor,
+    // so a domain nobody is afraid of accumulates no resentment; nothing is
+    // *acted on* at or above the release level, which is the "пока страх высок,
+    // обида не видна" half of the same sentence. The floor sits below the
+    // release level on purpose: there is a band in which a creature is being
+    // made to put up with things and is still too frightened to show it.
+    public const int LoyaltyGrudgeFearFloor = 5;
+    public const int LoyaltyGrudgeReleaseFear = 10;
+
+    // Ticks of one coercion that buy one point of resentment. Both are short
+    // relative to a wave interval and long relative to a decision, so a passing
+    // hunger costs nothing and a domain that keeps somebody hungry pays.
+    public const int LoyaltyGrudgeHungerPeriod = 100;
+    public const int LoyaltyGrudgeHunger = 1;
+    public const int LoyaltyGrudgeRefusedPlacePeriod = 100;
+    public const int LoyaltyGrudgeRefusedPlace = 1;
+
+    // How much resentment is spent when it is finally acted on. Less than a
+    // punishment costs, so one refusal does not clear the whole account.
+    public const int LoyaltyGrudgeDischarge = 6;
+
+    // What a verdict is worth. A punishment frightens more than a single wound
+    // and, when it lands on somebody who did nothing wrong, buys the domain an
+    // equal amount of resentment it will pay for later. Ignoring a creature the
+    // domain itself put on a card costs less than punishing it and is not free —
+    // ADR 0019 requires the absence of a verdict to have a consequence.
+    public const int LoyaltyVerdictRewardBenefit = 12;
+    public const int LoyaltyVerdictPunishFear = 10;
+    public const int LoyaltyVerdictPunishUnfairGrudge = 8;
+    public const int LoyaltyGrudgeIgnored = 2;
+
+    // How loyalty moves the choice of work. The cap is below one step of
+    // affinity (30) and far below one step of priority (100), so loyalty can
+    // decide between two comparable jobs and can never override what the player
+    // asked the domain to care about. That bound is the executable half of "ни
+    // одно значение не делает ни одно поведение неизбежным" (Issue #167).
+    public const int LoyaltyWorkGrudgeDivisor = 3;
+    public const int LoyaltyWorkBiasCap = 20;
+
+    // Whether resentment outweighs everything that holds a creature in the line
+    // when the domain calls it to a fight. A contest and not a gate: a single
+    // verdict can neither cause nor prevent the refusal on its own.
+    public const int LoyaltyRefuseGrudgeWeight = 3;
+    public const int LoyaltyRefuseGritWeight = 4;
+
+    // The moment of truth. Three cards, because the pitch says three to five and
+    // three is the smallest number at which the player is choosing rather than
+    // acknowledging. The window is measured in steps of the runner and not in
+    // ticks of the world, because the world does not tick while it is open: it
+    // is how long the domain waits for an answer before deciding it will not get
+    // one. Forty steps is long enough for a player to read three cards and short
+    // enough that a headless fixture with no verdicts in it is not slowed to a
+    // crawl.
+    public const int MomentOfTruthCards = 3;
+
+    // What one raider put down is worth when the domain decides whom to report
+    // on. It sits above anything a single wave can move a magnitude by, so a
+    // creature that did something the player might want to answer for is always
+    // on a card, and the cards about standing alone fill what is left.
+    public const int MomentOfTruthDeedWeight = 50;
+    public const int MomentOfTruthWindowSteps = 40;
+
+    // How many creatures the domain has. It lives here because the static
+    // pre-flight of a verdict needs to bound `creatureId` before any world
+    // exists, and the population is fixed for the whole of Prototype 1
+    // (contract 5.2).
+    public const int CreatureCount = 9;
+
     public const ulong DefaultSeed = 20_260_726UL;
 
     public const int MapWidth = 28;

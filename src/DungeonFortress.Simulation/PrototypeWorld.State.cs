@@ -40,7 +40,8 @@ public sealed partial class PrototypeWorld
             ComputeReadiness(creature),
             creature.ReadinessAtRaid,
             creature.RecoveryTicks,
-            [.. creature.RememberedPlaces.Values]);
+            [.. creature.RememberedPlaces.Values],
+            ToSnapshot(creature.Loyalty, ReleasedGrudge(creature) > 0));
     }
 
     private PrototypeDigDesignationSnapshot ToSnapshot(GridPoint tile)
@@ -194,12 +195,16 @@ public sealed partial class PrototypeWorld
                 paint.Tiles.ToArray(),
                 null,
                 null,
+                null,
+                null,
                 null),
             ZoneEraseCommand erase => new(
                 erase.Tick,
                 "zone_erase",
                 erase.ZoneKind,
                 erase.Tiles.ToArray(),
+                null,
+                null,
                 null,
                 null,
                 null),
@@ -210,12 +215,16 @@ public sealed partial class PrototypeWorld
                 designate.Tiles.ToArray(),
                 null,
                 null,
+                null,
+                null,
                 null),
             DigCancelCommand cancel => new(
                 cancel.Tick,
                 "dig_cancel",
                 null,
                 cancel.Tiles.ToArray(),
+                null,
+                null,
                 null,
                 null,
                 null),
@@ -226,12 +235,16 @@ public sealed partial class PrototypeWorld
                 build.Tiles.ToArray(),
                 null,
                 null,
+                null,
+                null,
                 null),
             BuildCancelCommand unbuild => new(
                 unbuild.Tick,
                 "build_cancel",
                 null,
                 unbuild.Tiles.ToArray(),
+                null,
+                null,
                 null,
                 null,
                 null),
@@ -242,7 +255,9 @@ public sealed partial class PrototypeWorld
                 [],
                 priority.JobKind,
                 null,
-                priority.Value),
+                priority.Value,
+                null,
+                null),
             SetRuleCommand rule => new(
                 rule.Tick,
                 "set_rule",
@@ -250,7 +265,19 @@ public sealed partial class PrototypeWorld
                 [],
                 null,
                 rule.RuleId,
-                rule.Value),
+                rule.Value,
+                null,
+                null),
+            VerdictCommand verdict => new(
+                verdict.Tick,
+                "verdict",
+                null,
+                [],
+                null,
+                null,
+                null,
+                verdict.CreatureId,
+                ToVerdictJson(verdict.Verdict)),
             _ => throw new InvalidDataException(
                 $"Unsupported prototype command: {command.GetType().Name}"),
         };
@@ -377,6 +404,15 @@ public sealed partial class PrototypeWorld
         /// in. Capped at <see cref="PrototypeTuning.MemoryPlacesMax"/>.
         /// </summary>
         public SortedDictionary<GridPoint, PrototypeRememberedPlace> RememberedPlaces { get; } = [];
+
+        /// <summary>
+        /// What this creature is worth to the domain and the domain to it —
+        /// fear, benefit and grudge, with the terms each of them was built from.
+        /// Everything that writes to it goes through
+        /// <see cref="PrototypeWorld.Accrue"/>; see
+        /// <c>PrototypeWorld.Loyalty.cs</c>.
+        /// </summary>
+        public LoyaltyState Loyalty { get; } = new();
 
         /// <summary>
         /// The work this creature turned down this tick because of where it

@@ -37,6 +37,17 @@ public sealed class BlowJournalSourceTests
 
     private const int PartyTicks = 2400;
 
+    private static PrototypeSnapshot PlayToTick(PrototypeCommandLog log, int tick)
+    {
+        var world = new PrototypeWorld(log);
+        while (!world.IsComplete && world.CurrentTick < tick)
+        {
+            world.Step();
+        }
+
+        return world.GetSnapshot();
+    }
+
     [Fact]
     public void Every_blow_of_the_party_is_recoverable_tick_by_tick()
     {
@@ -49,7 +60,17 @@ public sealed class BlowJournalSourceTests
         var recoveredKills = 0;
         while (world.CurrentTick < PartyTicks && !world.IsComplete)
         {
+            // A step is no longer always a tick (Issue #312): while the party
+            // stands in a moment of truth it does not move, and reading the
+            // blows of the frozen tick again would count every one of them once
+            // per step of the window.
+            var beforeStep = world.CurrentTick;
             world.RunTicks(1);
+            if (world.CurrentTick == beforeStep)
+            {
+                continue;
+            }
+
             foreach (var blow in BlowReadout.Of(world.GetSnapshot()).Blows)
             {
                 if (blow.Target.Kind == BodyKind.Raider)
@@ -67,7 +88,10 @@ public sealed class BlowJournalSourceTests
             }
         }
 
-        var final = PrototypeScenario.Run(log, PartyTicks).State;
+        // Played to a *tick* and not to a number of steps: a step stopped being
+        // a tick when the party learned to stand still between two waves
+        // (Issue #312), and `Run(log, n)` takes n steps.
+        var final = PlayToTick(log, PartyTicks);
         var attackEntries = final.Events
             .Where(@event => @event.ReasonCode == BlowReadout.AttackReason)
             .ToArray();

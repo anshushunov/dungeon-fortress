@@ -328,7 +328,20 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
 
             while (!world.IsComplete)
             {
+                // A step is no longer always a tick (Issue #312): while a moment
+                // of truth is open the party stands still and `Step` spends the
+                // call waiting for a verdict. A harness that counted such a call
+                // as a tick would credit every decision standing on the frozen
+                // tick with one extra repeat per step of the pause, and the
+                // check below would report an inflation the simulation did not
+                // commit.
+                var beforeStep = world.CurrentTick;
                 world.Step();
+                if (world.CurrentTick == beforeStep)
+                {
+                    continue;
+                }
+
                 var state = world.GetSnapshot();
                 var acted = state.Tick - 1;
                 for (var index = 0; index < state.Events.Count; index++)

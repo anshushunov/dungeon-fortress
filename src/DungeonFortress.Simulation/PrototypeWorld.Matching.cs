@@ -138,9 +138,18 @@ public sealed partial class PrototypeWorld
 
                 var urgency = Urgency(job.Kind, job.Resource);
                 var affinity = creature.Affinity(job.Kind);
+                // How willing this creature is to work for this domain at all.
+                // It is the same number for every job, so it never moves a
+                // creature between two kinds of work — it moves the creature
+                // relative to the other creatures competing for the same job,
+                // which is the only thing "чего он теперь стоит во владении" is
+                // allowed to do. Bounded well below one step of priority, so the
+                // player's instructions always outrank it.
+                var loyalty = LoyaltyWorkBias(creature);
                 var score = _priorities[job.Kind] * PrototypeTuning.ScorePriorityWeight +
                     affinity * PrototypeTuning.ScoreAffinityWeight +
-                    urgency -
+                    urgency +
+                    loyalty -
                     distance.Value;
                 if (score < PrototypeTuning.ScoreFloor)
                 {

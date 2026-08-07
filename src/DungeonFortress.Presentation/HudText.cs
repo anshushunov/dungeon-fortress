@@ -334,7 +334,15 @@ public static class HudText
     /// </summary>
     public static int StoryWeight(string reasonCode) => reasonCode switch
     {
-        "refused_place_of_panic" or "refused_place_of_wound" => 3,
+        // Level 3 also holds everything the player's own verdict caused
+        // (Issue #312). A verdict, and the two behaviours a grudge is answered
+        // with, are the same kind of fact as a refusal by memory of place — the
+        // creature's past changing what it does next — except that here the past
+        // is something the player did, which is the whole claim of slice 3.
+        "refused_place_of_panic" or "refused_place_of_wound"
+            or "verdict_rewarded" or "verdict_punished"
+            or "verdict_punished_without_fault" or "verdict_ignored"
+            or "combat_left_grudge" or "combat_refused_grudge" => 3,
 
         "combat_fled_morale" or "combat_downed" or "injury_tended" or "injury_mending"
             or "injury_healed" => 2,
@@ -415,10 +423,149 @@ public static class HudText
         // lines this panel has, and two lines is more than one entry of a
         // creature's story. The count is one click away and the story is what the
         // panel was clicked for.
+        // While the domain is waiting for a verdict the panel *is* the question
+        // (Issue #312). It takes the feed's surface rather than a new one for
+        // the reason the creature's story took it: the player is already looking
+        // here, and a party that has stopped has nothing newer to report than
+        // the three cards it stopped for.
+        if (state.MomentOfTruth.Open)
+        {
+            return MomentOfTruth(state);
+        }
+
         return view.SelectedCreatureId is { } creatureId
             ? CreatureStory(state, creatureId)
             : DomainFeed(state) + $"\n\nDiagnostics: {view.DiagnosticCount}";
     }
+
+    /// <summary>
+    /// The three cards of the moment of truth, each with a <b>named breakdown of
+    /// its terms</b> rather than a bare number.
+    ///
+    /// <para>The breakdown is the mechanic and not decoration: without it the
+    /// player has nothing to base a verdict on, and the pitch's section 6.11
+    /// names it as part of the minimum slice. What is printed is exactly the
+    /// terms the canonical snapshot carries — nothing here computes a magnitude,
+    /// so the sum of the parts and the number beside them cannot disagree by
+    /// arithmetic done in a panel.</para>
+    ///
+    /// <para>Only the axis a card is about is broken down, plus any axis that
+    /// moved this wave. A card that printed all three ledgers in full would be
+    /// eleven lines of a ten-line panel, and the one the player has to answer
+    /// would be the one scrolled off.</para>
+    /// </summary>
+    public static string MomentOfTruth(PrototypeSnapshot state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        var pause = state.MomentOfTruth;
+        var lines = new List<string>
+        {
+            $"MOMENT OF TRUTH · wave {pause.WaveNumber} · t{pause.OpenedTick} " +
+            $"· {pause.WindowSteps - pause.WaitedSteps} left",
+        };
+
+        foreach (var card in pause.Cards)
+        {
+            var answer = card.Verdict is { } verdict ? $" → {verdict}" : string.Empty;
+            lines.Add($"{card.Name} · {Headline(card)} · {Breakdown(card)}{answer}");
+        }
+
+        return string.Join("\n", lines);
+    }
+
+    /// <summary>
+    /// The one axis this card is answered on, broken into its named parts.
+    ///
+    /// <para>One axis and not three, because the panel is worth ten drawn lines
+    /// and three ledgers of three creatures is thirty. Which one is not a
+    /// preference: a grudge that has surfaced is what the player has to answer
+    /// for and outranks everything else; otherwise it is the axis the card was
+    /// chosen on, and a card chosen for a deed is answered on what the domain
+    /// has given that creature so far.</para>
+    /// </summary>
+    private static string Breakdown(PrototypeMomentOfTruthCard card)
+    {
+        var loyalty = card.Loyalty;
+        if (loyalty.GrudgeReleased && loyalty.Grudge > 0)
+        {
+            return Axis("grudge", loyalty.Grudge, loyalty.GrudgeTerms) + " [showing]";
+        }
+
+        return card.DominantAxis switch
+        {
+            "fear" => Axis("fear", loyalty.Fear, loyalty.FearTerms),
+            "grudge" => Axis("grudge", loyalty.Grudge, loyalty.GrudgeTerms),
+            _ => Axis("benefit", loyalty.Benefit, loyalty.BenefitTerms),
+        };
+    }
+
+    /// <summary>
+    /// What the card is about, in the words the domain would use. It is read off
+    /// <c>dominantAxis</c> and the deed count and never re-derived, so the panel
+    /// and the rule that chose the card cannot disagree.
+    /// </summary>
+    private static string Headline(PrototypeMomentOfTruthCard card) => card.DominantAxis switch
+    {
+        "deed" => card.RaidersDowned == 1
+            ? "put a raider down"
+            : $"put {card.RaidersDowned} raiders down",
+        "fear" => "took the worst of it",
+        "benefit" => "was well kept",
+        "grudge" => "is holding something against you",
+        _ => "was in the wave",
+    };
+
+    /// <summary>
+    /// One axis as "name total (+a term, -another)". The parts are printed in the
+    /// order the canonical document carries them, which is ordinal by code, so
+    /// the line is stable between two runs of one seed.
+    /// </summary>
+    private static string Axis(
+        string name,
+        int total,
+        IReadOnlyList<PrototypeLoyaltyTerm> terms)
+    {
+        if (terms.Count == 0)
+        {
+            return $"{name} {total.ToString(CultureInfo.InvariantCulture)}";
+        }
+
+        var parts = terms.Select(term =>
+            (term.Amount > 0 ? "+" : string.Empty) +
+            term.Amount.ToString(CultureInfo.InvariantCulture) + " " + TermName(term.Code));
+        return $"{name} {total.ToString(CultureInfo.InvariantCulture)} ({string.Join(", ", parts)})";
+    }
+
+    /// <summary>
+    /// A term code in the words of the feed rather than of the ledger. Unknown
+    /// codes are refused for the same reason
+    /// <see cref="EventNarration.Sentence"/> refuses one: a term the player
+    /// cannot read is worse than no breakdown at all, because it looks like an
+    /// explanation.
+    /// </summary>
+    public static string TermName(string code) => code switch
+    {
+        "fear_wound" => "put down",
+        "fear_panic" => "broke",
+        "fear_ally_downed" => "saw one fall",
+        "fear_punished" => "punished",
+        "fear_faded" => "faded",
+        "benefit_fed" => "fed",
+        "benefit_drilled" => "trained",
+        "benefit_tended" => "nursed",
+        "benefit_rewarded" => "rewarded",
+        "benefit_faded" => "faded",
+        "grudge_hunger" => "hungry with a full larder",
+        "grudge_refused_place" => "sent back where it broke",
+        "grudge_punished_unfairly" => "punished for nothing",
+        "grudge_ignored" => "ignored",
+        "grudge_spent" => "spent",
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(code),
+            code,
+            "The moment of truth has no wording for this loyalty term and will not invent " +
+            "one. Add it to HudText.TermName next to the term it belongs with."),
+    };
 
     /// <summary>
     /// The domain in at most <see cref="DomainFeedLines"/> lines: <b>who</b> in

@@ -72,6 +72,9 @@ public sealed partial class PrototypeWorld
             case SetRuleCommand rule:
                 _rules[rule.RuleId] = rule.Value;
                 break;
+            case VerdictCommand verdict:
+                ApplyVerdict(verdict);
+                break;
             default:
                 throw new InvalidDataException($"Unsupported prototype command: {command.GetType().Name}");
         }

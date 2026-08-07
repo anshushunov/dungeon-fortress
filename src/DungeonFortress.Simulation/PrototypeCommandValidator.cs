@@ -98,6 +98,9 @@ public static class PrototypeCommandValidator
                 case SetRuleCommand rule:
                     ValidateRule(rule);
                     break;
+                case VerdictCommand verdict:
+                    ValidateVerdict(verdict);
+                    break;
                 default:
                     throw new InvalidDataException(
                         $"Unsupported prototype command: {command.GetType().Name}");
@@ -280,6 +283,33 @@ public static class PrototypeCommandValidator
                     $"Build tile ({tile.X},{tile.Y}) is a material stockpile cell. " +
                     "Erase the cell first; a building site is not a warehouse.");
             }
+        }
+    }
+
+    /// <summary>
+    /// The form of a verdict, and only the form.
+    ///
+    /// <para>Here the verdict is worse off than <c>dig_designate</c>, and
+    /// ADR 0019 says so rather than hiding it: excavation has a necessary
+    /// condition the initial layout can answer ("a tile that was not rock at
+    /// tick 0 can never become rock"), and a verdict has none at all — the
+    /// starting layout knows nothing about a card that a wave has not produced
+    /// yet. So the pre-flight checks that the creature named could exist and
+    /// that the sign of judgement is one of the closed set, and the authority
+    /// for everything else is <see cref="PrototypeWorld.ApplyVerdict"/> on the
+    /// tick of the command.</para>
+    /// </summary>
+    private static void ValidateVerdict(VerdictCommand verdict)
+    {
+        if (!Enum.IsDefined(verdict.Verdict))
+        {
+            throw new InvalidDataException($"Unknown verdict: {verdict.Verdict}");
+        }
+
+        if (verdict.CreatureId < 0 || verdict.CreatureId >= PrototypeTuning.CreatureCount)
+        {
+            throw new InvalidDataException(
+                $"creatureId must be between 0 and {PrototypeTuning.CreatureCount - 1}.");
         }
     }
 

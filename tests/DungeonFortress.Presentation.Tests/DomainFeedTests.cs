@@ -131,6 +131,15 @@ public sealed class DomainFeedTests(ITestOutputHelper output)
         var applies = 0;
         foreach (var (tick, state) in Party("baseline", MeasuredTicks))
         {
+            // While the domain is waiting for a verdict this panel is not the
+            // feed at all — it is the three cards it stopped for (Issue #312).
+            // Its own bound and its own content are checked by
+            // MomentOfTruthPanelTests.
+            if (state.MomentOfTruth.Open)
+            {
+                continue;
+            }
+
             var significant = state.Events
                 .Where(@event => HudText.StoryWeight(@event.ReasonCode) > 0)
                 .ToArray();
@@ -418,6 +427,14 @@ public sealed class DomainFeedTests(ITestOutputHelper output)
         var truncated = 0;
         foreach (var (tick, state) in Party("baseline", MeasuredTicks))
         {
+            // A party standing in a moment of truth shows the three cards it
+            // stopped for and not the feed (Issue #312); that panel has its own
+            // bound and its own test.
+            if (state.MomentOfTruth.Open)
+            {
+                continue;
+            }
+
             var head = HudText.Feedback(View(state)).Split('\n')[0];
             var lines = FeedLines(HudText.Feedback(View(state)));
             var crew = state.Events.Select(@event => @event.CreatureId).Distinct().Count();

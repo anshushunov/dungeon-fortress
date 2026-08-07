@@ -86,6 +86,24 @@ public static class PrototypeCanonical
                 writer.WriteNull("value");
             }
 
+            if (command.CreatureId is { } commandCreatureId)
+            {
+                writer.WriteNumber("creatureId", commandCreatureId);
+            }
+            else
+            {
+                writer.WriteNull("creatureId");
+            }
+
+            if (command.Verdict is { } pendingVerdict)
+            {
+                writer.WriteString("verdict", pendingVerdict);
+            }
+            else
+            {
+                writer.WriteNull("verdict");
+            }
+
             writer.WriteEndObject();
         }
 
@@ -207,10 +225,68 @@ public static class PrototypeCanonical
             }
 
             writer.WriteEndArray();
+
+            // Loyalty (Issue #312). Additive, like `rememberedPlaces` before it:
+            // a new object on an existing section, no field renamed, removed or
+            // re-pointed, so the schema version does not move — see
+            // docs/engineering/PROTOTYPE_HEADLESS.md, "Версионирование
+            // канонического снапшота". Every frame's checksum does move, because
+            // the object is present on every creature from tick 0.
+            //
+            // The named terms are written beside the totals rather than instead
+            // of them: the totals are what the simulation reads, the terms are
+            // what the player reads, and the canonical document is where the two
+            // are compared.
+            writer.WriteStartObject("loyalty");
+            writer.WriteNumber("fear", creature.Loyalty.Fear);
+            writer.WriteNumber("benefit", creature.Loyalty.Benefit);
+            writer.WriteNumber("grudge", creature.Loyalty.Grudge);
+            writer.WriteBoolean("grudgeReleased", creature.Loyalty.GrudgeReleased);
+            WriteLoyaltyTerms(writer, "fearTerms", creature.Loyalty.FearTerms);
+            WriteLoyaltyTerms(writer, "benefitTerms", creature.Loyalty.BenefitTerms);
+            WriteLoyaltyTerms(writer, "grudgeTerms", creature.Loyalty.GrudgeTerms);
+            writer.WriteEndObject();
             writer.WriteEndObject();
         }
 
         writer.WriteEndArray();
+
+        // The pause between two waves (Issue #312). It is canonical state and not
+        // a screen: the runtime authority for "was there a card about this one,
+        // and has it been answered" lives here (ADR 0019), so a replay has to be
+        // able to reproduce it exactly.
+        writer.WriteStartObject("momentOfTruth");
+        writer.WriteBoolean("open", state.MomentOfTruth.Open);
+        writer.WriteNumber("waveNumber", state.MomentOfTruth.WaveNumber);
+        writer.WriteNumber("openedTick", state.MomentOfTruth.OpenedTick);
+        writer.WriteNumber("waitedSteps", state.MomentOfTruth.WaitedSteps);
+        writer.WriteNumber("windowSteps", state.MomentOfTruth.WindowSteps);
+        writer.WriteStartArray("cards");
+        foreach (var card in state.MomentOfTruth.Cards)
+        {
+            writer.WriteStartObject();
+            writer.WriteNumber("creatureId", card.CreatureId);
+            writer.WriteString("name", card.Name);
+            writer.WriteString("dominantAxis", card.DominantAxis);
+            writer.WriteNumber("notability", card.Notability);
+            writer.WriteNumber("fearThisWave", card.FearThisWave);
+            writer.WriteNumber("benefitThisWave", card.BenefitThisWave);
+            writer.WriteNumber("grudgeThisWave", card.GrudgeThisWave);
+            writer.WriteNumber("raidersDowned", card.RaidersDowned);
+            if (card.Verdict is { } answered)
+            {
+                writer.WriteString("verdict", answered);
+            }
+            else
+            {
+                writer.WriteNull("verdict");
+            }
+
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
+        writer.WriteEndObject();
 
         writer.WriteStartObject("zones");
         foreach (var zone in state.Zones.OrderBy(pair => pair.Key))
@@ -710,6 +786,29 @@ public static class PrototypeCanonical
             writer.WriteNumber("repeats", @event.Repeats);
             writer.WriteEndObject();
         }
+    }
+
+    /// <summary>
+    /// One axis of the ledger, as an array of named amounts in the order the
+    /// producer published them — which is ordinal by code, imposed at the source
+    /// by a <c>SortedDictionary</c>, so the document cannot depend on the order
+    /// the terms were credited in.
+    /// </summary>
+    private static void WriteLoyaltyTerms(
+        Utf8JsonWriter writer,
+        string name,
+        IEnumerable<PrototypeLoyaltyTerm> terms)
+    {
+        writer.WriteStartArray(name);
+        foreach (var term in terms)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("code", term.Code);
+            writer.WriteNumber("amount", term.Amount);
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
     }
 
     private static void WriteDetails(
