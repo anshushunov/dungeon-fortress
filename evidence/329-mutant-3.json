@@ -1,0 +1,15 @@
+{
+  "issue": 329,
+  "question": "Review of PR #330 found scripts/test-run-game-temporary-root.ps1's original design checked a hardcoded list of three known callers, so a brand new script calling Resolve-VerificationTemporaryRoot with the same Issue #329 defect - unmentioned anywhere - would pass the `scripts` stage green. After replacing the list with a scan of scripts/**/*.ps1 (commit 1a38cae), does planting exactly that kind of unregistered caller into scripts/ make the `scripts` stage redden and name the file?",
+  "preconditions": "Run only after committing the scan-based fix (commit 1a38cae) - `git status --short` was clean before the file was planted.",
+  "mutant": {
+    "description": "A brand new file scripts/zzz-mutant-329-unregistered-caller.ps1, never mentioned in any list, calling Resolve-VerificationTemporaryRoot with the exact original Issue #329 defect (optional -TemporaryRoot passed straight through as -ExplicitPath, no -RepositoryRoot).",
+    "plantedFileContents": "[CmdletBinding()]\nparam(\n    [string]$TemporaryRoot\n)\n\nSet-StrictMode -Version Latest\n$ErrorActionPreference = \"Stop\"\n\n. (Join-Path $PSScriptRoot \"TemporaryRoot.ps1\")\n\n$selection = Resolve-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot\nWrite-Output $selection.Path\n",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage scripts",
+    "exitCode": 1,
+    "finalEvent": "{\"event\":\"verification_result\",\"status\":\"error\",\"scope\":\"partial\",\"failedPhase\":\"stage\",\"failedStage\":\"scripts\",\"stagesExecuted\":[],\"stagesNotRun\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\",\"token-budget\"],\"reason\":\"'powershell' failed with exit code 1.\"}",
+    "failingAssertion": "'zzz-mutant-329-unregistered-caller.ps1' line 17 calls Resolve-VerificationTemporaryRoot without -RepositoryRoot. -TemporaryRoot is an optional parameter of this script, so an omitted one arrives here as an empty -ExplicitPath, and without -RepositoryRoot the resolver throws instead of falling back to its own-directory default (Issue #329)."
+  },
+  "gitStateBeforeAndAfter": "git status --short clean before planting the file (commit 1a38cae already made); the file was deleted (not committed) immediately after this run, then git status --short clean again.",
+  "conclusion": "The `scripts` stage reddens (exit 1, verification_result status=error, failedStage=scripts) when a brand-new, unregistered script with the Issue #329 defect is planted into scripts/, and scripts/test-run-game-temporary-root.ps1's scan finds and names it by file and line - proving the scan-based discovery (not the hardcoded list it replaced) closes the class of blindness review identified, not just the three instances known when this PR was opened. The planted file was removed immediately after this run; it was never committed."
+}
