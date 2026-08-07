@@ -1,0 +1,14 @@
+{
+  "issue": 303,
+  "purpose": "Reproduce the exact unclosed-slice instability that motivated the refusal (evidence/283-model-share.json measured 2026-08-06 as its upper bound and got 87.99% opus share; a re-run a few hours later on the same slice, per Issue #303's brief, gave 86.85% - the whole 1.14pp shift traced to that one still-open day) and show the script now refuses to compute that same slice.",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/token-budget-report.ps1 -From 2026-07-26 -To 2026-08-06 -SkipMergedPr -Now 2026-08-07",
+  "why2026-08-06IsTheRightReproduction": "evidence/283-model-share.json's own slice is {from: 2026-07-26, to: 2026-08-06}, captured while 'now' was 2026-08-07 (its text: 'сегодня 2026-08-07'). That is exactly one closed day of margin, not two - the same shape of call this script now refuses.",
+  "exitCode": 1,
+  "stderr": "REFUSED_UNCLOSED_SLICE: slice ending 2026-08-06 is less than two closed days before 'now' (2026-08-07). A calendar day is not closed just because its date has passed: a subagent that started before midnight can still be running - and Claude Code does not finalize its transcript file until it exits - so a day can keep gaining entries for hours after the date changes. Measured on this project (evidence/283-model-share.json, PR #291): opus share moved 87.99% -> 86.85% within a few hours, purely from one such still-open day. Latest closed -To for 'now' = 2026-08-07 is 2026-08-05; move -To back 1 day(s), or re-run later.",
+  "controlRun": {
+    "description": "The same command with -To moved back one day (to the actual TOKEN_BUDGET.md baseline upper bound) succeeds normally - the refusal is specific to the unclosed slice, not a general failure.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/token-budget-report.ps1 -From 2026-07-26 -To 2026-08-05 -SkipMergedPr -Now 2026-08-07",
+    "result": "exit 0, full report printed - see evidence/303-baseline-replay.json for the reproduced numbers"
+  },
+  "boundaryNote": "The refusal threshold is -To > (Now.Date - 2 days). For 'now' = 2026-08-07 that makes 2026-08-05 the latest permitted -To, which is exactly TOKEN_BUDGET.md's documented baseline upper bound - not a coincidence: the baseline's own note says the slice 'кроме незавершённого 2026-08-06' (excludes the unfinished 2026-08-06), i.e. the document's author already applied a one-day margin; this script tightens that to two, which is what evidence/283-model-share.json's instability shows one day is not enough."
+}

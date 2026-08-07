@@ -1,0 +1,41 @@
+{
+  "issue": 303,
+  "purpose": "Show that scripts/token-budget-report.ps1's writer/review split is (a) not an even split of the same data, (b) normalized per agent rather than a raw sum, and (c) validated against an independent reference extraction, not just eyeballed.",
+  "classificationMethod": {
+    "signal": "The first \"user\"-type line of a subagent transcript (its launch prompt), specifically only the text up to the first real newline in that turn - not the whole turn, and not any later \"user\"-type line.",
+    "reviewPattern": "(?i)(review-агент|review agent|reviewer|read-only)",
+    "writerPattern": "(?i)(записывающ|исполнитель|implementation-агент)",
+    "orderMatters": "Review pattern is tried first: a review-agent prompt routinely negates the writer word ('Ты — независимый review-агент... Ты НЕ исполнитель этого PR'), so 'исполнитель' alone is not a safe writer signal without first ruling out the review phrasing.",
+    "whyOnlyTheFirstLine": "A subagent's first turn also carries an injected system-reminder block (tool-use rules, the full skills catalogue, CLAUDE.md text) appended after the actual task prompt. That block routinely contains the word 'review' or 'reviewer' regardless of the agent's own role - e.g. the 'diff-reviewer' subagent-type description, or the review MCP server's own instructions. Matching the whole turn against the review pattern produced a false 'review' classification for writer agents whose own opening sentence said 'исполнитель'. Concretely: agent-a7d642dc122a4e56d.jsonl's turn is 7280 characters starting with 'Ты — исполнитель задачи...' (definitely a writer prompt, confirmed by manual reading) but also contains 'reviewer' later in the injected boilerplate - matching the full text misclassified it as review. Restricting the match to the first line (137 characters for this file) fixed it.",
+    "howValidated": "Built an independent reference classification in bash/jq, over all 150 subagent transcripts this project has ever produced (not just the slice), extracting only the first physical line of the first user-type message per file (jq -r '.message.content' | head -1, which - because jq unescapes \\n into a real newline - inadvertently already stops at the first line, which is what led to discovering the discrepancy against the script's original full-text match). Compared file-by-file against the script's classification (-DebugClassify) over the full history (From 2000-01-01 To 2026-08-05 -Now 2026-08-07): 150/150 files match, 0 mismatches, 90 review / 60 writer overall."
+  },
+  "resultForTheBaselineSlice": {
+    "slice": { "from": "2026-07-26", "to": "2026-08-05" },
+    "writer": {
+      "agentCount": 47,
+      "calls": 13899,
+      "cacheReadTokensTotal": 3587475367,
+      "cacheReadTokensPerAgent": 76329263.127659574
+    },
+    "review": {
+      "agentCount": 80,
+      "calls": 10461,
+      "cacheReadTokensTotal": 1378431058,
+      "cacheReadTokensPerAgent": 17230388.225
+    },
+    "unclassified": { "agentCount": 0 },
+    "sumCheck": "47 + 80 + 0 = 127 = subagents.all.agentCount (matches TOKEN_BUDGET.md's documented '127 субагентов' exactly); 3587475367 + 1378431058 = 4965906425 = subagents.all.cacheReadTokens (matches the documented 4965,9M exactly)."
+  },
+  "theNamedDifference": {
+    "metric": "cache-read tokens per subagent (not the raw sum, which conflates two populations of very different size)",
+    "writerPerAgentM": 76.3,
+    "reviewPerAgentM": 17.2,
+    "ratio": 4.43,
+    "statement": "A writer subagent in this project costs ~4.4x more cache-read per agent than a review subagent (76.3M vs 17.2M). A raw sum would have hidden this behind a single 'subagents' number and would shift with nothing more than a change in how many of each kind of agent a given period happened to run - exactly the vulnerability Issue #303 names for the PR #299 criterion check."
+  },
+  "taskClassFilterDemo": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/token-budget-report.ps1 -From 2026-07-26 -To 2026-08-05 -SkipMergedPr -TaskClass decision",
+    "result": "writer subagents: 1 agents, 237 calls, 43.8M cache-read total, 43.8M cache-read PER AGENT (review population is unaffected by the filter: still 80 agents - review prompts do not declare a task class)",
+    "knownLimitation": "The task-class filter only matches writer agents whose launch prompt declares a class tag ('класс `tier:standard`' etc.). That convention is recent (rule 34); agents from before it (most of the project's history, including 41 of the 60 writer agents ever seen) have no tag and are excluded when the filter is set. This is a named limitation, not a defect: within the 2026-07-26..2026-08-05 baseline slice specifically, zero writer agents carry a 'tier:standard' tag yet (the earliest tier-tagged agents in this project's whole history fall on 2026-08-06/07, outside the baseline slice), so -TaskClass tier:standard over the baseline window correctly reports 0 agents rather than silently matching something else."
+  }
+}
