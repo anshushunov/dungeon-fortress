@@ -1,0 +1,71 @@
+{
+  "issue": 311,
+  "purpose": "Проверить возраст записи DEBT_LEDGER.md от 2026-08-03 (review PR #198, Issue #186, мутационные подстановки не в дереве) по правилу трёх gate раздела «Кто и когда перечитывает», и переформулировать её условие, если возраст подтвердится.",
+  "recordUnderReview": {
+    "anchorInLedger": "«Срок с: `CONTINUE` (срез «цена памяти о месте»), 2026-08-02»",
+    "gateDecisionsAnchorLine": "docs/product/GATE_DECISIONS.md:69"
+  },
+  "step1_markerRegexWholeFile": {
+    "command": "rg -n '\\*\\*`(CONTINUE|ADJUST|PROMOTE|DEFER|STOP)`\\*\\*' docs/product/GATE_DECISIONS.md",
+    "output": [
+      "36:2026-07-29 Срез 1 — CONTINUE",
+      "48:2026-07-31 Пакетный playtest на main — CONTINUE",
+      "59:2026-08-01 Срез 2, третий заход — PROMOTE",
+      "65:2026-08-02 Блок боя — правило подхода — CONTINUE",
+      "69:2026-08-02 Срез: цена памяти о месте — CONTINUE  <- якорь записи",
+      "80:2026-08-04 Срез «существо без работы уходит с места боя» — CONTINUE",
+      "86:2026-08-04 Проба ADR 0020 — CONTINUE"
+    ],
+    "finding": "Только 7 строк во всём файле несут маркер `**`CONTINUE|ADJUST|PROMOTE|DEFER|STOP`**`. После строки-якоря 69 таким способом находится только ДВЕ строки (80 и 86) — по формуле раздела «Кто и когда перечитывает» это дало бы возраст 3-1=2, НЕ 3. Регэксп-команда одна не подтверждает счёт координатора."
+  },
+  "step2_readLinesFor20260806": {
+    "command": "sed -n '87,88p' docs/product/GATE_DECISIONS.md (эквивалент — прочитано Read-инструментом)",
+    "line88Excerpt": "| 2026-08-06 | **Потолок боя** — владелец сыграл дуэльную сцену на `main` после merge PR #268 (коммит `8850209`) и следом усомнился в самом направлении... | **Бою ставится потолок: читаемый, а не красивый.** Направление «визуальная проработка боя» свёрнуто; следующий блок — срез 3 «момент истины» | — | ...",
+    "finding": "Строка 88 — playtest-based gate-решение («владелец сыграл... и следом усомнился», решение записано после ответа на playtest), но её колонка «Решение» не обёрнута в маркер `` `CONTINUE`/`ADJUST`/... `` — регэксп её пропускает не потому, что это не gate, а потому что формулировка решения свободная. Определение раздела «Кто и когда перечитывает» гласит: «gate-решение — единица, которую нельзя нащёлкать: оно требует, чтобы владелец сыграл» — под это определение строка 88 подходит буквально."
+  },
+  "step3_precedentInLedger": {
+    "finding": "Запись про deny-записи `.claude/settings.json` (docs/engineering/DEBT_LEDGER.md, находка review PR #288) уже несёт «Срок с: «Потолок боя: читаемый, не красивый», 2026-08-06» — то есть реестр уже использует эту строку журнала как валидный gate-якорь, до этой задачи."
+  },
+  "conclusion": {
+    "gatesAfterAnchorByPlaytestDefinition": [
+      "2026-08-04, CONTINUE, срез «существо без работы уходит с места боя» (#201) — владелец играл на main",
+      "2026-08-04, CONTINUE, проба ADR 0020 — владелец смотрел дуэльную A/B-сцену",
+      "2026-08-06, «Потолок боя» — владелец сыграл дуэльную сцену и решение пересмотрело направление"
+    ],
+    "age": 3,
+    "threshold": 3,
+    "verdict": "Возраст ПОДТВЕРЖДЁН: 3, что равно порогу «три и более» — запись просрочена. Счёт координатора (3) совпадает с результатом по семантическому определению gate-решения («владелец сыграл»), но НЕ совпадает с результатом чисто регэксп-командой (2), потому что строка 2026-08-06 не несёт маркер CONTINUE/ADJUST/PROMOTE/DEFER/STOP. Расхождение между двумя способами счёта названо явно, а не сглажено."
+  },
+  "step4_mutationsSchemaAudit": {
+    "purpose": "Проверить факт для переформулированного условия: с какого файла evidence/*-mutations.json неформальная практика дословного поля подстановки началась и держится ли она.",
+    "command": "jq 'if type==\"object\" and has(\"mutants\") then .mutants elif type==\"object\" and has(\"halves\") then [.halves[]?.mutants[]?] elif type==\"array\" then . else [] end | map(has(\"change\") or (has(\"before\") and has(\"after\")) or has(\"replacement\") or ((.edit // \"\") | test(\" -> \"))) | {total: length, allLiteral: all}' evidence/<файл>-mutations.json",
+    "resultsByFileCreationDate": {
+      "2026-08-03": {
+        "evidence/186-mutations.json": { "total": 9, "allLiteral": false },
+        "evidence/197-mutations.json": { "total": 3, "allLiteral": false },
+        "evidence/201-mutations.json": { "total": 3, "allLiteral": true },
+        "evidence/210-mutations.json": { "total": 2, "allLiteral": false }
+      },
+      "2026-08-04": {
+        "evidence/221-mutations.json": { "total": 0, "allLiteral": true, "note": "структура файла не содержит списка mutants/halves — проверка вырождена" },
+        "evidence/222-mutations.json": { "total": 2, "allLiteral": false },
+        "evidence/228-mutations.json": { "total": 3, "allLiteral": false },
+        "evidence/244-mutations.json": { "total": 0, "allLiteral": true, "note": "то же вырождение" }
+      },
+      "2026-08-05": {
+        "evidence/259-mutations.json": { "total": 6, "allLiteral": true }
+      },
+      "2026-08-07": {
+        "evidence/281-mutations.json": { "total": 8, "allLiteral": false, "note": "7 из 8 несут '->' в edit; единственное исключение — мутант d-i, git mv файла без текстовой подстановки, полю неоткуда взяться" },
+        "evidence/284-mutations.json": { "total": 3, "allLiteral": true },
+        "evidence/303-mutations.json": { "total": 3, "allLiteral": true }
+      }
+    },
+    "finding": "До 2026-08-05 дословное поле — редкость (2 из 8 файлов). С evidence/259-mutations.json (2026-08-05) и во всех файлах 2026-08-07 (281, 284, 303) дословное поле присутствует у каждой текстовой подстановки — неформальная практика, не оформленная как правило DEVELOPMENT_PACE.md (см. rg -n \"дослов\" docs/engineering/DEVELOPMENT_PACE.md — одна строка, и она про другое)."
+  },
+  "newConditionForLedgerRecord": {
+    "text": "Первый файл evidence/*-mutations.json, добавленный ПОСЛЕ этой переформулировки (после evidence/303-mutations.json, 2026-08-07), у которого хотя бы одна текстовая подстановка мутанта (не git mv, не переименование) не несёт дословного поля — ни change.from/to, ни before+after, ни replacement, ни edit вида «<было> -> <стало>». Неформальная практика держится с evidence/259-mutations.json (2026-08-05, см. step4 выше); первый провал после этой даты — сигнал, что практика не устойчива сама по себе.",
+    "checkCommand": "jq 'if type==\"object\" and has(\"mutants\") then .mutants elif type==\"object\" and has(\"halves\") then [.halves[]?.mutants[]?] elif type==\"array\" then . else [] end | map(has(\"change\") or (has(\"before\") and has(\"after\")) or has(\"replacement\") or ((.edit // \"\") | test(\" -> \"))) | {total: length, allLiteral: all}' evidence/<новый файл>-mutations.json"
+  },
+  "modelId": "claude-sonnet-5:2026-08 (Claude Code CLI)"
+}
