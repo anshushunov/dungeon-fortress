@@ -110,12 +110,40 @@ if ($hasFrameSize) {
 # refuses one that does not, and that refusal is the rule. This says the same
 # thing before restore and build rather than after them, which is the same trade
 # the frame check above makes.
-if (-not [string]::IsNullOrWhiteSpace($ScreenshotPath) -and -not $hasCameraZoom) {
-    throw (
-        "A screenshot capture has to name -CameraZoom, because a frame nobody " +
-        "declared a zoom for would inherit whichever zoom the automatic rule " +
-        "picked for this window and stop being reproducible."
-    )
+#
+# Issue #329. This used to check -CameraZoom alone, which is why a screenshot
+# request missing -UiScale and/or -FrameSize sailed past this refusal, through
+# a full restore and build and an asset import, and only then hit
+# ViewLaunchOptions.Parse's own "requireExplicitCaptureParameters" refusal deep
+# inside the engine - an ArgumentException stack trace pointing at Main.cs
+# instead of the one-line reason this script could have given up front. All
+# three parameters exist for the identical reason: a frame nobody declared a
+# zoom, a UI scale or a size for would inherit whatever the automatic rule
+# picked for this window, and stop being reproducible the moment that rule's
+# answer changes. capture-evidence.ps1 already knows this and always supplies
+# all three; this script did not, and the two scripts silently disagreeing
+# about the same contract is what let the gap stand.
+if (-not [string]::IsNullOrWhiteSpace($ScreenshotPath)) {
+    $missingCaptureParameters = @()
+    if (-not $hasCameraZoom) {
+        $missingCaptureParameters += "-CameraZoom"
+    }
+    if (-not $hasUiScale) {
+        $missingCaptureParameters += "-UiScale"
+    }
+    if (-not $hasFrameSize) {
+        $missingCaptureParameters += "-FrameSize"
+    }
+    if ($missingCaptureParameters.Count -gt 0) {
+        throw (
+            "A screenshot capture has to name " +
+            ($missingCaptureParameters -join ", ") +
+            ", because a frame nobody declared " +
+            $(if ($missingCaptureParameters.Count -eq 1) { "it" } else { "them" }) +
+            " for would inherit whichever value the automatic rule picked for " +
+            "this window and stop being reproducible."
+        )
+    }
 }
 
 $resolvedScreenshotPath = if ([string]::IsNullOrWhiteSpace($ScreenshotPath)) {

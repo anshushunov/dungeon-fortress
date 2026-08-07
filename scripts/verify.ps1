@@ -45,6 +45,7 @@ $guardTestScript = Join-Path $repoRoot "scripts\test-godot-output-guard.ps1"
 $verifyStagesTestScript = Join-Path $repoRoot "scripts\test-verify-stages.ps1"
 $temporaryRootTestScript = Join-Path $repoRoot "scripts\test-temporary-root.ps1"
 $runGameTemporaryRootTestScript = Join-Path $repoRoot "scripts\test-run-game-temporary-root.ps1"
+$runGameCaptureParametersTestScript = Join-Path $repoRoot "scripts\test-run-game-capture-parameters.ps1"
 $screenshotOutputPathTestScript = Join-Path $repoRoot "scripts\test-screenshot-output-path.ps1"
 $evidenceToolsTestScript = Join-Path $repoRoot "scripts\test-evidence-tools.ps1"
 $claimedSha256TestScript = Join-Path $repoRoot "scripts\test-check-claimed-sha256.ps1"
@@ -398,6 +399,16 @@ $stageCatalog = [ordered]@{
             # of them for a full day without any of ten merged PRs noticing.
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $runGameTemporaryRootTestScript
+            )
+            # Issue #329, second and independent finding: run-game.ps1's own
+            # screenshot precondition only ever checked -CameraZoom, so a
+            # request missing -UiScale and/or -FrameSize sailed past it into a
+            # full build and only then hit the engine's own refusal. Invisible
+            # for the same reason as the resolver defect above - no stage here
+            # reaches run-game.ps1 - until it stopped being masked by the
+            # resolver dying first.
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $runGameCaptureParametersTestScript
             )
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $guardTestScript
