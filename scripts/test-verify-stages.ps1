@@ -1769,6 +1769,14 @@ New-Item -ItemType Directory -Force -Path $godotResolutionSandboxRoot | Out-Null
 $godotResolutionRealGodotParent = Split-Path -Parent $repoRoot
 $godotResolutionReal471Directory = Join-Path $godotResolutionRealGodotParent "Godot_v4.7.1-stable_mono_win64"
 $godotResolutionReal461Directory = Join-Path $godotResolutionRealGodotParent "Godot_v4.6.1-stable_mono_win64"
+# Whether the priority/version-rejection checks below actually ran, as opposed
+# to being skipped because this machine lacks one of the two real engine
+# installs they junction against. Reported in the final JSON (below,
+# issue307SiblingTierChecked) so a green run with this section silently
+# skipped is not indistinguishable from a green run that exercised it -
+# independent review of this PR found the two were not distinguishable in the
+# machine-readable summary.
+$issue307SiblingTierChecked = $false
 
 function New-GodotResolutionRepoScriptsCopy {
     [CmdletBinding()]
@@ -1869,112 +1877,131 @@ catch {
     }
 }
 
-if (-not (Test-Path -LiteralPath $godotResolutionReal471Directory -PathType Container) -or
-    -not (Test-Path -LiteralPath $godotResolutionReal461Directory -PathType Container)) {
-    Write-Host (
-        "Skipping the Issue #307 Godot-resolution tests: this machine does not " +
-        "have both '$godotResolutionReal471Directory' and " +
-        "'$godotResolutionReal461Directory', which the priority and " +
-        "version-rejection checks need as real engine installs to run --version " +
-        "against.")
-}
-else {
-    # --- resolves via the new tier with no -GodotPath and no environment, and
-    #     prefers the newer of two sibling directories ------------------------
-    $bothVersionsParent = Join-Path $godotResolutionSandboxRoot "both-versions"
-    New-Item -ItemType Directory -Force -Path $bothVersionsParent | Out-Null
-    $bothVersionsToolsPath = New-GodotResolutionRepoScriptsCopy -ParentDirectory $bothVersionsParent
-    # Junctioned in this order on purpose: this directory's own, unsorted
-    # enumeration order already returns Godot_v4.6.1 before Godot_v4.7.1
-    # (verified separately, not assumed), so a resolver that stopped sorting
-    # newest-first would still pass this check by accident if it happened to
-    # prefer creation order instead of name order. Junctioning 4.7.1 first
-    # closes that gap: the only way this check passes is by preferring the
-    # higher version *by name*.
-    New-GodotResolutionSiblingJunction -ParentDirectory $bothVersionsParent -RealDirectory $godotResolutionReal471Directory | Out-Null
-    New-GodotResolutionSiblingJunction -ParentDirectory $bothVersionsParent -RealDirectory $godotResolutionReal461Directory | Out-Null
+# Independent review of this PR found that the checks below - which junction
+# against real, potentially large engine installs and spawn child processes -
+# left their own sandbox behind whenever one of their `throw`s fired, because
+# the single cleanup call used to sit after this whole block, unprotected: an
+# early exit skipped straight past it. Mutant A (the sibling-directory tier
+# removed) makes the first check below throw on purpose, and was the case
+# that caught this - `git status`-clean before, junctions still on disk under
+# .artifacts after. The try/finally here is the fix: cleanup now runs whether
+# this block finishes, throws, or is skipped outright by the guard above.
+try {
+    if (-not (Test-Path -LiteralPath $godotResolutionReal471Directory -PathType Container) -or
+        -not (Test-Path -LiteralPath $godotResolutionReal461Directory -PathType Container)) {
+        Write-Host (
+            "Skipping the Issue #307 Godot-resolution tests: this machine does not " +
+            "have both '$godotResolutionReal471Directory' and " +
+            "'$godotResolutionReal461Directory', which the priority and " +
+            "version-rejection checks need as real engine installs to run --version " +
+            "against.")
+    }
+    else {
+        $issue307SiblingTierChecked = $true
 
-    $expected471Console = Join-Path $bothVersionsParent "Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe"
-    $noEnvResult = Invoke-IsolatedGodotResolution -GodotToolsPath $bothVersionsToolsPath
-    if (-not $noEnvResult.Success) {
-        throw (
-            "Resolve-GodotExecutable did not resolve via the Issue #307 " +
-            "sibling-directory tier with no -GodotPath and no environment " +
-            "set: $($noEnvResult.Text)")
-    }
-    if (-not [string]::Equals($noEnvResult.Text, $expected471Console, [StringComparison]::OrdinalIgnoreCase)) {
-        throw (
-            "Resolve-GodotExecutable resolved '$($noEnvResult.Text)' with both " +
-            "a 4.7.1 and a 4.6.1 sibling directory present and no environment " +
-            "set; expected the newer version '$expected471Console'.")
-    }
+        # --- resolves via the new tier with no -GodotPath and no environment,
+        #     and prefers the newer of two sibling directories ---------------
+        $bothVersionsParent = Join-Path $godotResolutionSandboxRoot "both-versions"
+        New-Item -ItemType Directory -Force -Path $bothVersionsParent | Out-Null
+        $bothVersionsToolsPath = New-GodotResolutionRepoScriptsCopy -ParentDirectory $bothVersionsParent
+        # Junctioned in this order on purpose: this directory's own, unsorted
+        # enumeration order already returns Godot_v4.6.1 before Godot_v4.7.1
+        # (verified separately, not assumed), so a resolver that stopped
+        # sorting newest-first would still pass this check by accident if it
+        # happened to prefer creation order instead of name order.
+        # Junctioning 4.7.1 first closes that gap: the only way this check
+        # passes is by preferring the higher version *by name*.
+        New-GodotResolutionSiblingJunction -ParentDirectory $bothVersionsParent -RealDirectory $godotResolutionReal471Directory | Out-Null
+        New-GodotResolutionSiblingJunction -ParentDirectory $bothVersionsParent -RealDirectory $godotResolutionReal461Directory | Out-Null
 
-    # --- the sibling-directory tier stays last: an explicit $env:GODOT4_CONSOLE
-    #     still overrides it even when a sibling directory also resolves -----
-    $decoyConsolePath = Join-Path $bothVersionsParent "decoy_console.exe"
-    [IO.File]::WriteAllText($decoyConsolePath, "not a real engine binary; only has to exist as a file")
-    $priorityResult = Invoke-IsolatedGodotResolution `
-        -GodotToolsPath $bothVersionsToolsPath `
-        -GodotConsoleEnvironmentValue $decoyConsolePath
-    if (-not $priorityResult.Success) {
-        throw (
-            "Resolve-GodotExecutable rejected a valid `$env:GODOT4_CONSOLE " +
-            "override with a sibling directory also present: " +
-            "$($priorityResult.Text)")
-    }
-    if (-not [string]::Equals($priorityResult.Text, $decoyConsolePath, [StringComparison]::OrdinalIgnoreCase)) {
-        throw (
-            "`$env:GODOT4_CONSOLE did not take priority over the Issue #307 " +
-            "sibling-directory tier. Expected '$decoyConsolePath', got " +
-            "'$($priorityResult.Text)' - the new tier must stay last.")
-    }
-
-    # --- a lone wrong-version sibling is still returned by this tier, and
-    #     rejected by Assert-GodotVersion, which names the version it found --
-    $wrongVersionParent = Join-Path $godotResolutionSandboxRoot "wrong-version-only"
-    New-Item -ItemType Directory -Force -Path $wrongVersionParent | Out-Null
-    $wrongVersionToolsPath = New-GodotResolutionRepoScriptsCopy -ParentDirectory $wrongVersionParent
-    New-GodotResolutionSiblingJunction -ParentDirectory $wrongVersionParent -RealDirectory $godotResolutionReal461Directory | Out-Null
-
-    $expected461Console = Join-Path $wrongVersionParent "Godot_v4.6.1-stable_mono_win64\Godot_v4.6.1-stable_mono_win64_console.exe"
-    $wrongVersionResult = Invoke-IsolatedGodotResolution -GodotToolsPath $wrongVersionToolsPath
-    if (-not $wrongVersionResult.Success) {
-        throw (
-            "Resolve-GodotExecutable refused to resolve a lone wrong-version " +
-            "sibling directory at all. The rejection is supposed to come from " +
-            "Assert-GodotVersion, by name, not from this tier: " +
-            "$($wrongVersionResult.Text)")
-    }
-    if (-not [string]::Equals($wrongVersionResult.Text, $expected461Console, [StringComparison]::OrdinalIgnoreCase)) {
-        throw (
-            "Resolve-GodotExecutable resolved '$($wrongVersionResult.Text)' " +
-            "instead of the lone sibling directory '$expected461Console'.")
-    }
-
-    $wrongVersionRejectedByName = $false
-    try {
-        Assert-GodotVersion -GodotPath $wrongVersionResult.Text | Out-Null
-    }
-    catch {
-        if ($_.Exception.Message -match [regex]::Escape("4.6.1")) {
-            $wrongVersionRejectedByName = $true
-        }
-        else {
+        $expected471Console = Join-Path $bothVersionsParent "Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe"
+        $noEnvResult = Invoke-IsolatedGodotResolution -GodotToolsPath $bothVersionsToolsPath
+        if (-not $noEnvResult.Success) {
             throw (
-                "Assert-GodotVersion rejected the 4.6.1 sibling directory but " +
-                "did not name the discovered version: $($_.Exception.Message)")
+                "Resolve-GodotExecutable did not resolve via the Issue #307 " +
+                "sibling-directory tier with no -GodotPath and no environment " +
+                "set: $($noEnvResult.Text)")
+        }
+        if (-not [string]::Equals($noEnvResult.Text, $expected471Console, [StringComparison]::OrdinalIgnoreCase)) {
+            throw (
+                "Resolve-GodotExecutable resolved '$($noEnvResult.Text)' with " +
+                "both a 4.7.1 and a 4.6.1 sibling directory present and no " +
+                "environment set; expected the newer version " +
+                "'$expected471Console'.")
+        }
+
+        # --- the sibling-directory tier stays last: an explicit
+        #     $env:GODOT4_CONSOLE still overrides it even when a sibling
+        #     directory also resolves ------------------------------------
+        $decoyConsolePath = Join-Path $bothVersionsParent "decoy_console.exe"
+        [IO.File]::WriteAllText($decoyConsolePath, "not a real engine binary; only has to exist as a file")
+        $priorityResult = Invoke-IsolatedGodotResolution `
+            -GodotToolsPath $bothVersionsToolsPath `
+            -GodotConsoleEnvironmentValue $decoyConsolePath
+        if (-not $priorityResult.Success) {
+            throw (
+                "Resolve-GodotExecutable rejected a valid `$env:GODOT4_CONSOLE " +
+                "override with a sibling directory also present: " +
+                "$($priorityResult.Text)")
+        }
+        if (-not [string]::Equals($priorityResult.Text, $decoyConsolePath, [StringComparison]::OrdinalIgnoreCase)) {
+            throw (
+                "`$env:GODOT4_CONSOLE did not take priority over the Issue " +
+                "#307 sibling-directory tier. Expected '$decoyConsolePath', " +
+                "got '$($priorityResult.Text)' - the new tier must stay last.")
+        }
+
+        # --- a lone wrong-version sibling is still returned by this tier,
+        #     and rejected by Assert-GodotVersion, which names the version
+        #     it found -------------------------------------------------------
+        $wrongVersionParent = Join-Path $godotResolutionSandboxRoot "wrong-version-only"
+        New-Item -ItemType Directory -Force -Path $wrongVersionParent | Out-Null
+        $wrongVersionToolsPath = New-GodotResolutionRepoScriptsCopy -ParentDirectory $wrongVersionParent
+        New-GodotResolutionSiblingJunction -ParentDirectory $wrongVersionParent -RealDirectory $godotResolutionReal461Directory | Out-Null
+
+        $expected461Console = Join-Path $wrongVersionParent "Godot_v4.6.1-stable_mono_win64\Godot_v4.6.1-stable_mono_win64_console.exe"
+        $wrongVersionResult = Invoke-IsolatedGodotResolution -GodotToolsPath $wrongVersionToolsPath
+        if (-not $wrongVersionResult.Success) {
+            throw (
+                "Resolve-GodotExecutable refused to resolve a lone " +
+                "wrong-version sibling directory at all. The rejection is " +
+                "supposed to come from Assert-GodotVersion, by name, not " +
+                "from this tier: $($wrongVersionResult.Text)")
+        }
+        if (-not [string]::Equals($wrongVersionResult.Text, $expected461Console, [StringComparison]::OrdinalIgnoreCase)) {
+            throw (
+                "Resolve-GodotExecutable resolved '$($wrongVersionResult.Text)' " +
+                "instead of the lone sibling directory '$expected461Console'.")
+        }
+
+        $wrongVersionRejectedByName = $false
+        try {
+            Assert-GodotVersion -GodotPath $wrongVersionResult.Text | Out-Null
+        }
+        catch {
+            if ($_.Exception.Message -match [regex]::Escape("4.6.1")) {
+                $wrongVersionRejectedByName = $true
+            }
+            else {
+                throw (
+                    "Assert-GodotVersion rejected the 4.6.1 sibling directory " +
+                    "but did not name the discovered version: " +
+                    "$($_.Exception.Message)")
+            }
+        }
+        if (-not $wrongVersionRejectedByName) {
+            throw (
+                "Assert-GodotVersion accepted the " +
+                "Godot_v4.6.1-stable_mono_win64 sibling directory the Issue " +
+                "#307 tier resolved to. A directory of the wrong version " +
+                "next to the repository root must still be rejected, by " +
+                "Assert-GodotVersion, not silently accepted.")
         }
     }
-    if (-not $wrongVersionRejectedByName) {
-        throw (
-            "Assert-GodotVersion accepted the Godot_v4.6.1-stable_mono_win64 " +
-            "sibling directory the Issue #307 tier resolved to. A directory of " +
-            "the wrong version next to the repository root must still be " +
-            "rejected, by Assert-GodotVersion, not silently accepted.")
-    }
 }
-
-Remove-TemporaryItemBestEffort -Path $godotResolutionSandboxRoot -Description "Issue #307 Godot-resolution test sandbox" | Out-Null
+finally {
+    Remove-TemporaryItemBestEffort -Path $godotResolutionSandboxRoot -Description "Issue #307 Godot-resolution test sandbox" | Out-Null
+}
 
 # --- stage output routing: raw dumps move to a file, failures stay loud ----
 #
@@ -2000,6 +2027,13 @@ Remove-TemporaryItemBestEffort -Path $godotResolutionSandboxRoot -Description "I
 
 $stageOutputSandbox = Join-Path $sandbox "stage-output-284"
 New-Item -ItemType Directory -Force -Path $stageOutputSandbox | Out-Null
+
+# Same reasoning, and the same shape, as the try/finally around the Issue
+# #307 section above: every `throw` below exits before reaching the shared
+# cleanup at the bottom of the file (`the guard against itself`, which only
+# runs if execution reaches it), so without a scoped finally here a failing
+# check in this section would leave $stageOutputSandbox on disk too.
+try {
 
 $stageOutputRunnerPath = Join-Path $stageOutputSandbox "runner.ps1"
 [IO.File]::WriteAllText($stageOutputRunnerPath, @'
@@ -2177,6 +2211,11 @@ foreach ($requiredChecksumField in @(
             "verification_result summary; a checksum went missing from " +
             "stdout (Issue #284).")
     }
+}
+
+}
+finally {
+    Remove-TemporaryItemBestEffort -Path $stageOutputSandbox -Description "stage output routing test sandbox" | Out-Null
 }
 
 # --- the guard against itself ----------------------------------------------
@@ -2459,6 +2498,13 @@ try {
         emptySelectionRejected = $true
         unknownStageRejected = $true
         stageOutputRoutingChecked = $true
+        # Issue #307 review: a green run with this section silently skipped
+        # (this machine lacks one of the two real engine installs it
+        # junctions against) used to be indistinguishable from a green run
+        # that actually exercised the priority and version-rejection checks -
+        # both reported plain "ok" with no trace of the skip anywhere in this
+        # machine-readable summary, only in a Write-Host line upstream.
+        issue307SiblingTierChecked = $issue307SiblingTierChecked
     } | ConvertTo-Json -Compress | Write-Host
 }
 finally {
