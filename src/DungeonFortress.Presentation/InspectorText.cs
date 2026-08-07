@@ -272,11 +272,10 @@ public static class InspectorText
     /// has been through nothing, which is most of them for most of a party.
     ///
     /// One line, and the newest place first. It was three lines with a heading
-    /// first, and the HUD overflow guard refused the frame: the panel fits
-    /// sixteen lines at 1280x720 and a creature carrying three memories needed
-    /// eighteen. The guard is right — text that does not fit is dropped or drawn
-    /// over the panel below — so the block is compact rather than the panel
-    /// taller.
+    /// first, and the HUD overflow guard refused the frame: a creature carrying
+    /// several remembered places overflowed the panel. The guard is right — text
+    /// that does not fit is dropped or drawn over the panel below — so the block
+    /// is compact rather than the panel taller.
     /// </summary>
     public static string DescribeMemory(PrototypeCreatureSnapshot creature)
     {
