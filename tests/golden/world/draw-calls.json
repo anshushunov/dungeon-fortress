@@ -1,0 +1,107 @@
+{
+  "frame": {
+    "entry": "DrawMap",
+    "fixture": "baseline",
+    "tick": 1,
+    "tileSize": 40
+  },
+  "passes": [
+    {
+      "pass": "BelowDepth",
+      "calls": 444,
+      "primitives": {
+        "Circle": 8,
+        "Line": 68,
+        "Rect": 368
+      },
+      "extent": [
+        0,
+        0,
+        1120,
+        640
+      ],
+      "sizes": [
+        3.636,
+        9.091
+      ],
+      "digest": "c54c65f52e15f439"
+    },
+    {
+      "pass": "Depth",
+      "calls": 1761,
+      "primitives": {
+        "Line": 418,
+        "Rect": 268,
+        "SetTransform": 585,
+        "String": 4,
+        "TextureRect": 486
+      },
+      "extent": [
+        -19.997,
+        -55.402,
+        1120,
+        645.455
+      ],
+      "sizes": [
+        1.818,
+        2.273,
+        3.636,
+        11,
+        34.545
+      ],
+      "digest": "a8cdf9fcefbbd468"
+    },
+    {
+      "pass": "Informational",
+      "calls": 72,
+      "primitives": {
+        "Arc": 5,
+        "Circle": 9,
+        "Line": 35,
+        "Rect": 19,
+        "String": 4
+      },
+      "extent": [
+        45.091,
+        56.773,
+        1032.727,
+        560
+      ],
+      "sizes": [
+        1.5,
+        2.545,
+        2.909,
+        3.273,
+        3.636,
+        4.091,
+        13,
+        13.636,
+        18.182
+      ],
+      "digest": "8c2103103c283080"
+    },
+    {
+      "pass": "Interaction",
+      "calls": 94,
+      "primitives": {
+        "Polyline": 1,
+        "Rect": 92,
+        "String": 1
+      },
+      "extent": [
+        42,
+        27.273,
+        1105.455,
+        582.455
+      ],
+      "sizes": [
+        1,
+        2,
+        2.727,
+        20,
+        94.545
+      ],
+      "digest": "bd24022c7fbc37b9"
+    }
+  ]
+}

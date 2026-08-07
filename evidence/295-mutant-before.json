@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "issue": 295,
+  "checkpoint": "1 — the geometry mutant is named verbatim and the pipeline is shown green on it",
+  "rule": "A check does not count as done until it is shown to fail when the specific part of the change it is meant to catch is reverted, not the change as a whole.",
+  "purpose": "Re-measure on today's main what Issue #281 measured on 5ace847: that a purely geometric change to the map survives the whole of verify.ps1. This is the 'before' half of Issue #295 — the state the detector added by this Issue has to turn red.",
+  "procedure": "The mutant was applied to the committed worktree at a44e14d with a python script that asserts the exact line it replaces (line 320 of src/DungeonFortress.Game/Main.DrawWorld.cs), then the full verify.ps1 was run, then the file was reverted with `git checkout --` and the tree confirmed clean. Nothing was mutated in an uncommitted file.",
+  "environment": {
+    "worktree": "C:\\gamedev\\_wt-295",
+    "branch": "agent/295-geometriya-otrisovki-mira-ne-pinaetsya-nichem-mutant-inset-3f-prokhodit-verify-ps1-zelenym",
+    "baseCommit": "a44e14d",
+    "temporaryRoot": "C:\\df-tmp-295 (passed with -TemporaryRoot; removed after the run)",
+    "godot": "4.7.1.stable.mono.official.a13da4feb",
+    "note": "The Godot executable is found by scripts/GodotTools.ps1 from the disk layout, so -GodotPath was not needed on this machine."
+  },
+  "baseline": {
+    "commit": "a44e14d",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$sw=[Diagnostics.Stopwatch]::StartNew(); & '.\\scripts\\verify.ps1' -TemporaryRoot 'C:\\df-tmp-295'; $c=$LASTEXITCODE; $sw.Stop(); Write-Host ('TOTAL_SECONDS=' + $sw.Elapsed.TotalSeconds + ' EXIT=' + $c)\"",
+    "result": "GREEN. verification_result status=ok, scope=full, 9 of 9 stages. TOTAL_SECONDS=815.7998731, EXIT=0.",
+    "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+    "viewInvariantChecksum": "7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead",
+    "stageSeconds": {
+      "scripts": 325.6,
+      "build": 60.3,
+      "tests": 318.9,
+      "mcp": 7.9,
+      "sim": 0.4,
+      "load": 0.8,
+      "godot": 69.6,
+      "ui": 11.7,
+      "screenshots": 19.4
+    },
+    "cacheState": "cold — first run in this worktree, so restore, NuGet and the Godot import all paid for themselves here"
+  },
+  "mutant": {
+    "name": "b-ii of Issue #281: every room border is inset three times as far",
+    "file": "src/DungeonFortress.Game/Main.DrawWorld.cs",
+    "line": 320,
+    "routine": "DrawRoomBorder",
+    "edit": "        var inset = ScaleWorld((float)purposeInset);  ->         var inset = ScaleWorld((float)purposeInset * 3f);",
+    "applyCommand": "python .mutate.py  (asserts lines[319] == the old line before replacing it, then rewrites the file)",
+    "verifyCommand": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$sw=[Diagnostics.Stopwatch]::StartNew(); & '.\\scripts\\verify.ps1' -TemporaryRoot 'C:\\df-tmp-295'; $c=$LASTEXITCODE; $sw.Stop(); Write-Host ('TOTAL_SECONDS=' + $sw.Elapsed.TotalSeconds + ' EXIT=' + $c)\"",
+    "result": "GREEN — the mutant survives the whole pipeline. verification_result status=ok, scope=full, stagesExecuted all nine, EXIT=0, TOTAL_SECONDS=499.8306158.",
+    "stageSeconds": {
+      "scripts": 176.0,
+      "build": 5.2,
+      "tests": 258.8,
+      "mcp": 4.0,
+      "sim": 0.3,
+      "load": 0.6,
+      "godot": 39.0,
+      "ui": 4.9,
+      "screenshots": 9.7
+    },
+    "cacheState": "warm — restore, build and the Godot import were already done by the baseline run above, which is why the same nine stages cost 499.8 s instead of 815.8 s. Only warm numbers are comparable with warm numbers.",
+    "numbersThatDidNotMove": {
+      "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f — identical to the baseline",
+      "viewInvariantChecksum": "7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead — identical to the baseline",
+      "loadChecksum": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045 — identical",
+      "goldenUiFrames": "all three compared ok",
+      "screenshotRepeatable": true,
+      "godotRaidExitCode": 0
+    },
+    "revertedAndReverifiedClean": true
+  },
+  "whyNothingSawIt": {
+    "ui": "tests/golden/ui/*.json hold HUD and inspector text plus the canonical checksum. Neither moves when a line on the map moves.",
+    "screenshots": "the stage captures the same frame twice with the same binary and compares the two PNGs with each other (Assert-FilesEqual $baselineScreenshot $baselineRepeatScreenshot). Two identical mutants agree with each other exactly as well as two identical originals do; there is no committed reference image in the tree (git ls-files tests/golden returns three .json files and nothing else).",
+    "godot": "viewInvariantChecksum is the canonical PrototypeWorld checksum asserted equal across four camera/frame/UI-scale cases. It is blind to the camera and to geometry by construction — that is the property the check exists to prove.",
+    "tests": "the Presentation suite reads the adapter as text and pins which primitive each routine calls; the number handed to that primitive, and the number handed to the pure geometry function feeding it, are outside what it reads. Issue #295 says exactly this: 'source-guard'ы фиксируют факт вызова процедуры отрисовки, а не её числовые аргументы'."
+  }
+}

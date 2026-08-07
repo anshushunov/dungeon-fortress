@@ -1,3 +1,7 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+
 using DungeonFortress.Presentation;
 using DungeonFortress.Simulation;
 
@@ -554,6 +558,497 @@ public partial class Main
     // BrushMode now, because everything that has to be said about a brush — its
     // name, its tooltip, which cells a stroke over it would take — is text, and
     // text on this side of the seam is text no test in CI can read.
+
+    // ---------------------------------------------------------------------
+    // The world-geometry journal (Issue #295)
+    //
+    // Every mark the map draws goes through one of the engine primitives
+    // declared below. They hide CanvasItem's own methods, so no call site had
+    // to be touched: a bare DrawRect(...) written anywhere in this class now
+    // resolves here first. While _worldDrawJournal is null — which is every
+    // frame a player or a capture ever sees — each of them forwards its
+    // arguments to the base method unchanged and does nothing else, so the
+    // picture is exactly the picture it was.
+    //
+    // While it is not null, the primitive records what it was given and
+    // returns without drawing. That is what makes the journal capturable
+    // outside _Draw at all: Godot refuses a draw command issued anywhere else,
+    // and the recording pass of VerifyWorldGeometry runs from _Ready.
+    //
+    // Why this and not a golden PNG: evidence/295-method-choice.json.
+    // ---------------------------------------------------------------------
+    private WorldDrawJournal? _worldDrawJournal;
+
+    /// <summary>
+    /// Opens one of the four declared passes of
+    /// <see cref="WorldDrawOrder"/> in the journal. It draws nothing and is
+    /// invisible to a run that is not recording.
+    ///
+    /// <para>
+    /// The boundaries are named in <c>DrawMap</c> rather than derived from a
+    /// stack walk on purpose: an inlined routine has no frame, so a stack walk
+    /// would attribute a mark to whichever caller the JIT happened to leave
+    /// standing, and a reference file built from that would move without the
+    /// drawing moving. Named boundaries cost four lines and are the same on
+    /// every machine.
+    /// </para>
+    /// </summary>
+    private void BeginWorldDrawPass(WorldDrawPass pass) =>
+        _worldDrawJournal?.BeginPass(pass);
+
+    private new void DrawRect(Rect2 rect, Color color, bool filled = true, float width = -1f)
+    {
+        if (_worldDrawJournal is { } journal)
+        {
+            journal.Rect(rect, color, filled, width);
+            return;
+        }
+
+        base.DrawRect(rect, color, filled, width);
+    }
+
+    private new void DrawLine(
+        Vector2 from,
+        Vector2 to,
+        Color color,
+        float width = -1f,
+        bool antialiased = false)
+    {
+        if (_worldDrawJournal is { } journal)
+        {
+            journal.Line(from, to, color, width, antialiased);
+            return;
+        }
+
+        base.DrawLine(from, to, color, width, antialiased);
+    }
+
+    private new void DrawCircle(Vector2 position, float radius, Color color)
+    {
+        if (_worldDrawJournal is { } journal)
+        {
+            journal.Circle(position, radius, color);
+            return;
+        }
+
+        base.DrawCircle(position, radius, color);
+    }
+
+    private new void DrawArc(
+        Vector2 center,
+        float radius,
+        float startAngle,
+        float endAngle,
+        int pointCount,
+        Color color,
+        float width = -1f,
+        bool antialiased = false)
+    {
+        if (_worldDrawJournal is { } journal)
+        {
+            journal.Arc(
+                center, radius, startAngle, endAngle, pointCount, color, width, antialiased);
+            return;
+        }
+
+        base.DrawArc(center, radius, startAngle, endAngle, pointCount, color, width, antialiased);
+    }
+
+    private new void DrawPolyline(
+        Vector2[] points,
+        Color color,
+        float width = -1f,
+        bool antialiased = false)
+    {
+        if (_worldDrawJournal is { } journal)
+        {
+            journal.Polyline(points, color, width, antialiased);
+            return;
+        }
+
+        base.DrawPolyline(points, color, width, antialiased);
+    }
+
+    private new void DrawTextureRect(
+        Texture2D texture,
+        Rect2 rect,
+        bool tile,
+        Color? modulate = null,
+        bool transpose = false)
+    {
+        if (_worldDrawJournal is { } journal)
+        {
+            journal.TextureRect(texture, rect, tile, modulate, transpose);
+            return;
+        }
+
+        base.DrawTextureRect(texture, rect, tile, modulate, transpose);
+    }
+
+    private new void DrawString(
+        Font font,
+        Vector2 pos,
+        string text,
+        HorizontalAlignment alignment = (HorizontalAlignment)0,
+        float width = -1f,
+        int fontSize = 16,
+        Color? modulate = null,
+        TextServer.JustificationFlag justificationFlags = (TextServer.JustificationFlag)3,
+        TextServer.Direction direction = (TextServer.Direction)0,
+        TextServer.Orientation orientation = (TextServer.Orientation)0)
+    {
+        if (_worldDrawJournal is { } journal)
+        {
+            journal.Text(
+                "String", pos, alignment, width, fontSize, 0, modulate,
+                justificationFlags, direction, orientation);
+            return;
+        }
+
+        base.DrawString(
+            font, pos, text, alignment, width, fontSize, modulate,
+            justificationFlags, direction, orientation);
+    }
+
+    private new void DrawStringOutline(
+        Font font,
+        Vector2 pos,
+        string text,
+        HorizontalAlignment alignment = (HorizontalAlignment)0,
+        float width = -1f,
+        int fontSize = 16,
+        int size = 1,
+        Color? modulate = null,
+        TextServer.JustificationFlag justificationFlags = (TextServer.JustificationFlag)3,
+        TextServer.Direction direction = (TextServer.Direction)0,
+        TextServer.Orientation orientation = (TextServer.Orientation)0)
+    {
+        if (_worldDrawJournal is { } journal)
+        {
+            journal.Text(
+                "StringOutline", pos, alignment, width, fontSize, size, modulate,
+                justificationFlags, direction, orientation);
+            return;
+        }
+
+        base.DrawStringOutline(
+            font, pos, text, alignment, width, fontSize, size, modulate,
+            justificationFlags, direction, orientation);
+    }
+
+    private new void DrawSetTransformMatrix(Transform2D xform)
+    {
+        if (_worldDrawJournal is { } journal)
+        {
+            journal.TransformMatrix(xform);
+            return;
+        }
+
+        base.DrawSetTransformMatrix(xform);
+    }
+
+    private new void DrawSetTransform(Vector2 position, float rotation = 0f, Vector2? scale = null)
+    {
+        if (_worldDrawJournal is { } journal)
+        {
+            journal.Transform(position, rotation, scale);
+            return;
+        }
+
+        base.DrawSetTransform(position, rotation, scale);
+    }
+
+    /// <summary>
+    /// The ordered record of one <c>DrawMap</c>, pass by pass.
+    ///
+    /// <para>
+    /// It keeps two kinds of thing about every pass. One is a digest of the
+    /// whole ordered stream of calls. The other is the handful of numbers a
+    /// person can read in a diff: how many calls of each primitive, the
+    /// rectangle the pass painted inside, and the stroke widths and radii it
+    /// used. A change that moves only the digest says "something moved"; the
+    /// readable numbers usually say what.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>What goes into the digest, exactly.</b> Every argument of every
+    /// primitive except two, and the two are named rather than left to be
+    /// discovered: the <em>string</em> a text primitive draws, and the
+    /// <see cref="Font"/> object it draws with. The text is golden UI's
+    /// business (<c>tests/golden/ui</c>) and repeating it here would put the
+    /// same caption in two reference files held by two different Issues; the
+    /// font is one shared <c>ThemeDB.FallbackFont</c> instance with no stable
+    /// identity to record. Everything else — alignment, wrap width, outline
+    /// size, justification, direction, orientation, tiling, transposition,
+    /// antialiasing — is in, because each of them moves or reshapes a mark.
+    /// </para>
+    ///
+    /// <para>
+    /// This paragraph is narrow because the first version of it was not, and
+    /// review measured the difference: it claimed "every argument" while
+    /// <c>alignment</c>, the wrap width, the outline size and
+    /// <c>transpose</c> were dropped, and proved the claim empty with a mutant
+    /// — <c>HorizontalAlignment.Left</c> to <c>Center</c> in
+    /// <c>DrawSelectionCount</c> physically moves the caption across a 52 px
+    /// box and the record did not notice. That is the same defect this Issue
+    /// exists to close, wearing the detector's own clothes.
+    /// </para>
+    /// </summary>
+    private sealed class WorldDrawJournal
+    {
+        private readonly List<PassJournal> _passes = [];
+        private PassJournal? _current;
+
+        internal IReadOnlyList<PassJournal> Passes => _passes;
+
+        internal void BeginPass(WorldDrawPass pass)
+        {
+            _current = new PassJournal(pass);
+            _passes.Add(_current);
+        }
+
+        internal void Rect(Rect2 rect, Color color, bool filled, float width)
+        {
+            var pass = Current();
+            pass.Point(rect.Position);
+            pass.Point(rect.End);
+            pass.Size(width);
+            pass.Call(
+                "Rect",
+                Number(rect.Position.X), Number(rect.Position.Y),
+                Number(rect.Size.X), Number(rect.Size.Y),
+                Paint(color), filled ? "filled" : "outline", Number(width));
+        }
+
+        internal void Line(
+            Vector2 from,
+            Vector2 to,
+            Color color,
+            float width,
+            bool antialiased)
+        {
+            var pass = Current();
+            pass.Point(from);
+            pass.Point(to);
+            pass.Size(width);
+            pass.Call(
+                "Line",
+                Number(from.X), Number(from.Y), Number(to.X), Number(to.Y),
+                Paint(color), Number(width), Flag(antialiased));
+        }
+
+        internal void Circle(Vector2 position, float radius, Color color)
+        {
+            var pass = Current();
+            pass.Point(position);
+            pass.Size(radius);
+            pass.Call("Circle", Number(position.X), Number(position.Y), Number(radius), Paint(color));
+        }
+
+        internal void Arc(
+            Vector2 center,
+            float radius,
+            float startAngle,
+            float endAngle,
+            int pointCount,
+            Color color,
+            float width,
+            bool antialiased)
+        {
+            var pass = Current();
+            pass.Point(center);
+            pass.Size(radius);
+            pass.Size(width);
+            pass.Call(
+                "Arc",
+                Number(center.X), Number(center.Y), Number(radius),
+                Number(startAngle), Number(endAngle),
+                pointCount.ToString(CultureInfo.InvariantCulture),
+                Paint(color), Number(width), Flag(antialiased));
+        }
+
+        internal void Polyline(Vector2[] points, Color color, float width, bool antialiased)
+        {
+            var pass = Current();
+            var parts = new List<string> { "Polyline" };
+            foreach (var point in points)
+            {
+                pass.Point(point);
+                parts.Add(Number(point.X));
+                parts.Add(Number(point.Y));
+            }
+
+            pass.Size(width);
+            parts.Add(Paint(color));
+            parts.Add(Number(width));
+            parts.Add(Flag(antialiased));
+            pass.Call([.. parts]);
+        }
+
+        internal void TextureRect(
+            Texture2D texture,
+            Rect2 rect,
+            bool tile,
+            Color? modulate,
+            bool transpose)
+        {
+            var pass = Current();
+            pass.Point(rect.Position);
+            pass.Point(rect.End);
+            pass.Call(
+                "TextureRect",
+                texture.ResourcePath.Length == 0 ? "generated" : texture.ResourcePath,
+                Number(rect.Position.X), Number(rect.Position.Y),
+                Number(rect.Size.X), Number(rect.Size.Y),
+                tile ? "tiled" : "stretched",
+                modulate is { } tint ? Paint(tint) : "none",
+                transpose ? "transposed" : "upright");
+        }
+
+        /// <summary>
+        /// Text is journalled by everything except what it says: the caption of
+        /// a room is golden UI's business (<c>tests/golden/ui</c>), and
+        /// repeating it here would put the same string in two reference files
+        /// held by two different Issues.
+        ///
+        /// <para>
+        /// Everything else about it is geometry and is recorded. Where it sits
+        /// — <c>RoomGeometry.LabelTop</c> moves it with the border's inset. How
+        /// it is aligned inside <paramref name="width"/>, which decides where
+        /// the glyphs actually land: <c>DrawSelectionCount</c> centres a count
+        /// in a 52 px box, and switching that to <c>Left</c> slides the caption
+        /// across the box while the position argument does not move at all.
+        /// The outline <paramref name="size"/>, which is how thick a halo is
+        /// drawn round a name. And the three text-server flags, which decide
+        /// justification, direction and orientation.
+        /// </para>
+        /// </summary>
+        internal void Text(
+            string primitive,
+            Vector2 position,
+            HorizontalAlignment alignment,
+            float width,
+            int fontSize,
+            int size,
+            Color? modulate,
+            TextServer.JustificationFlag justificationFlags,
+            TextServer.Direction direction,
+            TextServer.Orientation orientation)
+        {
+            var pass = Current();
+            pass.Point(position);
+            pass.Size(fontSize);
+            pass.Size(width);
+            pass.Size(size);
+            pass.Call(
+                primitive,
+                Number(position.X), Number(position.Y),
+                alignment.ToString(),
+                Number(width),
+                fontSize.ToString(CultureInfo.InvariantCulture),
+                size.ToString(CultureInfo.InvariantCulture),
+                modulate is { } tint ? Paint(tint) : "none",
+                ((int)justificationFlags).ToString(CultureInfo.InvariantCulture),
+                direction.ToString(),
+                orientation.ToString());
+        }
+
+        internal void TransformMatrix(Transform2D xform) =>
+            Current().Call(
+                "SetTransform",
+                Number(xform.X.X), Number(xform.X.Y),
+                Number(xform.Y.X), Number(xform.Y.Y),
+                Number(xform.Origin.X), Number(xform.Origin.Y));
+
+        internal void Transform(Vector2 position, float rotation, Vector2? scale)
+        {
+            var applied = scale ?? Vector2.One;
+            Current().Call(
+                "SetTransform",
+                Number(position.X), Number(position.Y), Number(rotation),
+                Number(applied.X), Number(applied.Y));
+        }
+
+        private PassJournal Current() =>
+            _current ?? throw new InvalidOperationException(
+                "A world mark was drawn outside every declared pass. DrawMap opens " +
+                "each pass of WorldDrawOrder with BeginWorldDrawPass, so a mark " +
+                "drawn before the first of them belongs to no pass at all.");
+
+        private static string Paint(Color color) => color.ToHtml(true);
+
+        private static string Flag(bool value) => value ? "on" : "off";
+
+        internal static string Number(double value)
+        {
+            var rounded = Math.Round(value, 3, MidpointRounding.AwayFromZero);
+            return (rounded == 0 ? 0 : rounded).ToString("0.###", CultureInfo.InvariantCulture);
+        }
+    }
+
+    /// <summary>One pass of one recorded <c>DrawMap</c>.</summary>
+    private sealed class PassJournal(WorldDrawPass pass)
+    {
+        private readonly StringBuilder _stream = new();
+        private readonly SortedDictionary<string, int> _primitives = new(StringComparer.Ordinal);
+        private readonly SortedSet<double> _sizes = [];
+        private double _minX = double.PositiveInfinity;
+        private double _minY = double.PositiveInfinity;
+        private double _maxX = double.NegativeInfinity;
+        private double _maxY = double.NegativeInfinity;
+
+        internal WorldDrawPass Pass { get; } = pass;
+
+        internal int Calls { get; private set; }
+
+        internal IReadOnlyDictionary<string, int> Primitives => _primitives;
+
+        internal IReadOnlyCollection<double> Sizes => _sizes;
+
+        internal bool HasExtent => Calls > 0 && double.IsFinite(_minX);
+
+        internal double[] Extent =>
+            HasExtent ? [_minX, _minY, _maxX, _maxY] : [];
+
+        internal void Point(Vector2 point)
+        {
+            _minX = Math.Min(_minX, RoundedOf(point.X));
+            _minY = Math.Min(_minY, RoundedOf(point.Y));
+            _maxX = Math.Max(_maxX, RoundedOf(point.X));
+            _maxY = Math.Max(_maxY, RoundedOf(point.Y));
+        }
+
+        /// <summary>
+        /// A stroke width or a radius. Godot's "use the default" is a negative
+        /// width and says nothing about geometry, so it is not collected.
+        /// </summary>
+        internal void Size(double value)
+        {
+            if (value > 0)
+            {
+                _sizes.Add(RoundedOf(value));
+            }
+        }
+
+        internal void Call(params string[] parts)
+        {
+            Calls++;
+            _primitives[parts[0]] = _primitives.TryGetValue(parts[0], out var seen) ? seen + 1 : 1;
+            _stream.Append(string.Join(' ', parts)).Append('\n');
+        }
+
+        internal string Digest()
+        {
+            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(_stream.ToString()));
+            return Convert.ToHexString(bytes)[..16].ToLowerInvariant();
+        }
+
+        private static double RoundedOf(double value)
+        {
+            var rounded = Math.Round(value, 3, MidpointRounding.AwayFromZero);
+            return rounded == 0 ? 0 : rounded;
+        }
+    }
 
     private sealed record RuntimeDiagnostic(string Scope, string Type, string Message);
 }

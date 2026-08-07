@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "issue": 295,
+  "checkpoint": "2 — the method is chosen and the choice is argued against the one rejected",
+  "question": "What is allowed to say that the geometry of the map has changed: a reference PNG in tests/golden, or a structural record of the draw calls with their numbers?",
+  "chosen": "structural record of the draw calls with their numbers",
+  "chosenShape": {
+    "what": "One DrawMap of a fixed, posed frame is recorded call by call — every primitive with every coordinate, radius, stroke width, colour and font size it was handed — and reduced, per declared pass of WorldDrawOrder, to: how many calls of each primitive, the rectangle the pass painted inside, the distinct stroke widths and radii, and a SHA-256 digest of the whole ordered stream.",
+    "reference": "tests/golden/world/draw-calls.json, 91 lines, 1.6 KB, plain text.",
+    "howItIsCaptured": "The ten engine primitives the adapter draws with are hidden by declarations of the same name in src/DungeonFortress.Game/Main.Rendering.cs. Not one call site changed: a bare DrawRect(...) written anywhere in the class now resolves to the hiding declaration first. While the journal is closed each one forwards its arguments to base unchanged, so the picture is the picture it was; while it is open each one records and returns, which is what lets the recording pass run from _Ready, where the engine refuses a draw command.",
+    "whereItRuns": "The godot stage, inside --smoke-controls, which verify.ps1 starts exactly once per run."
+  },
+  "rejected": "a reference PNG of the world viewport in tests/golden/world/",
+  "why": [
+    {
+      "point": "The repository already measured this and refused it",
+      "detail": "Issue #28 compared golden screenshots and rejected them: the three Issue #26 frames did reproduce byte for byte, but on one machine and one driver. The refusal is written into scripts/HudVerification.ps1 as the reason golden UI state exists at all. Issue #295 could not overturn that finding without repeating the measurement on more than one machine, and there is one machine here."
+    },
+    {
+      "point": "A PNG does not read in a diff",
+      "detail": "A reviewer of a geometry change would be shown a changed binary blob and would have to open two images to see what moved. The record chosen instead says 'BelowDepth: Line 68 -> 72, digest moved' in the failure text itself, which is what the mutant run actually printed (evidence/295-mutant-after.json)."
+    },
+    {
+      "point": "A PNG needs a window; this does not",
+      "detail": "The screenshots stage is the one stage that runs the engine with a real window, and it is the slowest per capture. The record is produced by a headless run that was already happening, and the whole check costs 0.23 s of the godot stage (measured; see evidence/295-mutant-after.json)."
+    },
+    {
+      "point": "A PNG moves for reasons that are not geometry",
+      "detail": "Font hinting, sprite import, driver, and the goblin pack itself all move pixels. Every one of those would be a red run about nothing, and a check that cries wolf is a check somebody adds to -Skip. The record moves only when a number the adapter computes moves."
+    }
+  ],
+  "whatThePngWouldHaveCaughtAndThisDoesNot": [
+    "A defect between the draw call and the pixel: the rendering driver, the font, the texture filter, the sprite import, the shader. The record says what the adapter asked for, not what the engine painted.",
+    "Anything drawn outside DrawMap. The HUD is Control nodes and is covered by golden UI; the one primitive _Draw issues itself, the background rectangle, is deliberately outside the record because it is not the map.",
+    "A geometry change made on the pure side that the adapter merely passes through — RoomGeometry, WallRenderGeometry, SelectionGeometry, CameraView. Those are ordinary unit tests in DungeonFortress.Presentation and are the half that already had cover. The half that had none is the adapter's own arithmetic, which is exactly what the mutant of Issue #281 attacked."
+  ],
+  "thirdOptionConsideredAndDropped": {
+    "what": "A source-level snapshot: read the adapter as text, as AdapterSource already does, and pin the argument expressions of every draw call.",
+    "whyDropped": "It cannot see this Issue's own mutant. `var inset = ScaleWorld((float)purposeInset * 3f);` changes a local variable that is handed to a pure geometry function; the arguments of the DrawLine calls that follow are `segment.From.X` and `accent` either way. Pinning the whole body of every drawing routine instead would catch it, but that is `git diff` with extra steps: every rename and every reformat would be a red run, and the reference would say nothing about geometry.",
+    "keptFromIt": "The completeness of the shims is checked exactly this way, by reading the source — an engine primitive the adapter draws with and does not hide would be a mark the journal never sees (WorldGeometryJournalGuardTests)."
+  },
+  "costOfTheChoice": [
+    "Ten hiding declarations in Main.Rendering.cs stand between the adapter and the engine forever. Each is a pass-through and is held to it by a test, but the indirection is real and a reader of DrawWall now has one more hop.",
+    "The reference frame is posed by the check itself — one selected creature, one hovered cell, a dig rectangle held open — so that all four passes have marks in them. Those constants live in VerifyWorldGeometry and a change to them is a change to the reference.",
+    "The frame is the baseline fixture at tick 1 as the controls smoke leaves it. A change to ApplyDemoControls or to the fixture moves the reference without the drawing moving, and somebody has to regenerate it and read the diff.",
+    "Regeneration is a flag rather than a script: `godot --headless --path src/DungeonFortress.Game -- --smoke-controls --write-world-geometry`. A script under scripts/ would be the better home and scripts/ is not this Issue's to add to."
+  ]
+}

@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "issue": 295,
+  "checkpoint": "3 and 4 — the detector exists, the same mutant turns the pipeline red, the detector is named, the mutant is reverted and the full pipeline is green again",
+  "rule": "A check does not count as done until it is shown to fail when the specific part of the change it is meant to catch is reverted, not the change as a whole.",
+  "procedure": "The detector was committed first (690f790). The mutant was then applied to that committed tree by a python one-liner that asserts the exact line it replaces, the godot stage was run, the exact failure text was reproduced from the single engine invocation that produced it, and the line was put back by the inverse replacement with the tree confirmed clean. Nothing was mutated in an uncommitted file.",
+  "environment": {
+    "worktree": "C:\\gamedev\\_wt-295",
+    "baseCommit": "a44e14d",
+    "detectorCommit": "690f790",
+    "temporaryRoot": "C:\\df-tmp-295",
+    "godot": "4.7.1.stable.mono.official.a13da4feb"
+  },
+  "detector": {
+    "name": "Main.VerifyWorldGeometry",
+    "file": "src/DungeonFortress.Game/Main.Verification.cs",
+    "reference": "tests/golden/world/draw-calls.json",
+    "stage": "godot",
+    "entryPoint": "--smoke-controls, which the godot stage of verify.ps1 starts exactly once",
+    "howItFails": "It throws from _Ready, so the run prints godot_controls_smoke status=error, GD.PushError writes one ERROR line, and Invoke-GodotChecked refuses the stage on it."
+  },
+  "mutant": {
+    "name": "b-ii of Issue #281: every room border is inset three times as far",
+    "file": "src/DungeonFortress.Game/Main.DrawWorld.cs",
+    "routine": "DrawRoomBorder",
+    "edit": "        var inset = ScaleWorld((float)purposeInset);  ->         var inset = ScaleWorld((float)purposeInset * 3f);",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$sw=[Diagnostics.Stopwatch]::StartNew(); & '.\\scripts\\verify.ps1' -Stage godot -TemporaryRoot 'C:\\df-tmp-295'; $c=$LASTEXITCODE; $sw.Stop(); Write-Host ('TOTAL_SECONDS=' + $sw.Elapsed.TotalSeconds + ' EXIT=' + $c)\"",
+    "result": "RED. verification_result status=error, scope=partial, failedPhase=stage, failedStage=godot, reason 'Godot emitted 1 unexpected ERROR line(s).'",
+    "detectorOutput": [
+      "ERROR: System.InvalidOperationException: The map is drawn with different geometry than the committed record of it (tests/golden/world/draw-calls.json):",
+      "  line 12",
+      "    committed: \"calls\": 444,",
+      "    run:       \"calls\": 448,",
+      "  line 15",
+      "    committed: \"Line\": 68,",
+      "    run:       \"Line\": 72,",
+      "  line 28",
+      "    committed: \"digest\": \"1259a88e867721e4\"",
+      "    run:       \"digest\": \"73c409941090270f\"",
+      "If the change is intended, regenerate with --write-world-geometry and review the diff.",
+      "   at DungeonFortress.Game.Main.VerifyWorldGeometry() in ...\\Main.Verification.cs:line 156",
+      "   at DungeonFortress.Game.Main.VerifyControlsSmoke() in ...\\Main.Verification.cs:line 260"
+    ],
+    "reproductionOfTheSameFailureOutsideTheStage": "Godot_v4.7.1-stable_mono_win64_console.exe --headless --path src/DungeonFortress.Game -- --smoke-controls  -> the same text, process exit code 1.",
+    "whatMoved": "The BelowDepth pass draws the room borders that are not swallowed by a wall. Three times the inset changes which pieces RoomGeometry.Border returns as well as where they are, so the pass went from 68 to 72 DrawLine calls and its digest moved. Nothing else in the record moved, which is the record saying where the change is.",
+    "revertedAndTreeClean": true
+  },
+  "costOfTheCheck": {
+    "question": "Did the run get slow enough that somebody will start skipping the stage?",
+    "isolatedMeasurement": {
+      "command": "powershell -NoProfile -Command \"$g='...Godot_v4.7.1-stable_mono_win64_console.exe'; 1..3 | ForEach-Object { $m = Measure-Command { & $g --headless --path src\\DungeonFortress.Game -- --smoke-controls | Out-Null }; '{0:N2}' -f $m.TotalSeconds }\"",
+      "withoutTheCheck": [1.27, 1.27, 1.26],
+      "withTheCheck": [1.67, 1.38, 1.45],
+      "delta": "0.23 s on the mean (1.50 against 1.27). 'Without' was measured on the same tree with the single call to VerifyWorldGeometry removed and the host rebuilt, so nothing but the check differs.",
+      "note": "The check records 2371 draw calls of one DrawMap and hashes four streams. There is no second engine start: it rides an invocation the godot stage was already making."
+    },
+    "stageMeasurement": {
+      "godotStageBefore": "69.6 s (full cold run) and 39.0 s (full warm run) — both from evidence/295-mutant-before.json, both without the check",
+      "godotStageAfter": "45.5 s (full warm run below), with the check",
+      "reading": "The stage number is NOT evidence for the cost of the check and is not offered as such. The same stage on the same machine and the same code cost 69.6 s and 39.0 s in two runs of this session, a spread of 30 s; 45.5 against 39.0 is inside that spread and attributes nothing. What can be attributed is the isolated measurement above: the same engine invocation, with and without the single call, 1.27 s against 1.50 s.",
+      "doesTheStageBecomeSkippable": "No. The godot stage is 45.5 s of a 444.2 s full run, and the check is 0.23 s of that — under a twentieth of a percent of the run."
+    }
+  },
+  "fullRunAfterTheRevert": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$sw=[Diagnostics.Stopwatch]::StartNew(); & '.\\scripts\\verify.ps1' -TemporaryRoot 'C:\\df-tmp-295'; $c=$LASTEXITCODE; $sw.Stop(); Write-Host ('TOTAL_SECONDS=' + $sw.Elapsed.TotalSeconds + ' EXIT=' + $c)\"",
+    "result": "GREEN. verification_result status=ok, scope=full, all nine stages executed, EXIT=0, TOTAL_SECONDS=444.2322188.",
+    "stageSeconds": {
+      "scripts": 145.1,
+      "build": 5.5,
+      "tests": 224.2,
+      "mcp": 5.0,
+      "sim": 0.4,
+      "load": 0.7,
+      "godot": 45.5,
+      "ui": 7.2,
+      "screenshots": 10.0
+    },
+    "numbersUnchangedByThisIssue": {
+      "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f — same as the base",
+      "viewInvariantChecksum": "7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead — same as the base",
+      "loadChecksum": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045 — same as the base",
+      "goldenUiFrames": "all three compared ok",
+      "screenshotRepeatable": true,
+      "reading": "The drawing did not change, which is this Issue's non-goal held to a number: the hidden primitives forward unchanged while the journal is closed, and every frame the pipeline captures is closed."
+    }
+  },
+  "fullRunOnTheRebasedBase": {
+    "why": "origin/main moved by six commits while this Issue was being worked, one of them scripts/verify.ps1 itself (#322, MSBuild node reuse). A green run against the old base says nothing about the base this branch will be merged into, so the branch was rebased onto 5b357dd and the full run repeated.",
+    "base": "5b357dd (check-base-stale.ps1 reports behind 0, ahead 4)",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$sw=[Diagnostics.Stopwatch]::StartNew(); & '.\\scripts\\verify.ps1' -TemporaryRoot 'C:\\df-tmp-295'; $c=$LASTEXITCODE; $sw.Stop(); Write-Host ('TOTAL_SECONDS=' + $sw.Elapsed.TotalSeconds + ' EXIT=' + $c)\"",
+    "result": "GREEN. status=ok, scope=full, nine of nine, EXIT=0, TOTAL_SECONDS=827.6915625.",
+    "stageSeconds": {
+      "scripts": 345.6,
+      "build": 10.5,
+      "tests": 397.8,
+      "mcp": 4.5,
+      "sim": 0.4,
+      "load": 0.6,
+      "godot": 49.4,
+      "ui": 4.9,
+      "screenshots": 10.6
+    },
+    "note": "This run is slower than the 444.2 s one on the old base, and the reason is upstream rather than here: #322 turned MSBuild node reuse off in every dotnet invocation of verify.ps1, which is what moved scripts (145.1 -> 345.6 s) and tests (224.2 -> 397.8 s). The godot stage, the only one this Issue adds work to, went 45.5 -> 49.4 s, still inside the 39.0-69.6 s spread the same stage showed without the check.",
+    "checksums": "deterministicChecksum e65273aa..., viewInvariantChecksum 7e9fffa7..., loadChecksum 7ec0f2d6... — all three the same as the base, on the new base too."
+  },
+  "guardsOfTheGuard": {
+    "why": "The journal is only as complete as the hiding declarations that feed it, and a hole there would be a green reference file about a map that moved. Four claims are held by DungeonFortress.Presentation.Tests.WorldGeometryJournalGuardTests, which runs in the tests stage with no engine.",
+    "negativeRun": {
+      "mutant": "base.DrawRect(ToRect2(geometry.Top), WallTopColor(isDiggable)); added to Main.DrawWorld.cs DrawWall — the escape that reaches the engine past the journal and past the fill checks.",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter \"FullyQualifiedName~WorldGeometryJournalGuardTests|FullyQualifiedName~WorldDrawPassGuardTests\"",
+      "result": "RED. A_hidden_primitive_forwards_to_the_engine_and_nowhere_else failed: не пройдено 1, пройдено 16.",
+      "revertedAndReverifiedGreen": true
+    },
+    "testCount": "Presentation suite 624 -> 629 tests, all passing (dotnet test tests/DungeonFortress.Presentation.Tests -c Release: пройдено 629, длительность 30 s)."
+  },
+  "limits": [
+    "The record says what the adapter asked the engine to draw, not what the engine painted. Driver, font, texture filter and sprite import are outside it.",
+    "The recorded frame is the baseline fixture at tick 1 as the controls smoke leaves it, posed by the check with one selected creature, one hovered cell and a dig rectangle held open. A change to ApplyDemoControls or to the fixture moves the reference without the drawing moving.",
+    "Geometry decided on the pure side — RoomGeometry, WallRenderGeometry, SelectionGeometry, CameraView — moves the record too, but it already had unit tests. The half that had nothing was the adapter's own arithmetic, and that is the half the mutant attacks.",
+    "The record is per pass, not per routine. It names which of the four passes moved; which routine inside it moved is still a question for the diff.",
+    "Regeneration is a flag on the engine invocation rather than a script under scripts/, because scripts/ is not this Issue's partition."
+  ]
+}

@@ -12,8 +12,271 @@ namespace DungeonFortress.Game;
 // screenshot, the deterministic fixture and the result the CLI prints.
 public partial class Main
 {
+    /// <summary>
+    /// The reference path of the world-geometry journal, relative to the
+    /// repository root.
+    /// </summary>
+    private const string WorldGeometryReference = "tests/golden/world/draw-calls.json";
+
+    /// <summary>
+    /// The flag that rewrites <see cref="WorldGeometryReference"/> instead of
+    /// comparing with it. Regeneration is a deliberate act with a diff to read,
+    /// which is why it is a flag and not "write the file if it is missing".
+    /// </summary>
+    private const string WorldGeometryWriteFlag = "--write-world-geometry";
+
+    /// <summary>
+    /// What the map actually draws, compared with the committed record of it
+    /// (Issue #295).
+    ///
+    /// <para>
+    /// <b>The hole this closes.</b> Nothing in the pipeline could see a change
+    /// in map geometry. Measured, not assumed: with every room's border inset
+    /// three times as far, the whole of <c>verify.ps1</c> stayed green — all
+    /// nine stages, both canonical checksums byte for byte identical, the three
+    /// golden UI frames matching, the repeated screenshot still equal to itself
+    /// (<c>evidence/295-mutant-before.json</c>). The canonical checksum is
+    /// view-invariant by construction, golden UI pins HUD text, the screenshot
+    /// stage compares a picture with a second copy of itself, and the source
+    /// guards pin which primitive a routine calls rather than what number it is
+    /// given.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>How it is captured.</b> The primitives in <c>Main.Rendering.cs</c>
+    /// hide the engine's own, so switching the journal on turns one ordinary
+    /// <c>DrawMap</c> into a record of every mark with its numbers, without a
+    /// single call site knowing. Nothing is painted while recording, which is
+    /// what lets this run from <c>_Ready</c> — the engine refuses a draw command
+    /// outside <c>_Draw</c>, and the smoke never reaches a frame.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Where it runs.</b> Inside the controls smoke, which the <c>godot</c>
+    /// stage starts exactly once. A stage of its own would be the honest place
+    /// and would cost one more engine start; <c>scripts/verify.ps1</c> is held
+    /// by three other Issues and this one may not edit it, so the check rides
+    /// the one headless entry point that already runs once per verification.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>What it does not claim.</b> It records what the adapter asks the
+    /// engine to draw, not what the engine paints; a defect in the driver, in
+    /// the font or in the sprite import is outside it, and that is the price of
+    /// not being a golden PNG (<c>evidence/295-method-choice.json</c>).
+    /// </para>
+    /// </summary>
+    private void VerifyWorldGeometry()
+    {
+        var journal = new WorldDrawJournal();
+        var fallbackDrawsBefore = _fallbackSpriteDraws;
+        var bodyFrameBefore = _bodyFrame;
+        var selectedCellBefore = _selectedCell;
+        var selectedCreatureBefore = _selectedCreatureId;
+        var hoverCellBefore = _hoverCell;
+        var editModeBefore = _editMode;
+        var brushZoneBefore = _brushZone;
+        var dragAnchorBefore = _dragAnchor;
+        var dragCurrentBefore = _dragCurrent;
+        try
+        {
+            // A frame nobody is pointing at draws no interaction pass at all,
+            // and a pass with nothing in it is a pass this check cannot speak
+            // for. So the recording frame is posed: one selected creature, one
+            // hovered cell, and a dig rectangle held open over the rock the
+            // fixture starts with. Every value here is a constant, which is
+            // what keeps the record the same on every machine.
+            _selectedCreatureId = _state!.Creatures.Select(creature => creature.Id).Min();
+            _selectedCell = new GridPoint(14, 7);
+            _hoverCell = new GridPoint(25, 1);
+            _editMode = BrushMode.Dig;
+            _brushZone = ZoneKind.TrainingGround;
+            _dragAnchor = new GridPoint(25, 1);
+            _dragCurrent = new GridPoint(26, 3);
+            _worldDrawJournal = journal;
+            DrawMap();
+        }
+        finally
+        {
+            // The recording pass is not a frame and must leave nothing of
+            // itself behind: these are all values a real frame reads, and the
+            // controls smoke this rides starts from the ones it had.
+            _worldDrawJournal = null;
+            _fallbackSpriteDraws = fallbackDrawsBefore;
+            _bodyFrame = bodyFrameBefore;
+            _selectedCell = selectedCellBefore;
+            _selectedCreatureId = selectedCreatureBefore;
+            _hoverCell = hoverCellBefore;
+            _editMode = editModeBefore;
+            _brushZone = brushZoneBefore;
+            _dragAnchor = dragAnchorBefore;
+            _dragCurrent = dragCurrentBefore;
+        }
+
+        var document = WorldGeometryDocument(journal);
+        var rewrites = OS.GetCmdlineUserArgs()
+            .Contains(WorldGeometryWriteFlag, StringComparer.Ordinal);
+        var referencePath = WorldGeometryReferencePath();
+        if (rewrites)
+        {
+            File.WriteAllText(
+                referencePath,
+                document,
+                new System.Text.UTF8Encoding(false));
+            GD.Print(JsonSerializer.Serialize(new
+            {
+                @event = "world_geometry_reference",
+                status = "written",
+                path = referencePath,
+                fixture = _fixture,
+                tick = _state!.Tick,
+                canonicalChecksum = _checksum,
+            }));
+            return;
+        }
+
+        if (!File.Exists(referencePath))
+        {
+            throw new FileNotFoundException(
+                $"The world-geometry reference is missing at '{referencePath}'. " +
+                $"Regenerate it with {WorldGeometryWriteFlag} and review the diff.",
+                referencePath);
+        }
+
+        var expected = File.ReadAllText(referencePath).Replace("\r\n", "\n");
+        if (string.Equals(expected, document, StringComparison.Ordinal))
+        {
+            GD.Print(JsonSerializer.Serialize(new
+            {
+                @event = "world_geometry_reference",
+                status = "ok",
+                passes = journal.Passes.Count,
+                calls = journal.Passes.Sum(pass => pass.Calls),
+                fixture = _fixture,
+                tick = _state!.Tick,
+                canonicalChecksum = _checksum,
+            }));
+            return;
+        }
+
+        throw new InvalidOperationException(
+            "The map is drawn with different geometry than the committed record of " +
+            $"it ({WorldGeometryReference}):\n  " +
+            string.Join("\n  ", WorldGeometryDifferences(expected, document)) +
+            $"\nIf the change is intended, regenerate with {WorldGeometryWriteFlag} " +
+            "and review the diff.");
+    }
+
+    /// <summary>
+    /// The first few lines that differ, named by line number, so the failure
+    /// says which pass moved instead of only that something did.
+    /// </summary>
+    private static IReadOnlyList<string> WorldGeometryDifferences(
+        string expected,
+        string actual)
+    {
+        var expectedLines = expected.Split('\n');
+        var actualLines = actual.Split('\n');
+        var differences = new List<string>();
+        for (var index = 0;
+             index < Math.Max(expectedLines.Length, actualLines.Length) && differences.Count < 8;
+             index++)
+        {
+            var expectedLine = index < expectedLines.Length ? expectedLines[index] : "<missing>";
+            var actualLine = index < actualLines.Length ? actualLines[index] : "<missing>";
+            if (!string.Equals(expectedLine, actualLine, StringComparison.Ordinal))
+            {
+                differences.Add(
+                    $"line {index + 1}\n    committed: {expectedLine.Trim()}\n" +
+                    $"    run:       {actualLine.Trim()}");
+            }
+        }
+
+        return differences;
+    }
+
+    private string WorldGeometryDocument(WorldDrawJournal journal)
+    {
+        var passes = journal.Passes.Select(pass => new
+        {
+            pass = pass.Pass.ToString(),
+            calls = pass.Calls,
+            primitives = pass.Primitives.ToDictionary(
+                entry => entry.Key,
+                entry => entry.Value,
+                StringComparer.Ordinal),
+            extent = pass.Extent,
+            sizes = pass.Sizes.ToArray(),
+            digest = pass.Digest(),
+        });
+
+        // The canonical checksum of the simulation used to be a field of this
+        // header, and it had to go. It is not geometry: every Issue that writes
+        // in DungeonFortress.Simulation moves it, and while it was inside the
+        // compared text the first such merge would have turned this stage red
+        // with the words "The map is drawn with different geometry" over a map
+        // drawn exactly as before. One such Issue is open right now (#312), so
+        // it is a defect with a date on it rather than a hypothesis. Splitting
+        // the merges by hand would be an agreement that lasts until the first
+        // time somebody forgets; taking the number out of the comparison is a
+        // mechanism. It is still printed — in the event line of the check —
+        // where somebody reading a failure can see which world the frame was
+        // of.
+        var text = JsonSerializer.Serialize(
+            new
+            {
+                frame = new
+                {
+                    entry = WorldDrawOrder.Entry,
+                    fixture = _fixture,
+                    tick = _state!.Tick,
+                    tileSize = _tileSize,
+                },
+                passes,
+            },
+            new JsonSerializerOptions { WriteIndented = true });
+        return text.Replace("\r\n", "\n") + "\n";
+    }
+
+    /// <summary>
+    /// Where the committed record lives, found the way a fixture is found: by
+    /// walking up from the assembly and from the working directory until a
+    /// directory looks like the repository.
+    /// </summary>
+    private static string WorldGeometryReferencePath()
+    {
+        var relative = WorldGeometryReference.Replace('/', Path.DirectorySeparatorChar);
+        foreach (var startingDirectory in new[]
+                 {
+                     AppContext.BaseDirectory,
+                     Directory.GetCurrentDirectory(),
+                 })
+        {
+            for (var directory = new DirectoryInfo(startingDirectory);
+                 directory is not null;
+                 directory = directory.Parent)
+            {
+                if (Directory.Exists(Path.Combine(directory.FullName, "scenarios", "prototype1")))
+                {
+                    var candidate = Path.Combine(directory.FullName, relative);
+                    Directory.CreateDirectory(Path.GetDirectoryName(candidate)!);
+                    return candidate;
+                }
+            }
+        }
+
+        throw new DirectoryNotFoundException(
+            $"Could not locate the repository root to resolve '{WorldGeometryReference}'.");
+    }
+
     private void VerifyControlsSmoke()
     {
+        // Before the strokes below change anything: the geometry check is about
+        // the map this run loaded, and every stroke this smoke applies would
+        // move it. See VerifyWorldGeometry for why it rides this entry point.
+        VerifyWorldGeometry();
+
+
         // This is an input seam rather than a simulation test: it asserts that a
         // brush stroke accepts multiple cells and that cancelling never leaves
         // the UI in a mouse-capturing edit mode.

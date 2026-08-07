@@ -119,11 +119,23 @@ public partial class Main
     /// drawn inline here would be a mark with no declared policy in the one place
     /// the manifest cannot see. <c>DrawMap_draws_nothing_of_its_own</c> is the
     /// check that keeps it that way.
+    ///
+    /// <para>
+    /// The four <see cref="BeginWorldDrawPass"/> calls draw nothing and change
+    /// nothing about the frame. They name, in the running code, the pass
+    /// boundaries the manifest declares, so the world-geometry journal of
+    /// Issue #295 can say <em>which</em> pass moved instead of only that
+    /// something did. A run that is not recording does not notice them, and
+    /// <c>WorldGeometryJournalGuardTests</c> holds the four to the four passes
+    /// of <see cref="WorldDrawPass"/>, in the declared order and each opened
+    /// before the first step that belongs to it.
+    /// </para>
     /// </summary>
     private void DrawMap()
     {
         var rockTiles = _state!.Map.RockTiles.ToHashSet();
         var diggableTiles = _state.Map.DiggableTiles.ToHashSet();
+        BeginWorldDrawPass(WorldDrawPass.BelowDepth);
         DrawMapBackground();
         DrawFloorTiles(rockTiles);
         // A room's floor is laid straight over the plain floor and under
@@ -139,10 +151,12 @@ public partial class Main
         // A room's border is a line on the floor, so it is drawn on the floor and
         // whoever stands on it is drawn afterwards (Issue #156).
         DrawRoomBorders(rockTiles);
+        BeginWorldDrawPass(WorldDrawPass.Depth);
         DrawElevatedWorld(rockTiles, diggableTiles);
         // Flat informational marks are projected above elevated geometry. A wall
         // must not erase the destination of an active job — nor the one part of a
         // room's border that a wall standing in front of it would swallow whole.
+        BeginWorldDrawPass(WorldDrawPass.Informational);
         DrawRoomBordersOverWalls(rockTiles);
         DrawZoneOutlines();
         DrawJobRoutes();
@@ -155,6 +169,7 @@ public partial class Main
         DrawRoomLabels(rockTiles);
         DrawUnroomedObjects();
         DrawRememberedPlaces(rockTiles);
+        BeginWorldDrawPass(WorldDrawPass.Interaction);
         DrawCellInteractionOverlays(rockTiles);
         DrawBrushPreview(rockTiles);
     }
