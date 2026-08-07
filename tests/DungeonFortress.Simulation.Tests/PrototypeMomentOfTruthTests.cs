@@ -281,8 +281,36 @@ public sealed class PrototypeMomentOfTruthTests
     [Fact]
     public void The_cards_are_ordered_by_notability_and_then_by_id()
     {
-        var cards = PrototypeScenario.Capture(RunToMomentOfTruth("baseline"))
-            .State.MomentOfTruth.Cards;
+        var state = PrototypeScenario.Capture(RunToMomentOfTruth("baseline")).State;
+        var cards = state.MomentOfTruth.Cards;
+
+        // The three the rule chose really are the three most notable of the
+        // nine, recomputed here from the published document alone. At the first
+        // card of a party every delta is measured from zero, so the whole of the
+        // rule is readable off the snapshot: deeds from the journal, standing
+        // from the ledgers. This is what the mutant M3 breaks — a selection that
+        // takes whoever comes first in the enumeration passes an ordering check
+        // and fails this one.
+        var notability = state.Creatures.ToDictionary(
+            creature => creature.Id,
+            creature =>
+                state.Events
+                    .Where(@event =>
+                        @event.CreatureId == creature.Id &&
+                        @event.ReasonCode == "combat_raider_downed")
+                    .Sum(@event => @event.Repeats) * PrototypeTuning.MomentOfTruthDeedWeight +
+                Math.Max(
+                    creature.Loyalty.Benefit,
+                    Math.Max(creature.Loyalty.Fear, creature.Loyalty.Grudge)));
+        var expected = notability
+            .OrderByDescending(pair => pair.Value)
+            .ThenBy(pair => pair.Key)
+            .Take(PrototypeTuning.MomentOfTruthCards)
+            .Select(pair => pair.Key)
+            .ToArray();
+        Assert.Equal(expected, cards.Select(card => card.CreatureId).ToArray());
+        Assert.All(cards, card => Assert.Equal(notability[card.CreatureId], card.Notability));
+
         for (var index = 1; index < cards.Count; index++)
         {
             var previous = cards[index - 1];
