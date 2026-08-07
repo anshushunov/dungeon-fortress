@@ -3,7 +3,6 @@
     "entry": "DrawMap",
     "fixture": "baseline",
     "tick": 1,
-    "canonicalChecksum": "2934fac1b74263ed81ed1635ba43c0d45725f42c8872e03d05c8b2eb6d834eae",
     "tileSize": 40
   },
   "passes": [
@@ -25,7 +24,7 @@
         3.636,
         9.091
       ],
-      "digest": "1259a88e867721e4"
+      "digest": "c54c65f52e15f439"
     },
     {
       "pass": "Depth",
@@ -47,9 +46,10 @@
         1.818,
         2.273,
         3.636,
-        11
+        11,
+        34.545
       ],
-      "digest": "662664157a9e3f3e"
+      "digest": "a8cdf9fcefbbd468"
     },
     {
       "pass": "Informational",
@@ -78,7 +78,7 @@
         13.636,
         18.182
       ],
-      "digest": "8ee5dc8ebc51a0e2"
+      "digest": "8c2103103c283080"
     },
     {
       "pass": "Interaction",
@@ -98,9 +98,10 @@
         1,
         2,
         2.727,
-        20
+        20,
+        94.545
       ],
-      "digest": "47c69618a6c1a05a"
+      "digest": "bd24022c7fbc37b9"
     }
   ]
 }

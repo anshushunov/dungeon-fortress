@@ -111,6 +111,101 @@ public sealed class WorldGeometryJournalGuardTests
     }
 
     /// <summary>
+    /// The two arguments the journal is allowed not to record, and the reason
+    /// each is exempt. Anything else a primitive is handed has to reach the
+    /// record.
+    /// </summary>
+    private static readonly string[] ArgumentsDeliberatelyNotRecorded =
+    [
+        // The glyphs themselves. What a caption says is golden UI's business
+        // (tests/golden/ui), held by a different Issue, and the same string in
+        // two reference files is two things to regenerate for one change.
+        "text",
+
+        // One shared ThemeDB.FallbackFont instance with no stable identity to
+        // write down. What is geometry about a font — the size — is a separate
+        // argument and is recorded.
+        "font",
+    ];
+
+    /// <summary>
+    /// The claim the whole record depends on, as a check rather than as a
+    /// sentence: a hidden primitive hands the journal every argument it was
+    /// given.
+    ///
+    /// <para>
+    /// This test exists because the first version of the journal did not, and
+    /// its absence cost a review round. <c>alignment</c>, the wrap width, the
+    /// outline size and <c>transpose</c> were dropped while the docstring said
+    /// "every argument", and review proved the claim empty with the obvious
+    /// mutant: <c>HorizontalAlignment.Left</c> to <c>Center</c> in
+    /// <c>DrawSelectionCount</c> slides the caption across a 52 px box without
+    /// moving the position argument at all, and the record said ok.
+    /// </para>
+    ///
+    /// <para>
+    /// An argument that reaches the primitive and not the record is a way for a
+    /// mark to move invisibly, which is the exact defect this Issue was opened
+    /// about. Two exemptions are allowed and both are named above.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_hidden_primitive_hands_the_journal_every_argument_it_was_given()
+    {
+        foreach (var primitive in ExpectedPrimitives)
+        {
+            var recorded = Identifiers(JournalCall(AdapterSource.Body(primitive)));
+            foreach (var parameter in AdapterSource.ParameterNames(primitive))
+            {
+                if (ArgumentsDeliberatelyNotRecorded.Contains(parameter, StringComparer.Ordinal))
+                {
+                    continue;
+                }
+
+                Assert.True(
+                    recorded.Contains(parameter),
+                    $"'{primitive}' is given '{parameter}' and does not hand it to the " +
+                    "journal, so a change to it moves the map and not the record. " +
+                    "Either record it, or add it to ArgumentsDeliberatelyNotRecorded " +
+                    "with the reason.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// The reference is about geometry, so nothing that is not geometry may sit
+    /// inside the text that is compared.
+    ///
+    /// <para>
+    /// The canonical checksum of the simulation used to. Every Issue that
+    /// writes in <c>DungeonFortress.Simulation</c> moves that number, so the
+    /// first such merge would have turned the <c>godot</c> stage red with the
+    /// words "The map is drawn with different geometry" over a map drawn
+    /// exactly as before — a false red on somebody else's PR, raised by a check
+    /// they have no reason to suspect. Keeping the two apart by scheduling the
+    /// merges would be an agreement that lasts until the first time somebody
+    /// forgets; this is a mechanism.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_reference_holds_nothing_but_geometry()
+    {
+        var reference = File.ReadAllText(Path.Combine(
+            PresentationFixtures.FindRepositoryRoot(),
+            "tests",
+            "golden",
+            "world",
+            "draw-calls.json"));
+
+        Assert.DoesNotContain("checksum", reference, StringComparison.OrdinalIgnoreCase);
+
+        // A 64-character hex run is what a canonical checksum looks like, under
+        // whatever name somebody gives it later. The 16-character pass digests
+        // are shorter than that on purpose, and they are geometry.
+        Assert.DoesNotMatch("[0-9a-f]{64}", reference);
+    }
+
+    /// <summary>
     /// A hidden primitive draws through the journal or through the engine, and
     /// decides which by one field. Recording it and drawing it in the same call
     /// would make a recording pass paint, which is impossible outside
@@ -186,6 +281,53 @@ public sealed class WorldGeometryJournalGuardTests
                 $"'{step}' draws in the {pass} pass but is called before DrawMap " +
                 "opens it, so the journal would file its marks under the pass before.");
         }
+    }
+
+    /// <summary>
+    /// The arguments of the one <c>journal.*(...)</c> call a hidden primitive
+    /// makes, as written.
+    /// </summary>
+    private static string JournalCall(string body)
+    {
+        var start = body.IndexOf("journal.", StringComparison.Ordinal);
+        Assert.True(start >= 0, "A hidden primitive makes no call on the journal at all.");
+
+        var open = body.IndexOf('(', start);
+        var depth = 0;
+        for (var index = open; index < body.Length; index++)
+        {
+            depth += body[index] switch { '(' => 1, ')' => -1, _ => 0 };
+            if (depth == 0)
+            {
+                return body[(open + 1)..index];
+            }
+        }
+
+        throw new InvalidOperationException("The call on the journal is unbalanced.");
+    }
+
+    private static HashSet<string> Identifiers(string text)
+    {
+        var identifiers = new HashSet<string>(StringComparer.Ordinal);
+        var current = 0;
+        for (var index = 0; index <= text.Length; index++)
+        {
+            var isPart = index < text.Length &&
+                (char.IsLetterOrDigit(text[index]) || text[index] == '_');
+            if (isPart)
+            {
+                continue;
+            }
+
+            if (index > current)
+            {
+                identifiers.Add(text[current..index]);
+            }
+
+            current = index + 1;
+        }
+
+        return identifiers;
     }
 
     private static int Occurrences(string text, string value)

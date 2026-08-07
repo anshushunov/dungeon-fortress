@@ -128,6 +128,9 @@ public partial class Main
                 @event = "world_geometry_reference",
                 status = "written",
                 path = referencePath,
+                fixture = _fixture,
+                tick = _state!.Tick,
+                canonicalChecksum = _checksum,
             }));
             return;
         }
@@ -149,6 +152,9 @@ public partial class Main
                 status = "ok",
                 passes = journal.Passes.Count,
                 calls = journal.Passes.Sum(pass => pass.Calls),
+                fixture = _fixture,
+                tick = _state!.Tick,
+                canonicalChecksum = _checksum,
             }));
             return;
         }
@@ -204,6 +210,18 @@ public partial class Main
             digest = pass.Digest(),
         });
 
+        // The canonical checksum of the simulation used to be a field of this
+        // header, and it had to go. It is not geometry: every Issue that writes
+        // in DungeonFortress.Simulation moves it, and while it was inside the
+        // compared text the first such merge would have turned this stage red
+        // with the words "The map is drawn with different geometry" over a map
+        // drawn exactly as before. One such Issue is open right now (#312), so
+        // it is a defect with a date on it rather than a hypothesis. Splitting
+        // the merges by hand would be an agreement that lasts until the first
+        // time somebody forgets; taking the number out of the comparison is a
+        // mechanism. It is still printed — in the event line of the check —
+        // where somebody reading a failure can see which world the frame was
+        // of.
         var text = JsonSerializer.Serialize(
             new
             {
@@ -212,7 +230,6 @@ public partial class Main
                     entry = WorldDrawOrder.Entry,
                     fixture = _fixture,
                     tick = _state!.Tick,
-                    canonicalChecksum = _checksum,
                     tileSize = _tileSize,
                 },
                 passes,

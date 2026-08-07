@@ -616,7 +616,7 @@ public partial class Main
     {
         if (_worldDrawJournal is { } journal)
         {
-            journal.Line(from, to, color, width);
+            journal.Line(from, to, color, width, antialiased);
             return;
         }
 
@@ -646,7 +646,8 @@ public partial class Main
     {
         if (_worldDrawJournal is { } journal)
         {
-            journal.Arc(center, radius, startAngle, endAngle, pointCount, color, width);
+            journal.Arc(
+                center, radius, startAngle, endAngle, pointCount, color, width, antialiased);
             return;
         }
 
@@ -661,7 +662,7 @@ public partial class Main
     {
         if (_worldDrawJournal is { } journal)
         {
-            journal.Polyline(points, color, width);
+            journal.Polyline(points, color, width, antialiased);
             return;
         }
 
@@ -677,7 +678,7 @@ public partial class Main
     {
         if (_worldDrawJournal is { } journal)
         {
-            journal.TextureRect(texture, rect, tile, modulate);
+            journal.TextureRect(texture, rect, tile, modulate, transpose);
             return;
         }
 
@@ -698,7 +699,9 @@ public partial class Main
     {
         if (_worldDrawJournal is { } journal)
         {
-            journal.Text("String", pos, fontSize, modulate);
+            journal.Text(
+                "String", pos, alignment, width, fontSize, 0, modulate,
+                justificationFlags, direction, orientation);
             return;
         }
 
@@ -722,7 +725,9 @@ public partial class Main
     {
         if (_worldDrawJournal is { } journal)
         {
-            journal.Text("StringOutline", pos, fontSize, modulate);
+            journal.Text(
+                "StringOutline", pos, alignment, width, fontSize, size, modulate,
+                justificationFlags, direction, orientation);
             return;
         }
 
@@ -758,13 +763,35 @@ public partial class Main
     ///
     /// <para>
     /// It keeps two kinds of thing about every pass. One is a digest of the
-    /// whole ordered stream of calls with every argument in it, which is what
-    /// makes the record exact — nothing about a mark can move without moving
-    /// it. The other is the handful of numbers a person can read in a diff:
-    /// how many calls of each primitive, the rectangle the pass painted
-    /// inside, and the stroke widths and radii it used. A change that moves
-    /// only the digest says "something moved"; the readable numbers usually
-    /// say what.
+    /// whole ordered stream of calls. The other is the handful of numbers a
+    /// person can read in a diff: how many calls of each primitive, the
+    /// rectangle the pass painted inside, and the stroke widths and radii it
+    /// used. A change that moves only the digest says "something moved"; the
+    /// readable numbers usually say what.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>What goes into the digest, exactly.</b> Every argument of every
+    /// primitive except two, and the two are named rather than left to be
+    /// discovered: the <em>string</em> a text primitive draws, and the
+    /// <see cref="Font"/> object it draws with. The text is golden UI's
+    /// business (<c>tests/golden/ui</c>) and repeating it here would put the
+    /// same caption in two reference files held by two different Issues; the
+    /// font is one shared <c>ThemeDB.FallbackFont</c> instance with no stable
+    /// identity to record. Everything else — alignment, wrap width, outline
+    /// size, justification, direction, orientation, tiling, transposition,
+    /// antialiasing — is in, because each of them moves or reshapes a mark.
+    /// </para>
+    ///
+    /// <para>
+    /// This paragraph is narrow because the first version of it was not, and
+    /// review measured the difference: it claimed "every argument" while
+    /// <c>alignment</c>, the wrap width, the outline size and
+    /// <c>transpose</c> were dropped, and proved the claim empty with a mutant
+    /// — <c>HorizontalAlignment.Left</c> to <c>Center</c> in
+    /// <c>DrawSelectionCount</c> physically moves the caption across a 52 px
+    /// box and the record did not notice. That is the same defect this Issue
+    /// exists to close, wearing the detector's own clothes.
     /// </para>
     /// </summary>
     private sealed class WorldDrawJournal
@@ -793,7 +820,12 @@ public partial class Main
                 Paint(color), filled ? "filled" : "outline", Number(width));
         }
 
-        internal void Line(Vector2 from, Vector2 to, Color color, float width)
+        internal void Line(
+            Vector2 from,
+            Vector2 to,
+            Color color,
+            float width,
+            bool antialiased)
         {
             var pass = Current();
             pass.Point(from);
@@ -802,7 +834,7 @@ public partial class Main
             pass.Call(
                 "Line",
                 Number(from.X), Number(from.Y), Number(to.X), Number(to.Y),
-                Paint(color), Number(width));
+                Paint(color), Number(width), Flag(antialiased));
         }
 
         internal void Circle(Vector2 position, float radius, Color color)
@@ -820,7 +852,8 @@ public partial class Main
             float endAngle,
             int pointCount,
             Color color,
-            float width)
+            float width,
+            bool antialiased)
         {
             var pass = Current();
             pass.Point(center);
@@ -831,10 +864,10 @@ public partial class Main
                 Number(center.X), Number(center.Y), Number(radius),
                 Number(startAngle), Number(endAngle),
                 pointCount.ToString(CultureInfo.InvariantCulture),
-                Paint(color), Number(width));
+                Paint(color), Number(width), Flag(antialiased));
         }
 
-        internal void Polyline(Vector2[] points, Color color, float width)
+        internal void Polyline(Vector2[] points, Color color, float width, bool antialiased)
         {
             var pass = Current();
             var parts = new List<string> { "Polyline" };
@@ -848,10 +881,16 @@ public partial class Main
             pass.Size(width);
             parts.Add(Paint(color));
             parts.Add(Number(width));
+            parts.Add(Flag(antialiased));
             pass.Call([.. parts]);
         }
 
-        internal void TextureRect(Texture2D texture, Rect2 rect, bool tile, Color? modulate)
+        internal void TextureRect(
+            Texture2D texture,
+            Rect2 rect,
+            bool tile,
+            Color? modulate,
+            bool transpose)
         {
             var pass = Current();
             pass.Point(rect.Position);
@@ -862,27 +901,56 @@ public partial class Main
                 Number(rect.Position.X), Number(rect.Position.Y),
                 Number(rect.Size.X), Number(rect.Size.Y),
                 tile ? "tiled" : "stretched",
-                modulate is { } tint ? Paint(tint) : "none");
+                modulate is { } tint ? Paint(tint) : "none",
+                transpose ? "transposed" : "upright");
         }
 
         /// <summary>
-        /// Text is journalled by where and how big rather than by what it says:
-        /// the caption of a room is golden UI's business (tests/golden/ui), and
+        /// Text is journalled by everything except what it says: the caption of
+        /// a room is golden UI's business (<c>tests/golden/ui</c>), and
         /// repeating it here would put the same string in two reference files
-        /// held by two different Issues. Where the caption sits is geometry —
-        /// <c>RoomGeometry.LabelTop</c> moves it with the border's inset — and
-        /// that is what is recorded.
+        /// held by two different Issues.
+        ///
+        /// <para>
+        /// Everything else about it is geometry and is recorded. Where it sits
+        /// — <c>RoomGeometry.LabelTop</c> moves it with the border's inset. How
+        /// it is aligned inside <paramref name="width"/>, which decides where
+        /// the glyphs actually land: <c>DrawSelectionCount</c> centres a count
+        /// in a 52 px box, and switching that to <c>Left</c> slides the caption
+        /// across the box while the position argument does not move at all.
+        /// The outline <paramref name="size"/>, which is how thick a halo is
+        /// drawn round a name. And the three text-server flags, which decide
+        /// justification, direction and orientation.
+        /// </para>
         /// </summary>
-        internal void Text(string primitive, Vector2 position, int fontSize, Color? modulate)
+        internal void Text(
+            string primitive,
+            Vector2 position,
+            HorizontalAlignment alignment,
+            float width,
+            int fontSize,
+            int size,
+            Color? modulate,
+            TextServer.JustificationFlag justificationFlags,
+            TextServer.Direction direction,
+            TextServer.Orientation orientation)
         {
             var pass = Current();
             pass.Point(position);
             pass.Size(fontSize);
+            pass.Size(width);
+            pass.Size(size);
             pass.Call(
                 primitive,
                 Number(position.X), Number(position.Y),
+                alignment.ToString(),
+                Number(width),
                 fontSize.ToString(CultureInfo.InvariantCulture),
-                modulate is { } tint ? Paint(tint) : "none");
+                size.ToString(CultureInfo.InvariantCulture),
+                modulate is { } tint ? Paint(tint) : "none",
+                ((int)justificationFlags).ToString(CultureInfo.InvariantCulture),
+                direction.ToString(),
+                orientation.ToString());
         }
 
         internal void TransformMatrix(Transform2D xform) =>
@@ -908,6 +976,8 @@ public partial class Main
                 "drawn before the first of them belongs to no pass at all.");
 
         private static string Paint(Color color) => color.ToHtml(true);
+
+        private static string Flag(bool value) => value ? "on" : "off";
 
         internal static string Number(double value)
         {

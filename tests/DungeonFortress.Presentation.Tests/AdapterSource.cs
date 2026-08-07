@@ -139,6 +139,44 @@ internal static class AdapterSource
         Receivers(method, includeBase: true);
 
     /// <summary>
+    /// The parameter names of a declared method, in order.
+    ///
+    /// <para>
+    /// It exists so that "this routine hands on everything it was given" can be
+    /// a checked claim rather than a sentence in a comment. Review found the
+    /// difference between the two the expensive way: the world-geometry journal
+    /// said it recorded every argument and quietly dropped four of them.
+    /// </para>
+    /// </summary>
+    internal static IReadOnlyList<string> ParameterNames(string method)
+    {
+        if (!TryFindDeclarationName(method, out var nameStart))
+        {
+            throw new InvalidOperationException(
+                $"The adapter declares no method named '{method}'.");
+        }
+
+        var open = SkipWhitespace(Masked, nameStart + method.Length);
+        var close = MatchingParenthesis(Masked, open);
+        var names = new List<string>();
+        foreach (var parameter in SplitArguments(Masked[(open + 1)..close]))
+        {
+            // "Color? modulate = null" — the name is the last identifier before
+            // a default value, and the last identifier of the whole part when
+            // there is none.
+            var tokens = parameter
+                .Split('=')[0]
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length > 0)
+            {
+                names.Add(tokens[^1]);
+            }
+        }
+
+        return names;
+    }
+
+    /// <summary>
     /// Every distinct identifier starting with the prefix that appears anywhere
     /// in the adapter, ordinal-sorted.
     /// </summary>
