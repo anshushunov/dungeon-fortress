@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "issue": 282,
+  "measurement": "before",
+  "what": "avg_ctx of the FIRST assistant call (first message.usage in the transcript) for a sample of recording (записывающих) subagents, per the 'avg_ctx' field of the TOKEN_BUDGET.md methodology applied to a single call instead of a whole run.",
+  "whyFirstCallOnly": "The whole-run avg_ctx in TOKEN_BUDGET.md averages over every call of a run, so it is dominated by later, compacted-in context. The quantity this Issue's acceptance criterion names is the context a fresh agent starts with, i.e. the first call only.",
+  "howRecordingWasIdentified": {
+    "source": "the opening ~300 characters of each subagent's first user-role message (the prompt the coordinator launched it with), read from ~/.claude/projects/C--gamedev-Dungeon-fortress/*/subagents/agent-*.jsonl",
+    "rule": "classified as a review agent first if the opening text matches /read-only|review-агент|reviewer/i (checked first because some review prompts also say 'не исполнитель', which would otherwise false-match the recording rule on the substring 'исполнитель'); otherwise classified as recording if it matches /записывающ|implementation-агент|исполнитель/i; every file in the sample matched one of the two categories (0 unclassified)",
+    "limitation": "text-pattern classification of the launch prompt, not a structural field. It groups together first-round executors and rework-circle executors (both change repository files per AGENTS.md's definition of recording work); it does not separate coordinator self-work sessions (main-session transcripts were not included at all, only */subagents/*.jsonl)."
+  },
+  "population": {
+    "totalSubagentTranscripts": 146,
+    "classifiedRecording": 57,
+    "classifiedReview": 89,
+    "unclassified": 0
+  },
+  "sample": "all 57 recording subagent transcripts found on this machine (no date filter — the full available history, since the Issue asks for a sample and a median/spread, not a date-bounded baseline like TOKEN_BUDGET.md's)",
+  "command": "cd ~/.claude/projects/C--gamedev-Dungeon-fortress\n> /tmp/rec_files.txt\nfor f in $(ls */subagents/*.jsonl); do\n  head=$(jq -rs 'map(select(.type==\"user\" and (.message.content|type==\"string\"))) | (.[0].message.content // \"\")' \"$f\" 2>/dev/null | head -c 300)\n  if echo \"$head\" | rg -qi 'read-only|review-агент|reviewer'; then\n    : # review agent, skip\n  elif echo \"$head\" | rg -qi 'записывающ|implementation-агент|исполнитель'; then\n    echo \"$f\" >> /tmp/rec_files.txt\n  fi\ndone\nwc -l /tmp/rec_files.txt\n\n> /tmp/first_ctx.txt\nwhile IFS= read -r f; do\n  v=$(jq -c 'select(.message.usage)' \"$f\" | head -1 | jq '((.message.usage.cache_read_input_tokens//0)+(.message.usage.cache_creation_input_tokens//0)+(.message.usage.input_tokens//0))')\n  [ -n \"$v\" ] && echo \"$v\" >> /tmp/first_ctx.txt\ndone < /tmp/rec_files.txt\n\njq -s '{n:length, min:min, max:max, mean:((add/length)|floor), median:(sort|.[(length/2|floor)]), p25:(sort|.[(length*0.25|floor)]), p75:(sort|.[(length*0.75|floor)])}' /tmp/first_ctx.txt",
+  "result": {
+    "n": 57,
+    "min": 24475,
+    "max": 38779,
+    "mean": 30490,
+    "median": 29617,
+    "p25": 27478,
+    "p75": 32626,
+    "unit": "tokens (cache_read_input_tokens + cache_creation_input_tokens + input_tokens of the first message.usage found in the transcript)"
+  },
+  "readingNote": "avg_ctx of the first call already sits well under the acceptance criterion's implicit ceiling once you account for what actually drives it: the client auto-loads AGENTS.md (16 016 B per `git show HEAD:AGENTS.md | wc -c`) and take-task.ps1 prints AGENT_ENTRY.md (7 081 B) plus the Issue body (size varies per Issue) before the first tool call. Median first-call context of 29 617 tokens is consistent with that plus normal system/tool-schema overhead, not with the ~10-document, 900+ KB package the Issue describes as the historical brief — which would only show up later in the run, as an agent actually opens those files with Read. This measurement is 'before' in the sense the Issue asks for (median/spread of avg_ctx at call 1, current state); it is not a measurement of what a brief additionally instructed the agent to read afterward.",
+  "afterMeasurement": "Not taken. No runs against the rewritten AGENT_ENTRY.md / take-task.ps1 exist yet at measurement time (this PR is that rewrite). Repeat with the same command once a batch of recording subagents has run under the new entry package; compare the same n/median/p25/p75 fields."
+}
