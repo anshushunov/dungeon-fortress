@@ -17,7 +17,13 @@ $ErrorActionPreference = "Stop"
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $artifactsRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot ".artifacts"))
 
-$temporaryRootSelection = Resolve-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot
+# -RepositoryRoot is required here for the same reason run-game.ps1 passes it
+# (Issue #329): -TemporaryRoot is optional, an omitted one arrives as an empty
+# string rather than "absent", an empty -ExplicitPath is not an override, and
+# without -RepositoryRoot the resolver's own-directory tier has nothing to
+# compute a default from and throws before this script ever reaches the
+# engine.
+$temporaryRootSelection = Resolve-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot -RepositoryRoot $repoRoot
 $env:TEMP = ConvertTo-NormalizedRootPath -Path $temporaryRootSelection.Path
 $env:TMP = $env:TEMP
 $gameProjectPath = Join-Path $repoRoot "src\DungeonFortress.Game"

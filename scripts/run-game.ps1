@@ -131,7 +131,17 @@ $resolvedScreenshotPath = if ([string]::IsNullOrWhiteSpace($ScreenshotPath)) {
 # matters for Issue #184 is that the directory is chosen the same way, because
 # that is what decides where the Godot runtime profile - and with it the GLES3
 # shader cache - ends up.
-$temporaryRootSelection = Resolve-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot
+#
+# -RepositoryRoot is required here for the same reason verify.ps1 passes it
+# (Issue #329): -TemporaryRoot is an optional parameter of this script, and an
+# omitted -TemporaryRoot arrives here as an empty string, not as "absent" -
+# PowerShell does not distinguish the two for a plain [string] parameter. An
+# empty -ExplicitPath is treated by the resolver as "no override" and falls
+# through to $env:DUNGEON_FORTRESS_TEMP and then to the own-directory tier,
+# which throws without -RepositoryRoot to compute a default from. Before this
+# fix every argument-free invocation of this script failed here, before ever
+# reaching the engine.
+$temporaryRootSelection = Resolve-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot -RepositoryRoot $repoRoot
 $env:TEMP = ConvertTo-NormalizedRootPath -Path $temporaryRootSelection.Path
 $env:TMP = $env:TEMP
 

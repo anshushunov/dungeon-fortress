@@ -1,0 +1,42 @@
+{
+  "issue": 329,
+  "question": "After fixing scripts/run-game.ps1 and scripts/update-golden-ui.ps1 to pass -RepositoryRoot to Resolve-VerificationTemporaryRoot, adding scripts/test-run-game-temporary-root.ps1 to the `scripts` stage, and correcting the misleading comment in scripts/TemporaryRoot.ps1, is the full `verify.ps1` run (all ten stages) still green?",
+  "baseCommit": "77e2fa0c48c85a051e40315912d0f5a7180bb839",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
+  "verificationResult": {
+    "event": "verification_result",
+    "status": "ok",
+    "scope": "full",
+    "stagesExecuted": ["scripts", "build", "tests", "mcp", "sim", "load", "godot", "ui", "screenshots", "token-budget"],
+    "stagesNotRun": [],
+    "prerequisites": ["restore", "solution-build", "scenario-build", "game-host-build", "engine-runtime"],
+    "seed": 424242,
+    "temporaryRoot": "C:\\gamedev\\df-verify-3680b197",
+    "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+    "changedSeedChecksum": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
+    "loadChecksum": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+    "godotVersion": "4.7.1.stable.mono.official.a13da4feb",
+    "screenshotRepeatable": true,
+    "goldenUiFrames": ["stone-t190-loose-no-stockpile", "stone-t336-in-transit", "stone-t950-stockpile-full"]
+  },
+  "stageElapsedSeconds": {
+    "scripts": 88,
+    "build": 39.2,
+    "tests": 135.3,
+    "mcp": 3.9,
+    "sim": 0.3,
+    "load": 0.6,
+    "godot": 29.7,
+    "ui": 3.9,
+    "screenshots": 8.8,
+    "token-budget": 73.8
+  },
+  "cleanupWarning": {
+    "event": "temporary_cleanup",
+    "status": "warning",
+    "description": "own temporary root directory",
+    "reason": "Отказано в доступе по пути \"System.Text.Json.SourceGeneration.dll\".",
+    "note": "Non-fatal by design (Issue #89): best-effort cleanup after the run already decided status=ok; does not affect verificationResult.status."
+  },
+  "conclusion": "Full verify.ps1 run is green: status=ok, scope=full, all ten stages executed, none skipped. Run started from a worktree whose HEAD equals origin/main's 77e2fa0 (git merge-base HEAD origin/main == git rev-parse origin/main), so the base is current."
+}
