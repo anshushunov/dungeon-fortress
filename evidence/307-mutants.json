@@ -40,5 +40,37 @@
     }
   ],
   "conclusion": "All three mutants turn scripts/test-verify-stages.ps1 red, and each dies on a different assertion: A on 'did not resolve at all' (Success = $false), B on 'the explicit override lost priority' (wrong Source/path even though Success = $true), C on 'resolved successfully but to the wrong version' (Success = $true, path is the 4.6.1 sibling instead of the 4.7.1 one). No two mutants share their failing assertion, so passing coverage is not an artifact of one shared check.",
-  "restoredCommittedStateBetweenMutants": "git checkout -- scripts/GodotTools.ps1, verified with 'git status --short' producing no output before applying the next mutant and again after the last one."
+  "restoredCommittedStateBetweenMutants": "git checkout -- scripts/GodotTools.ps1, verified with 'git status --short' producing no output before applying the next mutant and again after the last one.",
+  "reviewRound1": {
+    "question": "Independent review of PR #308 (major finding 1) found that these same three mutants, run against the pre-fix test harness, each left the Issue #307 sandbox (including its junctions to the real Godot_v4.7.1 and Godot_v4.6.1 installs) behind on disk under .artifacts, because the cleanup call sat after the checking block instead of in a finally. Fixed in commit c86d2d5 by wrapping the block in try/finally. This entry re-verifies, on the fixed test harness, that (a) the same three mutants still die on the same three distinct assertions, and (b) none of them leaves anything behind afterwards.",
+    "commandPerMutant": [
+      "git status --short   # confirm clean before mutating",
+      "<apply one mutant via Edit, same find/replace as above>",
+      "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-verify-stages.ps1   # expect exit 1, the mutant's own assertion",
+      "powershell -NoProfile -Command \"Get-ChildItem '.artifacts' -Directory -Filter 'verify-stage-guard-*' -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.LinkType } | ForEach-Object { Write-Output ('JUNCTION LEFT: ' + $_.FullName) }\"   # the finding-1 proof: no output means no leftover junction",
+      "git checkout -- scripts/GodotTools.ps1   # restore before the next mutant"
+    ],
+    "results": [
+      {
+        "mutant": "A",
+        "exitCode": 1,
+        "failingAssertion": "same as above: 'Resolve-GodotExecutable did not resolve via the Issue #307 sibling-directory tier with no -GodotPath and no environment set: ...'",
+        "junctionScanOutput": "(empty - no JUNCTION LEFT lines)"
+      },
+      {
+        "mutant": "B",
+        "exitCode": 1,
+        "failingAssertion": "same as above: '$env:GODOT4_CONSOLE did not take priority over the Issue #307 sibling-directory tier. Expected ... got ... - the new tier must stay last.'",
+        "junctionScanOutput": "(empty - no JUNCTION LEFT lines)"
+      },
+      {
+        "mutant": "C",
+        "exitCode": 1,
+        "failingAssertion": "same as above: 'Resolve-GodotExecutable resolved ...Godot_v4.6.1-... with both a 4.7.1 and a 4.6.1 sibling directory present ...; expected the newer version ...Godot_v4.7.1-...'",
+        "junctionScanOutput": "(empty - no JUNCTION LEFT lines)"
+      }
+    ],
+    "preExistingLeftoversFoundAndCleared": "Before this round's reruns, .artifacts/ still held eight verify-stage-guard-<guid> directories from this session's *original* (pre-fix) mutant runs, four of them containing live junctions to C:\\gamedev\\Godot_v4.7.1-stable_mono_win64 and C:\\gamedev\\Godot_v4.6.1-stable_mono_win64 - exactly what review reported. Verified with Get-ChildItem -Recurse | Where-Object LinkType that the entries were junctions (not copies) and that both real Godot install directories were intact and unaffected; removed all eight with Remove-Item -Recurse -Force before rerunning the mutants on the fixed harness.",
+    "separateObservationOutOfScope": "After each rerun on the fixed harness, an empty top-level '.artifacts/verify-stage-guard-<guid>' directory (and, for a mutant that fails before the nested 'verify.ps1 -Stage scripts' child completes, a second empty one from that child's own run) can still remain. These contain no junctions and no files - they are $sandbox itself, created near the top of test-verify-stages.ps1 and normally removed only by the unrelated 'guard against itself' try/finally at the very end of the file, which never runs if anything earlier throws. This is a pre-existing, file-wide pattern that predates this PR and is not what review's finding 1 was about (no reparse points involved, nothing outside .artifacts/); left unaddressed here as out of scope, called out in the PR comment for the coordinator to triage separately if wanted."
+  }
 }
