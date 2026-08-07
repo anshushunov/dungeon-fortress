@@ -187,6 +187,89 @@ function Get-RemoteRepoName {
     return $path
 }
 
+function Get-ReadingPackage {
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [string[]]$Labels,
+
+        [AllowEmptyString()]
+        [string]$Body
+    )
+
+    # Issue #282: the entry package is assembled by task type instead of a
+    # fixed ~10-document list. The type is read from what an Issue already
+    # carries — tier:* labels and the file paths its "Партиция" section
+    # names — never guessed from free text. Catalog order is stable so two
+    # runs on the same Issue print the same package in the same order.
+    $catalog = [ordered]@{
+        simulation     = @(
+            "docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md — раздел design-контракта, который описывает затронутую механику (якорь называет бриф)"
+            "docs/decisions/ — ADR, на которые ссылается этот раздел контракта"
+        )
+        presentation   = @(
+            "docs/engineering/PROTOTYPE_GRAYBOX.md — запуск и воспроизводимый screenshot Phase A graybox"
+            "docs/design/SIDE_INDICATOR.md — если задача меняет индикацию стороны"
+        )
+        headless       = @(
+            "docs/engineering/PROTOTYPE_HEADLESS.md — запуск и наблюдение headless-экономики"
+        )
+        art            = @(
+            "docs/art/ANIMATION_PIPELINE.md — происхождение ассетов и пайплайн"
+        )
+        product        = @(
+            "docs/product/PITCH.md и/или docs/product/ROADMAP.md (раздел NOW) — выдержку несёт бриф координатора, а не общая ссылка"
+        )
+        'tooling-docs' = @(
+            "ничего сверх AGENTS.md и AGENT_ENTRY.md — код игры не читается"
+        )
+    }
+
+    $b = if ($null -eq $Body) { "" } else { $Body }
+    $labelSet = @($Labels)
+
+    $isArt               = $labelSet -contains 'tier:art'
+    $isDeepOrCritical    = ($labelSet -contains 'tier:deep') -or ($labelSet -contains 'tier:critical')
+    $touchesSimSrc       = $b -match 'src/DungeonFortress\.Simulation'
+    $touchesDesignDocs   = $b -match 'docs/design/'
+    $touchesPresentation = $b -match 'src/DungeonFortress\.Presentation'
+    $touchesHeadless     = ($b -match 'PROTOTYPE_HEADLESS') -or ($b -match 'DungeonFortress\.Scenarios')
+    $touchesProduct      = ($b -match 'docs/product/PITCH\.md') -or ($b -match 'docs/product/ROADMAP\.md')
+    $hasSrcPath          = $b -match 'src/DungeonFortress'
+    $hasDocsOrScriptsPath = $b -match 'docs/|scripts/|\.claude/'
+    $touchesDocsOnly     = (-not $hasSrcPath) -and $hasDocsOrScriptsPath
+
+    $areas = New-Object System.Collections.Generic.List[string]
+    if ($isArt) { [void]$areas.Add('art') }
+    if ($touchesSimSrc -or $touchesDesignDocs -or $isDeepOrCritical) { [void]$areas.Add('simulation') }
+    if ($touchesPresentation) { [void]$areas.Add('presentation') }
+    if ($touchesHeadless) { [void]$areas.Add('headless') }
+    if ($touchesProduct) { [void]$areas.Add('product') }
+    if ($areas.Count -eq 0 -and $touchesDocsOnly) { [void]$areas.Add('tooling-docs') }
+
+    $certain = $areas.Count -gt 0
+    if (-not $certain) {
+        # Not enough signal in labels or partition to name an area: print
+        # everything rather than silently guessing a narrower package
+        # (Issue #282 acceptance criterion — insufficient data must be
+        # observable, not a silent reduced package).
+        $areas = @('simulation', 'presentation', 'headless', 'art', 'product')
+    }
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    foreach ($area in $areas) {
+        foreach ($entry in $catalog[$area]) {
+            [void]$lines.Add($entry)
+        }
+    }
+
+    return [pscustomobject]@{
+        Certain = $certain
+        Areas   = @($areas)
+        Lines   = @($lines)
+    }
+}
+
 function Get-IssueData {
     [CmdletBinding()]
     param(
