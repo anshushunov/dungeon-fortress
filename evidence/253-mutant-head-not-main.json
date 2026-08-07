@@ -44,5 +44,12 @@
     "exitCode": 0
   },
   "cleanup": "rm -rf .artifacts/evidence-253-fixture after the run (plus 'git worktree prune' on the fixture root first); .artifacts/ is gitignored and the fixture never touched the real repository's git state.",
+  "postCommitReverification": {
+    "description": "The runs above happened before 'git commit' recorded scripts/check-root-on-main.ps1 (working tree already matched HEAD byte-for-byte at commit time - 'git status --short' was empty right after). Rerun once more against a fresh fixture with the working tree at commit b4d57af to remove any doubt (Issue #179's lesson: measure the committed blob, not an assumption about the working copy).",
+    "commit": "b4d57af",
+    "guardOutput": "{\"event\":\"root_on_main_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-253\\\\.artifacts\\\\evidence-253-postcommit\\\\root\",\"applicable\":true,\"headBranch\":\"agent/202-worktree-command\",\"status\":\"fail\"}",
+    "exitCode": 1,
+    "result": "Identical to the pre-commit run above."
+  },
   "conclusion": "The substitution reproducing the 2026-08-01/#202 violation shape (root HEAD off 'main') turns scripts/check-root-on-main.ps1 red (exit 1, status fail, names the offending branch); restoring the legitimate state (root on 'main') turns it green again (exit 0, status ok) on the same fixture; and the real coordination root is independently confirmed legitimate today by the same guard, read-only."
 }

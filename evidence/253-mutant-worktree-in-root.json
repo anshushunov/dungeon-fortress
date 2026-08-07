@@ -47,5 +47,12 @@
     "exitCode": 0
   },
   "cleanup": "rm -rf .artifacts/evidence-253-fixture after the run (plus 'git worktree prune' on the fixture root first); .artifacts/ is gitignored and the fixture never touched the real repository's git state.",
+  "postCommitReverification": {
+    "description": "The runs above happened before 'git commit' recorded this wiring (working tree already matched HEAD byte-for-byte at commit time - 'git status --short' was empty right after). Rerun once more against a fresh fixture with the working tree at commit b4d57af to remove any doubt (Issue #179's lesson: measure the committed blob, not an assumption about the working copy).",
+    "commit": "b4d57af",
+    "guardOutput": "{\"event\":\"worktrees_in_root_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-253\\\\.artifacts\\\\evidence-253-postcommit\\\\root\",\"totalRegisteredWorktrees\":3,\"offenders\":[\"C:\\\\gamedev\\\\_wt-253\\\\.artifacts\\\\evidence-253-postcommit\\\\root\\\\w243\"],\"status\":\"fail\"}",
+    "exitCode": 1,
+    "result": "Identical to the pre-commit run above."
+  },
   "conclusion": "The substitution reproducing the 2026-08-04/#243 violation shape (worktree registered inside the root) turns scripts/check-no-worktrees-in-root.ps1 red (exit 1, status fail, names exactly the nested path and not the legitimate sibling); restoring the legitimate state turns it green again (exit 0, status ok) on the same fixture; and the real coordination root is independently confirmed legitimate today by the same guard, read-only."
 }
