@@ -473,6 +473,12 @@ public sealed class PrototypeMomentOfTruthTests
             Commands = [new VerdictCommand(atTick, subject, VerdictKind.Punish)],
         });
 
+        // The verdict's own journal entry is excluded from the comparison, and
+        // that exclusion is the whole strength of this check. Left in, the two
+        // lists differ because one of them contains the line "was punished" —
+        // which says the command was recorded, not that anything came of it. The
+        // mutant M6 makes the effect of a verdict nothing and passes a
+        // comparison that counts its own announcement.
         var mine = Decisions(with, subject);
         var theirs = Decisions(without, subject);
         Assert.True(
@@ -489,7 +495,8 @@ public sealed class PrototypeMomentOfTruthTests
         static List<string> Decisions(PrototypeSnapshot state, int creatureId) =>
         [
             .. state.Events
-                .Where(@event => @event.CreatureId == creatureId)
+                .Where(@event => @event.CreatureId == creatureId &&
+                    !@event.ReasonCode.StartsWith("verdict_", StringComparison.Ordinal))
                 .Select(@event => string.Create(
                     CultureInfo.InvariantCulture,
                     $"t{@event.FirstTick} {@event.ReasonCode} x{@event.Repeats}")),
