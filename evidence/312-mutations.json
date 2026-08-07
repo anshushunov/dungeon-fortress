@@ -1,0 +1,79 @@
+{
+  "issue": 312,
+  "rule": "Правило 21 и 32: мутант назначается на утверждение, а не на половину изменения. Каждый мутант применён к УЖЕ ЗАКОММИЧЕННОМУ состоянию и откачен `git checkout -- <файл>` после прогона. Круг доработки PR #328 добавил M7 и M4b и переизмерил M3 и M6 на усиленных проверках.",
+  "command": "dotnet test tests/DungeonFortress.Simulation.Tests --nologo --filter \"FullyQualifiedName~<тест>\"",
+  "mutants": [
+    {
+      "id": "M1",
+      "claim": "величины входят в снапшот и в сумму",
+      "mutation": "PrototypeTuning.cs: LoyaltyFearWound = 8 -> 0 (обнулено одно слагаемое начисления)",
+      "guard": "PrototypeMomentOfTruthTests.Every_named_source_of_the_three_magnitudes_is_reached_over_the_matrix",
+      "result": "красный",
+      "message": "the whole matrix never credited [fear_wound], so those sources of standing are documented and dead. Seen: benefit_drilled, benefit_faded, benefit_fed, benefit_tended, fear_ally_downed, fear_faded, fear_panic, grudge_hunger, grudge_ignored, grudge_refused_place",
+      "note": "Проверка заведена этим же кругом: до неё обнуление слагаемого проходило молча — величина оставалась опубликованной, детерминированной и пустой."
+    },
+    {
+      "id": "M2",
+      "claim": "пауза останавливает партию",
+      "mutation": "PrototypeWorld.cs: снят ранний выход `if (StepWhileAwaitingVerdict()) return;` из Step()",
+      "guard": "PrototypeMomentOfTruthTests.A_moment_of_truth_stops_the_party_on_a_tick_that_never_happens",
+      "result": "красный",
+      "message": "Assert.Equal() Failure: Values differ. Expected: 1336 Actual: 1356 — тик, который не должен был наступить, наступил двадцать раз."
+    },
+    {
+      "id": "M3",
+      "claim": "отбор карточек детерминирован",
+      "mutation": "PrototypeWorld.MomentOfTruth.cs: снята сортировка отбора (`OrderByDescending(Notability).ThenBy(Id)`), остался порядок перечисления существ",
+      "guard": "PrototypeMomentOfTruthTests.The_cards_are_ordered_by_notability_and_then_by_id",
+      "result": "красный",
+      "message": "Assert.Equal() Failure: Collections differ. Expected: [3, 7, 0] Actual: [0, 1, 2]",
+      "note": "Первый заход мутанта прошёл ЗЕЛЁНЫМ: проверка смотрела только на порядок, а у первых трёх существ id идут по возрастанию, и условие «либо заметнее, либо раньше по id» выполнялось само. Проверка усилена (тройка пересчитывается из снапшота) коммитом перед повторным прогоном — это находка мутанта, а не косметика."
+    },
+    {
+      "id": "M4",
+      "claim": "разбор слагаемых сходится с итогом",
+      "mutation": "PrototypeWorld.Loyalty.cs: в Accrue слагаемое страха пишется как `amount + 1` при неизменном итоге",
+      "guard": "PrototypeMomentOfTruthTests.Loyalty_totals_equal_the_sum_of_their_named_terms",
+      "result": "красный (два из трёх журналов)",
+      "message": "Мотылёк: fear is 5 and its named terms add up to 6 (fear_panic 6).",
+      "note": "Ловит сдвиг слагаемого относительно итога. Класс подстановки «дельты карточки заменены итогами» она НЕ ловит — это отдельный мутант M4b ниже, заведённый по находке F4 независимого review."
+    },
+    {
+      "id": "M5",
+      "claim": "валидатор отвергает пятое поле",
+      "mutation": "PrototypeCommandDocument.cs: из ParseVerdictCommand снят RequireExactProperties",
+      "guard": "PrototypeMomentOfTruthTests.The_form_of_a_verdict_is_closed_and_a_deviation_refuses_the_whole_document",
+      "result": "красный",
+      "message": "Assert.Throws() Failure: No exception was thrown. Expected: typeof(System.IO.InvalidDataException) — документ с полем `target` был принят."
+    },
+    {
+      "id": "M6",
+      "claim": "вердикт меняет следующую волну",
+      "mutation": "PrototypeWorld.MomentOfTruth.cs: все три величины вердикта начисляются нулём",
+      "guard": "PrototypeMomentOfTruthTests.A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave (и A_verdict_changes_nothing_but_the_standing_of_the_creature)",
+      "result": "красный",
+      "message": "creature 3 decided exactly the same things with the verdict and without it, so the verdict changed nothing that anybody can see.",
+      "note": "Первый заход мутанта: тест расхождения прошёл ЗЕЛЁНЫМ, потому что засчитывал за расхождение собственную строку журнала «наказан» — то есть факт записи команды, а не последствие. Сравнение теперь исключает события `verdict_*`; это тоже находка мутанта."
+    },
+    {
+      "id": "M4b",
+      "claim": "карточка показывает дельты волны, а не итоги партии (§2.2 контракта среза)",
+      "mutation": "PrototypeWorld.MomentOfTruth.cs, SelectCards: все три дельты заменены итогами (`ledger.Fear` вместо `ledger.Fear - ledger.FearAtLastCard` и так по каждой оси). Это подстановка независимого review дословно, и она применена НА КЛАССЕ — ко всем трём осям сразу, а не к одной.",
+      "guard": "PrototypeMomentOfTruthTests.A_card_reports_the_wave_and_not_the_whole_party",
+      "result": "красный",
+      "message": "baseline/20260726, t2070: the card about Брусок reports 11/0/0 where the wave moved it by 3/0/0 (it stood at 8/0/0 when the domain last reported on it).",
+      "note": "Находка F4 review: правило §2.2 держалось нулём тестов — подстановка проходила при 334/334 зелёных. Усиленный guard мутанта M3 её не ловил, потому что работал на первой паузе, где дельта равна итогу. Новая проверка идёт по всей матрице, ведёт собственные базы на каждое существо и ОТКАЗЫВАЕТСЯ проходить, если ни одна карточка не была о существе с историей — то есть не может выродиться в сравнение нуля с нулём."
+    },
+    {
+      "id": "M7",
+      "claim": "у награды есть своё последствие в поведении",
+      "mutation": "PrototypeWorld.Loyalty.cs: LoyaltyReach обнулён (`=> 0`)",
+      "guard": "PrototypeMomentOfTruthTests.A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave",
+      "result": "красный",
+      "message": "not one of the three creatures the domain reported on did anything differently for being rewarded, so `reward` is a command with no consequence and criterion 7 holds for one value of the enumeration out of two. Who moved when the first card was rewarded: nobody at all.",
+      "note": "Заведён по решению владельца 2026-08-07, снявшему асимметрию reward/punish (находка F2 review). Проверка трёхрукая: молчание, награда и наказание — и сравнивает знаки вердикта друг с другом, а не только с молчанием. Без третьей руки «отвеченная карточка отличается от неотвеченной» истинно и для вердикта без всякого эффекта: отвеченной карточке не начисляется grudge_ignored."
+    }
+  ],
+  "found_by_mutants": 3,
+  "reading": "Восемь мутантов из восьми красные. Три из них (M3, M6 и — на круге доработки — M4b) вскрыли слабые или отсутствующие проверки: M3 и M6 с первого захода прошли зелёными, а класс подстановки M4b не держался вовсе и был найден независимым review, а не мутационным прогоном исполнителя. Это и есть цена находки F4: мутант обязан быть на классе, а не на одном случае."
+}

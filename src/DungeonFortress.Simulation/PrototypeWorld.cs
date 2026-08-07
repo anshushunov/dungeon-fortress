@@ -251,6 +251,15 @@ public sealed partial class PrototypeWorld
             throw new InvalidOperationException("The prototype session has ended.");
         }
 
+        // A party that owes the player an answer stops being a party until it
+        // gets one: no phase below runs, and CurrentTick does not move. That is
+        // the whole of "пауза наблюдаема прогоном" — the tick simply does not
+        // happen.
+        if (StepWhileAwaitingVerdict())
+        {
+            return;
+        }
+
         ApplyCommands();
         AnnounceWaves();
         EnterRaiders();
@@ -275,6 +284,10 @@ public sealed partial class PrototypeWorld
         ActRaiders();
         CountPostOccupancyForTick();
         ApplyPassiveProcesses();
+        // Loyalty is credited from what this tick published and nothing else, so
+        // it sits after every phase that could publish anything and before the
+        // party is judged to be over.
+        AccrueLoyalty();
         // Order matters here and is part of the contract: the domain is declared
         // fallen while its people are still on the floor, and only afterwards do
         // the survivors of a finished wave get back up. Raising them first would
@@ -282,6 +295,9 @@ public sealed partial class PrototypeWorld
         ResolveSession();
         RaiseTheDowned();
         CurrentTick++;
+        // Last of all, so that the tick the pause holds back is the one after the
+        // wave was resolved and the cards are built from a finished tick.
+        OpenPendingMomentOfTruth();
     }
 
     public PrototypeSnapshot GetSnapshot()
@@ -463,7 +479,8 @@ public sealed partial class PrototypeWorld
             // Derived here and stored nowhere (ADR 0013, variant C): a room is
             // whatever the zones and the map add up to at this tick, so it cannot
             // fall out of step with them and no command creates one directly.
-            PrototypeRooms.Derive(_map, _zones, _priorities));
+            PrototypeRooms.Derive(_map, _zones, _priorities),
+            ToMomentOfTruthSnapshot());
     }
 
     /// <summary>
@@ -565,6 +582,7 @@ public sealed partial class PrototypeWorld
             BuildCancelCommand unbuild => unbuild with { Tiles = unbuild.Tiles.ToArray() },
             SetPriorityCommand priority => priority,
             SetRuleCommand rule => rule,
+            VerdictCommand verdict => verdict,
             _ => throw new InvalidDataException(
                 $"Unsupported prototype command: {command.GetType().Name}"),
         };

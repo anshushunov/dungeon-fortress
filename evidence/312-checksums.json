@@ -1,0 +1,125 @@
+{
+  "issue": 312,
+  "what": "Обе контрольные суммы всех трёх поставляемых журналов до и после среза 3, и чем именно они разошлись.",
+  "commands": [
+    "git worktree add .artifacts/main-base origin/main",
+    "dotnet run --project tests/DungeonFortress.Scenarios -c Release -- --prototype --commands scenarios/prototype1/<fixture>.commands.v2.json --ticks 2700 --snapshot <file>",
+    "stateChecksum — поле `checksum` строки prototype_result (SHA-256 канонического снапшота).",
+    "eventLogChecksum — SHA-256 документа {\"schemaVersion\":3,\"events\":[...]}, собранного из массива `events` того же снапшота: побайтно то, что отдаёт PrototypeCanonical.SerializeEvents.",
+    "divergence — посписочное сравнение журналов (creatureId, firstTick, reasonCode, repeats) до и после; скрипт .artifacts/measure.py круга доработки."
+  ],
+  "base": "origin/main на момент замера",
+  "runs": {
+    "before": {
+      "baseline": {
+        "ticks": 2422,
+        "outcome": "raided",
+        "score": 636,
+        "stateChecksum": "8305505e68c3d0425c6f5afdd2f7b8322c2287913344d7e85d127d56b04fc9d5",
+        "eventLogChecksum": "0331939d630e1c014e786a9b0fd2a976c4f87c6b5f9b200c26af08a45ac3029a"
+      },
+      "prepared": {
+        "ticks": 2424,
+        "outcome": "raided",
+        "score": 796,
+        "stateChecksum": "8ce96e89751627727481d36ddc2c6485487ce1d53fd6193f9e08db28f39bcf13",
+        "eventLogChecksum": "0adc3ad0bc7994fdb4485ea39867e146ee101396bb62812bb93559d691334527"
+      },
+      "neglected": {
+        "ticks": 615,
+        "outcome": "fallen",
+        "score": 0,
+        "stateChecksum": "0c169dfef4da6b6f0cf5e553005ccf6e5022469c033d01ac50a21d70e8e8c6bc",
+        "eventLogChecksum": "fbc029220d7534699d0915ea05d7f1ea9a933243c3ebacb0e2ea7f86a4137c81"
+      }
+    },
+    "after": {
+      "baseline": {
+        "ticks": 2422,
+        "outcome": "raided",
+        "score": 636,
+        "stateChecksum": "53a0016ae1aad209bf3e682381a64a81b856750244787a003ba9574f7c3d7116",
+        "eventLogChecksum": "a636047314347f19fc22c4bd60ead612d05a789c8cb0bb1b1933f34b8a7b7bc2"
+      },
+      "prepared": {
+        "ticks": 2424,
+        "outcome": "raided",
+        "score": 796,
+        "stateChecksum": "826c590f46c601bcb9fc395269420faaf56afbdccd1f695987ab09de6bd412cc",
+        "eventLogChecksum": "a580cfc61de0f56b8a9d9012b72a852bad3eb7637ad09c6d8e29130381e88517"
+      },
+      "neglected": {
+        "ticks": 615,
+        "outcome": "fallen",
+        "score": 0,
+        "stateChecksum": "5ac6cabd8c43e24c409ac00e397090e5eb9b69cd9c3a93e3b9d86277b3c8f675",
+        "eventLogChecksum": "fbc029220d7534699d0915ea05d7f1ea9a933243c3ebacb0e2ea7f86a4137c81"
+      }
+    }
+  },
+  "divergence": {
+    "baseline": {
+      "entriesBefore": 5592,
+      "entriesAfter": 5595,
+      "onlyBefore": 0,
+      "onlyAfter": 3,
+      "onlyBeforeIgnoringNewCodes": 0,
+      "onlyAfterIgnoringNewCodes": 0,
+      "sampleBefore": [],
+      "sampleAfter": [],
+      "scoreBefore": 636,
+      "scoreAfter": 636
+    },
+    "prepared": {
+      "entriesBefore": 2525,
+      "entriesAfter": 2535,
+      "onlyBefore": 1,
+      "onlyAfter": 11,
+      "onlyBeforeIgnoringNewCodes": 1,
+      "onlyAfterIgnoringNewCodes": 2,
+      "sampleBefore": [
+        [
+          8,
+          2080,
+          "waiting_blocked_by_other",
+          210
+        ]
+      ],
+      "sampleAfter": [
+        [
+          8,
+          2080,
+          "waiting_blocked_by_other",
+          6
+        ],
+        [
+          8,
+          2086,
+          "waiting_blocked_by_other",
+          204
+        ]
+      ],
+      "scoreBefore": 796,
+      "scoreAfter": 796
+    },
+    "neglected": {
+      "entriesBefore": 1793,
+      "entriesAfter": 1793,
+      "onlyBefore": 0,
+      "onlyAfter": 0,
+      "onlyBeforeIgnoringNewCodes": 0,
+      "onlyAfterIgnoringNewCodes": 0,
+      "sampleBefore": [],
+      "sampleAfter": [],
+      "scoreBefore": 0,
+      "scoreAfter": 0
+    }
+  },
+  "reading": [
+    "Тик окончания, исход и счёт партии совпадают до и после у всех трёх журналов: baseline: 2422/raided/636 против 2422/raided/636; prepared: 2424/raided/796 против 2424/raided/796; neglected: 615/fallen/0 против 615/fallen/0.",
+    "Контрольная сумма состояния сдвинулась у всех трёх и обязана была: у каждого существа с тика 0 появился объект `loyalty`, а у документа — секция `momentOfTruth`. Аддитивное расширение двигает checksum каждого кадра и не поднимает schemaVersion (PROTOTYPE_HEADLESS.md, «Версионирование канонического снапшота»).",
+    "Сумма журнала событий сдвинулась у baseline и prepared и НЕ сдвинулась у neglected: он падает на тике 615, до первой волны, поэтому ни одной карточки в нём нет.",
+    "Расхождение журналов измерено поимённо, а не заявлено. baseline: 3 записи появились, 0 исчезли, и после вычета новых reason codes расхождение равно 0. neglected: 0/0. prepared: 11 появились и 1 исчезла; после вычета новых кодов остаётся ровно одна запись, разрезанная надвое: waiting_blocked_by_other существа 8 на t2080 была x210, стала x6 на t2080 плюс x204 на t2086 — между ними встал новый verdict_ignored. Решения при этом те же и в том же порядке.",
+    "Новые reason codes в поставляемых журналах — только verdict_ignored: 3 в baseline, 9 в prepared, 0 в neglected. combat_refused_grudge и grudge_spent не встречаются нигде: они требуют, чтобы игрок наказывал, а в поставляемых журналах вердиктов нет вовсе."
+  ]
+}

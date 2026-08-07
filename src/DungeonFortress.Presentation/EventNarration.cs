@@ -135,6 +135,29 @@ public static class EventNarration
                 $"{Number(details, "downedAlliesNear", "?")} ally down.",
             "combat_downed" => $"was put down by raider {Number(details, "raiderId", "?")}.",
             "combat_returned" => "came back to work after the wave.",
+            // The two sentences that make a verdict readable as a cause rather
+            // than as a coincidence (Issue #312). Both are exact
+            // counterfactuals: the simulation only writes them when the grudge
+            // is what decided, which is why they may say so plainly.
+            "combat_refused_grudge" =>
+                $"would not stand for wave {Number(details, "wave", "?")}: " +
+                $"a grudge of {Number(details, "grudge", "?")} against " +
+                $"{Number(details, "holding", "?")} holding it.",
+
+            // The moment of truth.
+            "verdict_rewarded" =>
+                $"was rewarded for wave {Number(details, "wave", "?")}; " +
+                $"stands at {Number(details, "benefit", "?")} benefit.",
+            "verdict_punished" =>
+                $"was punished for wave {Number(details, "wave", "?")}, and had it coming; " +
+                $"stands at {Number(details, "fear", "?")} fear.",
+            "verdict_punished_without_fault" =>
+                $"was punished for wave {Number(details, "wave", "?")} without fault; " +
+                $"{Number(details, "fear", "?")} fear now, {Number(details, "grudge", "?")} " +
+                "grudge later.",
+            "verdict_ignored" =>
+                $"was left unanswered after wave {Number(details, "wave", "?")}; " +
+                $"the grudge stands at {Number(details, "grudge", "?")}.",
 
             // Wounds.
             "injury_tended" => "was carried off the floor, badly hurt.",

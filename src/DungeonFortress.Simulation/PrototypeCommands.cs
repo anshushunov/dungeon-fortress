@@ -56,6 +56,24 @@ public sealed record SetRuleCommand(
     string RuleId,
     int Value) : PrototypeCommand(Tick);
 
+/// <summary>
+/// The second addressed command of the dictionary, and the first that names a
+/// creature as the <b>subject of a judgement</b> rather than as the holder of a
+/// direction (ADR 0009). Its shape is fixed by ADR 0019 and is the whole of the
+/// permission: <c>{tick, kind, creatureId, verdict}</c> and nothing else — any
+/// field beyond this set takes the command out of the verdicts, whatever it is
+/// called.
+///
+/// <para>There is no cancelling twin, on purpose: <c>zone_paint</c>,
+/// <c>dig_designate</c> and <c>build_designate</c> have one because they state
+/// an intention about a patch of ground, while a verdict has already been seen
+/// by the domain, and un-saying it would make it a setting.</para>
+/// </summary>
+public sealed record VerdictCommand(
+    int Tick,
+    int CreatureId,
+    VerdictKind Verdict) : PrototypeCommand(Tick);
+
 public sealed record PrototypeCommandLog(
     string Scenario,
     ulong Seed,

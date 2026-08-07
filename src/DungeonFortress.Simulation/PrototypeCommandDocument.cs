@@ -123,6 +123,7 @@ public static class PrototypeCommandDocument
             "build_cancel" => ParseBuildCommand(element, tick, designate: false),
             "set_priority" => ParsePriorityCommand(element, tick),
             "set_rule" => ParseRuleCommand(element, tick),
+            "verdict" => ParseVerdictCommand(element, tick),
             string value => throw new InvalidDataException($"Unknown command kind: {value}"),
             null => throw new InvalidDataException("Command kind cannot be null."),
         };
@@ -257,6 +258,40 @@ public static class PrototypeCommandDocument
 
         return new SetRuleCommand(tick, ruleId, value);
     }
+
+    /// <summary>
+    /// The static half of a verdict: the closed set of properties, the closed
+    /// enumeration of values and the bounds of <c>creatureId</c>. Everything
+    /// else — is the window open, was there a card about this one — is a fact
+    /// about a world that does not exist yet and is checked on the tick of the
+    /// command (ADR 0019, «Форма команд вердикта»).
+    ///
+    /// <para><see cref="RequireExactProperties"/> is what makes "любое поле
+    /// сверх <c>{tick, kind, creatureId, verdict}</c> выводит команду из
+    /// вердиктов" structural rather than a promise: a fifth property throws
+    /// <c>Unknown property</c> and takes the whole document with it.</para>
+    /// </summary>
+    private static PrototypeCommand ParseVerdictCommand(JsonElement element, int tick)
+    {
+        RequireExactProperties(element, ["tick", "kind", "creatureId", "verdict"]);
+        var creatureId = ReadInt32(element, "creatureId");
+        var verdict = ReadString(element, "verdict");
+        return new VerdictCommand(tick, creatureId, ParseVerdict(verdict));
+    }
+
+    /// <summary>
+    /// The single place a string becomes a <see cref="VerdictKind"/>. The names
+    /// are spelled out instead of being derived from the enum, so a value cannot
+    /// enter the game dictionary by being added to a C# enum: it has to be
+    /// written here, and the design contract's walkthrough of the five
+    /// conditions is what has to be written beside it.
+    /// </summary>
+    internal static VerdictKind ParseVerdict(string verdict) => verdict switch
+    {
+        "reward" => VerdictKind.Reward,
+        "punish" => VerdictKind.Punish,
+        _ => throw new InvalidDataException($"Unknown verdict: {verdict}"),
+    };
 
     private static void RequireObject(JsonElement element, string name)
     {

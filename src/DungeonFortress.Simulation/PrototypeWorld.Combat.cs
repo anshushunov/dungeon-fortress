@@ -101,6 +101,15 @@ public sealed partial class PrototypeWorld
                 continue;
             }
 
+            if (ResentmentOutweighsTheLine(creature))
+            {
+                failed["grudge"] = creature.Loyalty.Grudge;
+                failed["holding"] = HoldingTheLine(creature);
+                SpendGrudge(creature);
+                RecordDecision(creature, "combat_refused_grudge", failed);
+                continue;
+            }
+
             var distance = _map.Distance(creature.Position, PrototypeMap.LarderTiles[0], _zones[ZoneKind.Forbidden]);
             if (!creature.IsMustering && distance is > PrototypeTuning.EngageRadius)
             {
@@ -119,6 +128,37 @@ public sealed partial class PrototypeWorld
             RecordDecision(creature, "combat_joined", new Dictionary<string, int> { ["readiness"] = ComputeReadiness(creature), ["wave"] = wave.Number });
         }
     }
+
+    /// <summary>
+    /// Whether accumulated resentment outweighs everything that would hold this
+    /// creature in the line: what the domain has given it, what it is afraid of,
+    /// and its own steadiness.
+    ///
+    /// <para>A contest and not a gate, and that distinction is half (b) of the
+    /// fifth condition of admissibility of a verdict value (Issue #167) in
+    /// executable form: no single verdict can either cause or prevent this on its
+    /// own. A punishment adds fear, which both holds the creature and hides the
+    /// grudge; a reward adds benefit on the other side of the same
+    /// comparison.</para>
+    ///
+    /// <para><b>Asked only of creatures that are not in the line yet</b>, and the
+    /// omission is a finding rather than an oversight. A second pass over the
+    /// people already fighting existed and wrote <c>combat_left_grudge</c>;
+    /// independent review of PR #328 showed by probe that it is <b>structurally
+    /// unreachable</b>. Joining and leaving were decided by this very comparison,
+    /// and nothing inside a fight moves either side of it: a grudge is credited
+    /// by coercion and none happens in combat, while fear only grows there, so a
+    /// creature that passed the test on the way in can never fail it on the way
+    /// out. A term the mechanic cannot reach is a promise the contract does not
+    /// keep, so it was removed rather than argued for.</para>
+    /// </summary>
+    private static bool ResentmentOutweighsTheLine(CreatureState creature) =>
+        ReleasedGrudge(creature) * PrototypeTuning.LoyaltyRefuseGrudgeWeight >
+        HoldingTheLine(creature);
+
+    private static int HoldingTheLine(CreatureState creature) =>
+        creature.Loyalty.Benefit + creature.Loyalty.Fear +
+        creature.Grit * PrototypeTuning.LoyaltyRefuseGritWeight;
 
     private void ActCombatant(CreatureState creature)
     {
@@ -154,6 +194,13 @@ public sealed partial class PrototypeWorld
             DropRaiderMeals(target);
             target.Mode = RaiderMode.Downed;
             _raidersDownedTotal++;
+            // The deed the moment of truth is mostly about. ADR 0019's own
+            // example of a card the domain owes an answer to is «он убил героя,
+            // а ты не наградил», so the count is kept — and deliberately never
+            // converted into a magnitude of standing, because paying it out as
+            // benefit here would be the game handing out the reward the player
+            // is being asked about.
+            creature.Loyalty.RaidersDownedSinceLastCard++;
             RecordDecision(creature, "combat_raider_downed", new Dictionary<string, int> { ["raiderId"] = target.Id });
         }
     }
@@ -348,6 +395,11 @@ public sealed partial class PrototypeWorld
             .Where(raider => raider.Mode == RaiderMode.Escaped)
             .Sum(raider => raider.CarryingMeals);
 
+        // The wave is over, so the domain owes its people an answer. The cards
+        // are not built here: the tick is still running, and a card built from
+        // half a tick would report a fight that has not finished settling.
+        _pendingMomentOfTruth = wave;
+
         foreach (var creature in _creatures.Where(creature => creature.Mode is CreatureMode.Fled or CreatureMode.Fighting))
         {
             var returning = creature.Mode == CreatureMode.Fled;
@@ -536,6 +588,28 @@ public sealed partial class PrototypeWorld
             var raidersNear = _raiders.Count(raider =>
                 raider.Mode == RaiderMode.Raiding &&
                 Manhattan(creature.Position, raider.Position) <= PrototypeTuning.MoralePressRadius);
+            // Loyalty is deliberately absent from this sum, and the omission is
+            // load-bearing rather than an oversight (Issue #312).
+            //
+            // Fear cannot be here: one number carries two different frights —
+            // of the domain, which makes a creature obey, and of the fight it is
+            // standing in, which makes it run — because Issue #312 names both a
+            // punishment and a wound among its sources. Adding it to nerve says
+            // that being hit by a raider makes a defender braver, and it was
+            // measured to do exactly that: the line stopped breaking, and
+            // contract invariant 4 ("подготовка делает набег дешевле") failed on
+            // seed 20260728 with prepared paying 421 against baseline's 353.
+            //
+            // A grudge cannot be here either, and the reason is a distinction
+            // rather than a number: **a grudge is not panic**. A creature that
+            // walks out because it resents the domain has not broken under
+            // dread, and putting resentment into nerve made the simulation call
+            // it a flight. That was measured too: on prepared/20260727 only 6 of
+            // 13 "broken" defenders left the tile they broke on, against the
+            // floor `Most_broken_defenders_actually_leave_the_tile_they_broke_on`
+            // holds — because half of them were not fleeing anything. Resentment
+            // leaves the line through UpdateCombatParticipation instead, which is
+            // its own sentence in the journal and does not pretend to be fear.
             var nerve = creature.Grit * PrototypeTuning.MoraleGritWeight +
                 ComputeReadiness(creature) / PrototypeTuning.MoraleReadinessDivisor +
                 creature.Hp * PrototypeTuning.MoraleHealthWeight / creature.MaxHp;

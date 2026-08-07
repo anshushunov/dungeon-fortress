@@ -94,6 +94,89 @@ public enum InjuryKind
     Heavy,
 }
 
+/// <summary>
+/// The closed enumeration of signs of judgement a player may pass on one
+/// creature (ADR 0019). It is a list of <b>judgements</b> and not of actions:
+/// every value here is walked through the five conditions of admissibility in
+/// <c>docs/design/SLICE_03_MOMENT_OF_TRUTH.md</c>, and a value that is not in
+/// that walkthrough may not be in this enum.
+///
+/// <para>Two values and no more. The minimum the pitch's section 6.11 asks for
+/// is "наградить, наказать"; the third option it names — "проигнорировать" — is
+/// deliberately <b>not</b> a value, because ignoring is the absence of a verdict
+/// and a command for it would let the player ignore loudly (ADR 0019).</para>
+/// </summary>
+public enum VerdictKind
+{
+    /// <summary>Признан отличившимся. Судится прошлое: карточка уже показана.</summary>
+    Reward,
+
+    /// <summary>Признан провинившимся. Тот же разбор, обратный знак.</summary>
+    Punish,
+}
+
+/// <summary>
+/// One named part of one loyalty magnitude: the code that says where it came
+/// from and how much of the total it is. Negative amounts are ordinary — fading
+/// and discharge are terms of the same ledger, so the breakdown always adds up
+/// to the number beside it.
+/// </summary>
+public sealed record PrototypeLoyaltyTerm(string Code, int Amount);
+
+/// <summary>
+/// What one creature is worth to the domain and the domain to it: fear, benefit
+/// and grudge, each with the named terms it was built from.
+///
+/// <see cref="GrudgeReleased"/> says whether the resentment is currently visible
+/// in behaviour at all. Section 6.3 of the pitch makes a grudge the delayed price
+/// of fear: it accumulates while fear is high and surfaces when fear falls, so
+/// "how much" and "is it showing" are two different questions and both are
+/// published.
+/// </summary>
+public sealed record PrototypeLoyaltySnapshot(
+    int Fear,
+    int Benefit,
+    int Grudge,
+    IReadOnlyList<PrototypeLoyaltyTerm> FearTerms,
+    IReadOnlyList<PrototypeLoyaltyTerm> BenefitTerms,
+    IReadOnlyList<PrototypeLoyaltyTerm> GrudgeTerms,
+    bool GrudgeReleased);
+
+/// <summary>
+/// One card of the moment of truth: a creature the domain reports on after a
+/// wave, its standing, and how much of that standing this wave is responsible
+/// for.
+///
+/// <see cref="Verdict"/> is the answer already given, and <c>null</c> while the
+/// card is unanswered. It is canonical state because the runtime authority for
+/// "was there a card about this creature, and has it already been answered"
+/// lives on the tick of the command (ADR 0019, «Форма команд вердикта»).
+/// </summary>
+public sealed record PrototypeMomentOfTruthCard(
+    int CreatureId,
+    string Name,
+    PrototypeLoyaltySnapshot Loyalty,
+    int FearThisWave,
+    int BenefitThisWave,
+    int GrudgeThisWave,
+    int RaidersDowned,
+    string DominantAxis,
+    int Notability,
+    string? Verdict);
+
+/// <summary>
+/// The pause between two waves. While <see cref="Open"/> the party does not
+/// advance: <c>tick</c> stands still and <see cref="WaitedSteps"/> counts how
+/// long the domain has been waiting for an answer.
+/// </summary>
+public sealed record PrototypeMomentOfTruthSnapshot(
+    bool Open,
+    int WaveNumber,
+    int OpenedTick,
+    int WaitedSteps,
+    int WindowSteps,
+    IReadOnlyList<PrototypeMomentOfTruthCard> Cards);
+
 public sealed record PrototypeDecision(
     int Tick,
     string ReasonCode,
@@ -171,7 +254,11 @@ public sealed record PrototypeCreatureSnapshot(
     // Where this creature broke or was put down, newest last, capped at
     // T.memory_places_max and ordered by tile so the canonical document does not
     // depend on the order events happened to arrive in.
-    IReadOnlyList<PrototypeRememberedPlace> RememberedPlaces);
+    IReadOnlyList<PrototypeRememberedPlace> RememberedPlaces,
+    // Appended on purpose, like every section added since v2. Fear, benefit and
+    // grudge with their named terms: what this creature is worth to the domain,
+    // and out of what.
+    PrototypeLoyaltySnapshot Loyalty);
 
 public sealed record PrototypeJobSnapshot(
     long JobId,
@@ -322,7 +409,11 @@ public sealed record PrototypePendingCommandSnapshot(
     IReadOnlyList<GridPoint> Tiles,
     JobKind? JobKind,
     string? RuleId,
-    int? Value);
+    int? Value,
+    // Appended for the verdict, the first command of the dictionary that names a
+    // creature. Null for the eight commands that do not.
+    int? CreatureId = null,
+    string? Verdict = null);
 
 public sealed record PrototypeEconomyCountersSnapshot(
     [property: JsonPropertyName("harvestsCompleted")] int HarvestsCompleted,
@@ -523,7 +614,10 @@ public sealed record PrototypeSnapshot(
     // Appended on purpose, like every section added since v2: a new list at the
     // end of the record cannot move the meaning of anything before it. Rooms are
     // derived from Zones and Map on every snapshot (ADR 0013, variant C).
-    IReadOnlyList<PrototypeRoomSnapshot> Rooms);
+    IReadOnlyList<PrototypeRoomSnapshot> Rooms,
+    // Appended for the same reason. The pause between two waves, its cards and
+    // the answers already given.
+    PrototypeMomentOfTruthSnapshot MomentOfTruth);
 
 public sealed record PrototypeRunResult(
     int Tick,
