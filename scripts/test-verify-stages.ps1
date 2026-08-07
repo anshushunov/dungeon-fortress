@@ -1546,11 +1546,14 @@ Assert-VerifyRejects `
 # so `-Stage scripts` refused on a machine without Godot even though nothing
 # in that stage's body calls dotnet or the engine - checked structurally
 # above (its own Summary says "Dependency-free"). Measured in
-# evidence/285-stage-engine-need.json: `scripts` is the only stage that
-# reaches neither Initialize-SolutionRestore / Initialize-SolutionBuild
+# evidence/285-stage-engine-need.json: `scripts` was, at the time, the only
+# stage that reaches neither Initialize-SolutionRestore / Initialize-SolutionBuild
 # (build, tests, mcp, and - through Initialize-ScenarioAssembly - sim and
 # load) nor the Godot executable itself (through Initialize-GameHostBuild and
-# Initialize-EngineRuntime - godot, ui, screenshots).
+# Initialize-EngineRuntime - godot, ui, screenshots). Issue #310's follow-up
+# round added a second such stage, `token-budget` - checked separately below
+# (check 1b), not by spawning a real run of it, for a cost reason explained
+# there.
 #
 # A bogus -GodotPath makes every case below deterministic regardless of
 # whether the machine running this test happens to have Godot on PATH or in
@@ -1671,6 +1674,47 @@ if ($env:DUNGEON_FORTRESS_SKIP_ENGINE_GATE_SMOKE -ne "1") {
         throw (
             "verify.ps1 -Stage scripts exited 0 but did not report a " +
             "successful verification_result: $($scriptsResult.Text)")
+    }
+
+    # --- check 1b: `token-budget` is registered as engine-free, statically -
+    #
+    # Issue #310's follow-up round moved the token-budget-report.ps1 test out
+    # of `scripts` into its own stage, for the same "dependency-free" reason
+    # `scripts` is check 1 above: neither needs the solution build nor the
+    # Godot engine. Check 1's own method - spawn a real `-Stage <name>` child
+    # with a bogus -GodotPath - cannot be reused for `token-budget` without
+    # reintroducing the exact cost this stage split exists to remove: that
+    # child would run the real, ~700 s transcript scan every time this file
+    # runs, which happens on every `-Stage scripts` selection (this file is
+    # itself one of that stage's checks). So this asserts the same underlying
+    # fact - `token-budget` is in verify.ps1's own $engineFreeStages list, the
+    # exact list its preflight consults - by reading the array literal
+    # straight out of the committed source, with no child process at all.
+    # A fresh parse, not the one inside Get-VerifyStructure ($mainAst there is
+    # local to that function) - Get-ParsedScript is the same helper this file
+    # already uses elsewhere for a standalone AST read.
+    $engineFreeCheckAst = (Get-ParsedScript -Path $verifyScript).Ast
+    $engineFreeAssignment = $engineFreeCheckAst.Find({
+        param($node)
+        $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Left -is [Management.Automation.Language.VariableExpressionAst] -and
+        $node.Left.VariablePath.UserPath -eq "engineFreeStages"
+    }, $true)
+    if ($null -eq $engineFreeAssignment) {
+        throw '$engineFreeStages is gone from verify.ps1, so which stages skip the engine cannot be checked at all.'
+    }
+    $engineFreeLiterals = @($engineFreeAssignment.Right.FindAll({
+        param($node)
+        $node -is [Management.Automation.Language.StringConstantExpressionAst]
+    }, $true) | ForEach-Object { $_.Value })
+    $missingFromEngineFree = @(@("scripts", "token-budget") | Where-Object { $_ -notin $engineFreeLiterals })
+    if ($missingFromEngineFree.Count -gt 0) {
+        throw (
+            "`$engineFreeStages in verify.ps1 is [$($engineFreeLiterals -join ', ')] " +
+            "and is missing [$($missingFromEngineFree -join ', ')] - a stage whose " +
+            "body never calls dotnet or Godot would start requiring the engine " +
+            "anyway, breaking a targeted run of it on a machine without Godot " +
+            "configured for no reason connected to what it actually checks.")
     }
 
     # --- checks 2 and 3: preflight refusal, then its wording ---------------

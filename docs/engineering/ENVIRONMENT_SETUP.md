@@ -358,14 +358,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
 каталога, Issue #307 для движка, — поэтому оба записаны здесь как объяснённое
 поведение, а не как обязательный параметр, который нужно помнить.
 
-**Исключение: `-Stage scripts`.** Единственная стадия, чьё тело не вызывает ни
-`dotnet`, ни движок (Issue #285; измерение — `evidence/285-stage-engine-need.json`
-в PR, закрывшем issue). Preflight резолвит движок, только если среди выбранных
-стадий есть хотя бы одна, кроме `scripts`, поэтому
-`.\scripts\verify.ps1 -Stage scripts` проходит без `-GodotPath`, без
-`GODOT4_CONSOLE` и без `-TemporaryRoot` — умолчание Issue #302 покрывает и этот
-случай. Любая другая стадия — в том числе в
-сочетании со `scripts` — снова требует движок: `build`, `tests` и `mcp`
+**Исключение: `-Stage scripts` и `-Stage token-budget`.** Две стадии, чьи тела
+не вызывают ни `dotnet`, ни движок: `scripts` (Issue #285; измерение —
+`evidence/285-stage-engine-need.json` в PR, закрывшем issue) и `token-budget`
+(Issue #310, вынесена из `scripts` тем же основанием — её тело тоже чистый
+PowerShell). Preflight резолвит движок, только если среди выбранных стадий
+есть хотя бы одна, кроме этих двух, поэтому `.\scripts\verify.ps1 -Stage
+scripts` и `.\scripts\verify.ps1 -Stage token-budget` проходят без
+`-GodotPath`, без `GODOT4_CONSOLE` и без `-TemporaryRoot` — умолчание Issue
+#302 покрывает и этот случай. Любая другая стадия — в том числе в сочетании со
+`scripts`/`token-budget` — снова требует движок: `build`, `tests` и `mcp`
 собирают решение целиком, `sim` и `load` восстанавливают его через
 `Initialize-ScenarioAssembly`, а `godot`, `ui` и `screenshots` запускают сам
 исполняемый файл. Отказ по-прежнему называет стадию, которая потребовала
@@ -390,7 +392,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -GodotP
 
 ### Стадии
 
-Проверка разделена на девять стадий. Стадия — группа проверок, которая падает по
+Проверка разделена на десять стадий. Стадия — группа проверок, которая падает по
 одной причине и нужна одному виду изменений. Полный прогон выполняет их в
 порядке таблицы; `-Stage` оставляет подмножество, `-Skip` исключает названные.
 
@@ -411,6 +413,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -GodotP
 | `godot` | `Debug` build Godot-host, изолированный импорт спрайтов, smoke, camera/input smoke, независимость checksum от камеры/кадра/UI scale и канонического состояния от частоты кадров | 30 с |
 | `ui` | эталонные кадры `tests/golden/ui/*.json`, снятые headless и сравнённые с коммитом | 4 с |
 | `screenshots` | baseline-кадр дважды с побайтовым сравнением и prepared-raid кадр; все параметры кадра явные | 12 с |
+| `token-budget` | регрессионный тест `token-budget-report.ps1` (Issue #303) против реальных транскриптов Claude Code на этой машине | 115–824 с\*\*\* |
 
 <!-- stage-table:end -->
 
@@ -437,6 +440,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -GodotP
 таблицы независимо от изменения. Обе цифры и команда — в теле PR, закрывшего
 Issue #253, а не здесь: причина не в гварде, а в разделяемой машине, и не
 предмет этого документа.
+
+\*\*\* Строка `token-budget` (Issue #310) варьируется сильнее любой другой:
+она сканирует реальные транскрипты Claude Code на диске
+(`~/.claude/projects/...`), и время зависит от файлового кэша ОС, а не только
+от их числа. На машине агента `.\scripts\verify.ps1 -Stage token-budget`
+показал 824,1 с при первом прогоне за сессию (`evidence/310-full-verify-in-scripts-stage.json`,
+элемент `scripts` до выноса теста из этой стадии) и 115,1 с несколько
+прогонов спустя в той же сессии (`evidence/310-token-budget-stage.json`) —
+без изменений в самом тесте, только тёплый кэш после повторных сканирований
+одной и той же директории. Ровно поэтому тест не годится ни одной другой
+стадии, кроме собственной: цена определяется состоянием диска, а не тем, что
+проверяет код.
 
 Что покрывает каждая стадия, печатает сам скрипт:
 

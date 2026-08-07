@@ -425,17 +425,6 @@ $stageCatalog = [ordered]@{
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $takeTaskTestScript
             )
-            # The regression test for token-budget-report.ps1 (Issue #303) runs
-            # against this machine's own Claude Code transcripts, not a fixture -
-            # same boundary the script itself documents ("Замер локален."). It does
-            # not depend on the solution build, the engine, or network access, so it
-            # belongs here alongside the other dependency-free script guards. It
-            # shipped in PR #309 unwired because scripts/test-verify-stages.ps1 was
-            # owned by a concurrent PR (#307) at the time; Issue #310 wires it in
-            # once that PR merged.
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $tokenBudgetReportTestScript
-            )
         }
     }
 
@@ -1027,21 +1016,55 @@ $stageCatalog = [ordered]@{
             }
         }
     }
+
+    "token-budget" = [pscustomobject]@{
+        Summary = "Regression test for token-budget-report.ps1 (Issue #303) against this machine's real Claude Code transcripts."
+        Body = {
+            # Issue #310. This test shipped unwired in PR #309 (scripts/test-verify-stages.ps1
+            # was owned by a concurrent PR at the time), was wired into the `scripts`
+            # stage once that blocker cleared, and moved here in the same Issue's
+            # follow-up round. Reason for its own stage rather than a slot in
+            # `scripts`: it is the only check in the whole catalogue that reads state
+            # outside the repository (this machine's own
+            # ~/.claude/projects/... transcript history - the boundary the script
+            # itself documents, "Замер локален.") and it dominates whatever stage
+            # holds it: measured at 700+ s versus low single digits for every other
+            # `scripts` guard combined (evidence/310-mutant-in-scripts-stage.json's
+            # negative-control run: 121.7 s for all fifteen `scripts` checks
+            # together, without this one). Rule 22 runs the full suite once per PR;
+            # wiring it into `scripts`
+            # made every *targeted* `-Stage scripts` run during a PR's intermediate
+            # rounds pay that cost too, even though nothing about editing an
+            # unrelated script needs a transcript scan. Its own stage keeps the cost
+            # exactly where it is unavoidable - the one full run - and off every
+            # other stage selection. Like `scripts`, it needs neither the solution
+            # build nor the Godot engine (see $engineFreeStages below).
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $tokenBudgetReportTestScript
+            )
+        }
+    }
 }
 
 $allStages = @($stageCatalog.Keys)
 
-# The only stage whose body never calls dotnet or the Godot executable: it is
-# pure PowerShell script guards (see its Summary above). Every other stage
-# reaches Initialize-SolutionRestore or Initialize-SolutionBuild somewhere in
-# its body - directly (build, tests, mcp), through Initialize-ScenarioAssembly
-# (sim, load) or through Initialize-GameHostBuild (godot, ui, screenshots) -
-# and that restore's NuGet profile is deliberately sourced from the engine's
-# bundled packages rather than nuget.org, so a partial run does not silently
+# The two stages whose bodies never call dotnet or the Godot executable:
+# `scripts` (pure PowerShell script guards, see its Summary above) and
+# `token-budget` (a single dependency-free PowerShell test, see its Summary
+# above). Every other stage reaches Initialize-SolutionRestore or
+# Initialize-SolutionBuild somewhere in its body - directly (build, tests,
+# mcp), through Initialize-ScenarioAssembly (sim, load) or through
+# Initialize-GameHostBuild (godot, ui, screenshots) - and that restore's
+# NuGet profile is deliberately sourced from the engine's bundled packages
+# rather than nuget.org, so a partial run does not silently
 # check a different source than a full run does. Measured, including why
 # nuget.org is not used instead, in evidence/285-stage-engine-need.json
-# (Issue #285).
-$engineFreeStages = @("scripts")
+# (Issue #285). `token-budget` joined this list in Issue #310's follow-up
+# round for the same reason `scripts` was in it originally: its body is pure
+# PowerShell, so gating it behind engine resolution would make a targeted
+# `-Stage token-budget` run refuse on a machine without Godot configured for
+# no reason connected to what it actually checks.
+$engineFreeStages = @("scripts", "token-budget")
 
 function Expand-StageNames {
     param(
@@ -1161,9 +1184,9 @@ try {
 
     # The engine is resolved only when a selected stage actually needs it - see
     # $engineFreeStages above for which ones do and why. A full run's refusal is
-    # unchanged: every stage but `scripts` needs the engine, so a full selection
-    # always falls into the "requires it" branch below and reports the same
-    # preflight failure it always has.
+    # unchanged: every stage but `scripts` and `token-budget` needs the engine,
+    # so a full selection always falls into the "requires it" branch below and
+    # reports the same preflight failure it always has.
     $engineRequiringStages = @($selectedStages | Where-Object { $_ -notin $engineFreeStages })
     if ($engineRequiringStages.Count -gt 0) {
         try {

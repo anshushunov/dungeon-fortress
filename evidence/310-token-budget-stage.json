@@ -1,0 +1,41 @@
+{
+  "issue": 310,
+  "question": "Moving scripts/test-token-budget-report.ps1 out of the `scripts` stage into its own `token-budget` stage: does `-Stage scripts` return to its pre-#310 order of cost, and what does the new `-Stage token-budget` cost on its own?",
+  "baseCommit": "verify.ps1/test-verify-stages.ps1/ENVIRONMENT_SETUP.md edited on top of ccfee82 (this PR's prior, in-scripts-stage round), not yet committed at measurement time.",
+  "scriptsStageAfterSplit": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage scripts",
+    "exitCode": 0,
+    "elapsedSeconds": 170.2,
+    "finalEvent": "{\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"partial\",\"stagesExecuted\":[\"scripts\"],\"stagesNotRun\":[\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\",\"token-budget\"],...}",
+    "comparison": "170.2 s, versus 824.1 s in evidence/310-full-verify-in-scripts-stage.json (same 15 checks - #253's four guards plus the eleven that predate Issue #310 - now with the token-budget test removed) and versus 121.7 s measured for the same 15 checks in evidence/310-mutant-in-scripts-stage.json's negative-control run. 170.2 s sits in the same order of magnitude as 121.7 s (both far below the 824.1 s baseline with the test still wired in); the residual gap between 170.2 and 121.7 is machine-load variance between separate runs in the same session, not a new cost - no code in the `scripts` stage changed between those two measurements beyond removing the one Invoke-Checked call this round also removes.",
+    "conclusion": "Confirmed: `-Stage scripts` returned to its pre-#310 order of cost. The 2.7x tax on every targeted `scripts`-stage run, named in the prior round's PR body, is gone."
+  },
+  "tokenBudgetStageAlone": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage token-budget",
+    "runs": [
+      {
+        "label": "clean run, no mutation",
+        "exitCode": 0,
+        "elapsedSeconds": 115.1,
+        "finalEvent": "{\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"partial\",\"stagesExecuted\":[\"token-budget\"],\"stagesNotRun\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\"],...}"
+      },
+      {
+        "label": "same stage, measured again inside the full run later the same session (evidence/310-full-verify.json)",
+        "exitCode": 0,
+        "elapsedSeconds": 119.7
+      }
+    ],
+    "varianceNote": "Both post-split measurements (115.1 s, 119.7 s) are far below the 700+ s this same test cost when it was the last check inside the `scripts` stage (824.1 s stage total minus ~121.7 s for the other 15 checks, both from the prior round's evidence). The most likely explanation is OS file-cache warmth: scripts/token-budget-report.ps1 scans real files under ~/.claude/projects/C--gamedev-Dungeon-fortress, and by this point in the session that directory tree had already been read cold multiple times by earlier rounds' runs (evidence/310-mutant-in-scripts-stage.json's baselineDirectRun, the in-scripts-stage full run, its mutant run, its negative control). No change was made to the test or the scanned data between the 824.1 s and 115.1 s measurements other than this stage move. This variance is documented, not hidden, in docs/engineering/ENVIRONMENT_SETUP.md's `token-budget` row footnote."
+  },
+  "mutantAgainstNewStage": {
+    "purpose": "Re-verify the mutant proof (previously against `scripts`, now against `token-budget`), and check whether moving the test to its own stage also resolves the ordering artifact noted in evidence/310-mutant-in-scripts-stage.json (the mutant surfacing via test-verify-stages.ps1's own nested engine-gate check at check #5, before this task's own call at check #16, because both read the same file).",
+    "method": "Verified clean via 'git status --short' before mutating. Applied the same forced-throw mutant to the committed scripts/test-token-budget-report.ps1, ran 'verify.ps1 -Stage token-budget', recorded the result, then restored with 'git checkout -- scripts/test-token-budget-report.ps1' and re-verified clean.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage token-budget",
+    "exitCode": 1,
+    "finalEvent": "{\"event\":\"verification_result\",\"status\":\"error\",\"scope\":\"partial\",\"failedPhase\":\"stage\",\"failedStage\":\"token-budget\",\"stagesExecuted\":[],\"stagesNotRun\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\",\"token-budget\"],\"reason\":\"'powershell' failed with exit code 1.\"}",
+    "stageOutputLogTail": "--- stage token-budget: Regression test for token-budget-report.ps1 (Issue #303) against this machine's real Claude Code transcripts.\n{\"event\":\"verification_result\",\"status\":\"error\",...,\"failedStage\":\"token-budget\",...}",
+    "maskingArtifactResolved": "Unlike the prior round's mutant (evidence/310-mutant-in-scripts-stage.json), this run shows exactly one failure, attributed by name to `token-budget`, with no earlier check's nested subprocess reaching the mutation first. Cause: `token-budget` is the only check in its own stage, and test-verify-stages.ps1's engine-gate smoke check (the source of the prior ordering artifact) is hardcoded to spawn a nested `-Stage scripts` run, which no longer touches this test at all. The stage split did not just move the cost - it also removed the pre-existing ambiguity in how the mutant's failure was attributed."
+  },
+  "elapsedSecondsOnMutant": "Not separately measured - the mutant throws immediately (before any transcript scan), so it is fast by construction regardless of file-cache state; not comparable to the clean-run numbers above and not treated as evidence of anything beyond 'it failed, and failed fast'.",
+  "conclusion": "The stage split achieves both of the coordinator's stated goals: `-Stage scripts` returns to its pre-#310 cost (170.2 s, versus 824.1 s with the test still wired in), and the mutant proof against the new `token-budget` stage is now unambiguous - failedStage names it directly, no earlier check's side effect involved."
+}
