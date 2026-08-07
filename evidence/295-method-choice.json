@@ -22,7 +22,7 @@
     },
     {
       "point": "A PNG needs a window; this does not",
-      "detail": "The screenshots stage is the one stage that runs the engine with a real window, and it is the slowest per capture. The record is produced by a headless run that was already happening, and the whole check costs 0.9 s of the godot stage (measured; see evidence/295-mutant-after.json)."
+      "detail": "The screenshots stage is the one stage that runs the engine with a real window, and it is the slowest per capture. The record is produced by a headless run that was already happening, and the whole check costs 0.23 s of the godot stage (measured; see evidence/295-mutant-after.json)."
     },
     {
       "point": "A PNG moves for reasons that are not geometry",

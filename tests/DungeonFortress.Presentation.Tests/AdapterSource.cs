@@ -84,11 +84,67 @@ internal static class AdapterSource
         PresentationFixtures.FindRepositoryRoot(),
         RelativePath.Replace('/', Path.DirectorySeparatorChar));
 
-    /// <summary>Every method whose name starts with the prefix, declared in the adapter.</summary>
-    internal static IReadOnlyList<string> DeclaredMethods(string prefix)
+    /// <summary>
+    /// Every method whose name starts with the prefix, declared in the adapter
+    /// — its own routines, not the engine primitives it hides.
+    ///
+    /// <para>
+    /// The exclusion is what Issue #295 added and it is narrow on purpose. A
+    /// declaration carrying the <c>new</c> modifier does not introduce a
+    /// routine: it redefines a method the engine already declares, which is how
+    /// the world-geometry journal reaches every mark without a single call site
+    /// being touched. Counting those as routines would make
+    /// <c>Every_drawing_routine_of_the_adapter_is_declared</c> demand that
+    /// <c>WorldDrawOrder</c> declare <c>DrawRect</c> as a mark with a pass and a
+    /// policy, which it is not.
+    /// </para>
+    ///
+    /// <para>
+    /// The escape this opens — hiding a real routine behind the modifier — is
+    /// closed rather than accepted: <see cref="HiddenEnginePrimitives"/> is
+    /// compared against the primitives the adapter actually calls, and every
+    /// one of them has to forward to <c>base</c> and do nothing else
+    /// (<c>WorldGeometryJournalGuardTests</c>).
+    /// </para>
+    /// </summary>
+    internal static IReadOnlyList<string> DeclaredMethods(string prefix) =>
+        NamesWithPrefix(prefix)
+            .Where(name => TryFindDeclaration(name, out _))
+            .Where(name => !HidesEnginePrimitive(name))
+            .ToArray();
+
+    /// <summary>
+    /// Every method whose name starts with the prefix that the adapter
+    /// <em>calls</em>, declared here or not. An engine primitive is exactly a
+    /// name that is called and belongs to no manifest, which is what makes the
+    /// completeness check of the shims self-maintaining.
+    /// </summary>
+    internal static IReadOnlyList<string> CalledMethods(string prefix) =>
+        NamesWithPrefix(prefix)
+            .Where(name => CallPositions(Masked, name).Any() ||
+                ReceiversOfAny(name).Count > 0)
+            .ToArray();
+
+    /// <summary>
+    /// Every method the adapter declares with the <c>new</c> modifier: the
+    /// engine primitives it hides in order to journal them.
+    /// </summary>
+    internal static IReadOnlyList<string> HiddenEnginePrimitives(string prefix) =>
+        NamesWithPrefix(prefix)
+            .Where(HidesEnginePrimitive)
+            .ToArray();
+
+    /// <summary>Every receiver of <paramref name="method"/>, <c>base</c> included.</summary>
+    internal static IReadOnlyList<string> ReceiversOfAny(string method) =>
+        Receivers(method, includeBase: true);
+
+    /// <summary>
+    /// Every distinct identifier starting with the prefix that appears anywhere
+    /// in the adapter, ordinal-sorted.
+    /// </summary>
+    private static IReadOnlyList<string> NamesWithPrefix(string prefix)
     {
-        var names = new List<string>();
-        var tested = new HashSet<string>(StringComparer.Ordinal);
+        var names = new SortedSet<string>(StringComparer.Ordinal);
         for (var index = 0; index < Masked.Length;)
         {
             var start = Masked.IndexOf(prefix, index, StringComparison.Ordinal);
@@ -109,15 +165,47 @@ internal static class AdapterSource
                 end++;
             }
 
-            var name = Masked[start..end];
-            if (tested.Add(name) && TryFindDeclaration(name, out _))
+            names.Add(Masked[start..end]);
+        }
+
+        return [.. names];
+    }
+
+    /// <summary>
+    /// Whether the declaration of <paramref name="method"/> carries the
+    /// <c>new</c> modifier.
+    ///
+    /// <para>
+    /// The modifier is looked for between the end of the previous statement or
+    /// block and the method's own name, which is exactly the run of modifiers
+    /// and the return type. <c>new</c> as an operator always stands inside an
+    /// expression and therefore after the last <c>;</c>, <c>{</c> or <c>}</c>
+    /// of some statement — never in that run.
+    /// </para>
+    /// </summary>
+    private static bool HidesEnginePrimitive(string method)
+    {
+        if (!TryFindDeclarationName(method, out var nameStart))
+        {
+            return false;
+        }
+
+        var start = nameStart;
+        while (start > 0 && Masked[start - 1] is not (';' or '{' or '}'))
+        {
+            start--;
+        }
+
+        foreach (var token in Masked[start..nameStart]
+                     .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (string.Equals(token, "new", StringComparison.Ordinal))
             {
-                names.Add(name);
+                return true;
             }
         }
 
-        names.Sort(StringComparer.Ordinal);
-        return names;
+        return false;
     }
 
     /// <summary>The body of one method: the block, or the expression after <c>=&gt;</c>.</summary>
@@ -234,8 +322,15 @@ internal static class AdapterSource
         }
     }
 
-    private static bool TryFindDeclaration(string method, out int bodyStart)
+    private static bool TryFindDeclaration(string method, out int bodyStart) =>
+        TryFindDeclaration(method, out bodyStart, out _);
+
+    private static bool TryFindDeclarationName(string method, out int nameStart) =>
+        TryFindDeclaration(method, out _, out nameStart);
+
+    private static bool TryFindDeclaration(string method, out int bodyStart, out int nameStart)
     {
+        nameStart = -1;
         for (var index = 0; index < Masked.Length;)
         {
             var start = Masked.IndexOf(method, index, StringComparison.Ordinal);
@@ -271,6 +366,7 @@ internal static class AdapterSource
                  Masked[after + 1] == '>'))
             {
                 bodyStart = Masked[after] == '{' ? after : after + 2;
+                nameStart = start;
                 return true;
             }
         }
@@ -411,7 +507,10 @@ internal static class AdapterSource
     /// whole file, so a receiver the reader does not understand is named rather
     /// than silently skipped.
     /// </summary>
-    internal static IReadOnlyList<string> ReceiversOf(string method)
+    internal static IReadOnlyList<string> ReceiversOf(string method) =>
+        Receivers(method, includeBase: false);
+
+    private static IReadOnlyList<string> Receivers(string method, bool includeBase)
     {
         var receivers = new List<string>();
         for (var index = 0; index < Masked.Length;)
@@ -442,7 +541,21 @@ internal static class AdapterSource
                 receiverStart--;
             }
 
-            receivers.Add(Masked[receiverStart..(start - 1)]);
+            var receiver = Masked[receiverStart..(start - 1)];
+            if (!includeBase && string.Equals(receiver, "base", StringComparison.Ordinal))
+            {
+                // The one receiver that is not a mark. `base.DrawRect(...)`
+                // exists in exactly one place — inside the declaration that
+                // hides `DrawRect` — and it is the forwarding call that makes
+                // the picture identical when nothing is being journalled
+                // (Issue #295). Every occurrence is held to that by
+                // WorldGeometryJournalGuardTests, which is what keeps this
+                // exemption from becoming the hole the guard was opened
+                // against; ReceiversOfAny still reports them.
+                continue;
+            }
+
+            receivers.Add(receiver);
         }
 
         return receivers;
