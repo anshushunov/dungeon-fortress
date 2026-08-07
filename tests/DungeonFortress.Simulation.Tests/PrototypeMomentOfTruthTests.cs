@@ -495,20 +495,24 @@ public sealed class PrototypeMomentOfTruthTests
     public void A_verdict_outside_the_window_or_without_a_card_is_refused_before_any_mutation()
     {
         // Outside the window: tick 5 of a party that has not seen a wave.
-        var early = LoadFixture("baseline") with
+        var world = new PrototypeWorld(LoadFixture("baseline") with
         {
             Commands = [new VerdictCommand(5, 0, VerdictKind.Reward)],
-        };
-        var world = new PrototypeWorld(early);
-        var before = PrototypeScenario.Capture(world).Checksum;
+        });
         for (var index = 0; index < 5; index++)
         {
             world.Step();
         }
 
+        // Photographed on the tick the command is due and compared after the
+        // refusal, which is the whole of what "before any mutation" claims.
+        // Independent review of PR #328 found this test asserting only that
+        // something was thrown; the checksum it did compare was of a world five
+        // ticks older, so it was bound to differ whatever the command did.
+        var beforeTheRefusal = PrototypeScenario.Capture(world).CanonicalJson;
         var refused = Assert.Throws<InvalidDataException>(world.Step);
         Assert.Contains("moment of truth is open", refused.Message, StringComparison.Ordinal);
-        Assert.NotEqual(before, PrototypeScenario.Capture(world).Checksum);
+        Assert.Equal(beforeTheRefusal, PrototypeScenario.Capture(world).CanonicalJson);
 
         // Without a card: inside the window, about somebody the domain did not
         // report on.
@@ -523,8 +527,15 @@ public sealed class PrototypeMomentOfTruthTests
         {
             Commands = [new VerdictCommand(atTick, uncarded, VerdictKind.Punish)],
         });
-        var thrown = Assert.Throws<InvalidDataException>(() => RunPastTheWindow(stray));
+        while (!stray.IsAwaitingVerdict && !stray.IsComplete)
+        {
+            stray.Step();
+        }
+
+        var beforeTheStrayVerdict = PrototypeScenario.Capture(stray).CanonicalJson;
+        var thrown = Assert.Throws<InvalidDataException>(stray.Step);
         Assert.Contains("reported no card", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(beforeTheStrayVerdict, PrototypeScenario.Capture(stray).CanonicalJson);
     }
 
     // ------------------------------------------------------------------
