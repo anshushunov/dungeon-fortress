@@ -662,7 +662,14 @@ public partial class Main : Node2D
         // frame-driven run and a frameless replay agree, the render loop added
         // nothing to canonical state.
         var replay = new PrototypeWorld(BuildFullLog(_playerCommands));
-        replay.RunTicks(_state!.Tick);
+        // Replayed to the same **tick** rather than for the same number of steps:
+        // a step stopped being a tick when the party learned to stand still
+        // between two waves (Issue #312).
+        var replayTarget = _state!.Tick;
+        while (!replay.IsComplete && replay.CurrentTick < replayTarget)
+        {
+            replay.Step();
+        }
 
         GD.Print(JsonSerializer.Serialize(new
         {
@@ -903,6 +910,18 @@ public partial class Main : Node2D
                 break;
             case Key.Y:
                 ReplayCurrentLog();
+                break;
+            // The moment of truth (Issue #312). The creature is the one already
+            // selected — the player clicks the name on the card — so the two keys
+            // carry only the sign of the judgement and never a target, a place or
+            // a moment. A verdict outside the window, or about somebody the domain
+            // said nothing about, is refused by the simulation and reported on the
+            // feedback line like any other rejected command.
+            case Key.G:
+                IssueVerdict(VerdictKind.Reward);
+                break;
+            case Key.H:
+                IssueVerdict(VerdictKind.Punish);
                 break;
             // Two jobs, in the order a player expects them: while a rectangle is
             // being dragged Esc withdraws the rectangle; with no rectangle in

@@ -206,7 +206,14 @@ public partial class Main
         var target = Math.Clamp(ticks, 0, PrototypeTuning.SessionTicks);
         // All of it but the last tick. The last one runs on its own below, so the
         // frame knows which way every body just stepped.
-        world.RunTicks(Math.Max(0, target - 1));
+        // Stepped to a **tick** and not for a number of steps: a step stopped
+        // being a tick when the party learned to stand still between two waves
+        // (Issue #312), and a fixture loaded "to tick N" must land on tick N or
+        // every captured frame moves with the balance.
+        while (!world.IsComplete && world.CurrentTick < Math.Max(0, target - 1))
+        {
+            world.Step();
+        }
         _world = world;
         _fixture = fixture;
         _paused = true;
@@ -235,8 +242,23 @@ public partial class Main
         if (target > 0 && !world.IsComplete)
         {
             RememberMotionOrigin();
-            world.RunTicks(1);
+            StepOneTick(world);
             RefreshState();
+        }
+    }
+
+    /// <summary>
+    /// One tick of the world, however many steps that takes. While a moment of
+    /// truth is open a step is spent waiting for a verdict and the tick does not
+    /// happen (Issue #312); STEP has to mean the same thing either way, so it
+    /// keeps stepping until the clock moves or the window closes by itself.
+    /// </summary>
+    private static void StepOneTick(PrototypeWorld world)
+    {
+        var before = world.CurrentTick;
+        while (!world.IsComplete && world.CurrentTick == before)
+        {
+            world.Step();
         }
     }
 
@@ -256,6 +278,11 @@ public partial class Main
         // the only evidence of it, and a STEP or an accepted command must show it
         // as readily as a running clock does.
         RememberCreatureHitPoints();
+        // Deliberately steps and not ticks: while a moment of truth is open a
+        // step is spent waiting, and the player pressing STEP has to watch the
+        // window count down instead of being carried through the pause they are
+        // supposed to answer (Issue #312). The same is true of the running clock,
+        // which comes through here.
         _world.RunTicks(Math.Min(ticks, PrototypeTuning.SessionTicks - _world.CurrentTick));
         RefreshState();
     }

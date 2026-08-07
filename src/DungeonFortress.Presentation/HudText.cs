@@ -989,6 +989,8 @@ public static class HudText
         BuildCancelCommand unbuild => $"t{unbuild.Tick} build_cancel ({unbuild.Tiles.Count})",
         SetPriorityCommand priority => $"t{priority.Tick} priority {priority.JobKind}={priority.Value}",
         SetRuleCommand rule => $"t{rule.Tick} rule {rule.RuleId}={rule.Value}",
+        VerdictCommand verdict =>
+            $"t{verdict.Tick} verdict {verdict.Verdict} #{verdict.CreatureId}",
         _ => command.GetType().Name,
     };
 }

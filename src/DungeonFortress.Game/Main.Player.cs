@@ -211,6 +211,32 @@ public partial class Main
         TryApplyPlayerCommand(new SetRuleCommand(_state.Tick, ruleId, value));
     }
 
+    /// <summary>
+    /// Answers the card of the currently selected creature (Issue #312). The
+    /// adapter contributes nothing but the sign: which creature is judged is the
+    /// one the player clicked, and whether the judgement is legal at all is the
+    /// simulation's answer on the tick of the command (ADR 0019).
+    /// </summary>
+    private void IssueVerdict(VerdictKind verdict)
+    {
+        if (_state is null)
+        {
+            return;
+        }
+
+        if (_selectedCreatureId is not { } creatureId)
+        {
+            _controlFeedback =
+                "no creature selected: click the one the card is about, then G to reward or " +
+                "H to punish.";
+            UpdateHud();
+            QueueRedraw();
+            return;
+        }
+
+        TryApplyPlayerCommand(new VerdictCommand(_state.Tick, creatureId, verdict));
+    }
+
     private void TryApplyPlayerCommand(PrototypeCommand command)
     {
         try
@@ -219,7 +245,13 @@ public partial class Main
             var candidateLog = BuildFullLog(candidateCommands);
             PrototypeCommandValidator.Validate(candidateLog);
             var candidateWorld = new PrototypeWorld(candidateLog);
-            candidateWorld.RunTicks(_state!.Tick);
+            // Replayed to the same **tick** and not for the same number of steps:
+            // a step stopped being a tick when the party learned to stand still
+            // between two waves (Issue #312), and RunTicks counts steps.
+            while (!candidateWorld.IsComplete && candidateWorld.CurrentTick < _state!.Tick)
+            {
+                candidateWorld.Step();
+            }
             _playerCommands.Add(command);
             _world = candidateWorld;
             _controlFeedback = $"accepted {HudText.DescribeCommand(command)}; activates on next tick";
@@ -246,7 +278,12 @@ public partial class Main
     private void ReplayCurrentLog()
     {
         var replay = new PrototypeWorld(BuildFullLog(_playerCommands));
-        replay.RunTicks(_state!.Tick);
+        var replayTarget = _state!.Tick;
+        while (!replay.IsComplete && replay.CurrentTick < replayTarget)
+        {
+            replay.Step();
+        }
+
         var checksum = PrototypeScenario.Capture(replay).Checksum;
         _controlFeedback = checksum == _checksum ? "replay checksum matches" : "replay checksum MISMATCH";
         if (checksum == _checksum)
