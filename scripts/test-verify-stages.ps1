@@ -177,6 +177,13 @@ $allowedOutsideStages = @(
     "Initialize-GodotNuGetEnvironment",
     # Cleanup of the run directory, which is best effort by design (Issue #89).
     "Remove-TemporaryItemBestEffort",
+    # Issue #302. Defined in TemporaryRoot.ps1: decides whether this run owns
+    # its temporary root at all (only the own-directory default does) before
+    # delegating to Remove-TemporaryItemBestEffort above. Same reasoning as
+    # that function - cleanup, not a check - and it has to run in `finally`
+    # regardless of how far the run got, which is why $temporaryRootPath and
+    # $temporaryRootOwned are read even on a preflight failure.
+    "Complete-VerificationTemporaryRoot",
     # Issue #284. Defined in GodotTools.ps1: routes a line to the run's stage
     # log file when verify.ps1 set one, and to Write-Host otherwise. It never
     # decides whether the repository is healthy - it only decides where a
@@ -2087,8 +2094,8 @@ try {
             Name = "temporary-directory-preflight-dropped"
             Why = "the Issue #89 preflight taken out of the run"
             File = "verify.ps1"
-            Find = '    $temporaryRootSelection = Initialize-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot'
-            Replace = '    $temporaryRootSelection = [pscustomobject]@{ Path = $null; Source = $null }'
+            Find = '    $temporaryRootSelection = Initialize-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot -RepositoryRoot $repoRoot'
+            Replace = '    $temporaryRootSelection = [pscustomobject]@{ Path = $null; Source = $null; Owned = $false }'
             Append = ""
             Expect = @("Initialize-VerificationTemporaryRoot", "never called")
         }

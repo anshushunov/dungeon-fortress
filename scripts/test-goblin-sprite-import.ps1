@@ -3,9 +3,11 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$GodotPath,
     # Issue #184: every entry point that starts the engine picks the temporary
-    # directory the same way. Run from verify.ps1 this changes nothing, because
-    # the parent has already put its choice in TEMP; run on its own it stops
-    # this script from being the one that disagrees.
+    # directory the same way. Issue #302 made that explicit rather than
+    # implicit: verify.ps1 now always passes the directory its own preflight
+    # already proved usable, and running this script on its own without it
+    # falls back to the same own-directory default (see below) instead of
+    # disagreeing with the parent.
     [string]$TemporaryRoot
 )
 
@@ -15,11 +17,19 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "GodotTools.ps1")
 . (Join-Path $PSScriptRoot "TemporaryRoot.ps1")
 
-$temporaryRootSelection = Resolve-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot
+$repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+
+# Issue #302: run from verify.ps1 this is always -TemporaryRoot, passed down
+# explicitly so this script uses the very directory the parent's preflight
+# already proved usable. Run standalone with neither -TemporaryRoot nor
+# $env:DUNGEON_FORTRESS_TEMP set, -RepositoryRoot lets it fall back to the
+# same own-directory default verify.ps1 uses, instead of the machine's
+# TMP/TEMP (evidence/302-temp-contention.json).
+$temporaryRootSelection = Resolve-VerificationTemporaryRoot `
+    -ExplicitPath $TemporaryRoot `
+    -RepositoryRoot $repoRoot
 $env:TEMP = ConvertTo-NormalizedRootPath -Path $temporaryRootSelection.Path
 $env:TMP = $env:TEMP
-
-$repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $testRoot = Join-Path $temporaryRoot ("dungeon-fortress-sprite-import-" + [Guid]::NewGuid().ToString("N"))
 $sourceAssets = Join-Path $repoRoot "src\DungeonFortress.Game\assets\generated\goblins"

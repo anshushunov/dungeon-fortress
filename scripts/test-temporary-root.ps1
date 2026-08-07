@@ -363,10 +363,18 @@ try {
 
     # --- resolution order ---------------------------------------------------
     # An override nobody can find is not an override, so the precedence is part
-    # of the contract: parameter, then environment variable, then TMP/TEMP.
-    $explicit = Resolve-VerificationTemporaryRoot -ExplicitPath $sandbox
-    if ($explicit.Path -ne $sandbox -or $explicit.Source -ne "-TemporaryRoot") {
-        throw "An explicit -TemporaryRoot was not the first choice: got '$($explicit.Path)' from '$($explicit.Source)'."
+    # of the contract: parameter, then environment variable, then this run's
+    # own directory. Issue #302 removed TMP/TEMP from the chain entirely -
+    # evidence/302-temp-contention.json measured it resolving to
+    # C:\WINDOWS\TEMP on this machine, a directory this account can create in
+    # but never delete from, so trusting it by default is the defect, not a
+    # feature to keep testing.
+    $explicit = Resolve-VerificationTemporaryRoot -ExplicitPath $sandbox -RepositoryRoot $repoRoot
+    if ($explicit.Path -ne $sandbox -or $explicit.Source -ne "-TemporaryRoot" -or $explicit.Owned) {
+        throw (
+            "An explicit -TemporaryRoot was not the first choice, or was marked " +
+            "Owned: got '$($explicit.Path)' from '$($explicit.Source)' " +
+            "(owned=$($explicit.Owned)).")
     }
 
     $previousVariable = $env:DUNGEON_FORTRESS_TEMP
@@ -374,25 +382,96 @@ try {
     $previousTmp = $env:TMP
     try {
         $env:DUNGEON_FORTRESS_TEMP = $sandbox
-        $fromVariable = Resolve-VerificationTemporaryRoot
-        if ($fromVariable.Path -ne $sandbox -or $fromVariable.Source -ne "`$env:DUNGEON_FORTRESS_TEMP") {
-            throw "DUNGEON_FORTRESS_TEMP was not used: got '$($fromVariable.Path)' from '$($fromVariable.Source)'."
+        $fromVariable = Resolve-VerificationTemporaryRoot -RepositoryRoot $repoRoot
+        if ($fromVariable.Path -ne $sandbox -or
+            $fromVariable.Source -ne "`$env:DUNGEON_FORTRESS_TEMP" -or
+            $fromVariable.Owned) {
+            throw (
+                "DUNGEON_FORTRESS_TEMP was not used, or was marked Owned: got " +
+                "'$($fromVariable.Path)' from '$($fromVariable.Source)' " +
+                "(owned=$($fromVariable.Owned)).")
         }
 
-        $overridden = Resolve-VerificationTemporaryRoot -ExplicitPath $artifactsRoot
+        $overridden = Resolve-VerificationTemporaryRoot -ExplicitPath $artifactsRoot -RepositoryRoot $repoRoot
         if ($overridden.Source -ne "-TemporaryRoot") {
             throw "-TemporaryRoot did not win over DUNGEON_FORTRESS_TEMP."
         }
 
         $env:DUNGEON_FORTRESS_TEMP = $null
-        $fallback = Resolve-VerificationTemporaryRoot
-        if ($fallback.Source -ne "TMP/TEMP") {
-            throw "Without an override the run did not fall back to TMP/TEMP: got '$($fallback.Source)'."
+
+        # --- Issue #302, mutant A: the default is not the ambient TMP/TEMP ---
+        # A sentinel TMP/TEMP proves this without depending on what this
+        # particular machine's TMP/TEMP happens to be: the assertion has to
+        # hold everywhere, not just on the machine C:\WINDOWS\TEMP was measured
+        # on.
+        $ambientSentinel = Join-Path $sandbox "ambient-sentinel-temp"
+        New-Item -ItemType Directory -Force -Path $ambientSentinel | Out-Null
+        $env:TEMP = $ambientSentinel
+        $env:TMP = $ambientSentinel
+        $ownDefault = Resolve-VerificationTemporaryRoot -RepositoryRoot $repoRoot
+        if ($ownDefault.Source -eq "TMP/TEMP") {
+            throw (
+                "Without -TemporaryRoot or `$env:DUNGEON_FORTRESS_TEMP, resolution " +
+                "fell back to the ambient TMP/TEMP - the Issue #302 defect: this " +
+                "machine's TMP/TEMP is a directory this account cannot delete " +
+                "from (evidence/302-temp-contention.json), and a shared machine " +
+                "directory is exactly what two concurrent agents collide on.")
+        }
+        if ($ownDefault.Source -ne "own run directory") {
+            throw "Without an override, resolution reported an unexpected source '$($ownDefault.Source)'."
+        }
+        if (-not $ownDefault.Owned) {
+            throw "The own-directory default was not marked Owned, so nothing will ever clean it up."
+        }
+        if ($ownDefault.Path.StartsWith($ambientSentinel, [StringComparison]::OrdinalIgnoreCase)) {
+            throw (
+                "The own-directory default '$($ownDefault.Path)' is inside the " +
+                "sentinel TMP/TEMP '$ambientSentinel'; relabelling TMP/TEMP is " +
+                "still the Issue #302 defect, not a fix for it.")
+        }
+        $expectedParent = Split-Path -Parent ([IO.Path]::GetFullPath($repoRoot))
+        if (-not $ownDefault.Path.StartsWith($expectedParent, [StringComparison]::OrdinalIgnoreCase)) {
+            throw (
+                "The own-directory default '$($ownDefault.Path)' is not a sibling " +
+                "of the repository root '$repoRoot' (expected under '$expectedParent').")
+        }
+
+        # --- Issue #302, mutant C: the default still goes through the usual
+        # preflight diagnosis, exactly like an explicit -TemporaryRoot always
+        # has. A fixed suffix makes the computed path predictable, so a file
+        # can be planted at the exact path the default would use.
+        $conflictSuffix = "conflict-" + [Guid]::NewGuid().ToString("N").Substring(0, 8)
+        $conflictPath = Get-OwnVerificationTemporaryRoot -RepositoryRoot $repoRoot -Suffix $conflictSuffix
+        if (Test-Path -LiteralPath $conflictPath) {
+            throw "The predicted own-directory default path '$conflictPath' already exists before the test could plant a conflict there."
+        }
+        [IO.File]::WriteAllText($conflictPath, "planted by scripts\test-temporary-root.ps1")
+        try {
+            $rejectedDefaultReason = $null
+            try {
+                Initialize-VerificationTemporaryRoot -RepositoryRoot $repoRoot -OwnDirectorySuffix $conflictSuffix | Out-Null
+            }
+            catch {
+                $rejectedDefaultReason = $_.Exception.Message
+            }
+            if ($null -eq $rejectedDefaultReason) {
+                throw (
+                    "The own-directory default was accepted even though " +
+                    "'$conflictPath' is a file, not a directory - the usual " +
+                    "diagnosis did not run against it.")
+            }
+            if ($rejectedDefaultReason -notmatch [regex]::Escape($conflictPath) -or
+                $rejectedDefaultReason -notmatch "is a file") {
+                throw "The own-directory default was refused, but not for the planted conflict: $rejectedDefaultReason"
+            }
+        }
+        finally {
+            Remove-Item -LiteralPath $conflictPath -Force -ErrorAction SilentlyContinue
         }
 
         # The override only helps if child processes and the engine see it, and
         # they read TMP and TEMP. Win32 GetTempPath prefers TMP, so both matter.
-        $applied = Initialize-VerificationTemporaryRoot -ExplicitPath $sandbox
+        $applied = Initialize-VerificationTemporaryRoot -ExplicitPath $sandbox -RepositoryRoot $repoRoot
         if ($applied.Path -ne $sandbox) {
             throw "The applied temporary root is '$($applied.Path)' instead of '$sandbox'."
         }
@@ -565,10 +644,64 @@ try {
         throw "The refusal does not say how to choose another directory: $($result.reason)"
     }
 
+    # --- Issue #302, mutant B: a run that owns its directory removes it -----
+    # In-process against the real function verify.ps1's `finally` block calls,
+    # not a nested `verify.ps1` invocation: the `scripts` stage already runs
+    # this very file, so spawning a full nested run here would have this
+    # check trigger itself recursively through that stage - measured at 240 s
+    # for a single `-Stage scripts` run instead of the usual tens of seconds,
+    # once with the recursion this produced. Complete-VerificationTemporaryRoot
+    # is the one place that decides whether a run's temporary root gets
+    # removed, so calling it directly proves the same thing the nested run
+    # would have, at the cost of a filesystem probe instead of a child process
+    # tree.
+    $ownedProbe = Join-Path $sandbox ("owned-cleanup-" + [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $ownedProbe | Out-Null
+    Complete-VerificationTemporaryRoot -Path $ownedProbe -Owned $true
+    if (Test-Path -LiteralPath $ownedProbe) {
+        throw (
+            "Complete-VerificationTemporaryRoot left an owned directory " +
+            "behind ('$ownedProbe'); a run that owns its temporary root has " +
+            "to remove it (Issue #302).")
+    }
+
+    # The negative control: a caller-supplied directory (Owned=$false, the
+    # shape an explicit -TemporaryRoot or $env:DUNGEON_FORTRESS_TEMP always
+    # produces) must never be touched, even though it is passed to the exact
+    # same function.
+    $notOwnedProbe = Join-Path $sandbox ("not-owned-cleanup-" + [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $notOwnedProbe | Out-Null
+    Complete-VerificationTemporaryRoot -Path $notOwnedProbe -Owned $false
+    if (-not (Test-Path -LiteralPath $notOwnedProbe)) {
+        throw (
+            "Complete-VerificationTemporaryRoot removed a directory marked " +
+            "Owned=`$false ('$notOwnedProbe'); an explicit -TemporaryRoot or " +
+            "`$env:DUNGEON_FORTRESS_TEMP names a directory the caller chose " +
+            "and may be reusing on purpose - this must never delete it.")
+    }
+    Remove-Item -LiteralPath $notOwnedProbe -Recurse -Force -ErrorAction SilentlyContinue
+
+    # A run whose preflight never got as far as choosing a directory - an
+    # empty Path, exactly what verify.ps1's own pre-try initialisation leaves
+    # $temporaryRootPath at - must be a silent no-op, not an error that
+    # replaces whatever the run was reporting (Issue #89's own reasoning,
+    # reapplied to this new function).
+    Complete-VerificationTemporaryRoot -Path "" -Owned $false
+
+    $realEndToEndCommand = (
+        "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify.ps1 " +
+        "-Stage scripts")
+    Write-Host (
+        "Own-directory default and cleanup are also proven end to end by a " +
+        "real, non-recursive command: run '$realEndToEndCommand' directly " +
+        "(not from inside this test) and read its verification_temporary_root " +
+        "and the directory's absence afterward - the evidence in " +
+        "evidence/302-temp-contention.json was captured exactly that way.")
+
     [ordered]@{
         event = "temporary_root_test"
         status = "ok"
-        resolutionOrder = @("-TemporaryRoot", "`$env:DUNGEON_FORTRESS_TEMP", "TMP/TEMP")
+        resolutionOrder = @("-TemporaryRoot", "`$env:DUNGEON_FORTRESS_TEMP", "own run directory")
         decidedByRemoveItem = $decidedByRemoveItem
         requiredDeleteParameters = $requiredRemoveItemParameters
         requiredErrorAction = $requiredErrorActionValue
@@ -579,7 +712,11 @@ try {
         cleanupWarnedInsteadOfThrowing = $cleanupWarned
         preflightRejectedBeforeStages = $true
         rejectionExitCode = $rejectionExitCode
-    } | ConvertTo-Json -Compress | Write-Host
+        ownDefaultNotAmbientTemp = $true
+        ownDefaultStillDiagnosed = $true
+        ownedTemporaryRootRemoved = $true
+        notOwnedTemporaryRootLeftAlone = $true
+    } | ConvertTo-Json -Compress -Depth 4 | Write-Host
 }
 finally {
     Remove-TemporaryItemBestEffort `

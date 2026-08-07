@@ -1,0 +1,29 @@
+{
+  "issue": 302,
+  "question": "Do the new temporary-root-default checks each die on their own assertion, or on one shared one?",
+  "method": "Applied each mutation as an uncommitted edit on top of the committed fix (commit 61b7e00), ran 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-temporary-root.ps1', recorded exit code and the first thrown message, then reverted with 'git checkout -- scripts/TemporaryRoot.ps1' (confirmed clean via 'git status --short') before applying the next one.",
+  "mutants": {
+    "A": {
+      "target": "scripts/TemporaryRoot.ps1, Resolve-VerificationTemporaryRoot's own-directory tier",
+      "find": "    return [pscustomobject]@{\n        Path = (Get-OwnVerificationTemporaryRoot -RepositoryRoot $RepositoryRoot -Suffix $OwnDirectorySuffix)\n        Source = \"own run directory\"\n        # Only this tier's directory is this run's alone to create and\n        # destroy. An explicit -TemporaryRoot or $env:DUNGEON_FORTRESS_TEMP\n        # names a directory the caller chose and may be reusing on purpose\n        # (evidence/302-temp-contention.json's own workarounds did exactly\n        # that across retries), so this run never deletes it.\n        Owned = $true\n    }\n}",
+      "replace": "    # MUTANT A (Issue #302): default reverted to the ambient machine TEMP.\n    return [pscustomobject]@{\n        Path = [IO.Path]::GetTempPath()\n        Source = \"TMP/TEMP\"\n        Owned = $false\n    }\n}",
+      "caughtBy": "the resolution-order block's own-directory check in test-temporary-root.ps1 (Source must not be 'TMP/TEMP')",
+      "result": "red, exit 1. First thrown message: \"Without -TemporaryRoot or $env:DUNGEON_FORTRESS_TEMP, resolution fell back to the ambient TMP/TEMP - the Issue #302 defect: this machine's TMP/TEMP is a directory this account cannot delete from (evidence/302-temp-contention.json), and a shared machine directory is exactly what two concurrent agents collide on.\""
+    },
+    "B": {
+      "target": "scripts/TemporaryRoot.ps1, Complete-VerificationTemporaryRoot",
+      "find": "    if (-not $Owned -or [string]::IsNullOrWhiteSpace($Path)) {\n        return\n    }\n\n    Remove-TemporaryItemBestEffort `\n        -Path $Path `\n        -Description \"own temporary root directory\" | Out-Null\n}",
+      "replace": "    # MUTANT B (Issue #302): cleanup of the owned directory removed.\n    return\n}",
+      "caughtBy": "the Complete-VerificationTemporaryRoot check in test-temporary-root.ps1 (an owned directory must be gone afterward)",
+      "result": "red, exit 1. First thrown message: \"Complete-VerificationTemporaryRoot left an owned directory behind ('C:\\\\gamedev\\\\_wt-302\\\\.artifacts\\\\temporary-root-test-5274297769d9425588e375dc5ad23c94\\\\owned-cleanup-3af590a479e544908b300c0cf9e82b9e'); a run that owns its temporary root has to remove it (Issue #302).\""
+    },
+    "C": {
+      "target": "scripts/TemporaryRoot.ps1, Initialize-VerificationTemporaryRoot",
+      "find": "    $selection = Resolve-VerificationTemporaryRoot -ExplicitPath $ExplicitPath -RepositoryRoot $RepositoryRoot -OwnDirectorySuffix $OwnDirectorySuffix\n    $candidate = ConvertTo-NormalizedRootPath -Path $selection.Path\n    # Unconditional, on purpose: the own-directory default is not exempt from\n    # this. It goes through the exact same probe - create, write, delete - as\n    # an explicit -TemporaryRoot always has, so a default that lands on an\n    # unusable directory (a file already there, a parent it cannot write to)\n    # is still refused by name and reason in preflight rather than accepted\n    # because this run picked it itself (Issue #302, mutant C).\n    $diagnosis = Get-TemporaryRootDiagnosis -Path $candidate\n    if ($null -ne $diagnosis) {",
+      "replace": "    $selection = Resolve-VerificationTemporaryRoot -ExplicitPath $ExplicitPath -RepositoryRoot $RepositoryRoot -OwnDirectorySuffix $OwnDirectorySuffix\n    $candidate = ConvertTo-NormalizedRootPath -Path $selection.Path\n    # MUTANT C (Issue #302): the own-directory default skips the usability probe.\n    $diagnosis = if ($selection.Source -eq \"own run directory\") { $null } else { Get-TemporaryRootDiagnosis -Path $candidate }\n    if ($null -ne $diagnosis) {",
+      "caughtBy": "the planted-conflict check in test-temporary-root.ps1 (a file at the predicted own-directory path must still be refused)",
+      "result": "red, exit 1. First thrown message: \"The own-directory default was accepted even though 'C:\\\\gamedev\\\\df-verify-conflict-423030c8' is a file, not a directory - the usual diagnosis did not run against it.\""
+    },
+    "conclusion": "Each of A, B and C is caught by a distinct assertion with a distinct message, none of them the same check. Working tree confirmed clean ('git status --short' showed only the untracked evidence-tmp/ scratch directory) after every revert."
+  }
+}

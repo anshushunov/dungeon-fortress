@@ -470,9 +470,18 @@ $stageCatalog = [ordered]@{
         Body = {
             Initialize-GameHostBuild
 
+            # Issue #302: the default temporary root is no longer read back from
+            # inherited TMP/TEMP - it is a directory this process computed for
+            # itself and may not compute again the same way if asked twice (the
+            # own-directory tier of Resolve-VerificationTemporaryRoot picks a
+            # fresh name every time it is not given one explicitly). Passing the
+            # already-resolved path down explicitly is what keeps this child
+            # using the very directory the preflight already proved usable,
+            # instead of silently picking a second one of its own.
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $goblinImportTestScript,
-                "-GodotPath", $godot
+                "-GodotPath", $godot,
+                "-TemporaryRoot", $temporaryRootPath
             )
 
             Initialize-EngineRuntime
@@ -1028,6 +1037,7 @@ $currentPhase = "preflight"
 $currentStage = $null
 $godotVersion = $null
 $temporaryRootPath = $null
+$temporaryRootOwned = $false
 
 New-Item -ItemType Directory -Force -Path $verifyRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $env:DOTNET_CLI_HOME | Out-Null
@@ -1064,13 +1074,15 @@ try {
     # both created there. Issue #89 spent three sessions on a TEMP that allowed
     # creating a directory and refused to delete it, because what verification
     # reported was "'powershell' failed with exit code 1" at stage godot.
-    $temporaryRootSelection = Initialize-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot
+    $temporaryRootSelection = Initialize-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot -RepositoryRoot $repoRoot
     $temporaryRootPath = $temporaryRootSelection.Path
+    $temporaryRootOwned = $temporaryRootSelection.Owned
     [ordered]@{
         event = "verification_temporary_root"
         status = "ok"
         path = $temporaryRootSelection.Path
         source = $temporaryRootSelection.Source
+        owned = $temporaryRootSelection.Owned
     } | ConvertTo-Json -Compress | Write-Host
 
     # The engine is resolved only when a selected stage actually needs it - see
@@ -1256,4 +1268,13 @@ finally {
             -Path $resolvedVerifyRoot `
             -Description "verification run directory" | Out-Null
     }
+
+    # Issue #302: a run that throws partway through - whether from a failed
+    # check or from Ctrl+C reaching PowerShell's own terminating-signal
+    # handling of a `finally` block - must not leave its own directory behind
+    # either. Complete-VerificationTemporaryRoot is the one place that decides
+    # whether this run owns $temporaryRootPath at all; see it in
+    # TemporaryRoot.ps1 for why an explicit -TemporaryRoot is never touched
+    # here.
+    Complete-VerificationTemporaryRoot -Path $temporaryRootPath -Owned $temporaryRootOwned
 }
