@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "issue": 287,
+  "what": "Result of executing the cleanup planned in evidence/287-worktree-inventory.json: what was actually removed, what could not be removed cleanly, and the final state of `git worktree list`.",
+  "measuredAt": "2026-08-07T02:56:00+03:00",
+  "before": {
+    "totalWorktreesIncludingRoot": 67,
+    "totalWorktreesExcludingRoot": 66,
+    "insideRootWorkingCopy": 32,
+    "command": "git -C \"C:/gamedev/Dungeon fortress\" worktree list --porcelain | rg -c \"^worktree \" (captured before any deletion, saved to evidence/287-worktree-inventory.json)"
+  },
+  "planned": {
+    "delete": 57,
+    "keep": 6,
+    "keepOutOfScope": 3,
+    "note": "counts from evidence/287-worktree-inventory.json entries[].decision"
+  },
+  "unexpectedFinding": {
+    "title": "git worktree remove deregisters but silently fails to delete files on Windows MAX_PATH (260 char) paths — for both this run's removals and pre-existing debris from an earlier, unrelated incident",
+    "details": [
+      "Every `.claude/worktrees/**` worktree hit `error: failed to delete '<path>': Filename too long` when removed with plain `git worktree remove` (and, for the 3 dirty ones, `--force`). git still deregisters the worktree from `.git/worktrees/` and from `git worktree list` — the failure is purely at the OS file-unlink step, caused by the combined length of `.claude/worktrees/<name>/src/DungeonFortress.Game/.godot/...` deep import-cache paths exceeding Windows' 260-character limit. `rm -rf` (MSYS) does not hit the same limit and was used to finish deleting the orphaned directory content after confirming (`git rev-parse --git-dir` failing with 'not a git repository') that git had already deregistered each one.",
+      "While clearing these, 6 directories were found in `.claude/worktrees/` that had ALREADY been deregistered before this task started — they never appeared in the initial `git worktree list --porcelain` snapshot (67 entries) taken at the top of this task, yet sat on disk with a `.git` pointer file referencing a `.git/worktrees/<name>` admin directory that no longer exists (agent-a67492ea35395b5d6, agent-hud-readability, agent-issue101, agent-tempo-rules), or with no git linkage at all (coord-verify110, review-pr108-base — leftover review-harness scratch dirs, not full checkouts). This is the same failure mode as above, from an earlier, unrelated `git worktree remove` run that predates this task. They were cleared in the same pass: each was independently confirmed already deregistered (git refuses to treat them as a repo), so removing their leftover files carries the same safety guarantee as the 29 this task itself deregistered — git's own dirty-check already ran and passed at the time they were removed, whenever that was.",
+      "This failure mode is a durable risk for this repository specifically because Godot worktrees carry `.godot` import caches with deep generated paths; any future `git worktree remove` on a `.claude/worktrees/**` (or any deeply-nested) Godot worktree can leave the same kind of filesystem debris even though `git worktree list` correctly shows it gone. Not fixed by this PR — named here as a finding, not remediated with a wrapper script, because AGENTS.md/scripts/verify.ps1 are out of this task's file partition and the fix (e.g. an `rm -rf` fallback wrapped around `git worktree remove`) belongs with whoever owns the worktree-creation tooling."
+    ],
+    "verifiabilityCaveat": "The 'git already deregistered this path, therefore rm -rf is safe' check (`git rev-parse --git-dir` failing, or `git -C <path> status --porcelain` failing with 'not a git repository') was run live, immediately before each deletion, in the session that did this cleanup — not skipped. It is NOT independently re-verifiable from the repository after the fact: the intermediate per-path confirmation output was not captured into a persisted evidence file, only judged in the moment and acted on. An independent reviewer working from repo state alone can confirm the 'before' snapshot (this file's sibling, 287-worktree-inventory.json) and the 'after' state (git worktree list, .claude/worktrees empty, .git/worktrees has no orphaned admin dirs) but cannot replay the intermediate per-directory safety check. Named honestly rather than presented as independently provable."
+  },
+  "actuallyRemoved": {
+    "insideRootWorkingCopy": {
+      "count": 32,
+      "method": "git worktree remove [--force for 3 dirty ones] to deregister, then rm -rf to clear the Windows-long-path leftovers that git itself could not unlink",
+      "plusPreExistingOrphans": 6,
+      "note": "32 planned + 6 unplanned pre-existing orphans discovered during cleanup (see unexpectedFinding) = 38 directories cleared from .claude/worktrees/, which is now empty"
+    },
+    "outsideRootMergedOrStaleReview": {
+      "count": 25,
+      "method": "git worktree remove (all clean, no --force needed)",
+      "breakdown": {
+        "mergedBranches": 20,
+        "detachedReviewCheckoutsOfAlreadyMergedPRs": 5
+      }
+    },
+    "totalRemoved": 57
+  },
+  "threeDirtyWorktreesForced": [
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a2f4c45056d13ab45",
+      "branch": "agent/38-mcp-build-lock",
+      "pr": "MERGED #63",
+      "uncommittedContent": "?? src/DungeonFortress.Game/HudButton.cs.uid",
+      "verdict": "Godot import-cache artifact (.uid sidecar file), not source; safe to discard",
+      "command": "git -C <path> status --porcelain; git -C <path> diff --stat"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-adebaf459f13bd979",
+      "branch": "agent/58-pause-designation",
+      "pr": "MERGED #62",
+      "uncommittedContent": "?? src/DungeonFortress.Game/HudButton.cs.uid",
+      "verdict": "same Godot import-cache artifact; safe to discard",
+      "command": "git -C <path> status --porcelain; git -C <path> diff --stat"
+    },
+    {
+      "path": "C:/gamedev/Dungeon fortress/.claude/worktrees/agent-a4be8caf42d97e9dc",
+      "branch": null,
+      "detached": true,
+      "pr": "none",
+      "uncommittedContent": "?? .review-scratch/",
+      "verdict": "review-agent scratch directory (not source, not tracked by any file), safe to discard",
+      "command": "git -C <path> status --porcelain"
+    }
+  ],
+  "keptAmbiguous": [
+    {
+      "path": "C:/gamedev/_wt-177-floor-disc",
+      "branch": "spike/177-floor-disc",
+      "pr": "none",
+      "uncommittedContent": "M src/DungeonFortress.Game/Main.cs (DrawFloorDisc spike, real exploratory design code, not junk)",
+      "verdict": "NOT deleted. Issue #177 was already closed via a different, merged fix (side ring, agent/177-side-marker, PR #203). This worktree holds an uncommitted, never-finished alternative visual treatment (a flat floor-disc shadow instead of the ring). It is real work, not build debris, and the task's own non-goals forbid deleting uncommitted work without an explicit decision. Left for the owner/coordinator to decide: discard, or turn into a documented spike/ADR reference.",
+      "command": "git -C \"C:/gamedev/_wt-177-floor-disc\" status --porcelain; git -C \"C:/gamedev/_wt-177-floor-disc\" diff -- src/DungeonFortress.Game/Main.cs"
+    }
+  ],
+  "after": {
+    "command": "git -C \"C:/gamedev/Dungeon fortress\" worktree list --porcelain | rg -c \"^worktree \"",
+    "totalWorktreesIncludingRoot": 11,
+    "totalWorktreesExcludingRoot": 10,
+    "insideRootWorkingCopy": 0,
+    "note": "One worktree not present in the 'before' snapshot (_wt-294, agent/294-...) appeared during this task's run — another agent claimed Issue #294 in parallel. It is untouched, counted here only because it is present in the 'after' list; it is not part of this task's delete/keep decision set."
+  },
+  "mutantCheck": {
+    "what": "Proves scripts/check-no-worktrees-in-root.ps1 actually catches the violation it claims to catch, run after the cleanup commit (checkpoint 2).",
+    "steps": [
+      {
+        "step": "add mutant worktree inside root",
+        "command": "git -C \"C:/gamedev/Dungeon fortress\" worktree add \".claude/worktrees/mutant-287\" HEAD --detach"
+      },
+      {
+        "step": "red",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-no-worktrees-in-root.ps1 -RepoRoot \"C:/gamedev/Dungeon fortress\"",
+        "output": "{\"event\":\"worktrees_in_root_check\",\"repoRoot\":\"C:\\\\gamedev\\\\Dungeon fortress\",\"totalRegisteredWorktrees\":12,\"offenders\":[\"C:\\\\gamedev\\\\Dungeon fortress\\\\.claude\\\\worktrees\\\\mutant-287\"],\"status\":\"fail\"}",
+        "exitCode": 1
+      },
+      {
+        "step": "remove mutant worktree",
+        "command": "git -C \"C:/gamedev/Dungeon fortress\" worktree remove --force \".claude/worktrees/mutant-287\" && git -C \"C:/gamedev/Dungeon fortress\" worktree prune -v"
+      },
+      {
+        "step": "green",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-no-worktrees-in-root.ps1 -RepoRoot \"C:/gamedev/Dungeon fortress\"",
+        "output": "{\"event\":\"worktrees_in_root_check\",\"repoRoot\":\"C:\\\\gamedev\\\\Dungeon fortress\",\"totalRegisteredWorktrees\":11,\"offenders\":[],\"status\":\"ok\"}",
+        "exitCode": 0
+      }
+    ],
+    "result": "red then green, confirmed"
+  }
+}
