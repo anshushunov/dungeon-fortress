@@ -1,0 +1,77 @@
+{
+  "issue": 302,
+  "question": "Where can the own-directory default live and still leave real headroom under the 254-character Godot shader-cache budget from Issue #184?",
+  "method": [
+    "Wrote a throwaway script (dot-sourcing the real scripts/GodotTools.ps1) that calls the real Assert-GodotShaderCachePathFits for a fixed project name ('Dungeon Fortress - deterministic spike', 38 characters, the actual config/name in src/DungeonFortress.Game/project.godot) and a fixed per-worktree profile-name hash (Get-StablePathHash of 'C:\\gamedev\\_wt-302', the real repository root at the time of measurement), against several candidate temporary roots.",
+    "Ran it with 'powershell -NoProfile -ExecutionPolicy Bypass -File evidence-tmp/measure-path.ps1' and read LongestPathLength/Headroom off the real function's own output for each candidate."
+  ],
+  "budget": {
+    "maximumEnterablePathLength": 254,
+    "source": "$script:GodotMaximumEnterableDirectoryPathLength in scripts/GodotTools.ps1, measured for Issue #184 in evidence/184-cause.json"
+  },
+  "candidates": [
+    {
+      "root": "C:\\WINDOWS\\TEMP",
+      "rootLength": 15,
+      "longestShaderCachePathLength": 204,
+      "headroom": 50,
+      "note": "The pre-#302 default. Path-length-wise this was always fine; the defect was that this account cannot delete from it (evidence/302-temp-contention.json), not that it was too deep."
+    },
+    {
+      "root": "C:\\Users\\User\\AppData\\Local\\Temp",
+      "rootLength": 32,
+      "longestShaderCachePathLength": 221,
+      "headroom": 33,
+      "note": "A per-user-profile alternative considered and rejected as the default: the account name is part of the path, so headroom shrinks with username length in a way this measurement cannot bound for other machines."
+    },
+    {
+      "root": "C:\\gamedev\\_wt-302\\.artifacts\\verify-temp-abc123ef01234567890123456789012",
+      "rootLength": 73,
+      "longestShaderCachePathLength": null,
+      "headroom": null,
+      "note": "REJECTED - throws. A per-run directory (32-hex GUID suffix, matching how $verifyRoot already names its own run directories) nested inside the worktree's own .artifacts is already too deep before the Godot profile and shader-cache suffix are even added. This is the candidate the Issue's own suggestion ('gitignored run directory is a legitimate place') most naturally reads as, and it does not fit."
+    },
+    {
+      "root": "C:\\gamedev\\_wt-302\\.artifacts",
+      "rootLength": 29,
+      "longestShaderCachePathLength": 218,
+      "headroom": 36,
+      "note": "Fits, but only because it is NOT per-run (no GUID suffix) - every run in this worktree would share the same root and rely entirely on the Godot-profile hash and per-run GUIDs used by its subdirectories for isolation, rather than the temporary root itself owning a directory it can point to as 'this run's own'."
+    },
+    {
+      "root": "C:\\gamedev\\_wt-302\\.artifacts\\vt-abc12345",
+      "rootLength": 41,
+      "longestShaderCachePathLength": 230,
+      "headroom": 24,
+      "note": "A per-run directory inside .artifacts with a short (8-hex) suffix instead of a full GUID. Fits on this worktree's path, but headroom shrinks to 17 for the sibling worktree used in the concurrency reproduction (C:\\gamedev\\_wt-302-repro-b\\.artifacts\\v-abc12345, see next row) - the margin is worktree-path-length-dependent in a way that is not safe to assume stays positive on a longer checkout path or a longer worktree name."
+    },
+    {
+      "root": "C:\\gamedev\\_wt-302-repro-b\\.artifacts\\v-abc12345",
+      "rootLength": 48,
+      "longestShaderCachePathLength": 237,
+      "headroom": 17,
+      "note": "Same per-run-inside-.artifacts shape, one worktree deeper. 17 characters of headroom is not a safe margin: a longer username, a deeper checkout, or a longer worktree branch slug (this repository already has worktree names like _wt-284-verify-ps1-pechataet-8-kb... in its own git history) would exhaust it."
+    },
+    {
+      "root": "C:\\Users\\User\\AppData\\Local\\Temp\\df-verify-abc12345",
+      "rootLength": 51,
+      "longestShaderCachePathLength": 240,
+      "headroom": 14,
+      "note": "Per-run directory inside the per-user temp folder. Rejected for the same username-length-dependence as the bare AppData\\Local\\Temp candidate above, made worse by the added per-run suffix."
+    },
+    {
+      "root": "C:\\gamedev\\df-verify-a1b2c3d4",
+      "rootLength": 29,
+      "longestShaderCachePathLength": 218,
+      "headroom": 36,
+      "note": "ADOPTED. Sibling of the repository root (Split-Path -Parent of the resolved worktree path), not nested inside it. Writable by construction - this is exactly where 'git worktree add' itself already writes - and short: headroom matches the flat-.artifacts candidate above while still being a genuine per-run directory (the 8-hex suffix is a fresh GUID substring per run, not shared across runs or worktrees)."
+    }
+  ],
+  "chosenDefault": {
+    "shape": "<parent of repository root>\\df-verify-<8 hex>",
+    "example": "C:\\gamedev\\df-verify-1a2b3c4d for repository root C:\\gamedev\\_wt-302",
+    "implementation": "Get-OwnVerificationTemporaryRoot in scripts/TemporaryRoot.ps1",
+    "whyNotInsideWorktree": "The two .artifacts-nested candidates above show headroom dropping from 36 (flat) to as low as 17 (one directory level deeper, on a different but comparably-named worktree) purely from worktree path depth - not a safe margin to commit to as the default across every checkout this repository will ever have.",
+    "whyNotTmpTemp": "evidence/302-temp-contention.json: path length was never the problem with TMP/TEMP: this account simply cannot delete from C:\\WINDOWS\\TEMP, at any depth."
+  }
+}
