@@ -28,9 +28,17 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 # claiming") is proven dead by running two mutations against copies of the
 # library and showing each one changes the outcome of the claim.
 #
-# This test is not wired into a verify.ps1 stage: adding it there is a
-# coordinator decision (it would touch scripts/verify.ps1, which this task's
-# partition keeps elsewhere).
+# Wired into the "scripts" stage of scripts/verify.ps1 ($takeTaskTestScript);
+# that wiring predates Issue #282 and is not part of this file's own
+# partition, so it is only relied on here, not re-described in detail.
+#
+# Issue #282 added Get-ReadingPackage coverage (the entry package is
+# assembled by task type instead of a fixed document list) plus three
+# mutants: A (take-task.ps1 stops asking Get-ReadingPackage about the real
+# Issue), B (Get-ReadingPackage silently narrows the package instead of
+# falling back to the full one with a warning when the type cannot be
+# determined) and C (AGENT_ENTRY.md drops one of its two mandatory-reading
+# sources, checked as text rather than as a run).
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $agentDir = Join-Path $repoRoot "scripts\agent"
@@ -54,6 +62,28 @@ function Assert-True {
     if (-not $Condition) {
         throw "ASSERT FAILED: $Message"
     }
+}
+
+function Get-ReadingPackageSection {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Text
+    )
+
+    # AGENT_ENTRY.md's own "Обязательное чтение" table names the same doc
+    # paths the printed package can name (e.g. PROTOTYPE_01_PREPARE_FOR_RAID.md),
+    # and that table is always in the output as part of "--- Agent Entry
+    # Rules ---". A check for "does this brief carry a given doc" has to look
+    # only at the per-Issue "--- Reading Package ---" section, or it would
+    # trivially pass from the boilerplate alone regardless of what
+    # take-task.ps1 actually decided for this Issue.
+    $m = [regex]::Match($Text, '(?s)--- Reading Package ---\r?\n(.*?)\r?\n--- Workspace Info ---')
+    if ($m.Success) {
+        return $m.Groups[1].Value
+    }
+    return ""
 }
 
 function New-FixtureRepository {
@@ -382,10 +412,16 @@ try {
         # which is exactly what makes it detectable. The state is re-seeded first
         # because the clean run already mutated it (posted its marker, set labels).
         $mutatedPath = Join-Path $sandbox ("lib-" + $mutation.Name + ".ps1")
+        # BOM is required here (Issue #282): take-task.lib.ps1 now carries
+        # Cyrillic reading-package text, and Windows PowerShell 5.1 falls
+        # back to the system codepage for a script file with no BOM, which
+        # corrupts those bytes badly enough to break parsing, not just
+        # display. The real files ship with a BOM (Copy-Item preserves it);
+        # a written-out mutation has to add it back explicitly.
         [IO.File]::WriteAllText(
             $mutatedPath,
             $libText.Replace($mutation.Find, $mutation.Replace),
-            [Text.UTF8Encoding]::new($false))
+            [Text.UTF8Encoding]::new($true))
         . $mutatedPath
         $null = New-InitialState -Sandbox $sandbox -Name $mutation.StateName -Number $mutation.Number `
             -InjectCompetitor $mutation.InjectCompetitor -FailClaimPersistence $mutation.FailClaimPersistence
@@ -398,6 +434,42 @@ try {
         . $libPath
     }
     $checks.mutant = "dead: both mutations change the claim outcome"
+
+    # =========================================================================
+    # Part A2: Get-ReadingPackage — the entry package is assembled by task
+    # type (Issue #282), not a fixed ~10-document list. Behavioural, no gh.
+    # =========================================================================
+    $simPkg = Get-ReadingPackage -Labels @("tier:standard", "ready") `
+        -Body "Партиция: своё — src/DungeonFortress.Simulation/PrototypeWorld.cs."
+    Assert-True "a Simulation-path body must resolve to the simulation area" ($simPkg.Certain -and ($simPkg.Areas -contains "simulation"))
+    Assert-True "the simulation package names the design contract" (($simPkg.Lines -join "`n") -match "PROTOTYPE_01_PREPARE_FOR_RAID")
+    Assert-True "the simulation package does not name presentation docs" (($simPkg.Lines -join "`n") -notmatch "PROTOTYPE_GRAYBOX")
+
+    $presPkg = Get-ReadingPackage -Labels @("tier:standard", "ready") `
+        -Body "Партиция: своё — src/DungeonFortress.Presentation/BodyRig.cs."
+    Assert-True "a Presentation-path body must resolve to the presentation area" ($presPkg.Certain -and ($presPkg.Areas -contains "presentation"))
+    Assert-True "the presentation package names the graybox doc" (($presPkg.Lines -join "`n") -match "PROTOTYPE_GRAYBOX")
+
+    $artPkg = Get-ReadingPackage -Labels @("tier:art", "ready") -Body "Нарисуй новый комплект брони."
+    Assert-True "tier:art must resolve to the art area regardless of body" ($artPkg.Certain -and ($artPkg.Areas -contains "art"))
+
+    $deepPkg = Get-ReadingPackage -Labels @("tier:deep", "ready") -Body "Баланс силы владения."
+    Assert-True "tier:deep must pull in the simulation area even without a src path" ($deepPkg.Certain -and ($deepPkg.Areas -contains "simulation"))
+
+    $toolingPkg = Get-ReadingPackage -Labels @("tier:fast", "ready") `
+        -Body "Партиция: своё — docs/engineering/AGENT_ENTRY.md, scripts/verify.ps1."
+    Assert-True "a docs/scripts-only body must resolve to tooling-docs" ($toolingPkg.Certain -and (@($toolingPkg.Areas) -join ",") -eq "tooling-docs")
+    Assert-True "tooling-docs reads nothing extra" ($toolingPkg.Lines.Count -eq 1 -and $toolingPkg.Lines[0] -match "ничего сверх")
+
+    $unknownPkg = Get-ReadingPackage -Labels @("tier:standard", "ready") -Body "У задачи пока нет описания."
+    Assert-True "a body with no recognisable path must be uncertain" (-not $unknownPkg.Certain)
+    Assert-True "an uncertain package falls back to every area, not a narrower guess" (
+        ($unknownPkg.Areas -contains "simulation") -and ($unknownPkg.Areas -contains "presentation") -and
+        ($unknownPkg.Areas -contains "headless") -and ($unknownPkg.Areas -contains "art") -and
+        ($unknownPkg.Areas -contains "product")
+    )
+
+    $checks.readingPackage = "ok (simulation, presentation, art, tier:deep, tooling-docs, uncertain-falls-back-to-full)"
 
     # =========================================================================
     # Part B: acceptance criteria 1-5, end to end
@@ -441,6 +513,116 @@ try {
     Assert-True "brief must contain the issue body" ($run1.Text -match "BODY-OF-ISSUE-5")
     Assert-True "brief must contain the agent entry rules" ($run1.Text -match "тело PR и есть отчёт")
 
+    # =========================================================================
+    # Part B2 (Issue #282): the reading package is assembled by task type end
+    # to end, and the two mutants assigned to this half:
+    #   A — take-task.ps1 stops asking Get-ReadingPackage about the real
+    #       Issue and prints a package independent of type;
+    #   B — Get-ReadingPackage silently narrows the package on insufficient
+    #       data instead of falling back to the full one with a warning.
+    # =========================================================================
+
+    # --- clean: a docs/scripts-only Issue must get the narrow package -------
+    $toolingState = New-InitialState -Sandbox $sandbox -Name "e2e-tooling" -Number 10 `
+        -Labels @("tier:fast", "ready") `
+        -Body "Партиция: свое - docs/engineering/AGENT_ENTRY.md, scripts/verify.ps1."
+    $toolingRun = Invoke-TakeTaskChild -Fixture $fixture -StateFile $toolingState -Arguments @("-Tier", "fast")
+    $toolingSection = Get-ReadingPackageSection -Text $toolingRun.Text
+    Assert-True "a tooling-docs Issue must claim and print a brief" ($toolingRun.ExitCode -eq 0)
+    Assert-True "a tooling-docs brief names the tooling-docs area" ($toolingRun.Text -match "Areas: tooling-docs")
+    Assert-True "a tooling-docs package must not carry the simulation design contract" ($toolingSection -notmatch "PROTOTYPE_01_PREPARE_FOR_RAID")
+    Assert-True "a tooling-docs brief must not warn about undetermined type" ($toolingRun.Text -notmatch "Область задачи не определена")
+
+    # --- clean: an Issue with no recognisable path gets the full package
+    #     and says plainly that the type could not be determined ------------
+    $unknownState = New-InitialState -Sandbox $sandbox -Name "e2e-unknown" -Number 11 `
+        -Labels @("tier:standard", "ready") -Body "У задачи пока нет описания."
+    $unknownRun = Invoke-TakeTaskChild -Fixture $fixture -StateFile $unknownState -Arguments @("-Tier", "standard")
+    $unknownSection = Get-ReadingPackageSection -Text $unknownRun.Text
+    Assert-True "an undetermined-type Issue must still claim and print a brief" ($unknownRun.ExitCode -eq 0)
+    Assert-True "an undetermined-type brief must say the area was not determined" ($unknownRun.Text -match "Область задачи не определена")
+    Assert-True "an undetermined-type package still carries every area" (
+        ($unknownSection -match "PROTOTYPE_01_PREPARE_FOR_RAID") -and
+        ($unknownSection -match "PROTOTYPE_GRAYBOX") -and
+        ($unknownSection -match "ANIMATION_PIPELINE")
+    )
+
+    $checks.readingPackageE2E = "ok (tooling-docs narrow + silent, undetermined full + warning)"
+
+    # --- mutant A: take-task.ps1 ignores the real Issue and always feeds
+    #     Get-ReadingPackage an empty label/body pair -------------------------
+    $entryText = [IO.File]::ReadAllText($entryPath)
+    $mutantAFind = '$readingPackage = Get-ReadingPackage -Labels $issueLabelNames -Body $issueData.body'
+    $mutantAOcc = ([regex]::Matches($entryText, [regex]::Escape($mutantAFind))).Count
+    if ($mutantAOcc -ne 1) {
+        throw "Mutation 'A' anchors on text appearing $mutantAOcc time(s) in take-task.ps1; it has to appear exactly once."
+    }
+    $mutantASandbox = Join-Path $sandbox "mutantA"
+    New-Item -ItemType Directory -Force -Path $mutantASandbox | Out-Null
+    $mutantAFixture = New-FixtureRepository -Sandbox $mutantASandbox
+    # BOM is required (see the comment on the claim-protocol mutation loop
+    # above): take-task.ps1's brief text is Cyrillic, and a child process
+    # started against a no-BOM copy would fail to parse it, not just
+    # mis-render it.
+    [IO.File]::WriteAllText(
+        (Join-Path $mutantAFixture "scripts\agent\take-task.ps1"),
+        $entryText.Replace($mutantAFind, '$readingPackage = Get-ReadingPackage -Labels @() -Body ""'),
+        [Text.UTF8Encoding]::new($true))
+    $mutantAState = New-InitialState -Sandbox $mutantASandbox -Name "mut-a" -Number 10 `
+        -Labels @("tier:fast", "ready") `
+        -Body "Партиция: свое - docs/engineering/AGENT_ENTRY.md, scripts/verify.ps1."
+    $mutantARun = Invoke-TakeTaskChild -Fixture $mutantAFixture -StateFile $mutantAState -Arguments @("-Tier", "fast")
+    $mutantASection = Get-ReadingPackageSection -Text $mutantARun.Text
+    if ($mutantASection -notmatch "PROTOTYPE_01_PREPARE_FOR_RAID") {
+        throw "Mutation 'A' did not change the outcome: a docs/scripts-only Issue's package still stayed narrow, so a return to a type-independent package would go undetected."
+    }
+    $checks.mutantA = "dead: a tooling-docs Issue gets the wide package once take-task.ps1 stops passing it the real Issue data"
+
+    # --- mutant B: Get-ReadingPackage silently narrows instead of falling
+    #     back to the full package with a warning ------------------------------
+    $libTextForB = [IO.File]::ReadAllText($libPath)
+    $mutantBFind = '$certain = $areas.Count -gt 0'
+    $mutantBOcc = ([regex]::Matches($libTextForB, [regex]::Escape($mutantBFind))).Count
+    if ($mutantBOcc -ne 1) {
+        throw "Mutation 'B' anchors on text appearing $mutantBOcc time(s) in take-task.lib.ps1; it has to appear exactly once."
+    }
+    $mutantBSandbox = Join-Path $sandbox "mutantB"
+    New-Item -ItemType Directory -Force -Path $mutantBSandbox | Out-Null
+    $mutantBFixture = New-FixtureRepository -Sandbox $mutantBSandbox
+    [IO.File]::WriteAllText(
+        (Join-Path $mutantBFixture "scripts\agent\take-task.lib.ps1"),
+        $libTextForB.Replace($mutantBFind, '$certain = $true'),
+        [Text.UTF8Encoding]::new($true))
+    $mutantBState = New-InitialState -Sandbox $mutantBSandbox -Name "mut-b" -Number 11 `
+        -Labels @("tier:standard", "ready") -Body "У задачи пока нет описания."
+    $mutantBRun = Invoke-TakeTaskChild -Fixture $mutantBFixture -StateFile $mutantBState -Arguments @("-Tier", "standard")
+    if ($mutantBRun.Text -match "Область задачи не определена") {
+        throw "Mutation 'B' did not change the outcome: an undetermined-type Issue still printed the warning, so a silent narrowing would go undetected."
+    }
+    $checks.mutantB = "dead: an undetermined-type Issue silently drops the warning once Certain is hard-wired true"
+
+    # --- mutant C: AGENT_ENTRY.md stops naming one of the two mandatory
+    #     sources. Documentation content, checked as text, not as a run. -----
+    $boilerplateText = [IO.File]::ReadAllText($boilerplatePath)
+    Assert-True "clean AGENT_ENTRY.md names both mandatory sources" (
+        ($boilerplateText -match [regex]::Escape('1. `AGENTS.md`')) -and
+        ($boilerplateText -match [regex]::Escape('2. `docs/engineering/AGENT_ENTRY.md`'))
+    )
+    $mutantCFind = '1. `AGENTS.md` — общий контракт агента; подтягивается клиентом автоматически'
+    $mutantCOcc = ([regex]::Matches($boilerplateText, [regex]::Escape($mutantCFind))).Count
+    if ($mutantCOcc -ne 1) {
+        throw "Mutation 'C' anchors on text appearing $mutantCOcc time(s) in AGENT_ENTRY.md; it has to appear exactly once."
+    }
+    $mutatedBoilerplate = $boilerplateText.Replace($mutantCFind, '')
+    $mutatedHasBothSources = (
+        ($mutatedBoilerplate -match [regex]::Escape('1. `AGENTS.md`')) -and
+        ($mutatedBoilerplate -match [regex]::Escape('2. `docs/engineering/AGENT_ENTRY.md`'))
+    )
+    if ($mutatedHasBothSources) {
+        throw "Mutation 'C' did not change the outcome: both mandatory sources are still named after removing the AGENTS.md line."
+    }
+    $checks.mutantC = "dead: removing the AGENTS.md line drops it from the two-mandatory-source check"
+
     # --- CR4: no suitable ticket -> human message and non-zero code ----------
     $emptyState = New-InitialState -Sandbox $sandbox -Name "e2e-empty" -Number 9 -Labels @("tier:deep", "ready")
     $empty = Invoke-TakeTaskChild -Fixture $fixture -StateFile $emptyState -Arguments @("-Tier", "standard")
@@ -454,7 +636,10 @@ try {
         $_.Name -notin @("repo", "remote.git", "repo-probe") -and
         -not ($_.Name -like "*.json") -and
         -not ($_.Name -like "lib-*.ps1") -and
-        -not ($_.Name -like "_wt-*")
+        -not ($_.Name -like "_wt-*") -and
+        # mutantA/mutantB (Issue #282) are their own nested sandboxes, each
+        # holding a full fixture repo built by New-FixtureRepository.
+        -not ($_.Name -like "mutant*")
     })
     Assert-True "no unexpected files may appear in the sandbox" ($stray.Count -eq 0)
 
@@ -489,6 +674,11 @@ try {
         remoteRepo = $checks.remoteRepo
         claimProtocol = $checks.claimProtocol
         mutant = $checks.mutant
+        readingPackage = $checks.readingPackage
+        readingPackageE2E = $checks.readingPackageE2E
+        mutantA = $checks.mutantA
+        mutantB = $checks.mutantB
+        mutantC = $checks.mutantC
         acceptance = $checks.acceptance
     } | ConvertTo-Json -Compress | Write-Host
 }

@@ -193,6 +193,13 @@ if ($null -eq $issueData) {
     exit 1
 }
 
+# Issue #282: the mandatory-reading package is assembled by task type
+# (tier:* labels plus the file paths the Issue's "Партиция" section names)
+# instead of a fixed document list. Insufficient signal prints the full
+# package and says so, rather than guessing a narrower one silently.
+$issueLabelNames = @($issueData.labels | ForEach-Object { $_.name })
+$readingPackage = Get-ReadingPackage -Labels $issueLabelNames -Body $issueData.body
+
 Write-Output "=========================================="
 Write-Output ("  BRIEF FOR ISSUE #{0}" -f $issueNum)
 Write-Output "=========================================="
@@ -202,6 +209,15 @@ Write-Output $boilerplate
 Write-Output ""
 Write-Output "--- Issue Body ---"
 Write-Output $issueData.body
+Write-Output ""
+Write-Output "--- Reading Package ---"
+if (-not $readingPackage.Certain) {
+    Write-Output "Область задачи не определена по меткам и партиции Issue; печатается полный пакет чтения, а не урезанный по догадке."
+}
+Write-Output ("  Areas: {0}" -f ($readingPackage.Areas -join ", "))
+foreach ($line in $readingPackage.Lines) {
+    Write-Output ("  - {0}" -f $line)
+}
 Write-Output ""
 Write-Output "--- Workspace Info ---"
 Write-Output ("  Worktree path : {0}" -f $worktreePath)
