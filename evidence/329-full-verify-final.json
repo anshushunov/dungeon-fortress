@@ -1,0 +1,44 @@
+{
+  "issue": 329,
+  "supersedes": "evidence/329-full-verify.json - that file measured the state after the first fix (resolver -RepositoryRoot) only, commit 15b3623. This file measures the final state, after the second, independent fix (run-game.ps1's screenshot precondition requiring all three capture parameters), commit 5653003.",
+  "question": "On the final state (both #329 fixes, both regression checks in the `scripts` stage, both mutants proven and reverted), is the full verify.ps1 run still green, all checksums unchanged from the pre-#329 baseline, and does stagesExecuted include all ten stages with stagesNotRun empty?",
+  "baseCommit": "77e2fa0c48c85a051e40315912d0f5a7180bb839",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
+  "verificationResult": {
+    "event": "verification_result",
+    "status": "ok",
+    "scope": "full",
+    "stagesExecuted": ["scripts", "build", "tests", "mcp", "sim", "load", "godot", "ui", "screenshots", "token-budget"],
+    "stagesNotRun": [],
+    "prerequisites": ["restore", "solution-build", "scenario-build", "game-host-build", "engine-runtime"],
+    "seed": 424242,
+    "temporaryRoot": "C:\\gamedev\\df-verify-421728a3",
+    "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+    "changedSeedChecksum": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
+    "loadChecksum": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+    "godotVersion": "4.7.1.stable.mono.official.a13da4feb",
+    "screenshotRepeatable": true,
+    "goldenUiFrames": ["stone-t190-loose-no-stockpile", "stone-t336-in-transit", "stone-t950-stockpile-full"]
+  },
+  "stageElapsedSeconds": {
+    "scripts": 103.9,
+    "build": 9.2,
+    "tests": 182.6,
+    "mcp": 3.9,
+    "sim": 0.3,
+    "load": 0.6,
+    "godot": 40.3,
+    "ui": 4.6,
+    "screenshots": 8.5,
+    "token-budget": 90.4
+  },
+  "cleanupWarning": {
+    "event": "temporary_cleanup",
+    "status": "warning",
+    "description": "own temporary root directory",
+    "reason": "Отказано в доступе по пути \"System.Text.Json.SourceGeneration.dll\".",
+    "note": "Non-fatal by design (Issue #89): best-effort cleanup after the run already decided status=ok; does not affect verificationResult.status."
+  },
+  "checksumComparisonAgainstFirstRun": "deterministicChecksum, changedSeedChecksum and loadChecksum are byte-for-byte identical to evidence/329-full-verify.json's values, captured before the second fix. Neither fix touches simulation or presentation code (both fixes are confined to scripts/run-game.ps1's own preflight and scripts/*.ps1 test tooling), so identical checksums are the expected, not merely observed, outcome.",
+  "conclusion": "Full verify.ps1 run on the final committed state (5653003) is green: status=ok, scope=full, all ten stages executed, none skipped. Run started from a worktree whose HEAD's merge-base with origin/main is 77e2fa0 (the same base the branch started from), so the base is current."
+}
