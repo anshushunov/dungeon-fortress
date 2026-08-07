@@ -1,0 +1,58 @@
+{
+  "issue": 253,
+  "question": "Does scripts/check-no-worktrees-in-root.ps1 (Issue #287, PR #297) turn red when a worktree is registered at a path nested inside the root working copy (the observable trace of the 2026-08-04/#243 incident), and does it turn green again once the state is legitimate again? This script existed before Issue #253 but had never been wired into anything and never had its own regression test - both are added by this Issue.",
+  "mechanism": "scripts/check-no-worktrees-in-root.ps1 (pre-existing, Issue #287), now wired into scripts/verify.ps1's 'scripts' stage and covered by scripts/test-check-no-worktrees-in-root.ps1, both committed on this branch before this evidence was collected.",
+  "method": "Built a disposable fixture git repository under .artifacts/evidence-253-fixture (never the real root at 'C:/gamedev/Dungeon fortress'), with an absolute-path sibling worktree next to it matching the real project's layout. Ran the committed scripts/check-no-worktrees-in-root.ps1 against the fixture root before, during and after the substitution. Commands and output recorded verbatim below.",
+  "fixtureSetup": [
+    "git init -q -b main <fixture>/root",
+    "git -C <fixture>/root config user.email test@example.com / user.name Test / commit.gpgsign false",
+    "echo one > <fixture>/root/a.txt && git -C <fixture>/root add a.txt && git -C <fixture>/root commit -q -m one",
+    "git -C <fixture>/root worktree add -q <fixture>/sibling-wt -b agent/task-branch"
+  ],
+  "beforeSubstitution": {
+    "command": "git -C <fixture>/root worktree list --porcelain",
+    "output": "worktree C:/gamedev/_wt-253/.artifacts/evidence-253-fixture/root\nHEAD <sha>\nbranch refs/heads/main\n\nworktree C:/gamedev/_wt-253/.artifacts/evidence-253-fixture/sibling-wt\nHEAD <sha>\nbranch refs/heads/agent/task-branch",
+    "guardCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-no-worktrees-in-root.ps1 -RepoRoot <fixture>/root",
+    "guardOutput": "{\"event\":\"worktrees_in_root_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-253\\\\.artifacts\\\\evidence-253-fixture\\\\root\",\"totalRegisteredWorktrees\":2,\"offenders\":[],\"status\":\"ok\"}",
+    "exitCode": 0
+  },
+  "note": "An earlier attempt at this fixture passed the sibling worktree's path as a *relative* string ('.artifacts/evidence-253-fixture/sibling-wt') to 'git -C <fixture>/root worktree add', which git resolved relative to the -C directory instead of the shell's own cwd, silently nesting the 'sibling' inside root and producing a false positive from the guard on a supposedly legitimate fixture. This was a fixture-construction mistake, not a guard defect - scripts/test-check-no-worktrees-in-root.ps1 and scripts/test-check-root-on-main.ps1 both build their fixtures with Join-Path-derived absolute paths from the start and did not hit this. Recorded here because it is exactly the kind of case this evidence file exists to rule out: the fixture below was rebuilt with an absolute sibling path and reverified 'ok' with zero offenders before the substitution.",
+  "substitution": {
+    "description": "Reproduces the observable trace of the 2026-08-04/#243 incident named in Issue #253: a worktree registered at a path nested inside the root working copy ('C:/gamedev/Dungeon fortress/w243' in the real incident).",
+    "command": "git -C <fixture>/root worktree add -q <fixture>/root/w243 -b art/243-nested",
+    "verifiedRegistration": {
+      "command": "git -C <fixture>/root worktree list --porcelain",
+      "output": "worktree C:/gamedev/_wt-253/.artifacts/evidence-253-fixture/root\nHEAD <sha>\nbranch refs/heads/main\n\nworktree C:/gamedev/_wt-253/.artifacts/evidence-253-fixture/root/w243\nHEAD <sha>\nbranch refs/heads/art/243-nested\n\nworktree C:/gamedev/_wt-253/.artifacts/evidence-253-fixture/sibling-wt\nHEAD <sha>\nbranch refs/heads/agent/task-branch"
+    },
+    "guardCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-no-worktrees-in-root.ps1 -RepoRoot <fixture>/root",
+    "guardOutput": "{\"event\":\"worktrees_in_root_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-253\\\\.artifacts\\\\evidence-253-fixture\\\\root\",\"totalRegisteredWorktrees\":3,\"offenders\":[\"C:\\\\gamedev\\\\_wt-253\\\\.artifacts\\\\evidence-253-fixture\\\\root\\\\w243\"],\"status\":\"fail\"}",
+    "exitCode": 1,
+    "result": "RED, as required. The legitimate sibling worktree is correctly absent from offenders; only the nested one is flagged."
+  },
+  "restoredLegitimateState": {
+    "description": "Separate mutant required by Issue #253's criteria: the mechanism must not turn red on legitimate state (worktree next to the repository, not inside it). Removing the nested worktree and rerunning the same guard proves this, on the same fixture the substitution above just turned red.",
+    "commands": [
+      "git -C <fixture>/root worktree remove --force <fixture>/root/w243",
+      "git -C <fixture>/root worktree prune"
+    ],
+    "guardCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-no-worktrees-in-root.ps1 -RepoRoot <fixture>/root",
+    "guardOutput": "{\"event\":\"worktrees_in_root_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-253\\\\.artifacts\\\\evidence-253-fixture\\\\root\",\"totalRegisteredWorktrees\":2,\"offenders\":[],\"status\":\"ok\"}",
+    "exitCode": 0,
+    "result": "GREEN, as required"
+  },
+  "realRootReadOnlyCheck": {
+    "description": "In addition to the fixture, the committed guard was run read-only ('git worktree list' only, no mutation) against the actual coordination root 'C:/gamedev/Dungeon fortress' to confirm today's real state is legitimate.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-no-worktrees-in-root.ps1 -RepoRoot \"C:/gamedev/Dungeon fortress\"",
+    "output": "{\"event\":\"worktrees_in_root_check\",\"repoRoot\":\"C:\\\\gamedev\\\\Dungeon fortress\",\"totalRegisteredWorktrees\":15,\"offenders\":[],\"status\":\"ok\"}",
+    "exitCode": 0
+  },
+  "cleanup": "rm -rf .artifacts/evidence-253-fixture after the run (plus 'git worktree prune' on the fixture root first); .artifacts/ is gitignored and the fixture never touched the real repository's git state.",
+  "postCommitReverification": {
+    "description": "The runs above happened before 'git commit' recorded this wiring (working tree already matched HEAD byte-for-byte at commit time - 'git status --short' was empty right after). Rerun once more against a fresh fixture with the working tree at commit b4d57af to remove any doubt (Issue #179's lesson: measure the committed blob, not an assumption about the working copy).",
+    "commit": "b4d57af",
+    "guardOutput": "{\"event\":\"worktrees_in_root_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-253\\\\.artifacts\\\\evidence-253-postcommit\\\\root\",\"totalRegisteredWorktrees\":3,\"offenders\":[\"C:\\\\gamedev\\\\_wt-253\\\\.artifacts\\\\evidence-253-postcommit\\\\root\\\\w243\"],\"status\":\"fail\"}",
+    "exitCode": 1,
+    "result": "Identical to the pre-commit run above."
+  },
+  "conclusion": "The substitution reproducing the 2026-08-04/#243 violation shape (worktree registered inside the root) turns scripts/check-no-worktrees-in-root.ps1 red (exit 1, status fail, names exactly the nested path and not the legitimate sibling); restoring the legitimate state turns it green again (exit 0, status ok) on the same fixture; and the real coordination root is independently confirmed legitimate today by the same guard, read-only."
+}

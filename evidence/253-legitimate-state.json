@@ -1,0 +1,47 @@
+{
+  "issue": 253,
+  "question": "Do both rule-17 guards (scripts/check-root-on-main.ps1 and scripts/check-no-worktrees-in-root.ps1) agree the mechanism is green - together, not just individually - on legitimate state: a worktree next to the repository (not inside it) and the root working copy on 'main'?",
+  "why a separate file": "Issue #253's criteria require this checked as its own mutant, separate from the RED substitutions in evidence/253-mutant-head-not-main.json and evidence/253-mutant-worktree-in-root.json (each of which also has its own single-guard GREEN restoration). This file is the combined proof: both guards run together, both against a fixture and against the real coordination root.",
+  "fixtureCheck": {
+    "description": "Same fixture shape as the two mutant files: a git repo on 'main' with an absolute-path sibling worktree next to it, nothing nested inside it.",
+    "setup": [
+      "git init -q -b main <fixture>/root",
+      "git -C <fixture>/root config user.email test@example.com / user.name Test / commit.gpgsign false",
+      "echo one > <fixture>/root/a.txt && git -C <fixture>/root add a.txt && git -C <fixture>/root commit -q -m one",
+      "git -C <fixture>/root worktree add -q <fixture>/sibling-wt -b agent/task-branch"
+    ],
+    "guardRuns": [
+      {
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-root-on-main.ps1 -RepoRoot <fixture>/root",
+        "output": "{\"event\":\"root_on_main_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-253\\\\.artifacts\\\\evidence-253-fixture\\\\root\",\"applicable\":true,\"headBranch\":\"main\",\"status\":\"ok\"}",
+        "exitCode": 0
+      },
+      {
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-no-worktrees-in-root.ps1 -RepoRoot <fixture>/root",
+        "output": "{\"event\":\"worktrees_in_root_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-253\\\\.artifacts\\\\evidence-253-fixture\\\\root\",\"totalRegisteredWorktrees\":2,\"offenders\":[],\"status\":\"ok\"}",
+        "exitCode": 0
+      }
+    ]
+  },
+  "realRootReadOnlyCheck": {
+    "description": "Both guards run read-only (no branch switch, no commit - only 'git rev-parse'/'git worktree list', which AGENTS.md rule 17 does not forbid) against the actual coordination root 'C:/gamedev/Dungeon fortress', proving today's real state is exactly the legitimate shape: HEAD on 'main', 15 registered worktrees, all of them outside the root.",
+    "guardRuns": [
+      {
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-root-on-main.ps1 -RepoRoot \"C:/gamedev/Dungeon fortress\"",
+        "output": "{\"event\":\"root_on_main_check\",\"repoRoot\":\"C:\\\\gamedev\\\\Dungeon fortress\",\"applicable\":true,\"headBranch\":\"main\",\"status\":\"ok\"}",
+        "exitCode": 0
+      },
+      {
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-no-worktrees-in-root.ps1 -RepoRoot \"C:/gamedev/Dungeon fortress\"",
+        "output": "{\"event\":\"worktrees_in_root_check\",\"repoRoot\":\"C:\\\\gamedev\\\\Dungeon fortress\",\"totalRegisteredWorktrees\":15,\"offenders\":[],\"status\":\"ok\"}",
+        "exitCode": 0
+      }
+    ]
+  },
+  "wiredRunCheck": {
+    "description": "Both guards also run for real, unconditionally, as the first two actions of scripts/verify.ps1's 'scripts' stage, against whichever checkout the run itself is invoked from. scripts/verify.ps1 -Stage scripts was run from this worktree (a linked worktree, not the root) and both guards reported 'applicable: false' / 'ok' there, which is the correct behaviour for a task worktree - the invariant only binds the root's own checkout. See the PR body for the full -Stage scripts run.",
+    "expectedBehaviourInATaskWorktree": "applicable=false for check-root-on-main.ps1 (git-dir != git-common-dir); totalRegisteredWorktrees counted with zero offenders for check-no-worktrees-in-root.ps1 (a task worktree's own root has nothing nested inside it either)."
+  },
+  "cleanup": "Fixture removed with 'git worktree prune' plus 'rm -rf .artifacts/evidence-253-fixture'; .artifacts/ is gitignored and nothing here touched the real repository's git state.",
+  "conclusion": "On legitimate state - fixture and real root alike - both guards agree: exit 0, status ok, no offenders, HEAD on main. Combined with the RED results in evidence/253-mutant-head-not-main.json and evidence/253-mutant-worktree-in-root.json, the mechanism is proven both ways on every state Issue #253 named."
+}
