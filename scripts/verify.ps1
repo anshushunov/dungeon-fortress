@@ -60,6 +60,7 @@ $noWorktreesInRootScript = Join-Path $repoRoot "scripts\check-no-worktrees-in-ro
 $noWorktreesInRootTestScript = Join-Path $repoRoot "scripts\test-check-no-worktrees-in-root.ps1"
 $rootOnMainScript = Join-Path $repoRoot "scripts\check-root-on-main.ps1"
 $rootOnMainTestScript = Join-Path $repoRoot "scripts\test-check-root-on-main.ps1"
+$tokenBudgetReportTestScript = Join-Path $repoRoot "scripts\test-token-budget-report.ps1"
 
 $env:DOTNET_CLI_HOME = Join-Path $artifactsRoot "dotnet-home"
 $env:DOTNET_NOLOGO = "1"
@@ -423,6 +424,17 @@ $stageCatalog = [ordered]@{
             # not depend on the solution build, the engine, or network access.
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $takeTaskTestScript
+            )
+            # The regression test for token-budget-report.ps1 (Issue #303) runs
+            # against this machine's own Claude Code transcripts, not a fixture -
+            # same boundary the script itself documents ("Замер локален."). It does
+            # not depend on the solution build, the engine, or network access, so it
+            # belongs here alongside the other dependency-free script guards. It
+            # shipped in PR #309 unwired because scripts/test-verify-stages.ps1 was
+            # owned by a concurrent PR (#307) at the time; Issue #310 wires it in
+            # once that PR merged.
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $tokenBudgetReportTestScript
             )
         }
     }
