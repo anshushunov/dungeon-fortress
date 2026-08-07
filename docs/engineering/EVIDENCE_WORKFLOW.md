@@ -1,7 +1,7 @@
 # Воспроизводимые evidence bundle
 
 Статус: действует
-Дата проверки: 2026-07-30
+Дата проверки: 2026-08-07
 
 Этот workflow собирает визуальное доказательство, но не превращает картинку в
 источник истины. PNG нужен человеку; manifest связывает его с явными параметрами
@@ -134,6 +134,87 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-claimed-sha2
 
 Скрипт также не требует, чтобы у каждого документа была заявленная сумма. Он
 проверяет те суммы, которые заявлены; полнота покрытия остаётся на review.
+
+## Что покрывают контрольные суммы `verify.ps1`
+
+`verification_result` печатает несколько разных game-state checksum, и это не
+взаимозаменяемые числа — у каждого своя граница покрытия. Критерий готовности
+вида «сумма совпадает с X» без указания, что именно эта сумма способна
+увидеть, может оказаться выполненным при любой мутации в партиции задачи —
+живой пример ниже, Issue #281.
+
+Все адреса ниже сняты на коммите `a44e14d` (`main`), а не перенесены из
+предыдущего измерения (PR #292): дерево с тех пор резалось несколько раз
+(PR #300, #305, #308, #309), и старые номера строк там уже не совпадали.
+
+### `deterministicChecksum` — только `SimulationWorld`
+
+Стадия `sim` (`scripts/verify.ps1:418`) вызывает `Invoke-Scenario`
+(`scripts/verify.ps1:111`), которая запускает `tests/DungeonFortress.Scenarios`
+без флага `--prototype`:
+
+```powershell
+rg -c -- '--prototype' scripts/verify.ps1 ; echo "exit:$?"
+```
+
+Вывод: пустой, `exit:1` — совпадений нет, строки `--prototype` в файле нет
+вовсе.
+
+Без `--prototype` `Program.cs` идёт по ветке
+`SimulationScenario.Run(config, options.TickCount, commands)`
+(`tests/DungeonFortress.Scenarios/Program.cs:33`), и напечатанный `checksum`
+(`tests/DungeonFortress.Scenarios/Program.cs:57`) — это `result.Checksum`
+именно этого прогона. `PrototypeWorld` и Godot-адаптер `Main` в этот путь не
+входят вовсе.
+
+`verify.ps1:1152` берёт число из `$simResult.DeterministicChecksum`, которое
+стадия `sim` ставит строкой `scripts/verify.ps1:440` как `$sameA.checksum` —
+checksum одного из двух одинаковых прогонов, использованных для проверки
+byte-for-byte детерминизма.
+
+### `viewInvariantChecksum` — состояние `PrototypeWorld`, не отрисовка
+
+Стадия `godot` четыре раза прогоняет `godot_headless_smoke` с разными camera
+position/zoom, frame size и UI scale (`scripts/verify.ps1:640-669`: `base`,
+`overview-shifted`, `detail-scaled-ui`, `large-same-zoom`) и требует, чтобы
+`checksum` совпал во всех четырёх (`Assert-SameNonEmptyValue`,
+`scripts/verify.ps1:693-695`). `verify.ps1:1176` публикует это число как
+`viewInvariantChecksum`.
+
+Совпадающее число — это `_checksum` Godot-адаптера
+(`src/DungeonFortress.Game/Main.cs:675`), которое присваивается ровно один раз:
+
+```csharp
+// src/DungeonFortress.Game/Main.Session.cs:312
+_checksum = PrototypeScenario.Capture(_world).Checksum;
+```
+
+`_world` объявлен как `PrototypeWorld` (`src/DungeonFortress.Game/Main.cs:44`).
+Camera, frame size и UI scale в этот checksum не попадают по построению — сам
+инвариант стадии `godot` и состоит в том, что они на сумму не влияют. Значит
+сумма целиком слепа к отрисовке: к camera transform, HUD-тексту, кистям карты,
+подсветке — и двигается только мутацией внутри того, что читает или пишет
+`PrototypeWorld` через `PrototypeScenario.Capture`.
+
+### Живой пример: Issue #281
+
+Партиция #281 — `src/DungeonFortress.Game/Main.cs` и
+`src/DungeonFortress.Simulation/PrototypeWorld.cs` (плюс затронутые `.csproj`).
+Критерий готовности требовал, чтобы `deterministicChecksum` и
+`viewInvariantChecksum` совпали с зафиксированными значениями.
+
+`deterministicChecksum` в этом критерии был структурно нулевым: партиция #281
+не содержит ни одного файла на пути `SimulationScenario.Run` — `SimulationWorld`
+в неё вообще не входит, — значит ни один мутант внутри `Main.cs` или
+`PrototypeWorld.cs` не мог сдвинуть эту сумму. Критерий выполнялся бы, даже
+если бы разрез сломал `PrototypeWorld` целиком: `deterministicChecksum` этого
+попросту не увидел бы.
+
+`viewInvariantChecksum` для той же партиции — рабочая проверка наполовину: она
+читает `PrototypeWorld` через `_world`, то есть мутант в `PrototypeWorld.cs`
+через неё виден. Слепа она к другой половине той же партиции — к коду
+`Main.cs`, который не пишет в `_world`, то есть к собственно рендерингу.
+Мутация только в этой части `Main.cs` прошла бы обе суммы незамеченной.
 
 ## Проверка заявленных выводов команд в теле PR
 
