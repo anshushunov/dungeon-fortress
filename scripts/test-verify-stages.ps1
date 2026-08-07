@@ -1737,6 +1737,245 @@ if ($env:DUNGEON_FORTRESS_SKIP_ENGINE_GATE_SMOKE -ne "1") {
     }
 }
 
+# --- Issue #307: convention-based resolution when the environment is not
+#     inherited ---------------------------------------------------------------
+#
+# Resolve-GodotExecutable's fourth tier looks for a Godot_v*-stable_mono_win64
+# directory next to the repository root and returns its *_console.exe.
+# evidence/307-resolution.json measured a machine where an explicit path, an
+# environment variable and PATH were all configured correctly, and none of
+# them reached the agent's process anyway, because that process forked before
+# they were written. The new tier reads the disk layout directly instead of
+# any of them.
+#
+# $PSScriptRoot inside a dot-sourced function binds to where that function is
+# *defined*, not where it is called from - proven above this section by
+# spawning a real child process and reading the value back. So proving "next
+# to the repository root" against a scenario this test controls, rather than
+# against this machine's own C:\gamedev, means running a *copy* of
+# GodotTools.ps1 - a single, dependency-free file - from a throwaway
+# "<sandbox>/repo/scripts/" in its own child process, with PATH emptied and
+# GODOT4_CONSOLE cleared so only the tier under test can succeed.
+#
+# The candidate directories themselves are junctions to the two engine
+# installs already on this machine (Godot_v4.7.1-stable_mono_win64 and the
+# deliberately wrong Godot_v4.6.1-stable_mono_win64 next to it), not copies:
+# a junction costs nothing regardless of how large the target is, and unlike
+# a synthetic empty file it is a real console.exe, which the version-rejection
+# check below needs - Assert-GodotVersion has to actually run --version
+# against it to name the version it found.
+$godotResolutionSandboxRoot = Join-Path $sandbox ("godot-resolution-307-" + [Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Force -Path $godotResolutionSandboxRoot | Out-Null
+$godotResolutionRealGodotParent = Split-Path -Parent $repoRoot
+$godotResolutionReal471Directory = Join-Path $godotResolutionRealGodotParent "Godot_v4.7.1-stable_mono_win64"
+$godotResolutionReal461Directory = Join-Path $godotResolutionRealGodotParent "Godot_v4.6.1-stable_mono_win64"
+
+function New-GodotResolutionRepoScriptsCopy {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ParentDirectory
+    )
+
+    $scriptsDirectory = Join-Path $ParentDirectory "repo\scripts"
+    New-Item -ItemType Directory -Force -Path $scriptsDirectory | Out-Null
+    $copyPath = Join-Path $scriptsDirectory "GodotTools.ps1"
+    Copy-Item -LiteralPath (Join-Path $repoRoot "scripts\GodotTools.ps1") -Destination $copyPath
+    return $copyPath
+}
+
+function New-GodotResolutionSiblingJunction {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ParentDirectory,
+
+        [Parameter(Mandatory = $true)]
+        [string]$RealDirectory
+    )
+
+    $linkPath = Join-Path $ParentDirectory (Split-Path -Leaf $RealDirectory)
+    New-Item -ItemType Junction -Path $linkPath -Target $RealDirectory | Out-Null
+    return $linkPath
+}
+
+function Invoke-IsolatedGodotResolution {
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$GodotToolsPath,
+
+        [string]$GodotConsoleEnvironmentValue = ""
+    )
+
+    $childScriptPath = Join-Path $godotResolutionSandboxRoot ("runner-" + [Guid]::NewGuid().ToString("N") + ".ps1")
+    [IO.File]::WriteAllText($childScriptPath, @'
+param(
+    [string]$GodotToolsPath,
+    [string]$GodotConsoleEnvironmentValue
+)
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+Remove-Item Env:\GODOT4_CONSOLE -ErrorAction SilentlyContinue
+if (-not [string]::IsNullOrEmpty($GodotConsoleEnvironmentValue)) {
+    $env:GODOT4_CONSOLE = $GodotConsoleEnvironmentValue
+}
+$env:Path = ""
+. $GodotToolsPath
+try {
+    Write-Output ("RESOLVED:" + (Resolve-GodotExecutable))
+}
+catch {
+    Write-Output ("FAILED:" + $_.Exception.Message)
+}
+'@, [Text.UTF8Encoding]::new($false))
+
+    # Built as an array, and the environment-value argument only appended when
+    # non-empty: Windows PowerShell 5.1 drops an empty-string argument when
+    # marshalling it to a native process, which turned "-GodotConsoleEnvironmentValue"
+    # into a flag with no value and made the child script fail on a missing
+    # parameter instead of running the no-override case it was meant to cover.
+    $childArguments = @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $childScriptPath,
+        "-GodotToolsPath", $GodotToolsPath
+    )
+    if (-not [string]::IsNullOrEmpty($GodotConsoleEnvironmentValue)) {
+        $childArguments += @("-GodotConsoleEnvironmentValue", $GodotConsoleEnvironmentValue)
+    }
+
+    # Same reason as Get-VerifyRunResult and Invoke-StageOutputRunner above:
+    # the child's own failure is not this session's terminating error.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = @(& powershell @childArguments 2>&1)
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+
+    $resultLine = @($output | Where-Object { $_ -match "^(RESOLVED|FAILED):" }) | Select-Object -Last 1
+    if ($null -eq $resultLine) {
+        throw "Isolated Godot resolution produced no RESOLVED/FAILED line: $($output | Out-String)"
+    }
+    $resultText = [string]$resultLine
+
+    return [pscustomobject]@{
+        Success = $resultText.StartsWith("RESOLVED:")
+        Text = $resultText.Substring($resultText.IndexOf(":") + 1)
+    }
+}
+
+if (-not (Test-Path -LiteralPath $godotResolutionReal471Directory -PathType Container) -or
+    -not (Test-Path -LiteralPath $godotResolutionReal461Directory -PathType Container)) {
+    Write-Host (
+        "Skipping the Issue #307 Godot-resolution tests: this machine does not " +
+        "have both '$godotResolutionReal471Directory' and " +
+        "'$godotResolutionReal461Directory', which the priority and " +
+        "version-rejection checks need as real engine installs to run --version " +
+        "against.")
+}
+else {
+    # --- resolves via the new tier with no -GodotPath and no environment, and
+    #     prefers the newer of two sibling directories ------------------------
+    $bothVersionsParent = Join-Path $godotResolutionSandboxRoot "both-versions"
+    New-Item -ItemType Directory -Force -Path $bothVersionsParent | Out-Null
+    $bothVersionsToolsPath = New-GodotResolutionRepoScriptsCopy -ParentDirectory $bothVersionsParent
+    # Junctioned in this order on purpose: this directory's own, unsorted
+    # enumeration order already returns Godot_v4.6.1 before Godot_v4.7.1
+    # (verified separately, not assumed), so a resolver that stopped sorting
+    # newest-first would still pass this check by accident if it happened to
+    # prefer creation order instead of name order. Junctioning 4.7.1 first
+    # closes that gap: the only way this check passes is by preferring the
+    # higher version *by name*.
+    New-GodotResolutionSiblingJunction -ParentDirectory $bothVersionsParent -RealDirectory $godotResolutionReal471Directory | Out-Null
+    New-GodotResolutionSiblingJunction -ParentDirectory $bothVersionsParent -RealDirectory $godotResolutionReal461Directory | Out-Null
+
+    $expected471Console = Join-Path $bothVersionsParent "Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe"
+    $noEnvResult = Invoke-IsolatedGodotResolution -GodotToolsPath $bothVersionsToolsPath
+    if (-not $noEnvResult.Success) {
+        throw (
+            "Resolve-GodotExecutable did not resolve via the Issue #307 " +
+            "sibling-directory tier with no -GodotPath and no environment " +
+            "set: $($noEnvResult.Text)")
+    }
+    if (-not [string]::Equals($noEnvResult.Text, $expected471Console, [StringComparison]::OrdinalIgnoreCase)) {
+        throw (
+            "Resolve-GodotExecutable resolved '$($noEnvResult.Text)' with both " +
+            "a 4.7.1 and a 4.6.1 sibling directory present and no environment " +
+            "set; expected the newer version '$expected471Console'.")
+    }
+
+    # --- the sibling-directory tier stays last: an explicit $env:GODOT4_CONSOLE
+    #     still overrides it even when a sibling directory also resolves -----
+    $decoyConsolePath = Join-Path $bothVersionsParent "decoy_console.exe"
+    [IO.File]::WriteAllText($decoyConsolePath, "not a real engine binary; only has to exist as a file")
+    $priorityResult = Invoke-IsolatedGodotResolution `
+        -GodotToolsPath $bothVersionsToolsPath `
+        -GodotConsoleEnvironmentValue $decoyConsolePath
+    if (-not $priorityResult.Success) {
+        throw (
+            "Resolve-GodotExecutable rejected a valid `$env:GODOT4_CONSOLE " +
+            "override with a sibling directory also present: " +
+            "$($priorityResult.Text)")
+    }
+    if (-not [string]::Equals($priorityResult.Text, $decoyConsolePath, [StringComparison]::OrdinalIgnoreCase)) {
+        throw (
+            "`$env:GODOT4_CONSOLE did not take priority over the Issue #307 " +
+            "sibling-directory tier. Expected '$decoyConsolePath', got " +
+            "'$($priorityResult.Text)' - the new tier must stay last.")
+    }
+
+    # --- a lone wrong-version sibling is still returned by this tier, and
+    #     rejected by Assert-GodotVersion, which names the version it found --
+    $wrongVersionParent = Join-Path $godotResolutionSandboxRoot "wrong-version-only"
+    New-Item -ItemType Directory -Force -Path $wrongVersionParent | Out-Null
+    $wrongVersionToolsPath = New-GodotResolutionRepoScriptsCopy -ParentDirectory $wrongVersionParent
+    New-GodotResolutionSiblingJunction -ParentDirectory $wrongVersionParent -RealDirectory $godotResolutionReal461Directory | Out-Null
+
+    $expected461Console = Join-Path $wrongVersionParent "Godot_v4.6.1-stable_mono_win64\Godot_v4.6.1-stable_mono_win64_console.exe"
+    $wrongVersionResult = Invoke-IsolatedGodotResolution -GodotToolsPath $wrongVersionToolsPath
+    if (-not $wrongVersionResult.Success) {
+        throw (
+            "Resolve-GodotExecutable refused to resolve a lone wrong-version " +
+            "sibling directory at all. The rejection is supposed to come from " +
+            "Assert-GodotVersion, by name, not from this tier: " +
+            "$($wrongVersionResult.Text)")
+    }
+    if (-not [string]::Equals($wrongVersionResult.Text, $expected461Console, [StringComparison]::OrdinalIgnoreCase)) {
+        throw (
+            "Resolve-GodotExecutable resolved '$($wrongVersionResult.Text)' " +
+            "instead of the lone sibling directory '$expected461Console'.")
+    }
+
+    $wrongVersionRejectedByName = $false
+    try {
+        Assert-GodotVersion -GodotPath $wrongVersionResult.Text | Out-Null
+    }
+    catch {
+        if ($_.Exception.Message -match [regex]::Escape("4.6.1")) {
+            $wrongVersionRejectedByName = $true
+        }
+        else {
+            throw (
+                "Assert-GodotVersion rejected the 4.6.1 sibling directory but " +
+                "did not name the discovered version: $($_.Exception.Message)")
+        }
+    }
+    if (-not $wrongVersionRejectedByName) {
+        throw (
+            "Assert-GodotVersion accepted the Godot_v4.6.1-stable_mono_win64 " +
+            "sibling directory the Issue #307 tier resolved to. A directory of " +
+            "the wrong version next to the repository root must still be " +
+            "rejected, by Assert-GodotVersion, not silently accepted.")
+    }
+}
+
+Remove-TemporaryItemBestEffort -Path $godotResolutionSandboxRoot -Description "Issue #307 Godot-resolution test sandbox" | Out-Null
+
 # --- stage output routing: raw dumps move to a file, failures stay loud ----
 #
 # Issue #284. Before this, Invoke-GodotChecked (and Invoke-GodotExpectedFailure,
