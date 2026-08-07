@@ -44,6 +44,8 @@ $gameProjectFile = Join-Path $gameProjectPath "DungeonFortress.Game.csproj"
 $guardTestScript = Join-Path $repoRoot "scripts\test-godot-output-guard.ps1"
 $verifyStagesTestScript = Join-Path $repoRoot "scripts\test-verify-stages.ps1"
 $temporaryRootTestScript = Join-Path $repoRoot "scripts\test-temporary-root.ps1"
+$runGameTemporaryRootTestScript = Join-Path $repoRoot "scripts\test-run-game-temporary-root.ps1"
+$runGameCaptureParametersTestScript = Join-Path $repoRoot "scripts\test-run-game-capture-parameters.ps1"
 $screenshotOutputPathTestScript = Join-Path $repoRoot "scripts\test-screenshot-output-path.ps1"
 $evidenceToolsTestScript = Join-Path $repoRoot "scripts\test-evidence-tools.ps1"
 $claimedSha256TestScript = Join-Path $repoRoot "scripts\test-check-claimed-sha256.ps1"
@@ -345,7 +347,7 @@ function Initialize-EngineRuntime {
 # agent can verify what it touched without paying for the rest.
 $stageCatalog = [ordered]@{
     scripts = [pscustomobject]@{
-        Summary = "Dependency-free script guards: stage selection, temporary directory, Godot output, screenshot/evidence paths, GitHub auth diagnostics, Ivan and domain MCP config, take-task behavioural test."
+        Summary = "Dependency-free script guards: stage selection, temporary directory (including run-game.ps1/update-golden-ui.ps1's own calls), Godot output, screenshot/evidence paths, GitHub auth diagnostics, Ivan and domain MCP config, take-task behavioural test."
         Body = {
             # Issue #253 (rule 17, AGENTS.md "Работа нескольких агентов"): the root
             # working copy belongs to the coordination session, and three measured
@@ -388,6 +390,25 @@ $stageCatalog = [ordered]@{
             # the run.
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $temporaryRootTestScript
+            )
+            # Issue #329. run-game.ps1 and update-golden-ui.ps1 both resolve a
+            # temporary directory before starting the engine, neither is
+            # reached by any stage here (stage `godot` starts the engine its
+            # own way), and that blind spot is exactly why Issue #302's
+            # contract change to Resolve-VerificationTemporaryRoot broke both
+            # of them for a full day without any of ten merged PRs noticing.
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $runGameTemporaryRootTestScript
+            )
+            # Issue #329, second and independent finding: run-game.ps1's own
+            # screenshot precondition only ever checked -CameraZoom, so a
+            # request missing -UiScale and/or -FrameSize sailed past it into a
+            # full build and only then hit the engine's own refusal. Invisible
+            # for the same reason as the resolver defect above - no stage here
+            # reaches run-game.ps1 - until it stopped being masked by the
+            # resolver dying first.
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $runGameCaptureParametersTestScript
             )
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $guardTestScript

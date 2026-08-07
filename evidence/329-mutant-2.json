@@ -1,0 +1,18 @@
+{
+  "issue": 329,
+  "question": "Does the `scripts` stage of verify.ps1 redden, cleanly attributed to scripts/test-run-game-capture-parameters.ps1, when scripts/run-game.ps1's screenshot precondition regresses to requiring only two of the three pixel-affecting parameters (drops the -UiScale guard) - the same class of defect as the first mutant, applied to the second, independent fix in this Issue?",
+  "preconditions": "Run only after committing the fixed, checked-in state (commit a3ff6e5) - `git status --short` was clean before the mutation was applied.",
+  "mutant": {
+    "file": "scripts/run-game.ps1",
+    "diff": {
+      "find": "    if (-not $hasCameraZoom) {\n        $missingCaptureParameters += \"-CameraZoom\"\n    }\n    if (-not $hasUiScale) {\n        $missingCaptureParameters += \"-UiScale\"\n    }\n    if (-not $hasFrameSize) {",
+      "replace": "    if (-not $hasCameraZoom) {\n        $missingCaptureParameters += \"-CameraZoom\"\n    }\n    if (-not $hasFrameSize) {"
+    },
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage scripts",
+    "exitCode": 1,
+    "finalEvent": "{\"event\":\"verification_result\",\"status\":\"error\",\"scope\":\"partial\",\"failedPhase\":\"stage\",\"failedStage\":\"scripts\",\"stagesExecuted\":[],\"stagesNotRun\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\",\"token-budget\"],\"reason\":\"'powershell' failed with exit code 1.\"}",
+    "failingAssertion": "'run-game.ps1' no longer requires -UiScale for a screenshot capture: no guard appends it to $missingCaptureParameters when $hasUiScale is false"
+  },
+  "gitStateBeforeAndAfter": "git status --short clean before mutating (commit a3ff6e5 already made); git checkout -- scripts/run-game.ps1 restored the fix afterward, then git status --short clean again.",
+  "conclusion": "The `scripts` stage reddens (exit 1, verification_result status=error, failedStage=scripts) when run-game.ps1's screenshot-capture precondition regresses to checking only two of the three required parameters, and the failure is attributed by scripts/test-run-game-capture-parameters.ps1 by exact missing parameter name rather than surfacing as a generic test failure or, worse, silently letting the request reach a full build and the engine's own ArgumentException. The mutation was reverted immediately after this run; it was never committed. Combined with evidence/329-mutant.json (the resolver-contract mutant on the first, independent fix in this Issue), both defects this Issue closed now have a check that reddens on regression, not just a one-time manual proof."
+}

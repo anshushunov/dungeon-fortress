@@ -1,0 +1,18 @@
+{
+  "issue": 329,
+  "question": "Does the `scripts` stage of verify.ps1 redden, cleanly attributed to scripts/test-run-game-temporary-root.ps1, when scripts/run-game.ps1 regresses back to calling Resolve-VerificationTemporaryRoot without -RepositoryRoot - the exact defect this Issue fixed?",
+  "preconditions": "Run only after committing the fixed, checked-in state (commit 15b3623) - `git status --short` was clean before the mutation was applied.",
+  "mutant": {
+    "file": "scripts/run-game.ps1",
+    "diff": {
+      "find": "$temporaryRootSelection = Resolve-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot -RepositoryRoot $repoRoot",
+      "replace": "$temporaryRootSelection = Resolve-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot"
+    },
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage scripts",
+    "exitCode": 1,
+    "finalEvent": "{\"event\":\"verification_result\",\"status\":\"error\",\"scope\":\"partial\",\"failedPhase\":\"stage\",\"failedStage\":\"scripts\",\"stagesExecuted\":[],\"stagesNotRun\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\",\"token-budget\"],\"reason\":\"'powershell' failed with exit code 1.\"}",
+    "failingAssertion": "Resolve-VerificationTemporaryRoot is called without a usable -RepositoryRoot:\n  'run-game.ps1' line 144 calls Resolve-VerificationTemporaryRoot without -RepositoryRoot. -TemporaryRoot is an optional parameter of this script, so an omitted one arrives here as an empty -ExplicitPath, and without -RepositoryRoot the resolver throws instead of falling back to its own-directory default (Issue #329).\nAt C:\\gamedev\\_wt-329\\scripts\\test-run-game-temporary-root.ps1:165 char:5"
+  },
+  "gitStateBeforeAndAfter": "git status --short clean before mutating (commit 15b3623 already made); git checkout -- scripts/run-game.ps1 restored the fix afterward, then git status --short clean again.",
+  "conclusion": "The `scripts` stage reddens (exit 1, verification_result status=error, failedStage=scripts) when scripts/run-game.ps1 regresses to the exact call shape Issue #329 was about, and the failure is attributed by scripts/test-run-game-temporary-root.ps1 by file and line number rather than surfacing as an opaque engine crash. The mutation was reverted immediately after this run; it was never committed."
+}

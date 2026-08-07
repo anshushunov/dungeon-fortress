@@ -89,9 +89,20 @@ function Resolve-VerificationTemporaryRoot {
         [string]$ExplicitPath,
 
         # Only needed to compute the own-directory default below; the
-        # -TemporaryRoot and $env:DUNGEON_FORTRESS_TEMP tiers never touch it,
-        # so existing callers that only ever pass an explicit override keep
-        # working unchanged.
+        # -TemporaryRoot and $env:DUNGEON_FORTRESS_TEMP tiers never touch it.
+        # This does NOT mean every caller that only ever passes an explicit
+        # override is safe to leave without it. It means only a caller whose
+        # -ExplicitPath is always non-empty is safe to leave without it - and
+        # "always passes -ExplicitPath" is not the same claim as "always passes
+        # a non-empty one". Issue #329: scripts\run-game.ps1 and
+        # scripts\update-golden-ui.ps1 both declare -TemporaryRoot as an
+        # optional [string] parameter and both pass it straight through as
+        # -ExplicitPath here. An omitted -TemporaryRoot arrives as "", not as
+        # "absent" - PowerShell does not distinguish the two for a plain
+        # [string] - and an empty -ExplicitPath falls through the first tier
+        # below to $env:DUNGEON_FORTRESS_TEMP and then to this one, which threw
+        # on every argument-free invocation of either script until both were
+        # updated to also pass -RepositoryRoot.
         [string]$RepositoryRoot,
 
         # Passed straight through to Get-OwnVerificationTemporaryRoot; see its

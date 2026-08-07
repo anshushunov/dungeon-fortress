@@ -110,12 +110,40 @@ if ($hasFrameSize) {
 # refuses one that does not, and that refusal is the rule. This says the same
 # thing before restore and build rather than after them, which is the same trade
 # the frame check above makes.
-if (-not [string]::IsNullOrWhiteSpace($ScreenshotPath) -and -not $hasCameraZoom) {
-    throw (
-        "A screenshot capture has to name -CameraZoom, because a frame nobody " +
-        "declared a zoom for would inherit whichever zoom the automatic rule " +
-        "picked for this window and stop being reproducible."
-    )
+#
+# Issue #329. This used to check -CameraZoom alone, which is why a screenshot
+# request missing -UiScale and/or -FrameSize sailed past this refusal, through
+# a full restore and build and an asset import, and only then hit
+# ViewLaunchOptions.Parse's own "requireExplicitCaptureParameters" refusal deep
+# inside the engine - an ArgumentException stack trace pointing at Main.cs
+# instead of the one-line reason this script could have given up front. All
+# three parameters exist for the identical reason: a frame nobody declared a
+# zoom, a UI scale or a size for would inherit whatever the automatic rule
+# picked for this window, and stop being reproducible the moment that rule's
+# answer changes. capture-evidence.ps1 already knows this and always supplies
+# all three; this script did not, and the two scripts silently disagreeing
+# about the same contract is what let the gap stand.
+if (-not [string]::IsNullOrWhiteSpace($ScreenshotPath)) {
+    $missingCaptureParameters = @()
+    if (-not $hasCameraZoom) {
+        $missingCaptureParameters += "-CameraZoom"
+    }
+    if (-not $hasUiScale) {
+        $missingCaptureParameters += "-UiScale"
+    }
+    if (-not $hasFrameSize) {
+        $missingCaptureParameters += "-FrameSize"
+    }
+    if ($missingCaptureParameters.Count -gt 0) {
+        throw (
+            "A screenshot capture has to name " +
+            ($missingCaptureParameters -join ", ") +
+            ", because a frame nobody declared " +
+            $(if ($missingCaptureParameters.Count -eq 1) { "it" } else { "them" }) +
+            " for would inherit whichever value the automatic rule picked for " +
+            "this window and stop being reproducible."
+        )
+    }
 }
 
 $resolvedScreenshotPath = if ([string]::IsNullOrWhiteSpace($ScreenshotPath)) {
@@ -131,7 +159,17 @@ $resolvedScreenshotPath = if ([string]::IsNullOrWhiteSpace($ScreenshotPath)) {
 # matters for Issue #184 is that the directory is chosen the same way, because
 # that is what decides where the Godot runtime profile - and with it the GLES3
 # shader cache - ends up.
-$temporaryRootSelection = Resolve-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot
+#
+# -RepositoryRoot is required here for the same reason verify.ps1 passes it
+# (Issue #329): -TemporaryRoot is an optional parameter of this script, and an
+# omitted -TemporaryRoot arrives here as an empty string, not as "absent" -
+# PowerShell does not distinguish the two for a plain [string] parameter. An
+# empty -ExplicitPath is treated by the resolver as "no override" and falls
+# through to $env:DUNGEON_FORTRESS_TEMP and then to the own-directory tier,
+# which throws without -RepositoryRoot to compute a default from. Before this
+# fix every argument-free invocation of this script failed here, before ever
+# reaching the engine.
+$temporaryRootSelection = Resolve-VerificationTemporaryRoot -ExplicitPath $TemporaryRoot -RepositoryRoot $repoRoot
 $env:TEMP = ConvertTo-NormalizedRootPath -Path $temporaryRootSelection.Path
 $env:TMP = $env:TEMP
 
