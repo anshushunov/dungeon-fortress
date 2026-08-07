@@ -1,0 +1,88 @@
+{
+  "issue": 306,
+  "question": "Does verify.ps1 leave its temporary directory behind because MSBuild node reuse keeps dotnet.exe alive past the run, and does disabling node reuse fix it without changing checksums?",
+  "priorIncident": {
+    "source": "evidence/302-concurrent-full-runs.json (measured on PR #305, Issue #302), cited verbatim in Issue #306's own body",
+    "event": "{\"event\":\"temporary_cleanup\",\"status\":\"warning\",\"description\":\"own temporary root directory\",\"path\":\"C:\\\\gamedev\\\\df-verify-4326b631\",\"reason\":\"...System.Text.Json.SourceGeneration.dll...\"}",
+    "attribution": "That PR's own writeup attributed it to 'several long-lived dotnet.exe MSBuild/Roslyn node-reuse worker processes ... holding a handle open', without naming a PID or confirming the mechanism against a live process. This Issue's brief asks for that confirmation before trusting the fix."
+  },
+  "before": {
+    "mechanism": {
+      "method": "Reproduced verify.ps1's own 'build' stage in isolation (dotnet restore of the solution, dotnet restore --locked-mode of the domain MCP test project, dotnet build --configuration Release --no-restore), under the same DOTNET_CLI_HOME/TEMP/TMP environment verify.ps1 itself sets, then snapshotted dotnet.exe/VBCSCompiler.exe/MSBuild.exe processes before and after.",
+      "script": "evidence/306-before-repro.ps1",
+      "log": "evidence/306-before-repro.log",
+      "result": "7 new dotnet.exe processes with command line '\"C:\\Program Files\\dotnet\\dotnet.exe\" \"C:\\Program Files\\dotnet\\sdk\\8.0.423\\MSBuild.dll\" /nologo /nodemode:1 /nodeReuse:true /low:false' (PIDs 144688, 78008, 97660, 94468, 97696, 82992, 92352), plus one 'dotnet.exe exec ...VBCSCompiler.dll -pipename:...' (PID 136732, the shared Roslyn compiler server) - all still running when the script's own cleanup ran, and none of them spawned by anything other than this one restore+build.",
+      "stillAliveLater": {
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File evidence/306-check-pids.ps1",
+        "log": "evidence/306-check-pids-20min-later.log",
+        "result": "All 8 PIDs still alive ~19 minutes after they were spawned, well past when a full verify.ps1 run's own cleanup would have run. PID 136732 (VBCSCompiler) has System.Text.Json.SourceGeneration.dll loaded as a shadow-copied analyzer module - the exact file evidence/302-concurrent-full-runs.json named as the lock that blocked cleanup - directly confirming which process class the earlier incident's 'dotnet.exe node-reuse worker' attribution meant.",
+        "caveat": "That specific module's shadow-copy path was 'C:\\WINDOWS\\TEMP\\VBCSCompiler\\AnalyzerAssemblyLoader\\...' - the machine's own TEMP, not this run's own owned temporary root - so this particular file is not itself what verify.ps1's cleanup deletes. It is evidence that this class of process (node-reuse dotnet.exe, VBCSCompiler) is real, spawned by this repository's own build, and outlives the run by a wide margin; the concurrent-run reproduction below is what shows the same class of process touching a run's own owned directory."
+      }
+    },
+    "concurrentRunLeftover": {
+      "method": "Mirrored evidence/302-concurrent-full-runs.json's own method: two `verify.ps1 -Stage build` runs launched together, neither passing -TemporaryRoot, from two worktrees on unfixed scripts/verify.ps1 (git-stashed the fix in the claimed worktree; a throwaway sibling worktree _wt-306-repro-b at commit a44e14d for the other, removed after use).",
+      "commandA": "cd C:/gamedev/_wt-306 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage build -GodotPath \"C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe\"",
+      "commandB": "cd C:/gamedev/_wt-306-repro-b && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage build -GodotPath \"C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe\"",
+      "logA": "evidence/306-concurrent-a.log",
+      "logB": "evidence/306-concurrent-b.log",
+      "result": "Both runs reported status ok with no temporary_cleanup warning line. Run A's own directory (C:\\gamedev\\df-verify-225c76ce) nonetheless still existed after the run finished, containing an empty 'NuGetScratch\\lock' subdirectory (evidence/306-concurrent-a-leftover-listing.txt) created at the same second (14:38:05) as six fresh '/nodeReuse:true' dotnet.exe MSBuild workers were spawned for that same run (visible at 14:38:18 in the machine's process list, captured before this leftover was cleaned up). Run B's directory (df-verify-fb7349db) was fully gone, no leftover.",
+      "interpretation": "A different shape of the same defect from evidence/302's explicit warning: here Remove-Item's recursive delete completed and returned success with nothing to warn about, but a directory of the same name was recreated microseconds later - consistent with a NuGet operation still finishing on a node-reuse-kept-alive background process whose own TEMP was baked in as this now-deleted path at spawn time. No warning is emitted for this shape at all, which is worse than the shape Issue #89's best-effort design was built for: the run reports full success and still leaves a directory behind.",
+      "cleanup": "The leftover C:\\gamedev\\df-verify-225c76ce was removed by this session (Remove-Item -Recurse -Force, unattributed to any other agent - it was this repro's own directory, named with this repro's own randomly generated suffix).",
+      "recreatedAfterDeletion": "It came back. Checked again ~11 minutes later, after the fixed full run below had finished: C:\\gamedev\\df-verify-225c76ce\\NuGetScratch\\lock existed again, timestamped 14:49:31 - after the manual deletion, and after the six /nodeReuse:true workers from run A (spawned 14:38:18) were still confirmed alive. This machine also had other agents' worktrees (_wt-296, _wt-312, _wt-248, _wt-313-coord) running their own dotnet activity throughout this window, and node reuse is a machine-wide pool keyed by SDK version and architecture, not by caller - any of them requesting a reusable node without disabling reuse could have been handed one of run A's own still-alive nodes, which still carries run A's now-deleted directory as its own environment's TEMP from when it was spawned. This is the residual risk this fix does not retroactively clean up: MSBUILDDISABLENODEREUSE=1 stops verify.ps1 from creating new leaked nodes going forward, but nodes already leaked before every concurrent user of this machine sets it can keep resurrecting an already-deleted run's directory for as long as they stay alive and someone reuses them. Removed a second time before finishing this task; not attributable to any run this fix could have prevented, since it predates the fix being applied anywhere on this machine."
+    }
+  },
+  "fixApplied": {
+    "change": "scripts/verify.ps1 sets $env:MSBUILDDISABLENODEREUSE = \"1\" alongside its other run-scoped dotnet environment variables (DOTNET_CLI_HOME, DOTNET_NOLOGO, ...), so every dotnet child process this script starts - restore, build, test, the domain MCP launcher and verification script - inherits it.",
+    "confirmationTheEnvVarReachesMSBuild": {
+      "method": "Captured the machine's live process list while today's post-fix full verify.ps1 run was in its build stage.",
+      "result": "PID 52232, command line '\"C:\\Program Files\\dotnet\\dotnet.exe\" \"C:\\Program Files\\dotnet\\sdk\\8.0.423\\MSBuild.dll\" /nologo /nodemode:1 /nodeReuse:false /low:false' - MSBUILDDISABLENODEREUSE=1 is not just set in the environment, it visibly flips MSBuild's own node-launch flag from /nodeReuse:true to /nodeReuse:false."
+    },
+    "confirmationNoSurvivors": {
+      "method": "Snapshotted dotnet.exe processes whose command line matches 'nodeReuse' or 'VBCSCompiler' immediately before and 2 seconds after running `verify.ps1 -Stage build` with the fix applied.",
+      "log": "evidence/306-after-stage-build.log",
+      "result": "NEW_NODEREUSE_OR_VBCS_SURVIVORS=0 - no new node-reuse or compiler-server process outlived this invocation."
+    }
+  },
+  "buildStageTiming": {
+    "note": "Rule 8: numbers below are two samples each way on a machine shared with other agents' concurrent dotnet/test activity (visible in the process listings taken during these runs - other worktrees' restores and test runs overlapped both arms). The variance across samples of the same configuration (before: 10.5s and 15.5s; after: 7.3s and 18.9s) is larger than any plausible effect of node reuse alone on a solution this size, so no reliable direction could be measured here - reported as-is rather than picking the pair that tells a cleaner story.",
+    "before": [
+      { "command": "git stash; powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage build -GodotPath ... -TemporaryRoot C:\\gamedev\\df-verify-306-before-stage", "log": "evidence/306-before-stage-build.log", "elapsedSeconds": 10.5 },
+      { "command": "git stash; powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage build -GodotPath ... -TemporaryRoot C:\\gamedev\\df-verify-306-before-stage-2", "log": "evidence/306-before-stage-build-2.log", "elapsedSeconds": 15.5 }
+    ],
+    "after": [
+      { "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage build -GodotPath ... -TemporaryRoot C:\\gamedev\\df-verify-306-after-stage", "log": "evidence/306-after-stage-build.log", "elapsedSeconds": 7.3 },
+      { "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage build -GodotPath ... -TemporaryRoot C:\\gamedev\\df-verify-306-after-stage-2", "log": "evidence/306-after-stage-build-2.log", "elapsedSeconds": 18.9 }
+    ],
+    "theoreticalCost": "Node reuse's benefit is amortised across many separate dotnet/MSBuild invocations sharing warm worker processes; disabling it means every restore/build in every future verify.ps1 invocation pays full node-startup cost instead of sometimes reusing an already-running one. That cost exists by MSBuild's own design even though it was not distinguishable from this machine's background noise in the samples above."
+  },
+  "fullRunAfterFix": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -GodotPath \"C:/gamedev/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe\"",
+    "log": "evidence/306-full-run-after.log",
+    "result": "status ok, all 9 stages executed, no temporary_cleanup warning anywhere in the output.",
+    "temporaryRoot": "C:\\gamedev\\df-verify-999ec814 - confirmed absent immediately after the run (Test-Path -> false / 'No such file or directory').",
+    "checksumsUnchanged": {
+      "deterministicChecksum": {
+        "expected (evidence/302-concurrent-full-runs.json)": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+        "actual": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+        "match": true
+      },
+      "viewInvariantChecksum": {
+        "expected (evidence/302-concurrent-full-runs.json)": "7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead",
+        "actual": "7e9fffa76dfa479623ceb5890c9585a63a77441d7b279d997d0919f7e538fead",
+        "match": true
+      }
+    },
+    "noNewNodeReuseSurvivors": "Process list taken right after this run completed shows every dotnet.exe matching '/nodeReuse:true' or 'VBCSCompiler' by CreationDate predates this run's own start (14:22, 14:36, 14:38 - all from the earlier 'before' experiments above); none were created during this run's own scripts/build/tests/mcp/godot/ui/screenshots stages.",
+    "stageTimings": {
+      "scripts": 178.9,
+      "build": 5.7,
+      "tests": 269,
+      "mcp": 7.7,
+      "sim": 1.6,
+      "load": 1.5,
+      "godot": 53.2,
+      "ui": 5.3,
+      "screenshots": 9.5
+    }
+  }
+}

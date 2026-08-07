@@ -1,0 +1,54 @@
+temporaryRoot: C:\gamedev\df-verify-306before (owned=True)
+godotVersion: 4.7.1.stable.mono.official.a13da4feb
+baseline dotnet/VBCSCompiler/MSBuild PIDs: 
+--- dotnet restore (solution) ---
+  Определение проектов для восстановления...
+  Восстановлен C:\gamedev\_wt-306\src\DungeonFortress.Presentation\DungeonFortress.Presentation.csproj (за 97 мс).
+  Восстановлен C:\gamedev\_wt-306\src\DungeonFortress.Simulation\DungeonFortress.Simulation.csproj (за 88 мс).
+  Восстановлен C:\gamedev\_wt-306\tests\DungeonFortress.Scenarios\DungeonFortress.Scenarios.csproj (за 97 мс).
+  Восстановлен C:\gamedev\_wt-306\src\DungeonFortress.Game\DungeonFortress.Game.csproj (за 245 мс).
+  Восстановлен C:\gamedev\_wt-306\tools\DungeonFortress.DomainMcp\DungeonFortress.DomainMcp.csproj (за 16,65 с).
+  Восстановлен C:\gamedev\_wt-306\tests\DungeonFortress.Presentation.Tests\DungeonFortress.Presentation.Tests.csproj (за 37,14 с).
+  Восстановлен C:\gamedev\_wt-306\tests\DungeonFortress.Simulation.Tests\DungeonFortress.Simulation.Tests.csproj (за 37,14 с).
+  Восстановлен C:\gamedev\_wt-306\tests\DungeonFortress.DomainMcp.Tests\DungeonFortress.DomainMcp.Tests.csproj (за 37,14 с).
+--- dotnet restore (domain mcp tests, locked-mode) ---
+  Определение проектов для восстановления...
+  Восстановлен C:\gamedev\_wt-306\src\DungeonFortress.Simulation\DungeonFortress.Simulation.csproj (за 56 мс).
+  Восстановлен C:\gamedev\_wt-306\tools\DungeonFortress.DomainMcp\DungeonFortress.DomainMcp.csproj (за 230 мс).
+  Восстановлен C:\gamedev\_wt-306\tests\DungeonFortress.DomainMcp.Tests\DungeonFortress.DomainMcp.Tests.csproj (за 244 мс).
+--- dotnet build (solution, Release) ---
+  DungeonFortress.Simulation -> C:\gamedev\_wt-306\src\DungeonFortress.Simulation\bin\Release\net8.0\DungeonFortress.Simulation.dll
+  DungeonFortress.Scenarios -> C:\gamedev\_wt-306\tests\DungeonFortress.Scenarios\bin\Release\net8.0\DungeonFortress.Scenarios.dll
+  DungeonFortress.Presentation -> C:\gamedev\_wt-306\src\DungeonFortress.Presentation\bin\Release\net8.0\DungeonFortress.Presentation.dll
+  DungeonFortress.DomainMcp -> C:\gamedev\_wt-306\tools\DungeonFortress.DomainMcp\bin\Release\net8.0\DungeonFortress.DomainMcp.dll
+  DungeonFortress.DomainMcp.Tests -> C:\gamedev\_wt-306\tests\DungeonFortress.DomainMcp.Tests\bin\Release\net8.0\DungeonFortress.DomainMcp.Tests.dll
+  DungeonFortress.Presentation.Tests -> C:\gamedev\_wt-306\tests\DungeonFortress.Presentation.Tests\bin\Release\net8.0\DungeonFortress.Presentation.Tests.dll
+  DungeonFortress.Simulation.Tests -> C:\gamedev\_wt-306\tests\DungeonFortress.Simulation.Tests\bin\Release\net8.0\DungeonFortress.Simulation.Tests.dll
+  DungeonFortress.Game -> C:\gamedev\_wt-306\src\DungeonFortress.Game\.godot\mono\temp\bin\Release\DungeonFortress.Game.dll
+
+Сборка успешно завершена.
+    Предупреждений: 0
+    Ошибок: 0
+
+Прошло времени 00:00:10.28
+--- post-build process snapshot ---
+NEW PID=144688 Name=dotnet.exe Created=07.08.2026 14:22:22
+  CommandLine: "C:\Program Files\dotnet\dotnet.exe" "C:\Program Files\dotnet\sdk\8.0.423\MSBuild.dll" /nologo /nodemode:1 /nodeReuse:true /low:false
+NEW PID=78008 Name=dotnet.exe Created=07.08.2026 14:22:22
+  CommandLine: "C:\Program Files\dotnet\dotnet.exe" "C:\Program Files\dotnet\sdk\8.0.423\MSBuild.dll" /nologo /nodemode:1 /nodeReuse:true /low:false
+NEW PID=97660 Name=dotnet.exe Created=07.08.2026 14:22:22
+  CommandLine: "C:\Program Files\dotnet\dotnet.exe" "C:\Program Files\dotnet\sdk\8.0.423\MSBuild.dll" /nologo /nodemode:1 /nodeReuse:true /low:false
+NEW PID=94468 Name=dotnet.exe Created=07.08.2026 14:22:22
+  CommandLine: "C:\Program Files\dotnet\dotnet.exe" "C:\Program Files\dotnet\sdk\8.0.423\MSBuild.dll" /nologo /nodemode:1 /nodeReuse:true /low:false
+NEW PID=97696 Name=dotnet.exe Created=07.08.2026 14:22:22
+  CommandLine: "C:\Program Files\dotnet\dotnet.exe" "C:\Program Files\dotnet\sdk\8.0.423\MSBuild.dll" /nologo /nodemode:1 /nodeReuse:true /low:false
+NEW PID=82992 Name=dotnet.exe Created=07.08.2026 14:22:22
+  CommandLine: "C:\Program Files\dotnet\dotnet.exe" "C:\Program Files\dotnet\sdk\8.0.423\MSBuild.dll" /nologo /nodemode:1 /nodeReuse:true /low:false
+NEW PID=92352 Name=dotnet.exe Created=07.08.2026 14:22:22
+  CommandLine: "C:\Program Files\dotnet\dotnet.exe" "C:\Program Files\dotnet\sdk\8.0.423\MSBuild.dll" /nologo /nodemode:1 /nodeReuse:true /low:false
+NEW PID=136732 Name=dotnet.exe Created=07.08.2026 14:22:37
+  CommandLine: "C:\Program Files\dotnet\dotnet.exe" exec "C:\Program Files\dotnet\sdk\8.0.423\Roslyn\bincore\VBCSCompiler.dll" "-pipename:z6vd6u1x5gSPRBwDLGVWDq4tcIXXTlWg7qIWhTaWiyw"
+--- attempting cleanup of temporary root ---
+CLEANUP SUCCEEDED (no lock encountered this run).
+--- final state ---
+temporaryRoot fully removed.

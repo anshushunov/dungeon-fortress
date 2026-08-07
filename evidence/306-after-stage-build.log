@@ -1,0 +1,6 @@
+﻿Verification scope: partial (1 of 9 stages: build).
+Not running: scripts, tests, mcp, sim, load, godot, ui, screenshots. A partial run does not replace a full one.
+{"event":"verification_stage_output","status":"ok","path":"C:\\gamedev\\_wt-306\\.artifacts\\verify-aa82abb69d964671aa368efc3a9711eb\\stage-output.log"}
+{"event":"verification_temporary_root","status":"ok","path":"C:\\gamedev\\df-verify-306-after-stage","source":"-TemporaryRoot","owned":false}
+{"event":"verification_stage","status":"ok","stage":"build","elapsedSeconds":7.3}
+{"event":"verification_result","status":"ok","scope":"partial","stagesExecuted":["build"],"stagesNotRun":["scripts","tests","mcp","sim","load","godot","ui","screenshots"],"prerequisites":["restore","solution-build"],"seed":424242,"temporaryRoot":"C:\\gamedev\\df-verify-306-after-stage","godotVersion":"4.7.1.stable.mono.official.a13da4feb"}
