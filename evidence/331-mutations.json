@@ -56,5 +56,141 @@
       "whyItCannotPass": "Проверка обходит все строки полосы и сравнивает результат свежего вызова Press со снапшотом симуляции, а не литерал с литералом: подстановка-константа права ровно на нулевой строке и падает на первой же следующей (ожидалось существо #7, получено #3).",
       "revert": "git checkout -- src/DungeonFortress.Presentation/UiControls.cs"
     }
-  ]
+  ],
+  "round2": {
+    "recordedAt": "2026-08-08",
+    "baseCommit": "03a36f1",
+    "note": "Круг доработки по независимому review. M1 и M2 пересняты на новом коде, потому что MomentOfTruthPress сменил форму; M3, M3b и M4 назначены кругом. Все применялись поверх коммита 03a36f1 и снимались `git checkout -- <файл>`.",
+    "green": {
+      "unit": {
+        "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~MomentOfTruthPanelTests\"",
+        "result": "Пройден!   : не пройдено     0, пройдено    20, пропущено     0, всего    20"
+      },
+      "godot": {
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage godot",
+        "result": "verification_result status ok, godotExitCode 0"
+      }
+    },
+    "whyTwoLayers": "Часть подстановок краснит только стадию godot: они лежат в адаптере, куда юнит-тесты слоя представления по ADR 0011 не дотягиваются. Это и есть дыра, которую нашёл review, и гард AssertMomentOfTruthPressPath — то, чем она закрыта.",
+    "mutants": [
+      {
+        "id": "M1",
+        "status": "переснят на коде круга 2 — по-прежнему красный",
+        "claim": "Карточки момента истины видны вне панели инспектора.",
+        "substitution": "Полоса всегда отвечает «закрыто»: карточки остаются только текстом инспектора.",
+        "file": "src/DungeonFortress.Presentation/UiControls.cs",
+        "symbol": "MomentOfTruthPanel.Of",
+        "change": {
+          "from": "        var pause = state.MomentOfTruth;\n        if (!pause.Open)\n        {\n            return ClosedPrompt;\n        }",
+          "to": "        var pause = state.MomentOfTruth;\n        if (!pause.Open || true)\n        {\n            return ClosedPrompt;\n        }"
+        },
+        "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~MomentOfTruthPanelTests\"",
+        "result": "red",
+        "summary": "Не пройден!: не пройдено     8, пройдено    12, пропущено     0, всего    20",
+        "revert": "git checkout -- src/DungeonFortress.Presentation/UiControls.cs"
+      },
+      {
+        "id": "M2",
+        "status": "переснят на коде круга 2 — красный, и теперь краснит оба слоя",
+        "claim": "Клик по карточке выбирает то существо, о котором эта карточка.",
+        "substitution": "Попадание мыши отвязано от строки: все три ветки Press отвечают существом первой карточки. Веток стало три вместо одного общего return, потому что знак вердикта теперь возвращается прямо в них.",
+        "file": "src/DungeonFortress.Presentation/UiControls.cs",
+        "symbol": "MomentOfTruthPanel.Press",
+        "change": {
+          "from": "                return new MomentOfTruthPress(card.CreatureId, null);\n                return new MomentOfTruthPress(card.CreatureId, VerdictKind.Reward);\n                return new MomentOfTruthPress(card.CreatureId, VerdictKind.Punish);",
+          "to": "                return new MomentOfTruthPress(prompt.Cards[0].CreatureId, null);\n                return new MomentOfTruthPress(prompt.Cards[0].CreatureId, VerdictKind.Reward);\n                return new MomentOfTruthPress(prompt.Cards[0].CreatureId, VerdictKind.Punish);",
+          "note": "Три отдельные строки в теле цикла foreach (var card in prompt.Cards); каждая заменяется на своём месте."
+        },
+        "commands": [
+          "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~MomentOfTruthPanelTests\"",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage godot"
+        ],
+        "result": "red",
+        "summary": {
+          "unit": "Не пройден!: не пройдено     2, пройдено    18, пропущено     0, всего    20 (Pressing_a_card_points_at_the_creature_it_is_about, Both_verdicts_are_reachable_by_pressing_and_name_their_own_creature)",
+          "godot": "exit 1"
+        },
+        "verbatimFailure": {
+          "godot": "ERROR: System.InvalidOperationException: The moment of truth's mouse path is wired wrong in 6 place(s): row 1's 'card' button answers about creature 0 while its own card is about creature 1; row 1's 'reward' button answers about creature 0 …"
+        },
+        "revert": "git checkout -- src/DungeonFortress.Presentation/UiControls.cs"
+      },
+      {
+        "id": "M3",
+        "status": "назначен кругом — красный",
+        "claim": "Вердикт выносится мышью: REWARD награждает, PUNISH наказывает.",
+        "substitution": "Знаки переставлены местами там, где знак теперь живёт, — в слое представления. В адаптере переставлять больше нечего: перевода между двумя перечислениями нет, `rg -n \"MomentOfTruthPressKind\" src/` даёт пусто.",
+        "file": "src/DungeonFortress.Presentation/UiControls.cs",
+        "symbol": "MomentOfTruthPanel.Press",
+        "change": {
+          "from": "            if (string.Equals(controlId, card.RewardId, StringComparison.Ordinal))\n            {\n                return new MomentOfTruthPress(card.CreatureId, VerdictKind.Reward);\n            }\n\n            if (string.Equals(controlId, card.PunishId, StringComparison.Ordinal))\n            {\n                return new MomentOfTruthPress(card.CreatureId, VerdictKind.Punish);\n            }",
+          "to": "            if (string.Equals(controlId, card.RewardId, StringComparison.Ordinal))\n            {\n                return new MomentOfTruthPress(card.CreatureId, VerdictKind.Punish);\n            }\n\n            if (string.Equals(controlId, card.PunishId, StringComparison.Ordinal))\n            {\n                return new MomentOfTruthPress(card.CreatureId, VerdictKind.Reward);\n            }"
+        },
+        "commands": [
+          "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~MomentOfTruthPanelTests\"",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage godot"
+        ],
+        "result": "red",
+        "summary": {
+          "unit": "Не пройден!: не пройдено     1, пройдено    19, пропущено     0, всего    20",
+          "godot": "exit 1"
+        },
+        "verbatimFailure": {
+          "unit": "  Не пройден DungeonFortress.Presentation.Tests.MomentOfTruthPanelTests.Both_verdicts_are_reachable_by_pressing_and_name_their_own_creature [562 ms]\n  Сообщение об ошибке:\n   Assert.Equal() Failure: Values differ\nExpected: Reward\nActual:   Punish\n  Трассировка стека:\n     at DungeonFortress.Presentation.Tests.MomentOfTruthPanelTests.Both_verdicts_are_reachable_by_pressing_and_name_their_own_creature() in C:\\gamedev\\_wt-331-moment-ui\\tests\\DungeonFortress.Presentation.Tests\\MomentOfTruthPanelTests.cs:line 142",
+          "godot": "ERROR: System.InvalidOperationException: The moment of truth's mouse path is wired wrong in 12 place(s): row 0's 'reward' button carries verdict Punish instead of Reward; row 0's 'reward' button would send Punish about creature 0 instead of Reward about creature 0; row 0's 'punish' button carries verdict Reward instead of Punish; row 0's 'punish' button would send Reward about creature 0 instead of Punish about creature 0; …"
+        },
+        "revert": "git checkout -- src/DungeonFortress.Presentation/UiControls.cs"
+      },
+      {
+        "id": "M3b",
+        "status": "ближайший выживший родственник мутанта review — красный только в движке, и это ровно то, ради чего заведён гард",
+        "claim": "Тот же знак, но подставленный на стороне адаптера, где мутант review и жил.",
+        "substitution": "Команда строится с перевёрнутым знаком. Юнит-тесты слоя представления этого увидеть не могут — код чужой; краснит прогонный гард AssertMomentOfTruthPressPath.",
+        "file": "src/DungeonFortress.Game/Main.Hud.cs",
+        "symbol": "Main.MomentOfTruthVerdictCommand",
+        "change": {
+          "from": "    private VerdictCommand? MomentOfTruthVerdictCommand(MomentOfTruthPress press) =>\n        press.Verdict is { } verdict && _state is not null\n            ? new VerdictCommand(_state.Tick, press.CreatureId, verdict)\n            : null;",
+          "to": "    private VerdictCommand? MomentOfTruthVerdictCommand(MomentOfTruthPress press) =>\n        press.Verdict is { } verdict && _state is not null\n            ? new VerdictCommand(\n                _state.Tick,\n                press.CreatureId,\n                verdict == VerdictKind.Reward ? VerdictKind.Punish : VerdictKind.Reward)\n            : null;"
+        },
+        "commands": [
+          "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~MomentOfTruthPanelTests\"",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage godot"
+        ],
+        "result": "red в стадии godot, зелено в юнит-тестах",
+        "summary": {
+          "unit": "Пройден!: не пройдено 0, пройдено 20 — подстановка в адаптере, слой представления её не видит",
+          "godot": "exit 1"
+        },
+        "verbatimFailure": {
+          "godot": "ERROR: System.InvalidOperationException: The moment of truth's mouse path is wired wrong in 6 place(s): row 0's 'reward' button would send Punish about creature 0 instead of Reward about creature 0; row 0's 'punish' button would send Reward about creature 0 instead of Punish about creature 0; …"
+        },
+        "revert": "git checkout -- src/DungeonFortress.Game/Main.Hud.cs"
+      },
+      {
+        "id": "M4",
+        "status": "назначен кругом — красный",
+        "claim": "Клик по карточке действительно наводит инспектор на существо, а не только вычисляет его.",
+        "substitution": "Ранний return в выборе существа по клику: сопоставление ищет существо с идентификатором -1, которого нет, поэтому метод всегда выходит до присваивания. Записан именно так, а не голым `return;` в начале: голый return делает остальное тело недостижимым (CS0162), а TreatWarningsAsErrors в Directory.Build.props превращает предупреждение в ошибку сборки — такой мутант просто не собрался бы.",
+        "file": "src/DungeonFortress.Game/Main.Player.cs",
+        "symbol": "Main.SelectCreature",
+        "change": {
+          "from": "        if (_state?.Creatures.FirstOrDefault(creature => creature.Id == creatureId)\n            is not { } chosen)\n        {\n            return;\n        }",
+          "to": "        if (_state?.Creatures.FirstOrDefault(creature => creature.Id == -1)\n            is not { } chosen)\n        {\n            return;\n        }"
+        },
+        "commands": [
+          "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~MomentOfTruthPanelTests\"",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage godot"
+        ],
+        "result": "red в стадии godot, зелено в юнит-тестах",
+        "summary": {
+          "unit": "Пройден!: не пройдено 0, пройдено 20 — подстановка в адаптере",
+          "godot": "exit 1"
+        },
+        "verbatimFailure": {
+          "godot": "ERROR: System.InvalidOperationException: The moment of truth's mouse path is wired wrong in 2 place(s): pressing a card about creature 8 left the inspector pointed at nobody; pressing a card about creature 8 left the map pointed at nothing rather than at GridPoint { X = 17, Y = 10 }. A band whose buttons answer about the wrong creature, or with the wrong sign, is worse than no band: the player is told they rewarded somebody they punished."
+        },
+        "revert": "git checkout -- src/DungeonFortress.Game/Main.Player.cs"
+      }
+    ]
+  }
 }
