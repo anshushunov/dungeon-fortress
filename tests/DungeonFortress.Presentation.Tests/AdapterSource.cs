@@ -9,6 +9,15 @@ namespace DungeonFortress.Presentation.Tests;
 internal sealed record SourceCall(string Name, IReadOnlyList<string> Arguments, string Text);
 
 /// <summary>
+/// One method of <c>WorldDrawJournal</c> that records text: its name, its
+/// declared parameters and its body.
+/// </summary>
+/// <param name="Name">The method's name.</param>
+/// <param name="Parameters">The parameter names, in declaration order.</param>
+/// <param name="Body">The body, masked like every other body the reader returns.</param>
+internal sealed record JournalMethod(string Name, IReadOnlyList<string> Parameters, string Body);
+
+/// <summary>
 /// The Godot adapter, read as text.
 ///
 /// This is the deliberate consequence of the root cause Issue #90 names: no test
@@ -309,6 +318,122 @@ internal static class AdapterSource
         }
 
         return calls;
+    }
+
+    /// <summary>
+    /// The methods of <c>WorldDrawJournal</c> that end in a recorded text — the
+    /// ones that call <c>pass.Call</c> or <c>Current().Call</c>.
+    ///
+    /// <para>
+    /// The set is derived rather than listed, so a recording method added to the
+    /// journal is guarded from the moment it exists. It is scoped to the
+    /// <c>WorldDrawJournal</c> class on purpose: the sibling <c>PassJournal</c>
+    /// declares <c>Point</c>, <c>Size</c> and <c>Call</c> on the same
+    /// <c>pass</c> receiver, and those are not the methods whose body names a
+    /// recorded primitive. <c>WorldGeometryJournalGuardTests</c> anchors the
+    /// derived set with an expected list, so a recording method leaving the class
+    /// is a red run rather than a silently smaller check.
+    /// </para>
+    /// </summary>
+    internal static IReadOnlyList<JournalMethod> JournalRecordingMethods()
+    {
+        var region = ClassRegion("WorldDrawJournal");
+        var methods = new List<JournalMethod>();
+        for (var index = region.Open; index < region.Close;)
+        {
+            while (index < region.Close && !IsIdentifierPart(Masked[index]))
+            {
+                index++;
+            }
+
+            if (index >= region.Close)
+            {
+                break;
+            }
+
+            var nameStart = index;
+            while (index < region.Close && IsIdentifierPart(Masked[index]))
+            {
+                index++;
+            }
+
+            var name = Masked[nameStart..index];
+            var open = SkipWhitespace(Masked, index);
+            if (open >= region.Close || Masked[open] != '(')
+            {
+                continue;
+            }
+
+            var close = MatchingPair(Masked, open, '(', ')');
+            var after = SkipWhitespace(Masked, close + 1);
+            string body;
+            if (after < region.Close && Masked[after] == '{')
+            {
+                var bodyClose = MatchingPair(Masked, after, '{', '}');
+                body = Masked[(after + 1)..bodyClose];
+                index = bodyClose + 1;
+            }
+            else if (after + 1 < region.Close &&
+                     Masked[after] == '=' &&
+                     Masked[after + 1] == '>')
+            {
+                var terminator = ExpressionBodyEnd(after + 2);
+                body = Masked[(after + 2)..terminator];
+                index = terminator + 1;
+            }
+            else
+            {
+                continue;
+            }
+
+            if (body.Contains("pass.Call(", StringComparison.Ordinal) ||
+                body.Contains("Current().Call(", StringComparison.Ordinal))
+            {
+                methods.Add(new JournalMethod(
+                    name,
+                    ParameterNamesIn(Masked, open, close),
+                    body));
+            }
+        }
+
+        return methods;
+    }
+
+    /// <summary>
+    /// The parameter names of one declaration, given the offsets of its
+    /// parameter list. The name is the last identifier before a default value,
+    /// and the last identifier of the whole part when there is none.
+    /// </summary>
+    private static IReadOnlyList<string> ParameterNamesIn(string text, int open, int close)
+    {
+        var names = new List<string>();
+        foreach (var parameter in SplitArguments(text[(open + 1)..close]))
+        {
+            var tokens = parameter
+                .Split('=')[0]
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length > 0)
+            {
+                names.Add(tokens[^1]);
+            }
+        }
+
+        return names;
+    }
+
+    /// <summary>The block of one class declared in the adapter, offsets included.</summary>
+    private static (int Open, int Close) ClassRegion(string name)
+    {
+        var start = Masked.IndexOf("class " + name, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            throw new InvalidOperationException(
+                $"The adapter declares no class named '{name}'.");
+        }
+
+        var open = Masked.IndexOf('{', start);
+        var close = MatchingPair(Masked, open, '{', '}');
+        return (open, close);
     }
 
     /// <summary>

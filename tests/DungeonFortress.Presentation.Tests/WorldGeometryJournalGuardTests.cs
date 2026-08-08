@@ -173,6 +173,57 @@ public sealed class WorldGeometryJournalGuardTests
     }
 
     /// <summary>
+    /// The second hop, and the half the first-version guard could not see.
+    ///
+    /// <para>
+    /// The check above demands that a hidden primitive hand the journal every
+    /// argument it was given; it is silent about what the journal does with
+    /// them next. <c>WorldDrawJournal.Text</c> could keep <c>alignment</c> in
+    /// its signature and drop it from the call it records, and the record would
+    /// stay green while the caption slid across its box — the review mutant of
+    /// PR #326 did exactly that and seven tests held.
+    /// </para>
+    ///
+    /// <para>
+    /// This is the other end: every parameter of a journal method that records
+    /// text has to reach the text that is recorded. The body's
+    /// <c>pass.Point</c> and <c>pass.Size</c> statements do not count — the
+    /// extent and the sizes are a readable summary beside the record, not the
+    /// record — and a parameter that survives only there is the same defect
+    /// wearing a second costume. The <c>alignment</c> of a caption is neither a
+    /// point nor a size, so its only path into the record is the text itself.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Every_argument_the_journal_is_given_reaches_the_recorded_text()
+    {
+        var recording = AdapterSource.JournalRecordingMethods();
+        Assert.Equal(
+            new[]
+            {
+                "Arc", "Circle", "Line", "Polyline", "Rect", "Text",
+                "TextureRect", "Transform", "TransformMatrix",
+            },
+            recording
+                .Select(method => method.Name)
+                .OrderBy(name => name, StringComparer.Ordinal));
+
+        foreach (var method in recording)
+        {
+            var recorded = Identifiers(RecordedTextRegion(method.Body));
+            foreach (var parameter in method.Parameters)
+            {
+                Assert.True(
+                    recorded.Contains(parameter),
+                    $"'{method.Name}' is given '{parameter}' and its value never reaches " +
+                    "the text that is recorded, so a change to it moves the map and not " +
+                    "the record. The parameter has to appear where the record is written, " +
+                    "not only in the signature or in the extent and sizes beside it.");
+            }
+        }
+    }
+
+    /// <summary>
     /// The reference is about geometry, so nothing that is not geometry may sit
     /// inside the text that is compared.
     ///
@@ -341,5 +392,64 @@ public sealed class WorldGeometryJournalGuardTests
         }
 
         return count;
+    }
+
+    /// <summary>
+    /// The recorded-text half of a journal method's body: every
+    /// <c>pass.Point</c> and <c>pass.Size</c> statement blanked, because the
+    /// extent and the sizes are not the text that is compared.
+    /// </summary>
+    private static string RecordedTextRegion(string body)
+    {
+        var characters = body.ToCharArray();
+        foreach (var call in new[] { "pass.Point", "pass.Size" })
+        {
+            for (var index = 0;
+                 (index = body.IndexOf(call, index, StringComparison.Ordinal)) >= 0;)
+            {
+                var open = index + call.Length;
+                if (open >= body.Length || body[open] != '(')
+                {
+                    index++;
+                    continue;
+                }
+
+                var close = MatchingParenthesis(body, open);
+                for (var current = index; current <= close; current++)
+                {
+                    characters[current] = ' ';
+                }
+
+                index = close + 1;
+            }
+        }
+
+        return new string(characters);
+    }
+
+    private static int MatchingParenthesis(string text, int open)
+    {
+        var depth = 0;
+        for (var index = open; index < text.Length; index++)
+        {
+            switch (text[index])
+            {
+                case '(':
+                    depth++;
+                    break;
+                case ')':
+                    depth--;
+                    break;
+                default:
+                    continue;
+            }
+
+            if (depth == 0)
+            {
+                return index;
+            }
+        }
+
+        throw new InvalidOperationException("The call is unbalanced.");
     }
 }
