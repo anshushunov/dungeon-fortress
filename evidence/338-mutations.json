@@ -1,0 +1,18 @@
+{
+  "issue": 338,
+  "base": "4d94d40",
+  "mutants": [
+    {
+      "id": "M1",
+      "claim": "подпись читает отложенный приоритет",
+      "file": "src/DungeonFortress.Presentation/RoomReadings.cs",
+      "change": {
+        "from": "                ? $\"{name} · off ({work} {view.Priority(work)})\"",
+        "to": "                ? $\"{name} · off ({work} {view.State.Priorities[work]})\""
+      },
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~The_blocked_caption_names_a_priority_accepted_in_the_same_paused_moment\"",
+      "result": "red",
+      "message": "Assert.Equal() Failure: Strings differ\n                          ↓ (pos 19)\nExpected: \"TRAIN · off (Drill 3)\"\nActual:   \"TRAIN · off (Drill 0)\"\n                          ↑ (pos 19)\n  Трассировка стека:\n     at DungeonFortress.Presentation.Tests.RoomReadingTests.The_blocked_caption_names_a_priority_accepted_in_the_same_paused_moment() in C:\\gamedev\\_wt-338-room-caption\\tests\\DungeonFortress.Presentation.Tests\\RoomReadingTests.cs:line 221"
+    }
+  ]
+}
