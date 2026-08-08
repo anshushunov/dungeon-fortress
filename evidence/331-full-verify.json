@@ -1,24 +1,26 @@
 {
   "issue": 331,
-  "what": "Полный verify.ps1 один раз на финальном состоянии (критерий 7, правило 22).",
+  "round": 2,
+  "what": "Полный verify.ps1 один раз на финальном состоянии круга доработки (критерий 7, правило 22).",
   "ranAt": "2026-08-08",
-  "commit": "446679d",
+  "commit": "433351c",
   "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
+  "exitCode": 0,
   "stages": [
     {
       "stage": "scripts",
       "status": "ok",
-      "elapsedSeconds": 132.7
+      "elapsedSeconds": 105.0
     },
     {
       "stage": "build",
       "status": "ok",
-      "elapsedSeconds": 9.3
+      "elapsedSeconds": 6.7
     },
     {
       "stage": "tests",
       "status": "ok",
-      "elapsedSeconds": 174.5
+      "elapsedSeconds": 213.7
     },
     {
       "stage": "mcp",
@@ -28,7 +30,7 @@
     {
       "stage": "sim",
       "status": "ok",
-      "elapsedSeconds": 0.3
+      "elapsedSeconds": 0.4
     },
     {
       "stage": "load",
@@ -38,24 +40,30 @@
     {
       "stage": "godot",
       "status": "ok",
-      "elapsedSeconds": 32.9
+      "elapsedSeconds": 34.2
     },
     {
       "stage": "ui",
       "status": "ok",
-      "elapsedSeconds": 6.7
+      "elapsedSeconds": 4.1
     },
     {
       "stage": "screenshots",
       "status": "ok",
-      "elapsedSeconds": 6.7
+      "elapsedSeconds": 5.7
     },
     {
       "stage": "token-budget",
       "status": "ok",
-      "elapsedSeconds": 91.3
+      "elapsedSeconds": 120.4
     }
   ],
+  "reading": {
+    "criterion6": "hudGuardRegressionExitCode=1 и hudReadabilityRegressionExitCode=1 — оба негативных прогона по-прежнему краснят, гарды вёрстки и читаемости не ослаблены ни полосой, ни двумя новыми прогонными гардами; smallestPhysicalTextPixels не сдвинулся (8 на авторском кадре, 16 на развёрнутом окне владельца).",
+    "noSnapshotDrift": "deterministicChecksum e65273aa… и loadChecksum 7ec0f2d6… совпадают дословно с прогоном круга 1 (evidence/331-full-verify.json до этой правки) и с последним записанным прогоном на main (evidence/329-full-verify-final.json). Пауза при открытии окна — темп адаптера и в каноническое состояние не попадает.",
+    "goldenUntouched": "goldenUiFrames те же три кадра, tests/golden/ui/*.json не менялись.",
+    "newGuards": "Стадия godot теперь прогоняет ещё два гарда на каждом входе: AssertMomentOfTruthPressPath (кнопки полосы разрешаются в свой ряд и свой знак, команда несёт тот же знак и то же существо, нажатие карточки наводит инспектор) и AssertMomentOfTruthStopsTheClock (часы останавливаются на кадре открытия окна и только на нём). Их способность падать показана мутантами M2, M3, M3b и M4 в evidence/331-mutations.json."
+  },
   "result": {
     "event": "verification_result",
     "status": "ok",
@@ -73,28 +81,56 @@
       "token-budget"
     ],
     "stagesNotRun": [],
+    "prerequisites": [
+      "restore",
+      "solution-build",
+      "scenario-build",
+      "game-host-build",
+      "engine-runtime"
+    ],
     "seed": 424242,
+    "temporaryRoot": "C:\\gamedev\\df-verify-f9ebf542",
     "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
     "changedSeedChecksum": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
     "loadChecksum": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+    "loadElapsedMilliseconds": [
+      212.324,
+      199.016
+    ],
     "godotVersion": "4.7.1.stable.mono.official.a13da4feb",
+    "godotExitCode": 0,
+    "godotControlsExitCode": 0,
+    "godotCameraExitCode": 0,
+    "invalidViewFailuresChecked": 5,
     "hudGuardRegressionExitCode": 1,
     "hudReadabilityRegressionExitCode": 1,
     "hudSmallestPhysicalTextPixels": {
       "Authored": 8,
       "OwnerMaximized": 16
     },
+    "cameraTransformRegressionExitCode": 1,
+    "cameraInputChecks": 15,
+    "cameraTransformChecks": 15,
+    "cameraBoundsChecks": 10,
+    "cameraPanChecks": 5,
     "viewInvariantChecksum": "94d7a550b96af32b75400510194d02b7b23975da47677a7058aa85571792bb56",
+    "viewCases": [
+      "base",
+      "overview-shifted",
+      "detail-scaled-ui",
+      "large-same-zoom"
+    ],
+    "goblinScreenPixels": {
+      "Overview": 30.909090909090907,
+      "Base": 61.81818181818181,
+      "Detail": 92.72727272727272
+    },
+    "godotRaidExitCode": 0,
     "screenshotRepeatable": true,
     "goldenUiFrames": [
       "stone-t190-loose-no-stockpile",
       "stone-t336-in-transit",
       "stone-t950-stockpile-full"
     ]
-  },
-  "reading": {
-    "criterion6": "hudGuardRegressionExitCode=1 и hudReadabilityRegressionExitCode=1 — оба негативных прогона по-прежнему краснят, то есть гарды вёрстки и читаемости не ослаблены новым элементом; smallestPhysicalTextPixels не изменился (8 на авторском кадре, 16 на развёрнутом окне владельца).",
-    "noSnapshotDrift": "deterministicChecksum e65273aa... и loadChecksum 7ec0f2d6... совпадают дословно с последним записанным полным прогоном на main — evidence/329-full-verify-final.json (команда сверки: jq -r '..|objects|select(has(\"deterministicChecksum\"))' evidence/329-full-verify-final.json). Полоса ничего не трогает в каноническом состоянии.",
-    "goldenUntouched": "goldenUiFrames те же три кадра, tests/golden/ui/*.json не менялись."
   }
 }
