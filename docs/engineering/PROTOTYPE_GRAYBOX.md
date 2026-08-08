@@ -1667,6 +1667,39 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1 `
   -ScreenshotPath issue24\dig-after.png
 ```
 
+### The frame a wave ends on (Issue #331)
+
+`--demo-moment-of-truth` plays the shipped journal until the party stops by
+itself between two waves and waits there. It stops on a **state** and not on a
+tick, for the reason the simulation's own tests give: the tick a wave ends on is
+emergent, and a number would be a balance value pretending to be a fixture. That
+is also why `--screenshot-ticks` cannot reach this frame — running "to tick N"
+past the end of a wave spends the whole 40-step window on the way and arrives
+after the question has closed.
+
+Nothing about it is simulation: it runs ordinary steps of the shipped log and
+stops on one of them.
+
+`run-game.ps1` has no switch for it yet — its `-Demo*` switches are enumerated
+one by one, and that script was outside the partition of Issue #331. Until one is
+added the flag is reached through the engine directly, in the same isolated
+runtime profile `verify.ps1` uses:
+
+```powershell
+. .\scripts\GodotTools.ps1
+Initialize-GodotRuntimeEnvironment -RepositoryRoot (Get-Location).Path
+Invoke-GodotChecked -GodotPath (Resolve-GodotExecutable) -Arguments @(
+  "--path", "src\DungeonFortress.Game", "--resolution", "1600x900",
+  "--", "--fixture", "baseline", "--demo-moment-of-truth",
+  "--screenshot", "evidence\331-moment-of-truth.png", "--screenshot-ticks", "1",
+  "--tile-size", "40", "--camera-zoom", "0.5", "--camera-position", "560,320",
+  "--ui-scale", "1", "--frame-size", "1600x900"
+) -ExpectedSuccessEvent "godot_graybox_screenshot"
+```
+
+The frame it produces, and the readings taken from it, are
+`evidence/331-moment-of-truth.png` and `evidence/331-frame.json`.
+
 ## Wave checkpoints
 
 A party is a sequence of waves, not one raid. At tick 300 the HUD announces wave
@@ -1754,6 +1787,7 @@ Both structured outputs — `godot_headless_smoke` from `--smoke` and
 | `controlFeedback` | the raw control feedback string |
 | `editMode`, `brushZone` | which brush is held |
 | `selectedCell`, `selectedCreatureId` | what the inspector is pointed at |
+| `momentOfTruth` | the band the moment of truth is answered on (Issue #331): whether it is `open`, whether the node is `visible`, the path of that node under the HUD root, the wave, `unanswered`, `stepsLeft`, the heading, the explanation, and one entry per card with its text, its verdict, whether it is selected and the ids of its three buttons |
 | `pending` | intent accepted for this tick that the tick has not applied yet — marks, withdrawals and priority changes — or `null` |
 
 This turns every inspector branch into an ordinary testable artifact: choose the
