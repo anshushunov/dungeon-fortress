@@ -1,0 +1,18 @@
+{
+  "issue": 327,
+  "base": "e21c9eb",
+  "mutants": [
+    {
+      "id": "M0-before",
+      "claim": "до правки дыра существует: подстановка проходит зелёной",
+      "file": "src/DungeonFortress.Game/Main.Rendering.cs",
+      "change": {
+        "from": "            pass.Call(\n                primitive,\n                Number(position.X), Number(position.Y),\n                alignment.ToString(),\n                Number(width),",
+        "to": "            pass.Call(\n                primitive,\n                Number(position.X), Number(position.Y),\n                Number(width),"
+      },
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests",
+      "result": "green",
+      "message": "638 passed, 0 failed"
+    }
+  ]
+}
