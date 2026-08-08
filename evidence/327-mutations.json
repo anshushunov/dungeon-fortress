@@ -1,0 +1,45 @@
+{
+  "issue": 327,
+  "base": "e21c9eb",
+  "mutants": [
+    {
+      "id": "M0-before",
+      "claim": "до правки дыра существует: подстановка проходит зелёной",
+      "file": "src/DungeonFortress.Game/Main.Rendering.cs",
+      "change": {
+        "from": "            pass.Call(\n                primitive,\n                Number(position.X), Number(position.Y),\n                alignment.ToString(),\n                Number(width),",
+        "to": "            pass.Call(\n                primitive,\n                Number(position.X), Number(position.Y),\n                Number(width),"
+      },
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests",
+      "result": "green",
+      "message": "638 passed, 0 failed"
+    },
+    {
+      "id": "M1",
+      "claim": "после правки та же подстановка красит",
+      "file": "src/DungeonFortress.Game/Main.Rendering.cs",
+      "change": {
+        "from": "            pass.Call(\n                primitive,\n                Number(position.X), Number(position.Y),\n                alignment.ToString(),\n                Number(width),",
+        "to": "            pass.Call(\n                primitive,\n                Number(position.X), Number(position.Y),\n                Number(width),"
+      },
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests",
+      "result": "red",
+      "guard": "WorldGeometryJournalGuardTests.Every_argument_the_journal_is_given_reaches_the_recorded_text",
+      "message": "'Text' is given 'alignment' and its value never reaches the text that is recorded, so a change to it moves the map and not the record. The parameter has to appear where the record is written, not only in the signature or in the extent and sizes beside it."
+    },
+    {
+      "id": "M2",
+      "claim": "проверка ловит класс, а не один аргумент",
+      "file": "src/DungeonFortress.Game/Main.Rendering.cs",
+      "change": {
+        "from": "            pass.Call(\n                primitive,\n                Number(position.X), Number(position.Y),\n                alignment.ToString(),\n                Number(width),\n                fontSize.ToString(CultureInfo.InvariantCulture),",
+        "to": "            pass.Call(\n                primitive,\n                Number(position.X), Number(position.Y),\n                alignment.ToString(),\n                fontSize.ToString(CultureInfo.InvariantCulture),"
+      },
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests",
+      "result": "red",
+      "guard": "WorldGeometryJournalGuardTests.Every_argument_the_journal_is_given_reaches_the_recorded_text",
+      "message": "'Text' is given 'width' and its value never reaches the text that is recorded, so a change to it moves the map and not the record. The parameter has to appear where the record is written, not only in the signature or in the extent and sizes beside it.",
+      "note": "width остаётся в pass.Size(width) — той самой сводке extent/sizes рядом с записью, — и всё равно краснеет: проверка смотрит именно на записываемый текст, а не на тело метода целиком. Ловит класс, а не случай alignment."
+    }
+  ]
+}
