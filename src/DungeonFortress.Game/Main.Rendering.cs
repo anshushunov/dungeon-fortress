@@ -498,7 +498,7 @@ public partial class Main
         DrawString(
             ThemeDB.FallbackFont,
             origin + new Vector2(ScaleWorld(3) + icon, labelTop + icon),
-            RoomLabels.Caption(room, _projection!.State.Priorities),
+            RoomLabels.Caption(room, _projection!),
             HorizontalAlignment.Left,
             -1,
             Math.Max(1, (int)Math.Round(ScaleWorld(7))),

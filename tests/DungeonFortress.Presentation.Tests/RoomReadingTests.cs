@@ -86,8 +86,8 @@ public sealed class RoomReadingTests
         var view = View(3, new ZonePaintCommand(1, ZoneKind.Watch, [EmptyFloorA]),
             new SetPriorityCommand(1, JobKind.Watch, 2));
 
-        Assert.Equal("WATCH", RoomLabels.Caption(Room(view, "watch@25,6"), view.State.Priorities));
-        Assert.Equal("FARM", RoomLabels.Caption(Room(view, "farm@1,1"), view.State.Priorities));
+        Assert.Equal("WATCH", RoomLabels.Caption(Room(view, "watch@25,6"), view));
+        Assert.Equal("FARM", RoomLabels.Caption(Room(view, "farm@1,1"), view));
     }
 
     [Fact]
@@ -96,18 +96,18 @@ public sealed class RoomReadingTests
         var unfinished = View(2, new ZonePaintCommand(1, ZoneKind.TrainingGround, [EmptyFloorA]));
         Assert.Equal(
             "TRAIN · no post",
-            RoomLabels.Caption(Room(unfinished, "trainingGround@25,6"), unfinished.State.Priorities));
+            RoomLabels.Caption(Room(unfinished, "trainingGround@25,6"), unfinished));
 
         var blocked = View(2, new ZonePaintCommand(1, ZoneKind.TrainingGround, [LeftPost]));
         Assert.Equal(
             "TRAIN · off (Drill 0)",
-            RoomLabels.Caption(Room(blocked, "trainingGround@10,2"), blocked.State.Priorities));
+            RoomLabels.Caption(Room(blocked, "trainingGround@10,2"), blocked));
 
         var shut = View(
             3,
             new ZonePaintCommand(1, ZoneKind.Watch, [EmptyFloorA]),
             new ZonePaintCommand(2, ZoneKind.Forbidden, [EmptyFloorA]));
-        Assert.Equal("WATCH · forbidden", RoomLabels.Caption(Room(shut, "watch@25,6"), shut.State.Priorities));
+        Assert.Equal("WATCH · forbidden", RoomLabels.Caption(Room(shut, "watch@25,6"), shut));
     }
 
     /// <summary>
@@ -133,7 +133,8 @@ public sealed class RoomReadingTests
             "room_missing_feature",
             Complete: false);
 
-        Assert.Equal(caption, RoomLabels.Caption(room, Priorities()));
+        var view = View(1);
+        Assert.Equal(caption, RoomLabels.Caption(room, view));
         Assert.Equal(
             RoomLabels.FeatureName(PrototypeRooms.RequiredFeature(purpose)!.Value),
             caption[(caption.IndexOf("no ", StringComparison.Ordinal) + 3)..]);
@@ -165,11 +166,11 @@ public sealed class RoomReadingTests
             "room_blocked_priority",
             Complete: true);
 
-        var priorities = Priorities();
         var work = PrototypeRooms.EnabledWork(purpose)!.Value;
-        Assert.Equal(caption, RoomLabels.Caption(room, priorities));
+        var view = View(2, new SetPriorityCommand(1, work, 0));
+        Assert.Equal(caption, RoomLabels.Caption(room, view));
         Assert.Equal(
-            $"{work} {priorities[work]}",
+            $"{work} {view.Priority(work)}",
             caption[(caption.IndexOf('(') + 1)..caption.IndexOf(')')]);
     }
 
@@ -189,14 +190,38 @@ public sealed class RoomReadingTests
             "room_blocked_priority",
             Complete: true);
 
-        var raised = Priorities();
-        raised[JobKind.Drill] = 3;
+        var raised = View(2, new SetPriorityCommand(1, JobKind.Drill, 3));
 
         Assert.Equal("TRAIN · off (Drill 3)", RoomLabels.Caption(room, raised));
     }
 
-    private static Dictionary<JobKind, int> Priorities() =>
-        Enum.GetValues<JobKind>().ToDictionary(job => job, _ => 0);
+    /// <summary>
+    /// The caption names the priority the player set in this same paused moment,
+    /// not the value the world still holds — the same correction
+    /// <see cref="MapAccents.Room"/> makes for the room's colour. Without it the
+    /// two would disagree for a whole paused moment: the room would already read
+    /// as working while the caption still named the old number to raise.
+    /// </summary>
+    [Fact]
+    public void The_blocked_caption_names_a_priority_accepted_in_the_same_paused_moment()
+    {
+        var commands = new PrototypeCommand[]
+        {
+            new ZonePaintCommand(1, ZoneKind.TrainingGround, [LeftPost, RightPost]),
+            new SetPriorityCommand(40, JobKind.Drill, 3),
+        };
+        var waiting = View(40, commands);
+
+        // The world has not applied the raise yet: the canonical priority is still
+        // 0 and the room's status still says blocked. The caption must name the
+        // number the player just set, as the room's colour already does.
+        Assert.Equal(0, waiting.State.Priorities[JobKind.Drill]);
+        Assert.Equal(3, waiting.Priority(JobKind.Drill));
+        Assert.Equal("room_blocked_priority", Room(waiting, "trainingGround@10,2").StatusCode);
+        Assert.Equal(
+            "TRAIN · off (Drill 3)",
+            RoomLabels.Caption(Room(waiting, "trainingGround@10,2"), waiting));
+    }
 
     [Fact]
     public void Every_purpose_has_a_name()
