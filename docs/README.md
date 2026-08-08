@@ -95,6 +95,7 @@ authentication и точный token usage handoff описаны в
 | Процессное правило: темп, review, параллелизм | `engineering/DEVELOPMENT_PACE.md` |
 | Находка review без наблюдаемого последствия | `engineering/DEBT_LEDGER.md` |
 | Замер расхода токенов и базовая линия | `engineering/TOKEN_BUDGET.md` |
+| Как работать со сторонним провайдером реализации | `engineering/EXTERNAL_DELEGATION.md` |
 | Конкретная работа с критериями готовности | GitHub Issue |
 | Группа задач и порядок выполнения | GitHub Project |
 | Обсуждение и проверка изменения | Pull Request |
