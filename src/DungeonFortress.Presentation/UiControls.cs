@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using DungeonFortress.Simulation;
 
 namespace DungeonFortress.Presentation;
@@ -86,6 +88,13 @@ public sealed record UiControl(
 /// <param name="Speed">The time multiplier.</param>
 /// <param name="Fixture">Which shipped command log the session started from.</param>
 /// <param name="SessionComplete">Whether the session has run out of ticks.</param>
+/// <param name="MomentOfTruthOpen">
+/// Whether the party is standing still waiting for a verdict. The toolbar has to
+/// know: while it is true pressing RUN moves no tick at all, and until Issue #331
+/// the button said nothing about why — the owner's playtest read that as a broken
+/// pause ("Снять с паузы нельзя — видимо так ждётся что-то, но на UI не понимаю
+/// что делать").
+/// </param>
 public sealed record UiControlsViewState(
     BrushMode Mode,
     ZoneKind BrushZone,
@@ -96,7 +105,8 @@ public sealed record UiControlsViewState(
     bool Paused,
     double Speed,
     string Fixture,
-    bool SessionComplete);
+    bool SessionComplete,
+    bool MomentOfTruthOpen = false);
 
 /// <summary>
 /// The two control strips as data.
@@ -135,23 +145,41 @@ public static class UiControls
     {
         // One button with two faces: it says what pressing it will do, so a paused
         // game shows the play icon and a running one shows pause.
+        //
+        // While a verdict is owed it grows a third thing to say. The button is
+        // deliberately still enabled: waiting the window out is one of the two
+        // ways the moment of truth closes, and disabling RUN would take that way
+        // away. What was missing is the sentence, not the refusal.
+        //
+        // The title of that sentence follows the face the button is wearing and
+        // is not hard-coded to "Run". Independent review of PR #345 found the
+        // first version saying "Run [P]" over the pause icon whenever the window
+        // opened while the clock was running — a tooltip calling a button by
+        // another button's name, in exactly the state the player reaches for it.
+        var running = !view.Paused;
+        var timeControlId = running ? UiControlIds.Pause : UiControlIds.Run;
+        var timeControlTitle = running ? "Pause [P]" : "Run [P]";
         yield return new UiControl(
-            view.Paused ? UiControlIds.Run : UiControlIds.Pause,
+            timeControlId,
             string.Empty,
             "P",
-            view.Paused
-                ? "Run [P]\nStart time. The crew keeps choosing its own work."
-                : "Pause [P]\nStop time. Marking the map works while paused.",
-            !view.Paused,
+            timeControlTitle + "\n" + (view.MomentOfTruthOpen
+                ? MomentOfTruthPanel.TimeIsHeldTooltip
+                : running
+                    ? "Stop time. Marking the map works while paused."
+                    : "Start time. The crew keeps choosing its own work."),
+            running,
             !view.SessionComplete,
-            UiIconManifest.FileFor(view.Paused ? UiControlIds.Run : UiControlIds.Pause),
+            UiIconManifest.FileFor(timeControlId),
             UiControlStrip.Time);
 
         yield return new UiControl(
             UiControlIds.Step,
             string.Empty,
             "S",
-            "Step [S]\nAdvance exactly one simulation tick and stop.",
+            "Step [S]\n" + (view.MomentOfTruthOpen
+                ? MomentOfTruthPanel.TimeIsHeldTooltip
+                : "Advance exactly one simulation tick and stop."),
             false,
             !view.SessionComplete,
             UiIconManifest.FileFor(UiControlIds.Step),
@@ -324,4 +352,348 @@ public static class UiControls
     // that existed only because the general branch could not be trusted with a
     // fraction under a ru-RU culture (Issue #46).
     private static string SpeedLabel(double speed) => HudText.Speed(speed);
+}
+
+// =====================================================================
+// The moment of truth as clickable controls (Issue #331)
+//
+// It lives beside the toolbar rather than in a file of its own because it is
+// the same kind of thing: the text and the ids of a family of buttons, decided
+// where a unit test can read them (ADR 0011), with the adapter left holding
+// layout and dispatch. The difference from the two strips above is that this
+// family is not fixed — the domain chooses how many cards there are and who
+// they are about — so it is built from the snapshot instead of from a constant
+// list, and it cannot be matched to buttons by position the way UiControls.Build
+// is.
+//
+// Why it exists at all: the cards were already text (HudText.MomentOfTruth), but
+// that text landed in the inspector column on the right, and the owner's first
+// playtest of slice 3 (2026-08-08) never found it — «после боя игра запаузилась
+// и непонятно куда нажимать и где ожидается ввод». The verdicts were reaching
+// the simulation the whole time. What was missing was somewhere to look and
+// something to press.
+// =====================================================================
+
+/// <summary>
+/// One resolved press: about whom, and with what sign.
+///
+/// <para><see cref="Verdict"/> is the sign the simulation will be sent, and
+/// <c>null</c> when the press only points the inspector at the creature.</para>
+///
+/// <para><b>Why it is a <see cref="VerdictKind"/> and not a third enumeration of
+/// the same three cases.</b> It used to be one, and the adapter translated it
+/// into <c>VerdictKind</c> with a <c>switch</c>. Independent review of PR #345
+/// swapped the two arms of that switch — a player pressing REWARD punished the
+/// creature — and <em>every</em> check in the repository stayed green: the whole
+/// solution's 1001 tests, <c>verify.ps1 -Stage godot</c> and <c>-Stage ui</c>.
+/// The translation lived in the one layer nothing reads. There is now nothing to
+/// translate: the sign crosses the seam as the value the command carries, in a
+/// layer a unit test can reach.</para>
+///
+/// <para>The band still never decides a verdict is <em>legal</em>. That is the
+/// simulation's answer on the tick of the command
+/// (<a href="../../docs/decisions/0019-verdict-not-order.md">ADR 0019</a>).</para>
+/// </summary>
+public sealed record MomentOfTruthPress(int CreatureId, VerdictKind? Verdict)
+{
+    /// <summary>Whether this press only moves the inspector.</summary>
+    public bool IsSelectionOnly => Verdict is null;
+}
+
+/// <summary>
+/// The stable ids of the band's controls. Index-based rather than creature-based
+/// because the adapter builds the rows once and refills them: the row is the
+/// thing that persists, the creature on it is not.
+/// </summary>
+public static class MomentOfTruthControlIds
+{
+    public const string CardPrefix = "mot_card_";
+    public const string RewardPrefix = "mot_reward_";
+    public const string PunishPrefix = "mot_punish_";
+
+    public static string Card(int index) => CardPrefix + Index(index);
+
+    public static string Reward(int index) => RewardPrefix + Index(index);
+
+    public static string Punish(int index) => PunishPrefix + Index(index);
+
+    private static string Index(int index) => index.ToString(CultureInfo.InvariantCulture);
+}
+
+/// <summary>
+/// One card as three controls: the card itself, which points at the creature,
+/// and the two answers.
+/// </summary>
+/// <param name="Index">Which row of the band this is.</param>
+/// <param name="CreatureId">Who the domain is reporting on.</param>
+/// <param name="Text">
+/// The sentence, which is <see cref="HudText.MomentOfTruthCardLine"/> and not a
+/// second wording of it.
+/// </param>
+/// <param name="Verdict">The answer already given, or <c>null</c>.</param>
+/// <param name="Selected">Whether the inspector is already pointed here.</param>
+public sealed record MomentOfTruthCardControl(
+    int Index,
+    int CreatureId,
+    string Text,
+    string? Verdict,
+    bool Selected)
+{
+    public string CardId => MomentOfTruthControlIds.Card(Index);
+
+    public string RewardId => MomentOfTruthControlIds.Reward(Index);
+
+    public string PunishId => MomentOfTruthControlIds.Punish(Index);
+
+    /// <summary>An answered card takes no second answer.</summary>
+    public bool Answered => Verdict is not null;
+
+    public string CardTooltip =>
+        $"{Text}\nClick to point the inspector at this creature. " +
+        "REWARD and PUNISH answer the card without touching the map.";
+}
+
+/// <summary>
+/// The whole band, as data. <see cref="Open"/> is the only thing the adapter has
+/// to ask before deciding whether to show it.
+/// </summary>
+/// <param name="Unanswered">How many cards still have no verdict.</param>
+/// <param name="StepsLeft">How many steps until the window closes on its own.</param>
+/// <param name="Title">The one-line heading: wave, count, countdown.</param>
+/// <param name="Explanation">What closes the window and what silence costs.</param>
+public sealed record MomentOfTruthPrompt(
+    bool Open,
+    int WaveNumber,
+    int Unanswered,
+    int StepsLeft,
+    string Title,
+    string Explanation,
+    IReadOnlyList<MomentOfTruthCardControl> Cards);
+
+/// <summary>
+/// The moment of truth as something to look at and press.
+///
+/// <para>Everything here is a projection of the canonical snapshot; nothing is
+/// computed that the snapshot does not already carry, and nothing decides
+/// whether an answer is allowed. Which creature is judged is the one whose card
+/// was pressed, and whether that judgement is legal at all is answered by the
+/// simulation on the tick of the command — ADR 0019, and the same seam the
+/// <c>G</c>/<c>H</c> keys already went through.</para>
+/// </summary>
+public static class MomentOfTruthPanel
+{
+    public const string RewardLabel = "REWARD";
+    public const string PunishLabel = "PUNISH";
+    public const string RewardHotkey = "G";
+    public const string PunishHotkey = "H";
+
+    /// <summary>
+    /// What RUN and STEP say while a verdict is owed. One sentence in one place,
+    /// because the toolbar tooltip, the band and the line a refused press writes
+    /// all have to say the same thing.
+    /// </summary>
+    public const string TimeIsHeldTooltip =
+        "Time is not moving: the domain is waiting for a verdict. Answer the cards " +
+        "under the map, or let the window run out — pressing this only spends the " +
+        "window, it does not advance a tick.";
+
+    private static readonly MomentOfTruthPrompt ClosedPrompt = new(
+        false, 0, 0, 0, string.Empty, string.Empty, []);
+
+    /// <summary>
+    /// The band with nothing to ask. It is a value rather than <c>null</c> so
+    /// that a caller with no world yet — the adapter builds the HUD before it
+    /// loads a fixture — draws the same shape as a caller with a closed window.
+    /// </summary>
+    public static MomentOfTruthPrompt Closed => ClosedPrompt;
+
+    /// <summary>
+    /// The longest answer the canonical snapshot can carry on a card, for the
+    /// layout guard's worst case. It is a literal because the mapping from
+    /// <c>VerdictKind</c> to the word is <c>internal</c> to the simulation; both
+    /// words are six characters, so the choice between them decides nothing, and
+    /// <c>MomentOfTruthPanelTests</c> holds the worst case against a real card.
+    /// </summary>
+    private const string WidestVerdict = "punish";
+
+    /// <summary>
+    /// The band for one frame. Closed windows produce a closed prompt with no
+    /// cards rather than <c>null</c>, so the adapter has one shape to draw.
+    /// </summary>
+    /// <param name="state">Canonical state.</param>
+    /// <param name="selectedCreatureId">Who the inspector is pointed at.</param>
+    public static MomentOfTruthPrompt Of(PrototypeSnapshot state, int? selectedCreatureId)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        var pause = state.MomentOfTruth;
+        if (!pause.Open)
+        {
+            return ClosedPrompt;
+        }
+
+        var cards = pause.Cards
+            .Select((card, index) => new MomentOfTruthCardControl(
+                index,
+                card.CreatureId,
+                HudText.MomentOfTruthCardLine(card),
+                card.Verdict,
+                selectedCreatureId == card.CreatureId))
+            .ToArray();
+
+        var unanswered = cards.Count(card => !card.Answered);
+        var stepsLeft = Math.Max(0, pause.WindowSteps - pause.WaitedSteps);
+        return new MomentOfTruthPrompt(
+            true,
+            pause.WaveNumber,
+            unanswered,
+            stepsLeft,
+            Title(pause.WaveNumber, unanswered, cards.Length, stepsLeft),
+            Explanation(unanswered, stepsLeft),
+            cards);
+    }
+
+    /// <summary>
+    /// The heading: which wave is being answered for, how much is left to answer
+    /// and how long the domain will keep asking. All three are the numbers the
+    /// player is missing, and all three are read off the snapshot.
+    /// </summary>
+    public static string Title(int waveNumber, int unanswered, int cardCount, int stepsLeft) =>
+        $"MOMENT OF TRUTH · wave {Number(waveNumber)} · {Number(unanswered)} of " +
+        $"{Number(cardCount)} unanswered · {Number(stepsLeft)} steps left · time is held";
+
+    /// <summary>
+    /// The two ways out and the price of neither. It says "closes on its own"
+    /// rather than "you may ignore it", because the window closing unanswered is
+    /// not free: a card the domain raised for a deed and nobody answered is
+    /// remembered as a slight (<c>grudge_ignored</c>).
+    /// </summary>
+    public static string Explanation(int unanswered, int stepsLeft) => unanswered == 0
+        ? "Every card is answered. Time starts again on the next step."
+        : $"Click a card to point at the creature, then REWARD [{RewardHotkey}] or " +
+            $"PUNISH [{PunishHotkey}]. The window closes when all {Number(unanswered)} are " +
+            $"answered, or by itself in {Number(stepsLeft)} steps — and a deed nobody " +
+            "answered for is remembered against you.";
+
+    /// <summary>
+    /// The line a run writes when the player asks for time while the window is
+    /// open. It carries the same numbers the band does, because the feedback line
+    /// is where a player who pressed RUN is already looking.
+    /// </summary>
+    public static string TimeIsHeld(MomentOfTruthPrompt prompt)
+    {
+        ArgumentNullException.ThrowIfNull(prompt);
+        return $"Time is held by the moment of truth of wave {Number(prompt.WaveNumber)}: " +
+            $"{Number(prompt.Unanswered)} card(s) unanswered, {Number(prompt.StepsLeft)} steps " +
+            "until the window closes by itself. Answer the cards under the map — REWARD or " +
+            "PUNISH — or keep pressing to spend the window.";
+    }
+
+    /// <summary>
+    /// Every number this band prints, in the one culture the HUD is allowed to
+    /// speak. Same rule and same reason as <see cref="HudText.Speed"/>: this text
+    /// is a checked artefact, and a separator that follows the machine would pass
+    /// locally and fail in CI (Issue #46).
+    /// </summary>
+    private static string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// What a pressed control id means, or <c>null</c> when nothing in this band
+    /// owns that id.
+    ///
+    /// <para>This is the whole of "clicking a card picks the creature it is
+    /// about" <b>and</b> of "REWARD rewards", and it is a function of the prompt
+    /// rather than of a table the adapter keeps beside it: the row a player
+    /// pressed, the creature the verdict names and the sign it carries cannot
+    /// drift apart, because there is only one description of the pairing — and
+    /// that description is here, where a unit test reads it.</para>
+    /// </summary>
+    public static MomentOfTruthPress? Press(MomentOfTruthPrompt prompt, string controlId)
+    {
+        ArgumentNullException.ThrowIfNull(prompt);
+        if (!prompt.Open || string.IsNullOrEmpty(controlId))
+        {
+            return null;
+        }
+
+        foreach (var card in prompt.Cards)
+        {
+            if (string.Equals(controlId, card.CardId, StringComparison.Ordinal))
+            {
+                return new MomentOfTruthPress(card.CreatureId, null);
+            }
+
+            if (string.Equals(controlId, card.RewardId, StringComparison.Ordinal))
+            {
+                return new MomentOfTruthPress(card.CreatureId, VerdictKind.Reward);
+            }
+
+            if (string.Equals(controlId, card.PunishId, StringComparison.Ordinal))
+            {
+                return new MomentOfTruthPress(card.CreatureId, VerdictKind.Punish);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The widest band this party can ever produce, for the layout guard.
+    ///
+    /// <para>A capture stands wherever it was told to stand, and the window is
+    /// open for a handful of steps of a whole party, so the shape a player reads
+    /// is the one shape nothing would measure — the same hole
+    /// <c>Main.CreatureStoryPanels</c> was written to close for the creature
+    /// story. This builds a full band out of the widest card <em>this</em>
+    /// snapshot's creatures can produce, so the guard measures a real sentence
+    /// rather than a hand-written imitation of one.</para>
+    /// </summary>
+    /// <param name="state">Canonical state, open window or not.</param>
+    public static MomentOfTruthPrompt WorstCase(PrototypeSnapshot state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        var widest = state.Creatures
+            .Select(creature => HudText.MomentOfTruthCardLine(new PrototypeMomentOfTruthCard(
+                creature.Id,
+                creature.Name,
+                creature.Loyalty,
+                0,
+                0,
+                0,
+                // The longest headline of the four Headline() can produce is the
+                // plural deed, and it is longest with a two-digit count.
+                RaidersDowned: 99,
+                DominantAxis: "deed",
+                Notability: 0,
+                // An answered card is the wider one: it carries the arrow and the
+                // verdict on top of everything an unanswered one has.
+                Verdict: WidestVerdict)))
+            .Concat([string.Empty])
+            .OrderByDescending(line => line.Length)
+            // A tie-break, so two creatures with equally long lines cannot make
+            // the guard measure a different string on two runs of one seed.
+            .ThenBy(line => line, StringComparer.Ordinal)
+            .First();
+
+        var cards = Enumerable
+            .Range(0, PrototypeTuning.MomentOfTruthCards)
+            .Select(index => new MomentOfTruthCardControl(
+                index,
+                index,
+                widest,
+                WidestVerdict,
+                false))
+            .ToArray();
+
+        // The widest heading and the widest explanation are the ones with every
+        // number at its longest, not the ones this frame happens to show.
+        var stepsLeft = PrototypeTuning.MomentOfTruthWindowSteps;
+        return new MomentOfTruthPrompt(
+            true,
+            state.Waves.Count,
+            cards.Length,
+            stepsLeft,
+            Title(state.Waves.Count, cards.Length, cards.Length, stepsLeft),
+            Explanation(cards.Length, stepsLeft),
+            cards);
+    }
 }

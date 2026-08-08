@@ -1,0 +1,142 @@
+{
+  "issue": 331,
+  "round": 2,
+  "what": "Полный verify.ps1 один раз на финальном состоянии круга доработки (критерий 7, правило 22).",
+  "ranAt": "2026-08-08",
+  "commit": "65480e0",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
+  "exitCode": 0,
+  "stages": [
+    {
+      "stage": "scripts",
+      "status": "ok",
+      "elapsedSeconds": 106.0
+    },
+    {
+      "stage": "build",
+      "status": "ok",
+      "elapsedSeconds": 6.0
+    },
+    {
+      "stage": "tests",
+      "status": "ok",
+      "elapsedSeconds": 227.8
+    },
+    {
+      "stage": "mcp",
+      "status": "ok",
+      "elapsedSeconds": 3.9
+    },
+    {
+      "stage": "sim",
+      "status": "ok",
+      "elapsedSeconds": 0.4
+    },
+    {
+      "stage": "load",
+      "status": "ok",
+      "elapsedSeconds": 1.8
+    },
+    {
+      "stage": "godot",
+      "status": "ok",
+      "elapsedSeconds": 34.0
+    },
+    {
+      "stage": "ui",
+      "status": "ok",
+      "elapsedSeconds": 4.1
+    },
+    {
+      "stage": "screenshots",
+      "status": "ok",
+      "elapsedSeconds": 5.9
+    },
+    {
+      "stage": "token-budget",
+      "status": "ok",
+      "elapsedSeconds": 123.8
+    }
+  ],
+  "reading": {
+    "criterion6": "hudGuardRegressionExitCode=1 и hudReadabilityRegressionExitCode=1 — оба негативных прогона по-прежнему краснят, гарды вёрстки и читаемости не ослаблены ни полосой, ни двумя новыми прогонными гардами; smallestPhysicalTextPixels не сдвинулся (8 на авторском кадре, 16 на развёрнутом окне владельца).",
+    "noSnapshotDrift": "deterministicChecksum e65273aa… и loadChecksum 7ec0f2d6… совпадают дословно с прогоном круга 1 (evidence/331-full-verify.json до этой правки) и с последним записанным прогоном на main (evidence/329-full-verify-final.json). Пауза при открытии окна — темп адаптера и в каноническое состояние не попадает.",
+    "goldenUntouched": "goldenUiFrames те же три кадра, tests/golden/ui/*.json не менялись.",
+    "newGuards": "Стадия godot теперь прогоняет ещё два гарда на каждом входе: AssertMomentOfTruthPressPath (кнопки полосы разрешаются в свой ряд и свой знак, команда несёт тот же знак и то же существо, нажатие карточки наводит инспектор) и AssertMomentOfTruthStopsTheClock (часы останавливаются на кадре открытия окна и только на нём). Их способность падать показана мутантами M2, M3, M3b и M4 в evidence/331-mutations.json."
+  },
+  "result": {
+    "event": "verification_result",
+    "status": "ok",
+    "scope": "full",
+    "stagesExecuted": [
+      "scripts",
+      "build",
+      "tests",
+      "mcp",
+      "sim",
+      "load",
+      "godot",
+      "ui",
+      "screenshots",
+      "token-budget"
+    ],
+    "stagesNotRun": [],
+    "prerequisites": [
+      "restore",
+      "solution-build",
+      "scenario-build",
+      "game-host-build",
+      "engine-runtime"
+    ],
+    "seed": 424242,
+    "temporaryRoot": "C:\\gamedev\\df-verify-d115acad",
+    "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+    "changedSeedChecksum": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
+    "loadChecksum": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+    "loadElapsedMilliseconds": [
+      207.448,
+      204.124
+    ],
+    "godotVersion": "4.7.1.stable.mono.official.a13da4feb",
+    "godotExitCode": 0,
+    "godotControlsExitCode": 0,
+    "godotCameraExitCode": 0,
+    "invalidViewFailuresChecked": 5,
+    "hudGuardRegressionExitCode": 1,
+    "hudReadabilityRegressionExitCode": 1,
+    "hudSmallestPhysicalTextPixels": {
+      "Authored": 8,
+      "OwnerMaximized": 16
+    },
+    "cameraTransformRegressionExitCode": 1,
+    "cameraInputChecks": 15,
+    "cameraTransformChecks": 15,
+    "cameraBoundsChecks": 10,
+    "cameraPanChecks": 5,
+    "viewInvariantChecksum": "94d7a550b96af32b75400510194d02b7b23975da47677a7058aa85571792bb56",
+    "viewCases": [
+      "base",
+      "overview-shifted",
+      "detail-scaled-ui",
+      "large-same-zoom"
+    ],
+    "goblinScreenPixels": {
+      "Overview": 30.909090909090907,
+      "Base": 61.81818181818181,
+      "Detail": 92.72727272727272
+    },
+    "godotRaidExitCode": 0,
+    "screenshotRepeatable": true,
+    "goldenUiFrames": [
+      "stone-t190-loose-no-stockpile",
+      "stone-t336-in-transit",
+      "stone-t950-stockpile-full"
+    ]
+  },
+  "base": "76c9b97 — ветка перебазирована на актуальный main после мержа #338, #341 и #347; прогон ниже сделан уже на перебазированной вершине, а не до неё.",
+  "presentationTests": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests",
+    "result": "Пройден!   : не пройдено     0, пройдено   661, пропущено     0, всего   661",
+    "note": "661 против 656 в круге 1 и 638 на исходной базе e21c9eb. Из пяти новых две — проверки этого круга (знак вердикта как VerdictKind, имя кнопки времени на обеих гранях), остальные пришли с main вместе с #338 и #344."
+  }
+}

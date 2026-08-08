@@ -160,6 +160,73 @@ public partial class Main
     }
 
     /// <summary>
+    /// The labels of the moment-of-truth band, named the way the overflow guard
+    /// names everything else.
+    ///
+    /// <para>
+    /// They are deliberately <b>not</b> in <see cref="HudLabels"/>. The band is
+    /// hidden until a wave ends and a row is hidden when the domain raised fewer
+    /// cards than there are rows, and a hidden Control is given no size by its
+    /// container — so measuring them live would report every empty row as text
+    /// that does not fit. They are measured instead by
+    /// <see cref="MeasureMomentOfTruthBand"/> against the worst case
+    /// <see cref="MomentOfTruthPanel.WorstCase"/> builds, at every frame, which
+    /// is a wider band than any live one (proved in
+    /// <c>MomentOfTruthPanelTests</c>).
+    /// </para>
+    /// </summary>
+    private (string Name, Label? Label)[] MomentOfTruthLabels() =>
+    [
+        ("momentTitle", _momentTitle),
+        ("momentExplanation", _momentExplanation),
+        .. _momentRows.Select((row, index) => ($"momentCard[{index}]", (Label?)row.Text)),
+    ];
+
+    /// <summary>
+    /// Shows the widest band this party can produce and measures every label of
+    /// it, then puts the live one back.
+    ///
+    /// <para>
+    /// This is the counterpart of <see cref="CreatureStoryPanels"/> for the band:
+    /// a capture stands wherever it was told to stand, the window is open for a
+    /// handful of steps of a whole party, and without this the one shape a player
+    /// reads during the moment of truth would be the one shape nothing measures.
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<string> MeasureMomentOfTruthBand(HudFitFrame frame)
+    {
+        if (_state is null || _momentBand is null)
+        {
+            return [];
+        }
+
+        ShowMomentOfTruth(MomentOfTruthPanel.WorstCase(_state));
+        LayoutHud(frame.Viewport, frame.UiScale);
+        var failures = new List<string>();
+        foreach (var (name, label) in MomentOfTruthLabels())
+        {
+            if (label is null)
+            {
+                continue;
+            }
+
+            var needed = label.GetLineCount();
+            var shown = label.GetVisibleLineCount();
+            if (needed > shown)
+            {
+                failures.Add(
+                    $"the moment of truth's '{name}' needs {needed} lines but only {shown} " +
+                    $"fit in {FormatVector(label.Size)} at viewport " +
+                    $"{FormatVector(frame.Viewport)}, UI scale {FormatNumber(frame.UiScale)}");
+            }
+        }
+
+        RefreshMomentOfTruthBand();
+        LayoutHud(frame.Viewport, frame.UiScale);
+        return failures;
+    }
+
+    /// <summary>
     /// Every piece of HUD text the overflow guard measures. The four panels the
     /// golden UI state records come first; the header and the legend rows are
     /// here too, because a Control layout can squeeze them just as easily and
@@ -211,6 +278,12 @@ public partial class Main
                 icon = control.Icon,
             })
             .ToArray(),
+        // The band the moment of truth is answered on, as text and ids rather
+        // than as pixels (Issue #331). It is what makes "the cards are visible
+        // outside the inspector, they say how many are unanswered and how long
+        // the window has left, and each one can be pressed" checkable by an
+        // automated run instead of by looking at a screenshot.
+        momentOfTruth = MomentOfTruthState(),
         // The rectangle in progress, so a drag is observable without a picture.
         // It is null unless the button is actually down, which is also the claim
         // "a cancelled drag left nothing behind".
@@ -249,6 +322,55 @@ public partial class Main
 
     private static int[][] Tiles(IReadOnlyList<GridPoint> tiles) =>
         [.. tiles.Select(tile => new[] { tile.X, tile.Y })];
+
+    /// <summary>
+    /// The moment-of-truth band as data: whether it is on screen, what it says
+    /// and which control answers which creature. The <c>visible</c> field is read
+    /// off the live node rather than off the prompt, so the claim it supports is
+    /// "the band is drawn" and not "the band was asked to be drawn".
+    /// </summary>
+    private object MomentOfTruthState()
+    {
+        var prompt = CurrentMomentOfTruth();
+        return new
+        {
+            open = prompt.Open,
+            visible = _momentBand?.Visible ?? false,
+            // Whether the clock is stopped, next to whether the question is being
+            // asked. The two together are the claim of round 2 of Issue #331: a
+            // band the player has time to read. An open window reported with
+            // `paused: false` is a band being spent at the speed of the toolbar —
+            // 6.7 seconds at 1x, 0.42 at 16x.
+            paused = _paused,
+            // Named so a reader can tell at a glance that the band is not the
+            // inspector column: the two are different nodes with different
+            // parents, and Issue #331 is exactly about which one the cards are in.
+            node = _momentBand is null ? null : _hudRoot?.GetPathTo(_momentBand).ToString(),
+            waveNumber = prompt.WaveNumber,
+            unanswered = prompt.Unanswered,
+            stepsLeft = prompt.StepsLeft,
+            title = prompt.Title,
+            explanation = prompt.Explanation,
+            cards = prompt.Cards
+                .Select(card => (object)new
+                {
+                    index = card.Index,
+                    creatureId = card.CreatureId,
+                    text = card.Text,
+                    verdict = card.Verdict,
+                    selected = card.Selected,
+                    cardId = card.CardId,
+                    rewardId = card.RewardId,
+                    punishId = card.PunishId,
+                    // What the row actually shows, so the text on the button and
+                    // the text in this record cannot drift apart.
+                    drawn = card.Index < _momentRows.Count
+                        ? _momentRows[card.Index].Text.Text
+                        : null,
+                })
+                .ToArray(),
+        };
+    }
 
     /// <summary>
     /// Frame and UI-scale pairs the HUD is required to hold all of its text at.
@@ -312,6 +434,36 @@ public partial class Main
         foreach (var line in _legendLines)
         {
             line.CustomMinimumSize = new Vector2(0, HudTextHeight(line, line.GetLineCount()));
+        }
+
+        // The band's own two lines, for exactly the reason the legend rows are
+        // here: an autowrapping Label reports a minimum height of nothing,
+        // because it can always wrap narrower, so a container that has no spare
+        // room gives it one pixel. Measured on this Issue's first engine run —
+        // "'momentTitle' needs 1 lines but only 0 fit in (843, 1)" at every one
+        // of the eight frames the guard checks.
+        foreach (var label in new[] { _momentTitle, _momentExplanation })
+        {
+            if (label is not null)
+            {
+                label.CustomMinimumSize = new Vector2(
+                    0,
+                    HudTextHeight(label, label.GetLineCount()));
+            }
+        }
+
+        // The same second pass for the cards of the moment of truth, and for the
+        // same reason: the card's Label is anchored to its Button rather than
+        // laid out by a container, so the Button cannot know how tall a wrapped
+        // sentence made it. The first pass gives the row its width; this asks how
+        // many lines that width costs and reserves them (Issue #331).
+        foreach (var row in _momentRows)
+        {
+            row.Card.CustomMinimumSize = new Vector2(
+                0,
+                Math.Max(
+                    ControlButtonSize,
+                    HudTextHeight(row.Text, row.Text.GetLineCount()) + MomentCardPadding));
         }
 
         _hudRoot.PropagateNotification((int)Container.NotificationSortChildren);
@@ -395,6 +547,10 @@ public partial class Main
                         $"{FormatNumber(frame.UiScale)}");
                 }
             }
+
+            // The band a player answers the moment of truth on (Issue #331), at
+            // its widest rather than at whatever this run happens to show.
+            failures.AddRange(MeasureMomentOfTruthBand(frame));
 
             // Put the panel back before the next frame measures the live labels,
             // or the loop above reports the candidate left in the label rather

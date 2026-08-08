@@ -262,12 +262,21 @@ public partial class Main
         }
     }
 
-    private void Advance(int ticks)
+    /// <param name="ticks">How many ticks are asked for.</param>
+    /// <param name="byHand">
+    /// Whether a person pressed STEP, as opposed to the running clock asking for
+    /// its share of the frame. Only a deliberate press earns an explanation when
+    /// the clock refuses to move (Issue #331): writing the same sentence on every
+    /// frame of a running party would bury whatever the last command answered.
+    /// </param>
+    private void Advance(int ticks, bool byHand = false)
     {
         if (_world is null || _world.IsComplete)
         {
             return;
         }
+
+        var tickBefore = _world.CurrentTick;
 
         // A tick is a new blow, so the frame the last one was scrubbed to means
         // nothing any more.
@@ -285,6 +294,134 @@ public partial class Main
         // which comes through here.
         _world.RunTicks(Math.Min(ticks, PrototypeTuning.SessionTicks - _world.CurrentTick));
         RefreshState();
+
+        // The step was spent waiting rather than played. Saying so is the whole
+        // of criterion 4 of Issue #331: the clock standing still is correct
+        // behaviour, and correct behaviour with no explanation is what the owner
+        // read as a defect.
+        if (byHand && _world.CurrentTick == tickBefore && _state is { MomentOfTruth.Open: true })
+        {
+            ExplainHeldTime();
+            UpdateHud();
+        }
+    }
+
+    /// <summary>
+    /// Stops the clock on the frame a moment of truth opens (Issue #331, round 2).
+    ///
+    /// <para>
+    /// <b>Why.</b> While the window is open a step of the world is spent waiting
+    /// and no tick happens, so a running clock burns the window instead of the
+    /// party: at <c>TicksPerSecond</c> 6 and
+    /// <see cref="PrototypeTuning.MomentOfTruthWindowSteps"/> 40 the band lives
+    /// 6.7 seconds at 1x and 0.42 at 16x. The owner's playtest was played with
+    /// the clock running, so without this the whole band is an amber flash at the
+    /// bottom of the screen followed by the next wave and silently accrued
+    /// grudges — the same unplayable moment Issue #331 was opened about, in a new
+    /// shape. Independent review of PR #345 measured it and called it the
+    /// playtest blocker.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>What it is not.</b> It changes no rule of the window. Forty steps stay
+    /// forty steps, silence stays a legal answer and still costs what
+    /// <c>CloseMomentOfTruth</c> charges for it; the player can press RUN again
+    /// and spend the window exactly as before. What changes is that silence
+    /// becomes something chosen rather than something slept through. Nothing here
+    /// reaches canonical state: <c>_paused</c> is adapter tempo, and a party
+    /// replayed headless prints the same checksum either way.
+    /// </para>
+    ///
+    /// <para>
+    /// It fires on the transition and not on the state, so a player who pressed
+    /// RUN with the window already open is not paused again on the next frame.
+    /// </para>
+    /// </summary>
+    private void StopTheClockWhenTheDomainAsks()
+    {
+        if (!ShouldStopTheClock(_state is { MomentOfTruth.Open: true }))
+        {
+            return;
+        }
+
+        _paused = true;
+        _tickAccumulator = 0;
+        _controlFeedback = MomentOfTruthPanel.TimeIsHeld(CurrentMomentOfTruth());
+    }
+
+    /// <summary>
+    /// The decision behind <see cref="StopTheClockWhenTheDomainAsks"/>, kept apart
+    /// from its effect so that <see cref="AssertMomentOfTruthStopsTheClock"/> can
+    /// hold it against a sequence of openings without needing a party that has
+    /// reached one.
+    ///
+    /// <para>It answers <c>true</c> exactly on the frame the window opens. Not
+    /// "while it is open": a player who deliberately pressed RUN during an open
+    /// window would otherwise be paused again on the very next frame, which would
+    /// take away the second legal answer — waiting the window out.</para>
+    ///
+    /// <para>The frame-pacing probe is exempt because it is not a player: it
+    /// drives <c>_Process</c> to an exact tick with nobody to lift a pause, so a
+    /// pause would hang the run rather than fail it. Its target today (200) is
+    /// well before the first wave, which is precisely why the exemption is
+    /// written down instead of relied upon.</para>
+    /// </summary>
+    private bool ShouldStopTheClock(bool open)
+    {
+        var opened = open && !_momentOfTruthWasOpen;
+        _momentOfTruthWasOpen = open;
+        return opened && _framePacingTargetTick is null;
+    }
+
+    /// <summary>
+    /// The clock stops on the frame the domain asks something, and on no other.
+    ///
+    /// <para>
+    /// Independent review of PR #345 measured what the missing pause costs: with
+    /// the clock running the band lives 6.7 seconds at 1x and 0.42 at 16x,
+    /// because a step of an open window is spent waiting rather than played. The
+    /// owner's playtest was played with the clock running, so an unread band is
+    /// the same unplayable moment Issue #331 was opened about.
+    /// </para>
+    ///
+    /// <para>
+    /// This holds the decision against the sequence a party actually produces:
+    /// closed, then open (stop here and only here), open again on the next frame
+    /// (do not stop — the player may have chosen to run), closed, open again
+    /// (stop). It runs on every entry point and needs no wave to have landed.
+    /// The field it walks is restored before returning.
+    /// </para>
+    /// </summary>
+    private void AssertMomentOfTruthStopsTheClock()
+    {
+        var remembered = _momentOfTruthWasOpen;
+        _momentOfTruthWasOpen = false;
+        var failures = new List<string>();
+        foreach (var (open, expected, why) in new (bool Open, bool Expected, string Why)[]
+                 {
+                     (false, false, "a closed window must not stop the clock"),
+                     (true, true, "the frame the window opens on must stop the clock"),
+                     (true, false, "a window that was already open must not stop it again"),
+                     (false, false, "a window that closed must not stop it"),
+                     (true, true, "the next wave's window must stop it again"),
+                 })
+        {
+            var actual = ShouldStopTheClock(open);
+            if (actual != expected)
+            {
+                failures.Add($"{why}, but it answered {actual}");
+            }
+        }
+
+        _momentOfTruthWasOpen = remembered;
+        if (failures.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"The moment of truth stops the clock wrongly in {failures.Count} place(s): " +
+                string.Join("; ", failures) +
+                ". A band the player cannot stop on is a band the player cannot read: an open " +
+                "window spends its steps at the speed of the clock, not of the party.");
+        }
     }
 
     /// <summary>
@@ -308,6 +445,7 @@ public partial class Main
     private void RefreshState()
     {
         _state = _world!.GetSnapshot();
+        StopTheClockWhenTheDomainAsks();
         // One projection per state. Everything that draws or reads the map takes
         // this instance — the map, the brush, the HUD panels and the structured
         // output — so they cannot be looking at four moments of the same tick.
@@ -389,6 +527,7 @@ public partial class Main
         _feedback!.Text = panels.Feedback;
         _roster!.Text = panels.Roster;
         RefreshControls();
+        RefreshMomentOfTruthBand();
     }
 
     /// <summary>

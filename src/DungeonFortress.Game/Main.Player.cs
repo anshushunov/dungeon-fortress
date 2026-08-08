@@ -59,6 +59,28 @@ public partial class Main
     }
 
     /// <summary>
+    /// Points the inspector at one creature by name rather than by where it
+    /// stands. Clicking the map has a cell and finds the creature on it; a card
+    /// of the moment of truth has the creature and has to find the cell, and it
+    /// has to work while the party is standing still — which is every moment the
+    /// band is on screen (Issue #331).
+    /// </summary>
+    private void SelectCreature(int creatureId)
+    {
+        if (_state?.Creatures.FirstOrDefault(creature => creature.Id == creatureId)
+            is not { } chosen)
+        {
+            return;
+        }
+
+        _selectedCreatureId = chosen.Id;
+        _selectedCell = chosen.Position;
+        UpdateHud();
+        UpdateCreatureLabels();
+        QueueRedraw();
+    }
+
+    /// <summary>
     /// What the rectangle the player is dragging would do right now. It is the
     /// same value the release applies, so the highlighted area, the cell count
     /// above the cursor and the command that lands cannot disagree.
@@ -179,8 +201,31 @@ public partial class Main
         // A run that is moving again draws the moment its own clock is at, not
         // the one somebody stepped to while it was stopped.
         _strikeScrub = null;
+        ExplainHeldTime();
         UpdateHud();
         QueueRedraw();
+    }
+
+    /// <summary>
+    /// Why the clock did not move (Issue #331). Asking for time while a verdict
+    /// is owed spends a step of the window and advances no tick, and until this
+    /// existed the run said nothing at all — the owner read a working pause as a
+    /// broken one: «Снять с паузы нельзя — видимо так ждётся что-то, но на UI не
+    /// понимаю что делать».
+    ///
+    /// <para>The press is deliberately not refused. Waiting the window out is one
+    /// of the two ways the moment of truth closes (<c>CloseMomentOfTruth</c>), so
+    /// a RUN that did nothing would take a legitimate answer — silence — away
+    /// from the player. What was missing is the sentence.</para>
+    /// </summary>
+    private void ExplainHeldTime()
+    {
+        if (_state is not { MomentOfTruth.Open: true })
+        {
+            return;
+        }
+
+        _controlFeedback = MomentOfTruthPanel.TimeIsHeld(CurrentMomentOfTruth());
     }
 
     private void SetSpeed(double speed)
@@ -421,6 +466,74 @@ public partial class Main
             $"post on (25,2) at tick {DemoBuildBlueprintTick}, [B] zones it TrainingGround " +
             "and Drill is switched on. Nobody was ordered to carry or build anything.";
         RefreshState();
+    }
+
+    /// <summary>
+    /// The reproducible moment-of-truth capture (Issue #331): play the shipped
+    /// journal until the party stops by itself and wait there.
+    ///
+    /// <para>
+    /// It stops on a <em>state</em> and not on a tick, for the reason the
+    /// simulation's own tests give: the tick a wave ends on is emergent, and a
+    /// number here would be a balance value pretending to be a fixture. It is
+    /// also why <c>--screenshot-ticks</c> cannot reach this frame — running "to
+    /// tick N" past the end of a wave spends the whole window on the way and
+    /// arrives after the question has closed.
+    /// </para>
+    ///
+    /// <para>
+    /// Nothing here is simulation: it runs ordinary steps of the shipped log and
+    /// stops on one of them. A run that stopped here and one that played straight
+    /// through the same steps print the same checksum.
+    /// </para>
+    /// </summary>
+    private void ApplyDemoMomentOfTruth()
+    {
+        // Steps rather than ticks: while the window is open a step is spent
+        // waiting, so the bound has to cover every window of the party as well as
+        // every tick of it.
+        var remaining = PrototypeTuning.SessionTicks +
+            (PrototypeTuning.WaveCount * PrototypeTuning.MomentOfTruthWindowSteps);
+        // Deliberately left running. A running clock is what a player has when a
+        // wave ends, and stopping it is the adapter's job rather than the
+        // capture's: a demo that paused itself would photograph a frame that
+        // proves nothing about the behaviour it exists to show (Issue #331,
+        // round 2).
+        _paused = false;
+        while (_world is { IsComplete: false, IsAwaitingVerdict: false } && remaining-- > 0)
+        {
+            RememberMotionOrigin();
+            _world.Step();
+        }
+
+        RefreshState();
+        if (_state is not { MomentOfTruth.Open: true })
+        {
+            throw new InvalidOperationException(
+                $"Fixture '{_fixture}' played a whole party without ever stopping between two " +
+                "waves, so --demo-moment-of-truth has no frame to capture.");
+        }
+
+        if (!_paused)
+        {
+            throw new InvalidOperationException(
+                "The moment of truth opened and the clock kept running. An open window spends " +
+                $"its {PrototypeTuning.MomentOfTruthWindowSteps} steps at the speed of the " +
+                "toolbar rather than of the party — 6.7 seconds at 1x and under half a second " +
+                "at 16x — so the band would flash past unread, which is the playtest blocker " +
+                "independent review of PR #345 measured.");
+        }
+
+        // Nothing selected on purpose: this is the frame the player is actually
+        // given when a wave ends, and the question the capture has to answer is
+        // whether that frame explains itself.
+        _selectedCreatureId = null;
+        _selectedCell = null;
+        _controlFeedback =
+            "Demo: the party stopped between two waves. The cards are under the map; " +
+            "click one and answer it, or watch the window count down.";
+        UpdateHud();
+        QueueRedraw();
     }
 
     // ---------------------------------------------------------------------

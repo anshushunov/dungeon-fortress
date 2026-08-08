@@ -1,0 +1,86 @@
+{
+  "issue": 331,
+  "round": 2,
+  "what": "Кадр с открытым моментом истины: карточки видны вне панели инспектора, часы остановлены самим адаптером (критерии 1, 4, 5 и находка major про 6,7 с).",
+  "capturedAt": "2026-08-08",
+  "model": "anthropic/claude-opus-5[1m]",
+  "screenshotSha256": "1a13b62db28683129f38a3073a542f0e83a62f6e368842c0acc936cb5084f3a3",
+  "commands": {
+    "screenshot": ". ./scripts/GodotTools.ps1; Initialize-GodotRuntimeEnvironment -RepositoryRoot (Get-Location).Path; Invoke-GodotChecked -GodotPath (Resolve-GodotExecutable) -Arguments @('--path','src\\DungeonFortress.Game','--resolution','1600x900','--','--fixture','baseline','--demo-moment-of-truth','--screenshot','evidence/331-moment-of-truth.png','--screenshot-ticks','1','--tile-size','40','--camera-zoom','0.5','--camera-position','560,320','--ui-scale','1','--frame-size','1600x900') -ExpectedSuccessEvent godot_graybox_screenshot",
+    "sha256": "sha256sum evidence/331-moment-of-truth.png",
+    "godotStage": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage godot"
+  },
+  "reading": {
+    "bandNodeIsInTheMapColumn": "ui.momentOfTruth.node = .../@VBoxContainer@33/MomentOfTruthBand — потомок колонки карты, не боковой панели инспектора.",
+    "cardsDrawn": "у каждой карточки поле drawn совпадает с text: на кнопке нарисован тот же текст, что несёт снапшот.",
+    "clockStoppedByTheAdapter": "ui.momentOfTruth.paused = true и summary говорит PAUSED, при том что --demo-moment-of-truth намеренно выставляет _paused = false перед прогоном и бросает исключение, если после открытия окна часы всё ещё идут. Значит паузу поставил StopTheClockWhenTheDomainAsks, а не сам скрипт съёмки.",
+    "runIsExplained": "tooltip кнопки run называет причину неподвижного времени; на статическом кадре tooltip не рисуется — постоянно видимая часть это «· time is held» в заголовке полосы.",
+    "guardsGreen": "runtimeDiagnostics пуст: AssertLabelsFit, AssertControlStripsFit, AssertHudTextReadable, AssertMomentOfTruthPressPath и AssertMomentOfTruthStopsTheClock прошли на этом входе.",
+    "frameUnchangedSinceRound1": "sha256 кадра 1a13b62db28683129f38a3073a542f0e83a62f6e368842c0acc936cb5084f3a3 — тот же, что независимый review получил двумя своими прогонами на 4741a99: правки круга 2 полосу визуально не меняли."
+  },
+  "frame": {
+    "event": "godot_graybox_screenshot",
+    "status": "ok",
+    "fixture": "baseline",
+    "tick": 1336,
+    "checksum": "c0b2d998ba05706d17b05182cdd525bb79ae2dd6e8b4b9fdb588db96f669bf49",
+    "screenshot": "331-moment-of-truth.png",
+    "frameSize": [
+      1600,
+      900
+    ],
+    "uiScale": 1,
+    "hudReadable": true,
+    "smallestPhysicalTextPixels": 8,
+    "summary": "BASELINE  •  t1336  •  PAUSED  •  jobs 0  •  c0b2d998  •  renown 60↑  •  strength 13↓  •  crew 9\nWAVE 2/4 · warn t1450  •  food 41+0  •  raw 39+0  •  stone 0L 0C 0/0S  •  dug 0  •  marks 0",
+    "momentOfTruth": {
+      "open": true,
+      "visible": true,
+      "paused": true,
+      "node": "@MarginContainer@2/@HBoxContainer@3/@VBoxContainer@33/MomentOfTruthBand",
+      "waveNumber": 1,
+      "unanswered": 3,
+      "stepsLeft": 40,
+      "title": "MOMENT OF TRUTH · wave 1 · 3 of 3 unanswered · 40 steps left · time is held",
+      "explanation": "Click a card to point at the creature, then REWARD [G] or PUNISH [H]. The window closes when all 3 are answered, or by itself in 40 steps — and a deed nobody answered for is remembered against you.",
+      "cards": [
+        {
+          "index": 0,
+          "creatureId": 3,
+          "text": "Смола · put 3 raiders down · benefit 0 (-8 faded, +8 fed)",
+          "verdict": null,
+          "selected": false,
+          "cardId": "mot_card_0",
+          "rewardId": "mot_reward_0",
+          "punishId": "mot_punish_0",
+          "drawn": "Смола · put 3 raiders down · benefit 0 (-8 faded, +8 fed)"
+        },
+        {
+          "index": 1,
+          "creatureId": 7,
+          "text": "Обух · put a raider down · benefit 0 (-8 faded, +8 fed)",
+          "verdict": null,
+          "selected": false,
+          "cardId": "mot_card_1",
+          "rewardId": "mot_reward_1",
+          "punishId": "mot_punish_1",
+          "drawn": "Обух · put a raider down · benefit 0 (-8 faded, +8 fed)"
+        },
+        {
+          "index": 2,
+          "creatureId": 0,
+          "text": "Брусок · took the worst of it · fear 8 (+3 saw one fall, +5 broke)",
+          "verdict": null,
+          "selected": false,
+          "cardId": "mot_card_2",
+          "rewardId": "mot_reward_2",
+          "punishId": "mot_punish_2",
+          "drawn": "Брусок · took the worst of it · fear 8 (+3 saw one fall, +5 broke)"
+        }
+      ]
+    },
+    "runTooltip": "Run [P]\nTime is not moving: the domain is waiting for a verdict. Answer the cards under the map, or let the window run out — pressing this only spends the window, it does not advance a tick.",
+    "inspectorFeedbackPanel": "MOMENT OF TRUTH · wave 1 · t1336 · 40 left\nСмола · put 3 raiders down · benefit 0 (-8 faded, +8 fed)\nОбух · put a raider down · benefit 0 (-8 faded, +8 fed)\nБрусок · took the worst of it · fear 8 (+3 saw one fall, +5 broke)",
+    "runtimeDiagnostics": []
+  }
+}
