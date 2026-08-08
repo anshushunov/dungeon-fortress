@@ -336,6 +336,12 @@ public partial class Main
         {
             open = prompt.Open,
             visible = _momentBand?.Visible ?? false,
+            // Whether the clock is stopped, next to whether the question is being
+            // asked. The two together are the claim of round 2 of Issue #331: a
+            // band the player has time to read. An open window reported with
+            // `paused: false` is a band being spent at the speed of the toolbar —
+            // 6.7 seconds at 1x, 0.42 at 16x.
+            paused = _paused,
             // Named so a reader can tell at a glance that the band is not the
             // inspector column: the two are different nodes with different
             // parents, and Issue #331 is exactly about which one the cards are in.

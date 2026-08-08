@@ -106,16 +106,24 @@ public sealed class MomentOfTruthPanelTests
             var press = MomentOfTruthPanel.Press(prompt, MomentOfTruthControlIds.Card(index));
 
             Assert.NotNull(press);
-            Assert.Equal(MomentOfTruthPressKind.Select, press!.Kind);
+            Assert.True(press!.IsSelectionOnly);
+            Assert.Null(press.Verdict);
             Assert.Equal(state.MomentOfTruth.Cards[index].CreatureId, press.CreatureId);
         }
     }
 
     /// <summary>
-    /// The claim of criterion 3: both answers are reachable by pressing, and each
-    /// carries the creature of its own row. Nothing here decides the verdict is
-    /// legal — that is the simulation's answer on the tick of the command
-    /// (ADR 0019) — only which creature and with what sign.
+    /// The claim of criterion 3: both answers are reachable by pressing, each
+    /// carries the creature of its own row, and each carries <b>its own sign</b>.
+    /// Nothing here decides the verdict is legal — that is the simulation's
+    /// answer on the tick of the command (ADR 0019) — only which creature and
+    /// with what sign.
+    ///
+    /// <para>The sign is asserted as a <c>VerdictKind</c>, which is the value the
+    /// command carries, and not as a third enumeration the adapter would have to
+    /// translate. Independent review of PR #345 swapped the two arms of that
+    /// translation and every check in the repository stayed green; this is the
+    /// check that would now fail.</para>
     /// </summary>
     [Fact]
     public void Both_verdicts_are_reachable_by_pressing_and_name_their_own_creature()
@@ -131,11 +139,45 @@ public sealed class MomentOfTruthPanelTests
 
             Assert.NotNull(reward);
             Assert.NotNull(punish);
-            Assert.Equal(MomentOfTruthPressKind.Reward, reward!.Kind);
-            Assert.Equal(MomentOfTruthPressKind.Punish, punish!.Kind);
+            Assert.Equal(VerdictKind.Reward, reward!.Verdict);
+            Assert.Equal(VerdictKind.Punish, punish!.Verdict);
+            Assert.False(reward.IsSelectionOnly);
+            Assert.False(punish.IsSelectionOnly);
             Assert.Equal(expected, reward.CreatureId);
             Assert.Equal(expected, punish.CreatureId);
         }
+    }
+
+    /// <summary>
+    /// The button the player reads names itself correctly while the window is
+    /// open, whatever the clock is doing.
+    ///
+    /// <para>Independent review of PR #345 found the first version answering
+    /// "Run [P]" over the pause icon whenever a moment of truth opened while time
+    /// was running — a tooltip calling a button by another button's name, in
+    /// exactly the state the player reaches for it. The title is now read off the
+    /// same face the icon is, so the two cannot disagree.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(true, UiControlIds.Run, "Run [P]")]
+    [InlineData(false, UiControlIds.Pause, "Pause [P]")]
+    public void The_time_button_keeps_its_own_name_while_the_window_is_open(
+        bool paused,
+        string expectedId,
+        string expectedTitle)
+    {
+        var control = Assert.Single(
+            Toolbar(momentOfTruthOpen: true, paused: paused)
+                .Where(entry => entry.Strip == UiControlStrip.Time)
+                .Take(1));
+
+        Assert.Equal(expectedId, control.Id);
+        Assert.StartsWith(expectedTitle + "\n", control.Tooltip, StringComparison.Ordinal);
+        Assert.Contains(
+            MomentOfTruthPanel.TimeIsHeldTooltip,
+            control.Tooltip,
+            StringComparison.Ordinal);
+        Assert.Equal(UiIconManifest.FileFor(expectedId), control.Icon);
     }
 
     /// <summary>
@@ -270,7 +312,9 @@ public sealed class MomentOfTruthPanelTests
         Assert.True(open.Single(control => control.Id == UiControlIds.Run).Enabled);
     }
 
-    private static IReadOnlyList<UiControl> Toolbar(bool momentOfTruthOpen) => UiControls.Build(
+    private static IReadOnlyList<UiControl> Toolbar(
+        bool momentOfTruthOpen,
+        bool paused = true) => UiControls.Build(
         new UiControlsViewState(
             BrushMode.Inspect,
             ZoneKind.Farm,
@@ -278,7 +322,7 @@ public sealed class MomentOfTruthPanelTests
             2,
             "ration_reserve",
             3,
-            Paused: true,
+            Paused: paused,
             Speed: 1.0,
             Fixture: "baseline",
             SessionComplete: false,

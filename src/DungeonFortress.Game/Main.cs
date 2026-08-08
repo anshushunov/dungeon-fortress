@@ -68,6 +68,11 @@ public partial class Main : Node2D
     private Label? _momentTitle;
     private Label? _momentExplanation;
     private readonly List<MomentOfTruthRow> _momentRows = [];
+    // Whether the previous snapshot already had a moment of truth open. It is how
+    // StopTheClockWhenTheDomainAsks tells "the domain has just asked something"
+    // from "the domain is still waiting", so a player who deliberately pressed RUN
+    // during an open window is not paused again on the next frame.
+    private bool _momentOfTruthWasOpen;
     private readonly List<HudButton> _controlButtons = [];
     // A permanent, invisible sample of the tooltip HudButton draws, kept for the
     // HUD readability guard's subtree walk: see CreateControlStrips and
@@ -365,6 +370,14 @@ public partial class Main : Node2D
             // fonts the labels above were actually given and hands them to the
             // engine-free policy.
             AssertHudTextReadable();
+            // Issue #331, round 2. Fitting the frame, being readable and being
+            // wired to the right creature are three different questions, and the
+            // third one had no answer at all: independent review swapped the two
+            // verdict signs on the mouse path — pressing REWARD punished — and
+            // the whole solution's tests, the godot stage and the ui stage all
+            // stayed green. This is the check that reads that wiring.
+            AssertMomentOfTruthPressPath();
+            AssertMomentOfTruthStopsTheClock();
             ApplyCameraView();
             AssertRequestedFrameSize();
 

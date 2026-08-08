@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using DungeonFortress.Presentation;
 using DungeonFortress.Simulation;
 
@@ -723,6 +725,23 @@ public partial class Main
     /// </summary>
     private void ShowMomentOfTruth(MomentOfTruthPrompt prompt)
     {
+        // A card with no row would be dropped in silence, and silence about a
+        // card is the one thing this band exists to prevent. Today the two
+        // numbers agree by construction — the rows are built from
+        // PrototypeTuning.MomentOfTruthCards — but the slice's own design already
+        // says "3-5 cards", so raising that constant is a question of when.
+        // Independent review of PR #345 asked for the comparison rather than a
+        // ledger line, and it costs one.
+        if (prompt.Cards.Count > _momentRows.Count)
+        {
+            throw new InvalidOperationException(
+                $"The moment of truth raised {prompt.Cards.Count} cards but the band has " +
+                $"{_momentRows.Count} rows, so {prompt.Cards.Count - _momentRows.Count} of them " +
+                "would not be drawn at all. The rows are built from " +
+                $"{nameof(PrototypeTuning)}.{nameof(PrototypeTuning.MomentOfTruthCards)}; the two " +
+                "have to move together.");
+        }
+
         _momentBand!.Visible = prompt.Open;
         _momentTitle!.Text = prompt.Title;
         _momentExplanation!.Text = prompt.Explanation;
@@ -772,6 +791,12 @@ public partial class Main
     /// about in every case, including the two answers: the verdict the
     /// simulation receives names a creature, and the one it names has to be the
     /// one whose row was pressed.
+    ///
+    /// <para>There is no decision left here. <see cref="MomentOfTruthPanel.Press"/>
+    /// answers both questions — who, and with what sign — and this applies the
+    /// answer. That is the point: while the sign was decided by a <c>switch</c> in
+    /// this file, swapping its two arms turned REWARD into a punishment with every
+    /// check in the repository still green (independent review of PR #345).</para>
     /// </summary>
     private void HandleMomentOfTruthPressed(string controlId)
     {
@@ -780,17 +805,215 @@ public partial class Main
             return;
         }
 
+        ApplyMomentOfTruthPress(press);
+    }
+
+    /// <summary>
+    /// Applies a resolved press: point the inspector at the creature, and — if
+    /// the press carried a sign — send that verdict about that creature.
+    ///
+    /// <para>Separate from <see cref="HandleMomentOfTruthPressed"/> so that
+    /// <see cref="AssertMomentOfTruthPressPath"/> can walk the same code without
+    /// a Godot button to click.</para>
+    /// </summary>
+    private void ApplyMomentOfTruthPress(MomentOfTruthPress press)
+    {
         SelectCreature(press.CreatureId);
-        switch (press.Kind)
+        if (MomentOfTruthVerdictCommand(press) is { } command)
         {
-            case MomentOfTruthPressKind.Reward:
-                IssueVerdict(VerdictKind.Reward);
-                break;
-            case MomentOfTruthPressKind.Punish:
-                IssueVerdict(VerdictKind.Punish);
-                break;
+            TryApplyPlayerCommand(command);
         }
     }
+
+    /// <summary>
+    /// The command a press asks for, as a value rather than as an effect, or
+    /// <c>null</c> when the press only moved the inspector.
+    ///
+    /// <para>Returning it instead of sending it is what makes the sign checkable
+    /// on an ordinary run: <see cref="AssertMomentOfTruthPressPath"/> reads the
+    /// command this builds and never applies it, so the check costs no tick and
+    /// reaches no canonical state.</para>
+    /// </summary>
+    private VerdictCommand? MomentOfTruthVerdictCommand(MomentOfTruthPress press) =>
+        press.Verdict is { } verdict && _state is not null
+            ? new VerdictCommand(_state.Tick, press.CreatureId, verdict)
+            : null;
+
+    /// <summary>
+    /// The mouse path of the moment of truth, proved on every entry point.
+    ///
+    /// <para>
+    /// <b>What it is for.</b> Independent review of PR #345 wrote a mutant in
+    /// this file — the two arms of the verdict <c>switch</c> swapped, so pressing
+    /// REWARD punished — and it passed the whole solution's tests,
+    /// <c>verify.ps1 -Stage godot</c> and <c>-Stage ui</c>. Criterion 3 of Issue
+    /// #331 ("a verdict is cast with the mouse") was therefore not a checkable
+    /// statement. Most of that hole is closed by moving the sign into
+    /// <see cref="MomentOfTruthPanel"/>, which unit tests read; what is left is
+    /// the wiring on this side, and this is the check that reads it.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Three claims, none of which needs an open window or a tick.</b> The
+    /// prompt is <see cref="MomentOfTruthPanel.WorstCase"/>, which is an open band
+    /// built from this fixture's own creatures, so the ids below are the ids the
+    /// buttons were actually created with:
+    /// </para>
+    ///
+    /// <list type="number">
+    /// <item>each button the adapter built dispatches on an id this band owns,
+    /// and that id resolves to that button's own row and sign;</item>
+    /// <item>the command a press builds carries the same sign and the same
+    /// creature the press named;</item>
+    /// <item>applying a selection-only press really does point the inspector at
+    /// that creature — the substitution independent review named second was an
+    /// early <c>return</c> in <see cref="SelectCreature"/>.</item>
+    /// </list>
+    ///
+    /// <para>Nothing is applied and nothing is left behind: the selection is put
+    /// back before returning, and no command is ever handed to the session.</para>
+    /// </summary>
+    private void AssertMomentOfTruthPressPath()
+    {
+        if (_state is null || _momentRows.Count == 0)
+        {
+            return;
+        }
+
+        var prompt = MomentOfTruthPanel.WorstCase(_state);
+        var failures = new List<string>();
+        for (var index = 0; index < prompt.Cards.Count && index < _momentRows.Count; index++)
+        {
+            var card = prompt.Cards[index];
+            var row = _momentRows[index];
+            foreach (var (name, node, expected) in new (string Name, HudButton Node, VerdictKind? Verdict)[]
+                     {
+                         ("card", row.Card, null),
+                         ("reward", row.Reward, VerdictKind.Reward),
+                         ("punish", row.Punish, VerdictKind.Punish),
+                     })
+            {
+                var id = node.Name.ToString();
+                if (MomentOfTruthPanel.Press(prompt, id) is not { } press)
+                {
+                    failures.Add(
+                        $"row {index}'s '{name}' button is named '{id}', which the band does not " +
+                        "own, so pressing it would do nothing at all");
+                    continue;
+                }
+
+                if (press.CreatureId != card.CreatureId)
+                {
+                    failures.Add(
+                        $"row {index}'s '{name}' button answers about " +
+                        $"{DescribeCreature(press.CreatureId)} while its own card is about " +
+                        $"{DescribeCreature(card.CreatureId)}");
+                }
+
+                if (press.Verdict != expected)
+                {
+                    failures.Add(
+                        $"row {index}'s '{name}' button carries verdict " +
+                        $"{Describe(press.Verdict)} instead of {Describe(expected)}");
+                }
+
+                var command = MomentOfTruthVerdictCommand(press);
+                if (expected is null)
+                {
+                    if (command is not null)
+                    {
+                        failures.Add(
+                            $"row {index}'s '{name}' button would send a verdict, but pressing a " +
+                            "card is only supposed to point the inspector at its creature");
+                    }
+
+                    continue;
+                }
+
+                if (command is null)
+                {
+                    failures.Add($"row {index}'s '{name}' button would send no command at all");
+                    continue;
+                }
+
+                if (command.Verdict != expected || command.CreatureId != press.CreatureId)
+                {
+                    failures.Add(
+                        $"row {index}'s '{name}' button would send " +
+                        $"{Describe(command.Verdict)} about {DescribeCreature(command.CreatureId)} " +
+                        $"instead of {Describe(expected)} about " +
+                        $"{DescribeCreature(press.CreatureId)}");
+                }
+            }
+        }
+
+        failures.AddRange(AssertMomentOfTruthPressSelects(prompt));
+
+        if (failures.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"The moment of truth's mouse path is wired wrong in {failures.Count} place(s): " +
+                string.Join("; ", failures) +
+                ". A band whose buttons answer about the wrong creature, or with the wrong sign, " +
+                "is worse than no band: the player is told they rewarded somebody they punished.");
+        }
+    }
+
+    /// <summary>
+    /// The third claim of <see cref="AssertMomentOfTruthPressPath"/>, kept apart
+    /// because it is the only part with a side effect to undo.
+    /// </summary>
+    private IEnumerable<string> AssertMomentOfTruthPressSelects(MomentOfTruthPrompt prompt)
+    {
+        if (_state!.Creatures.Count == 0 || prompt.Cards.Count == 0)
+        {
+            yield break;
+        }
+
+        var previousCreature = _selectedCreatureId;
+        var previousCell = _selectedCell;
+        // The last creature rather than the first, so a selection that never
+        // moved still fails when the run happens to start with nobody or with
+        // creature zero selected.
+        var chosen = _state.Creatures[^1];
+        ApplyMomentOfTruthPress(new MomentOfTruthPress(chosen.Id, null));
+        // Described through locals rather than inside the interpolation holes:
+        // WorldDrawPassGuardTests masks literals out of this assembly's source
+        // and a string nested inside a hole survives the mask, which the first
+        // draft of this guard tripped.
+        var pointedAt = DescribeCreature(_selectedCreatureId);
+        var pointedAtCell = DescribeCell(_selectedCell);
+        if (_selectedCreatureId != chosen.Id)
+        {
+            yield return
+                $"pressing a card about {DescribeCreature(chosen.Id)} left the inspector " +
+                $"pointed at {pointedAt}";
+        }
+
+        if (_selectedCell != chosen.Position)
+        {
+            yield return
+                $"pressing a card about {DescribeCreature(chosen.Id)} left the map pointed at " +
+                $"{pointedAtCell} rather than at {chosen.Position}";
+        }
+
+        _selectedCreatureId = previousCreature;
+        _selectedCell = previousCell;
+        UpdateHud();
+        UpdateCreatureLabels();
+        QueueRedraw();
+    }
+
+    private static string Describe(VerdictKind? verdict) =>
+        verdict is { } kind ? kind.ToString() : "nothing";
+
+    private static string DescribeCreature(int? creatureId) =>
+        creatureId is { } id
+            ? "creature " + id.ToString(CultureInfo.InvariantCulture)
+            : "nobody";
+
+    private static string DescribeCell(GridPoint? cell) =>
+        cell is { } point ? point.ToString() : "nothing";
 
     /// <summary>
     /// The side panel: heading, inspector, legend, event feedback. The legend is

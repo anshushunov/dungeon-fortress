@@ -494,6 +494,12 @@ public partial class Main
         // every tick of it.
         var remaining = PrototypeTuning.SessionTicks +
             (PrototypeTuning.WaveCount * PrototypeTuning.MomentOfTruthWindowSteps);
+        // Deliberately left running. A running clock is what a player has when a
+        // wave ends, and stopping it is the adapter's job rather than the
+        // capture's: a demo that paused itself would photograph a frame that
+        // proves nothing about the behaviour it exists to show (Issue #331,
+        // round 2).
+        _paused = false;
         while (_world is { IsComplete: false, IsAwaitingVerdict: false } && remaining-- > 0)
         {
             RememberMotionOrigin();
@@ -508,7 +514,16 @@ public partial class Main
                 "waves, so --demo-moment-of-truth has no frame to capture.");
         }
 
-        _paused = true;
+        if (!_paused)
+        {
+            throw new InvalidOperationException(
+                "The moment of truth opened and the clock kept running. An open window spends " +
+                $"its {PrototypeTuning.MomentOfTruthWindowSteps} steps at the speed of the " +
+                "toolbar rather than of the party — 6.7 seconds at 1x and under half a second " +
+                "at 16x — so the band would flash past unread, which is the playtest blocker " +
+                "independent review of PR #345 measured.");
+        }
+
         // Nothing selected on purpose: this is the frame the player is actually
         // given when a wave ends, and the question the capture has to answer is
         // whether that frame explains itself.

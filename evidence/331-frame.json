@@ -1,17 +1,22 @@
 {
   "issue": 331,
-  "what": "Кадр с открытым моментом истины: карточки видны вне панели инспектора (критерии 1, 4, 5).",
+  "round": 2,
+  "what": "Кадр с открытым моментом истины: карточки видны вне панели инспектора, часы остановлены самим адаптером (критерии 1, 4, 5 и находка major про 6,7 с).",
   "capturedAt": "2026-08-08",
   "model": "anthropic/claude-opus-5[1m]",
+  "screenshotSha256": "1a13b62db28683129f38a3073a542f0e83a62f6e368842c0acc936cb5084f3a3",
   "commands": {
-    "screenshot": "powershell -NoProfile -ExecutionPolicy Bypass -Command \". ./scripts/GodotTools.ps1; Initialize-GodotRuntimeEnvironment -RepositoryRoot (Get-Location).Path; Invoke-GodotChecked -GodotPath (Resolve-GodotExecutable) -Arguments @(--path,srcDungeonFortress.Game,--resolution,1600x900,--,--fixture,baseline,--demo-moment-of-truth,--screenshot,evidence/331-moment-of-truth.png,--screenshot-ticks,1,--tile-size,40,--camera-zoom,0.5,--camera-position,560,320,--ui-scale,1,--frame-size,1600x900) -ExpectedSuccessEvent godot_graybox_screenshot\"",
+    "screenshot": ". ./scripts/GodotTools.ps1; Initialize-GodotRuntimeEnvironment -RepositoryRoot (Get-Location).Path; Invoke-GodotChecked -GodotPath (Resolve-GodotExecutable) -Arguments @('--path','src\\DungeonFortress.Game','--resolution','1600x900','--','--fixture','baseline','--demo-moment-of-truth','--screenshot','evidence/331-moment-of-truth.png','--screenshot-ticks','1','--tile-size','40','--camera-zoom','0.5','--camera-position','560,320','--ui-scale','1','--frame-size','1600x900') -ExpectedSuccessEvent godot_graybox_screenshot",
+    "sha256": "sha256sum evidence/331-moment-of-truth.png",
     "godotStage": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage godot"
   },
   "reading": {
-    "bandNodeIsInTheMapColumn": "ui.momentOfTruth.node = .../@VBoxContainer@33/MomentOfTruthBand — потомок колонки карты, не боковой панели инспектора",
-    "cardsDrawn": "у каждой карточки поле drawn совпадает с text: на кнопке нарисован тот же текст, что несёт снапшот",
-    "runIsExplained": "tooltip кнопки run называет причину неподвижного времени",
-    "labelFitGreen": "runtimeDiagnostics пуст: AssertLabelsFit, AssertControlStripsFit и AssertHudTextReadable прошли на всех восьми проверяемых кадрах"
+    "bandNodeIsInTheMapColumn": "ui.momentOfTruth.node = .../@VBoxContainer@33/MomentOfTruthBand — потомок колонки карты, не боковой панели инспектора.",
+    "cardsDrawn": "у каждой карточки поле drawn совпадает с text: на кнопке нарисован тот же текст, что несёт снапшот.",
+    "clockStoppedByTheAdapter": "ui.momentOfTruth.paused = true и summary говорит PAUSED, при том что --demo-moment-of-truth намеренно выставляет _paused = false перед прогоном и бросает исключение, если после открытия окна часы всё ещё идут. Значит паузу поставил StopTheClockWhenTheDomainAsks, а не сам скрипт съёмки.",
+    "runIsExplained": "tooltip кнопки run называет причину неподвижного времени; на статическом кадре tooltip не рисуется — постоянно видимая часть это «· time is held» в заголовке полосы.",
+    "guardsGreen": "runtimeDiagnostics пуст: AssertLabelsFit, AssertControlStripsFit, AssertHudTextReadable, AssertMomentOfTruthPressPath и AssertMomentOfTruthStopsTheClock прошли на этом входе.",
+    "frameUnchangedSinceRound1": "sha256 кадра 1a13b62db28683129f38a3073a542f0e83a62f6e368842c0acc936cb5084f3a3 — тот же, что независимый review получил двумя своими прогонами на 4741a99: правки круга 2 полосу визуально не меняли."
   },
   "frame": {
     "event": "godot_graybox_screenshot",
@@ -27,9 +32,11 @@
     "uiScale": 1,
     "hudReadable": true,
     "smallestPhysicalTextPixels": 8,
+    "summary": "BASELINE  •  t1336  •  PAUSED  •  jobs 0  •  c0b2d998  •  renown 60↑  •  strength 13↓  •  crew 9\nWAVE 2/4 · warn t1450  •  food 41+0  •  raw 39+0  •  stone 0L 0C 0/0S  •  dug 0  •  marks 0",
     "momentOfTruth": {
       "open": true,
       "visible": true,
+      "paused": true,
       "node": "@MarginContainer@2/@HBoxContainer@3/@VBoxContainer@33/MomentOfTruthBand",
       "waveNumber": 1,
       "unanswered": 3,

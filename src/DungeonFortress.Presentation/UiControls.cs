@@ -150,27 +150,36 @@ public static class UiControls
         // deliberately still enabled: waiting the window out is one of the two
         // ways the moment of truth closes, and disabling RUN would take that way
         // away. What was missing is the sentence, not the refusal.
+        //
+        // The title of that sentence follows the face the button is wearing and
+        // is not hard-coded to "Run". Independent review of PR #345 found the
+        // first version saying "Run [P]" over the pause icon whenever the window
+        // opened while the clock was running — a tooltip calling a button by
+        // another button's name, in exactly the state the player reaches for it.
+        var running = !view.Paused;
+        var timeControlId = running ? UiControlIds.Pause : UiControlIds.Run;
+        var timeControlTitle = running ? "Pause [P]" : "Run [P]";
         yield return new UiControl(
-            view.Paused ? UiControlIds.Run : UiControlIds.Pause,
+            timeControlId,
             string.Empty,
             "P",
-            view.MomentOfTruthOpen
-                ? "Run [P]\n" + MomentOfTruthPanel.TimeIsHeldTooltip
-                : view.Paused
-                    ? "Run [P]\nStart time. The crew keeps choosing its own work."
-                    : "Pause [P]\nStop time. Marking the map works while paused.",
-            !view.Paused,
+            timeControlTitle + "\n" + (view.MomentOfTruthOpen
+                ? MomentOfTruthPanel.TimeIsHeldTooltip
+                : running
+                    ? "Stop time. Marking the map works while paused."
+                    : "Start time. The crew keeps choosing its own work."),
+            running,
             !view.SessionComplete,
-            UiIconManifest.FileFor(view.Paused ? UiControlIds.Run : UiControlIds.Pause),
+            UiIconManifest.FileFor(timeControlId),
             UiControlStrip.Time);
 
         yield return new UiControl(
             UiControlIds.Step,
             string.Empty,
             "S",
-            view.MomentOfTruthOpen
-                ? "Step [S]\n" + MomentOfTruthPanel.TimeIsHeldTooltip
-                : "Step [S]\nAdvance exactly one simulation tick and stop.",
+            "Step [S]\n" + (view.MomentOfTruthOpen
+                ? MomentOfTruthPanel.TimeIsHeldTooltip
+                : "Advance exactly one simulation tick and stop."),
             false,
             !view.SessionComplete,
             UiIconManifest.FileFor(UiControlIds.Step),
@@ -366,25 +375,30 @@ public static class UiControls
 // =====================================================================
 
 /// <summary>
-/// What a press on the moment-of-truth band means. The band never decides a
-/// verdict is legal — that is the simulation's answer on the tick of the command
-/// (<a href="../../docs/decisions/0019-verdict-not-order.md">ADR 0019</a>) — it
-/// only says which creature the player pointed at and with what sign.
+/// One resolved press: about whom, and with what sign.
+///
+/// <para><see cref="Verdict"/> is the sign the simulation will be sent, and
+/// <c>null</c> when the press only points the inspector at the creature.</para>
+///
+/// <para><b>Why it is a <see cref="VerdictKind"/> and not a third enumeration of
+/// the same three cases.</b> It used to be one, and the adapter translated it
+/// into <c>VerdictKind</c> with a <c>switch</c>. Independent review of PR #345
+/// swapped the two arms of that switch — a player pressing REWARD punished the
+/// creature — and <em>every</em> check in the repository stayed green: the whole
+/// solution's 1001 tests, <c>verify.ps1 -Stage godot</c> and <c>-Stage ui</c>.
+/// The translation lived in the one layer nothing reads. There is now nothing to
+/// translate: the sign crosses the seam as the value the command carries, in a
+/// layer a unit test can reach.</para>
+///
+/// <para>The band still never decides a verdict is <em>legal</em>. That is the
+/// simulation's answer on the tick of the command
+/// (<a href="../../docs/decisions/0019-verdict-not-order.md">ADR 0019</a>).</para>
 /// </summary>
-public enum MomentOfTruthPressKind
+public sealed record MomentOfTruthPress(int CreatureId, VerdictKind? Verdict)
 {
-    /// <summary>Point the inspector at the creature this card is about.</summary>
-    Select,
-
-    /// <summary>Reward it, which is <c>VerdictKind.Reward</c> to the simulation.</summary>
-    Reward,
-
-    /// <summary>Punish it, which is <c>VerdictKind.Punish</c> to the simulation.</summary>
-    Punish,
+    /// <summary>Whether this press only moves the inspector.</summary>
+    public bool IsSelectionOnly => Verdict is null;
 }
-
-/// <summary>One resolved press: what was asked for, and about whom.</summary>
-public sealed record MomentOfTruthPress(MomentOfTruthPressKind Kind, int CreatureId);
 
 /// <summary>
 /// The stable ids of the band's controls. Index-based rather than creature-based
@@ -587,10 +601,11 @@ public static class MomentOfTruthPanel
     /// owns that id.
     ///
     /// <para>This is the whole of "clicking a card picks the creature it is
-    /// about", and it is a function of the prompt rather than of a table the
-    /// adapter keeps beside it: the row a player pressed and the creature the
-    /// verdict names cannot drift apart, because there is only one description of
-    /// the pairing.</para>
+    /// about" <b>and</b> of "REWARD rewards", and it is a function of the prompt
+    /// rather than of a table the adapter keeps beside it: the row a player
+    /// pressed, the creature the verdict names and the sign it carries cannot
+    /// drift apart, because there is only one description of the pairing — and
+    /// that description is here, where a unit test reads it.</para>
     /// </summary>
     public static MomentOfTruthPress? Press(MomentOfTruthPrompt prompt, string controlId)
     {
@@ -602,20 +617,19 @@ public static class MomentOfTruthPanel
 
         foreach (var card in prompt.Cards)
         {
-            var kind = controlId switch
+            if (string.Equals(controlId, card.CardId, StringComparison.Ordinal))
             {
-                _ when string.Equals(controlId, card.CardId, StringComparison.Ordinal) =>
-                    (MomentOfTruthPressKind?)MomentOfTruthPressKind.Select,
-                _ when string.Equals(controlId, card.RewardId, StringComparison.Ordinal) =>
-                    MomentOfTruthPressKind.Reward,
-                _ when string.Equals(controlId, card.PunishId, StringComparison.Ordinal) =>
-                    MomentOfTruthPressKind.Punish,
-                _ => null,
-            };
+                return new MomentOfTruthPress(card.CreatureId, null);
+            }
 
-            if (kind is { } pressed)
+            if (string.Equals(controlId, card.RewardId, StringComparison.Ordinal))
             {
-                return new MomentOfTruthPress(pressed, card.CreatureId);
+                return new MomentOfTruthPress(card.CreatureId, VerdictKind.Reward);
+            }
+
+            if (string.Equals(controlId, card.PunishId, StringComparison.Ordinal))
+            {
+                return new MomentOfTruthPress(card.CreatureId, VerdictKind.Punish);
             }
         }
 

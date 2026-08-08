@@ -1787,7 +1787,7 @@ Both structured outputs — `godot_headless_smoke` from `--smoke` and
 | `controlFeedback` | the raw control feedback string |
 | `editMode`, `brushZone` | which brush is held |
 | `selectedCell`, `selectedCreatureId` | what the inspector is pointed at |
-| `momentOfTruth` | the band the moment of truth is answered on (Issue #331): whether it is `open`, whether the node is `visible`, the path of that node under the HUD root, the wave, `unanswered`, `stepsLeft`, the heading, the explanation, and one entry per card with its text, its verdict, whether it is selected and the ids of its three buttons |
+| `momentOfTruth` | the band the moment of truth is answered on (Issue #331): whether it is `open`, whether the node is `visible`, whether the clock is `paused`, the path of that node under the HUD root, the wave, `unanswered`, `stepsLeft`, the heading, the explanation, and one entry per card with its text, its verdict, whether it is selected and the ids of its three buttons. `open: true` with `paused: false` is the defect shape: a step of an open window is spent waiting rather than played, so a running clock burns all 40 steps in 6.7 seconds at 1x and 0.42 at 16x, and the band flashes past unread |
 | `pending` | intent accepted for this tick that the tick has not applied yet — marks, withdrawals and priority changes — or `null` |
 
 This turns every inspector branch into an ordinary testable artifact: choose the
