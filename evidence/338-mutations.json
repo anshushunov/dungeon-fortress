@@ -1,0 +1,42 @@
+{
+  "issue": 338,
+  "base": "97325ed",
+  "mutants": [
+    {
+      "id": "M1",
+      "claim": "число «off (Work N)» читается из канонических приоритетов, а не из проекции",
+      "file": "src/DungeonFortress.Presentation/RoomReadings.cs",
+      "change": {
+        "from": "                ? $\"{name} · off ({work} {view.Priority(work)})\"",
+        "to": "                ? $\"{name} · off ({work} {view.State.Priorities[work]})\""
+      },
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~The_blocked_caption_names_the_projected_priority_of_the_enabled_work\"",
+      "result": "red",
+      "message": "Assert.Equal() Failure: Strings differ\n                              ↓ (pos 19)\nExpected: \"TRAIN · off (Drill 0)\"\nActual:   \"TRAIN · off (Drill 3)\"\n                              ↑ (pos 19)\n  Трассировка стека:\n     at DungeonFortress.Presentation.Tests.RoomReadingTests.The_blocked_caption_names_the_projected_priority_of_the_enabled_work() in C:\\gamedev\\_wt-338-room-caption\\tests\\DungeonFortress.Presentation.Tests\\RoomReadingTests.cs:line 204"
+    },
+    {
+      "id": "M2",
+      "claim": "ветвление подписи снова по room.StatusCode, а не по MapAccents.Room",
+      "file": "src/DungeonFortress.Presentation/RoomReadings.cs",
+      "change": {
+        "from": "        return MapAccents.Room(view, room) switch\n        {\n            RoomAccent.Unreachable => $\"{name} · forbidden\",\n            RoomAccent.Unfinished => PrototypeRooms.RequiredFeature(room.Purpose) is { } feature\n                ? $\"{name} · no {FeatureName(feature)}\"\n                : $\"{name} · unfinished\",\n            RoomAccent.BlockedByPriority => PrototypeRooms.EnabledWork(room.Purpose) is { } work\n                ? $\"{name} · off ({work} {view.Priority(work)})\"\n                : $\"{name} · off\",\n            _ => name,\n        };",
+        "to": "        return room.StatusCode switch\n        {\n            \"room_forbidden\" => $\"{name} · forbidden\",\n            \"room_missing_feature\" => PrototypeRooms.RequiredFeature(room.Purpose) is { } feature\n                ? $\"{name} · no {FeatureName(feature)}\"\n                : $\"{name} · unfinished\",\n            \"room_blocked_priority\" => PrototypeRooms.EnabledWork(room.Purpose) is { } work\n                ? $\"{name} · off ({work} {view.Priority(work)})\"\n                : $\"{name} · off\",\n            _ => name,\n        };"
+      },
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~The_caption_agrees_with_the_rooms_accent_on_the_same_view\"",
+      "result": "red",
+      "message": "Assert.Equal() Failure: Strings differ\nExpected: \"TRAIN\"\nActual:   \"TRAIN · off (Drill 3)\"\n                ↑ (pos 5)\n  Трассировка стека:\n     at DungeonFortress.Presentation.Tests.RoomReadingTests.AssertCaptionFollowsAccent(MapProjection view, String roomId) in C:\\gamedev\\_wt-338-room-caption\\tests\\DungeonFortress.Presentation.Tests\\RoomReadingTests.cs:line 293\n   at DungeonFortress.Presentation.Tests.RoomReadingTests.The_caption_agrees_with_the_rooms_accent_on_the_same_view() in C:\\gamedev\\_wt-338-room-caption\\tests\\DungeonFortress.Presentation.Tests\\RoomReadingTests.cs:line 258"
+    },
+    {
+      "id": "M3",
+      "claim": "Unfinished-ступень подписи ломается на подпись рабочей комнаты",
+      "file": "src/DungeonFortress.Presentation/RoomReadings.cs",
+      "change": {
+        "from": "            RoomAccent.Unfinished => PrototypeRooms.RequiredFeature(room.Purpose) is { } feature\n                ? $\"{name} · no {FeatureName(feature)}\"\n                : $\"{name} · unfinished\",",
+        "to": "            RoomAccent.Unfinished => name,"
+      },
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~The_caption_agrees_with_the_rooms_accent_on_the_same_view\"",
+      "result": "red",
+      "message": "Assert.Equal() Failure: Strings differ\n                ↓ (pos 5)\nExpected: \"TRAIN · no post\"\nActual:   \"TRAIN\"\n  Трассировка стека:\n     at DungeonFortress.Presentation.Tests.RoomReadingTests.AssertCaptionFollowsAccent(MapProjection view, String roomId) in C:\\gamedev\\_wt-338-room-caption\\tests\\DungeonFortress.Presentation.Tests\\RoomReadingTests.cs:line 293\n   at DungeonFortress.Presentation.Tests.RoomReadingTests.The_caption_agrees_with_the_rooms_accent_on_the_same_view() in C:\\gamedev\\_wt-338-room-caption\\tests\\DungeonFortress.Presentation.Tests\\RoomReadingTests.cs:line 267"
+    }
+  ]
+}
