@@ -152,27 +152,30 @@ public static class RoomLabels
     /// the same — it names the work whose zero priority stopped the room, and the
     /// number to raise.
     ///
-    /// The priority for "off (Work N)" is read from the projection and not from
-    /// the snapshot, for the same reason the room's colour reads that way
-    /// (<see cref="MapAccents.Room"/>): the status code was computed under the
-    /// value the world holds, and a raise accepted in the same paused moment must
-    /// change the caption the instant it is accepted, or the room and its caption
-    /// would disagree until time moves — Issue #338.
+    /// The branch is <see cref="MapAccents.Room"/>, the same decision the room's
+    /// colour is drawn from, rather than the snapshot's own <c>statusCode</c> —
+    /// Issue #338. The two statuses the accent reads as <c>Unfinished</c> cannot
+    /// both come from the world (<c>room_missing_feature</c> is the only one), so
+    /// the accent is the whole decision and the caption is structurally unable to
+    /// disagree with the colour: a raise accepted in the same paused moment turns
+    /// the room green and drops the "off" line at the same instant, and the
+    /// priority shown for "off (Work N)" is read from the projection for the same
+    /// reason.
     /// </summary>
     public static string Caption(PrototypeRoomSnapshot room, MapProjection view)
     {
         ArgumentNullException.ThrowIfNull(room);
         ArgumentNullException.ThrowIfNull(view);
         var name = Name(room.Purpose);
-        return room.StatusCode switch
+        return MapAccents.Room(view, room) switch
         {
-            "room_missing_feature" => PrototypeRooms.RequiredFeature(room.Purpose) is { } feature
+            RoomAccent.Unreachable => $"{name} · forbidden",
+            RoomAccent.Unfinished => PrototypeRooms.RequiredFeature(room.Purpose) is { } feature
                 ? $"{name} · no {FeatureName(feature)}"
                 : $"{name} · unfinished",
-            "room_blocked_priority" => PrototypeRooms.EnabledWork(room.Purpose) is { } work
+            RoomAccent.BlockedByPriority => PrototypeRooms.EnabledWork(room.Purpose) is { } work
                 ? $"{name} · off ({work} {view.Priority(work)})"
                 : $"{name} · off",
-            "room_forbidden" => $"{name} · forbidden",
             _ => name,
         };
     }

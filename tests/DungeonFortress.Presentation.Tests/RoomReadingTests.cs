@@ -175,35 +175,46 @@ public sealed class RoomReadingTests
     }
 
     /// <summary>
-    /// The caption names the work whose priority is 0, and the number to raise is
-    /// read from the published priorities rather than assumed — so the reading
-    /// stays honest the moment a priority the world already holds is queried.
+    /// The number a blocked room names is the priority the player set, read from
+    /// the projection and not from the value the world still holds — so a drop
+    /// accepted in this same paused moment shows as 0, not as the 3 the world has
+    /// yet to apply. This is the BlockedByPriority half of the Ready case below:
+    /// the same correction <see cref="MapAccents.Room"/> makes, applied to the
+    /// caption.
     /// </summary>
     [Fact]
-    public void The_blocked_caption_names_the_actual_priority_of_the_enabled_work()
+    public void The_blocked_caption_names_the_projected_priority_of_the_enabled_work()
     {
-        var room = new PrototypeRoomSnapshot(
-            "x@0,0",
-            ZoneKind.TrainingGround,
-            [new GridPoint(0, 0)],
-            [],
-            "room_blocked_priority",
-            Complete: true);
+        var commands = new PrototypeCommand[]
+        {
+            new ZonePaintCommand(1, ZoneKind.TrainingGround, [LeftPost, RightPost]),
+            new SetPriorityCommand(1, JobKind.Drill, 3),
+            new SetPriorityCommand(40, JobKind.Drill, 0),
+        };
+        var waiting = View(40, commands);
 
-        var raised = View(2, new SetPriorityCommand(1, JobKind.Drill, 3));
-
-        Assert.Equal("TRAIN · off (Drill 3)", RoomLabels.Caption(room, raised));
+        // The world has not applied the drop yet: the canonical priority is still
+        // 3, the projection already reads 0, and the room reads blocked through
+        // the same fold the colour uses.
+        Assert.Equal(3, waiting.State.Priorities[JobKind.Drill]);
+        Assert.Equal(0, waiting.Priority(JobKind.Drill));
+        Assert.Equal(
+            RoomAccent.BlockedByPriority,
+            MapAccents.Room(waiting, Room(waiting, "trainingGround@10,2")));
+        Assert.Equal(
+            "TRAIN · off (Drill 0)",
+            RoomLabels.Caption(Room(waiting, "trainingGround@10,2"), waiting));
     }
 
     /// <summary>
-    /// The caption names the priority the player set in this same paused moment,
-    /// not the value the world still holds — the same correction
-    /// <see cref="MapAccents.Room"/> makes for the room's colour. Without it the
-    /// two would disagree for a whole paused moment: the room would already read
-    /// as working while the caption still named the old number to raise.
+    /// A priority raised in this same paused moment turns the room green before
+    /// the tick runs, and the caption must turn with it — the exact case Issue
+    /// #338 was about. The world still holds 0 and its status still says blocked;
+    /// the room reads Ready through the projection, so the caption is the name and
+    /// nothing else, and a working room never says "off" under its own colour.
     /// </summary>
     [Fact]
-    public void The_blocked_caption_names_a_priority_accepted_in_the_same_paused_moment()
+    public void The_caption_reads_working_the_moment_a_priority_is_raised_while_paused()
     {
         var commands = new PrototypeCommand[]
         {
@@ -213,14 +224,73 @@ public sealed class RoomReadingTests
         var waiting = View(40, commands);
 
         // The world has not applied the raise yet: the canonical priority is still
-        // 0 and the room's status still says blocked. The caption must name the
-        // number the player just set, as the room's colour already does.
+        // 0 and the room's status still says blocked. The projection already reads
+        // 3, so the room reads Ready — the same way the colour does.
         Assert.Equal(0, waiting.State.Priorities[JobKind.Drill]);
         Assert.Equal(3, waiting.Priority(JobKind.Drill));
         Assert.Equal("room_blocked_priority", Room(waiting, "trainingGround@10,2").StatusCode);
+        Assert.Equal(RoomAccent.Ready, MapAccents.Room(waiting, Room(waiting, "trainingGround@10,2")));
         Assert.Equal(
-            "TRAIN · off (Drill 3)",
+            "TRAIN",
             RoomLabels.Caption(Room(waiting, "trainingGround@10,2"), waiting));
+    }
+
+    /// <summary>
+    /// The two halves of ADR 0013's «иконка назначения и подпись с состоянием»
+    /// must answer from the same decision. The room's colour is
+    /// <see cref="MapAccents.Room"/>; the caption must be the words of the same
+    /// accent, on the same view and the same room. The expectation is therefore
+    /// derived from the accent rather than restated as literals, and the whole
+    /// ladder is walked — a room turned green by a raise accepted in a paused
+    /// moment, a room blocked by a priority, a room waiting for its object, and a
+    /// forbidden one. A caption that read a different source than the colour would
+    /// fail here even where the words happen to agree.
+    /// </summary>
+    [Fact]
+    public void The_caption_agrees_with_the_rooms_accent_on_the_same_view()
+    {
+        // Ready, the moment a raise is accepted while paused — the exact case the
+        // review reproduced: the world still holds 0, the projection reads 3.
+        var raised = View(
+            40,
+            new ZonePaintCommand(1, ZoneKind.TrainingGround, [LeftPost, RightPost]),
+            new SetPriorityCommand(40, JobKind.Drill, 3));
+        AssertCaptionFollowsAccent(raised, "trainingGround@10,2");
+
+        // BlockedByPriority: a complete gym whose only problem is the Drill
+        // priority.
+        var blocked = View(2, new ZonePaintCommand(1, ZoneKind.TrainingGround, [LeftPost]));
+        AssertCaptionFollowsAccent(blocked, "trainingGround@10,2");
+
+        // Unfinished: the gym is painted and the post it needs is not inside it.
+        var unfinished = View(2, new ZonePaintCommand(1, ZoneKind.TrainingGround, [EmptyFloorA]));
+        AssertCaptionFollowsAccent(unfinished, "trainingGround@25,6");
+
+        // Unreachable: every tile of the room is forbidden.
+        var shut = View(
+            3,
+            new ZonePaintCommand(1, ZoneKind.Watch, [EmptyFloorA]),
+            new ZonePaintCommand(2, ZoneKind.Forbidden, [EmptyFloorA]));
+        AssertCaptionFollowsAccent(shut, "watch@25,6");
+    }
+
+    private static void AssertCaptionFollowsAccent(MapProjection view, string roomId)
+    {
+        var room = Room(view, roomId);
+        var accent = MapAccents.Room(view, room);
+        var name = RoomLabels.Name(room.Purpose);
+        var expected = accent switch
+        {
+            RoomAccent.Unreachable => $"{name} · forbidden",
+            RoomAccent.Unfinished => PrototypeRooms.RequiredFeature(room.Purpose) is { } feature
+                ? $"{name} · no {RoomLabels.FeatureName(feature)}"
+                : $"{name} · unfinished",
+            RoomAccent.BlockedByPriority => PrototypeRooms.EnabledWork(room.Purpose) is { } work
+                ? $"{name} · off ({work} {view.Priority(work)})"
+                : $"{name} · off",
+            _ => name,
+        };
+        Assert.Equal(expected, RoomLabels.Caption(room, view));
     }
 
     [Fact]
