@@ -59,6 +59,22 @@ public partial class Main
         };
         column.AddChild(_worldViewport);
 
+        // Under the map and above the roster, which is the answer to the owner's
+        // own question — «Снизу вот есть какое-то меню — может там сделаем какой-то
+        // нормальный текст, который можно нажимать кнопкой мыши?» — and to the
+        // defect behind it: the cards used to be drawn in the inspector column on
+        // the far right, and the first playtest of slice 3 never found them.
+        //
+        // Two placements were rejected. Adding the cards to the time or brush
+        // strip is impossible without breaking what those strips are: their
+        // buttons are matched to UiControls.Build by position and the list length
+        // is asserted, while a card is chosen by the domain and exists only for
+        // the length of one pause. A modal overlay over the middle of the map was
+        // rejected because it covers the bodies the cards are about, and because
+        // the map is the one place a player can still mark ground while the party
+        // waits.
+        column.AddChild(CreateMomentOfTruthBand());
+
         _roster = MakeHudLabel(10, new Color("#cbd5e1"));
         _roster.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         _roster.SizeFlagsStretchRatio = 1f;
@@ -295,7 +311,8 @@ public partial class Main
         _paused,
         _speed,
         _fixture,
-        _state is not null && _state.Tick >= PrototypeTuning.SessionTicks);
+        _state is not null && _state.Tick >= PrototypeTuning.SessionTicks,
+        _state is { MomentOfTruth.Open: true });
 
     /// <summary>
     /// What a press does. Dispatch is by control id read from the current list,
@@ -317,7 +334,7 @@ public partial class Main
                 TogglePause();
                 break;
             case UiControlIds.Step:
-                Advance(1);
+                Advance(1, byHand: true);
                 break;
             case UiControlIds.Speed0_5:
                 SetSpeed(0.5);
@@ -526,6 +543,253 @@ public partial class Main
             loadedIcons = _icons.Keys.OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             placeholderIcons = _missingIcons,
         };
+    }
+
+    // ---------------------------------------------------------------------
+    // The moment of truth band (Issue #331)
+    //
+    // Slice 3 already worked: the keys G and H reached the simulation and the
+    // verdict changed the next wave. What did not work was finding out that any
+    // of it was being asked for. The cards were a paragraph of HudText in the
+    // inspector column, no control anywhere mentioned the keys, and RUN did
+    // nothing visible because the tick was being held — which reads as a broken
+    // pause rather than as a question.
+    //
+    // The band is the question, put where the player is looking, with the answer
+    // as two buttons per card. Nothing about what it says is decided here: the
+    // text, the ids and the meaning of a press all come from
+    // MomentOfTruthPanel, which does not reference Godot and is covered by unit
+    // tests running in CI.
+    // ---------------------------------------------------------------------
+
+    /// <summary>One card's row of the band: the card itself and the two answers.</summary>
+    private sealed record MomentOfTruthRow(
+        Control Row,
+        HudButton Card,
+        Label Text,
+        HudButton Reward,
+        HudButton Punish);
+
+    /// <summary>The card sentence, at the size the toolbar labels its buttons.</summary>
+    private const int MomentCardFontSize = HudFontSizes.ButtonLabelFontSize;
+
+    /// <summary>The heading, two points above the cards, like a tooltip title.</summary>
+    private const int MomentTitleFontSize = HudFontSizes.ButtonLabelFontSize + 2;
+
+    /// <summary>
+    /// How wide an answer button is. Wide enough for "PUNISH [H]" at the card
+    /// font and narrow enough that two of them plus a sentence still fit the
+    /// narrowest frame the overflow guard checks.
+    /// </summary>
+    private const int MomentAnswerButtonWidth = 74;
+
+    /// <summary>
+    /// The room a card's Button keeps around its sentence, so the text is not
+    /// drawn flush against the border the button paints.
+    /// </summary>
+    private const int MomentCardPadding = 6;
+
+    /// <summary>
+    /// The band, hidden until the domain asks something. It is built once and
+    /// refilled, so a press always lands on a row that exists — the same reason
+    /// the toolbar builds its buttons once.
+    /// </summary>
+    private Control CreateMomentOfTruthBand()
+    {
+        var panel = new PanelContainer
+        {
+            Name = "MomentOfTruthBand",
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            SizeFlagsVertical = Control.SizeFlags.Fill,
+            // Hidden rather than absent: a band that is built only when a wave
+            // ends could not be measured by the layout guard in _Ready, which is
+            // the one moment every entry point pays for that guard.
+            Visible = false,
+        };
+        var style = new StyleBoxFlat
+        {
+            BgColor = new Color("#2b1d0e"),
+            BorderColor = new Color("#f59e0b"),
+        };
+        style.SetBorderWidthAll(1);
+        style.SetContentMarginAll(4);
+        panel.AddThemeStyleboxOverride("panel", style);
+
+        var column = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        column.AddThemeConstantOverride("separation", 2);
+        panel.AddChild(column);
+
+        _momentTitle = MakeHudLabel(MomentTitleFontSize, new Color("#fcd34d"));
+        _momentTitle.Name = "MomentOfTruthTitle";
+        column.AddChild(_momentTitle);
+
+        _momentExplanation = MakeHudLabel(MomentCardFontSize, new Color("#fde68a"));
+        _momentExplanation.Name = "MomentOfTruthExplanation";
+        column.AddChild(_momentExplanation);
+
+        for (var index = 0; index < PrototypeTuning.MomentOfTruthCards; index++)
+        {
+            var row = CreateMomentOfTruthRow(index);
+            column.AddChild(row.Row);
+            _momentRows.Add(row);
+        }
+
+        _momentBand = panel;
+        return panel;
+    }
+
+    private MomentOfTruthRow CreateMomentOfTruthRow(int index)
+    {
+        var row = new HBoxContainer
+        {
+            Name = $"MomentOfTruthRow{index}",
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        row.AddThemeConstantOverride("separation", ControlButtonSeparation);
+
+        // The card is a Button with no text of its own and a Label inside it. A
+        // Button's own text neither wraps nor is measured by the overflow guard,
+        // and a card is a sentence: the Label wraps, the guard measures it, and
+        // because it ignores the mouse the whole rectangle stays one click.
+        var card = MakeMomentButton(MomentOfTruthControlIds.Card(index), string.Empty);
+        card.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        row.AddChild(card);
+
+        var text = MakeHudLabel(MomentCardFontSize, new Color("#fde68a"));
+        text.Name = $"MomentOfTruthCard{index}";
+        card.AddChild(text);
+        text.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+
+        var reward = MakeMomentButton(
+            MomentOfTruthControlIds.Reward(index),
+            $"{MomentOfTruthPanel.RewardLabel} [{MomentOfTruthPanel.RewardHotkey}]");
+        var punish = MakeMomentButton(
+            MomentOfTruthControlIds.Punish(index),
+            $"{MomentOfTruthPanel.PunishLabel} [{MomentOfTruthPanel.PunishHotkey}]");
+        row.AddChild(reward);
+        row.AddChild(punish);
+        return new MomentOfTruthRow(row, card, text, reward, punish);
+    }
+
+    /// <summary>
+    /// One button of the band. It dispatches on its own id rather than on a
+    /// position in a list, because which creature a row is about changes with
+    /// every wave and a number baked into a handler would not.
+    /// </summary>
+    private HudButton MakeMomentButton(string id, string label)
+    {
+        var button = new HudButton
+        {
+            Name = id,
+            Text = label,
+            FocusMode = Control.FocusModeEnum.None,
+            ClipText = true,
+            CustomMinimumSize = new Vector2(
+                label.Length == 0 ? 0 : MomentAnswerButtonWidth,
+                ControlButtonSize),
+        };
+        button.AddThemeFontSizeOverride("font_size", MomentCardFontSize);
+        button.AddThemeColorOverride("font_color", new Color("#fde68a"));
+        button.AddThemeColorOverride("font_hover_color", new Color("#fffbeb"));
+        button.AddThemeColorOverride("font_disabled_color", new Color("#a1701f"));
+        button.AddThemeStyleboxOverride("normal", ControlButtonStyle("#3b2a12", "#a16207"));
+        button.AddThemeStyleboxOverride("hover", ControlButtonStyle("#5b3f18", "#fbbf24"));
+        button.AddThemeStyleboxOverride("pressed", ControlButtonStyle("#b45309", "#fffbeb"));
+        button.AddThemeStyleboxOverride("disabled", ControlButtonStyle("#241a0c", "#3f2f14"));
+        button.Pressed += () => HandleMomentOfTruthPressed(id);
+        return button;
+    }
+
+    /// <summary>
+    /// The band as the current frame says it should read. Called from
+    /// <see cref="UpdateHud"/>, so it follows every snapshot, every accepted
+    /// command and every selection without anything having to remember to.
+    /// </summary>
+    private void RefreshMomentOfTruthBand()
+    {
+        if (_momentBand is null)
+        {
+            return;
+        }
+
+        var prompt = CurrentMomentOfTruth();
+        ShowMomentOfTruth(prompt);
+    }
+
+    /// <summary>
+    /// Puts a prompt on the band. Separate from <see cref="RefreshMomentOfTruthBand"/>
+    /// because the layout guard measures a worst case rather than the live
+    /// window — see <c>Main.MomentOfTruthWorstCase</c>.
+    /// </summary>
+    private void ShowMomentOfTruth(MomentOfTruthPrompt prompt)
+    {
+        _momentBand!.Visible = prompt.Open;
+        _momentTitle!.Text = prompt.Title;
+        _momentExplanation!.Text = prompt.Explanation;
+        for (var index = 0; index < _momentRows.Count; index++)
+        {
+            var row = _momentRows[index];
+            if (index >= prompt.Cards.Count)
+            {
+                row.Row.Visible = false;
+                row.Text.Text = string.Empty;
+                continue;
+            }
+
+            var card = prompt.Cards[index];
+            row.Row.Visible = true;
+            row.Text.Text = card.Text;
+            row.Card.TooltipText = card.CardTooltip;
+            // The selected row is the one the two keys would answer, so it is
+            // shown pressed: the mouse and the keyboard have to agree about who
+            // is being judged.
+            row.Card.SetPressedNoSignal(card.Selected);
+            row.Card.ToggleMode = true;
+            row.Reward.Disabled = card.Answered;
+            row.Punish.Disabled = card.Answered;
+            row.Reward.TooltipText = AnswerTooltip(card, MomentOfTruthPanel.RewardLabel);
+            row.Punish.TooltipText = AnswerTooltip(card, MomentOfTruthPanel.PunishLabel);
+        }
+    }
+
+    private static string AnswerTooltip(MomentOfTruthCardControl card, string answer) =>
+        card.Answered
+            ? $"{answer}\nAlready answered: {card.Verdict}. A card takes one verdict."
+            : $"{answer}\nAnswer this card. The domain decides what the answer is worth; " +
+              "saying nothing is also an answer and is remembered.";
+
+    /// <summary>
+    /// What the band is a function of: canonical state and who the inspector is
+    /// pointed at. Readable before a fixture exists, because <c>_Ready</c> builds
+    /// the HUD first and loads the world after.
+    /// </summary>
+    private MomentOfTruthPrompt CurrentMomentOfTruth() => _state is null
+        ? MomentOfTruthPanel.Closed
+        : MomentOfTruthPanel.Of(_state, _selectedCreatureId);
+
+    /// <summary>
+    /// A press on the band. It points the inspector at the creature the row is
+    /// about in every case, including the two answers: the verdict the
+    /// simulation receives names a creature, and the one it names has to be the
+    /// one whose row was pressed.
+    /// </summary>
+    private void HandleMomentOfTruthPressed(string controlId)
+    {
+        if (MomentOfTruthPanel.Press(CurrentMomentOfTruth(), controlId) is not { } press)
+        {
+            return;
+        }
+
+        SelectCreature(press.CreatureId);
+        switch (press.Kind)
+        {
+            case MomentOfTruthPressKind.Reward:
+                IssueVerdict(VerdictKind.Reward);
+                break;
+            case MomentOfTruthPressKind.Punish:
+                IssueVerdict(VerdictKind.Punish);
+                break;
+        }
     }
 
     /// <summary>

@@ -59,6 +59,15 @@ public partial class Main : Node2D
     private Label? _roster;
     private Control? _timeStrip;
     private Control? _brushStrip;
+    // The moment-of-truth band (Issue #331): the cards under the map, where the
+    // player is already looking, instead of as text in the inspector column
+    // nobody found. Everything it says is decided in
+    // DungeonFortress.Presentation.MomentOfTruthPanel; this side is layout and
+    // dispatch, exactly like the two control strips.
+    private Control? _momentBand;
+    private Label? _momentTitle;
+    private Label? _momentExplanation;
+    private readonly List<MomentOfTruthRow> _momentRows = [];
     private readonly List<HudButton> _controlButtons = [];
     // A permanent, invisible sample of the tooltip HudButton draws, kept for the
     // HUD readability guard's subtree walk: see CreateControlStrips and
@@ -225,6 +234,11 @@ public partial class Main : Node2D
             // ticks and stops on one, and the frame is chosen by a reading of the
             // journal the view already builds every tick.
             var demoDuel = arguments.Contains("--demo-duel", StringComparer.Ordinal);
+            // Issue #331: the frame a wave ends on. It stops on the state the
+            // party stops in rather than on a tick, because the tick a wave ends
+            // on is emergent — see ApplyDemoMomentOfTruth.
+            var demoMomentOfTruth =
+                arguments.Contains("--demo-moment-of-truth", StringComparer.Ordinal);
             var duelFrame = CommandLineArguments.ReadInt(arguments, "--demo-duel-frame");
             _flatBody = arguments.Contains("--flat-body", StringComparer.Ordinal);
             var requiresSprites = !headlessSmoke && !controlsSmoke && !cameraSmoke;
@@ -256,7 +270,7 @@ public partial class Main : Node2D
             LoadFixture(
                 fixture,
                 demoControls || demoDig || demoStone || demoBuild || demoDuel ||
-                controlsSmoke || _screenshotPath is null
+                demoMomentOfTruth || controlsSmoke || _screenshotPath is null
                     ? 1
                     : screenshotTicks);
             if (hudGuardRegression)
@@ -304,6 +318,11 @@ public partial class Main : Node2D
             if (demoDuel)
             {
                 ApplyDemoDuel(duelFrame);
+            }
+
+            if (demoMomentOfTruth)
+            {
+                ApplyDemoMomentOfTruth();
             }
             if (selectCreature is { } creatureId)
             {
@@ -843,7 +862,7 @@ public partial class Main : Node2D
                 TogglePause();
                 break;
             case Key.S:
-                Advance(1);
+                Advance(1, byHand: true);
                 break;
             // One twelfth of the blow being drawn, without running a tick: the
             // frame-by-frame half of ADR 0020's duel scene.

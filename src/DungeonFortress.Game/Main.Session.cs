@@ -262,12 +262,21 @@ public partial class Main
         }
     }
 
-    private void Advance(int ticks)
+    /// <param name="ticks">How many ticks are asked for.</param>
+    /// <param name="byHand">
+    /// Whether a person pressed STEP, as opposed to the running clock asking for
+    /// its share of the frame. Only a deliberate press earns an explanation when
+    /// the clock refuses to move (Issue #331): writing the same sentence on every
+    /// frame of a running party would bury whatever the last command answered.
+    /// </param>
+    private void Advance(int ticks, bool byHand = false)
     {
         if (_world is null || _world.IsComplete)
         {
             return;
         }
+
+        var tickBefore = _world.CurrentTick;
 
         // A tick is a new blow, so the frame the last one was scrubbed to means
         // nothing any more.
@@ -285,6 +294,16 @@ public partial class Main
         // which comes through here.
         _world.RunTicks(Math.Min(ticks, PrototypeTuning.SessionTicks - _world.CurrentTick));
         RefreshState();
+
+        // The step was spent waiting rather than played. Saying so is the whole
+        // of criterion 4 of Issue #331: the clock standing still is correct
+        // behaviour, and correct behaviour with no explanation is what the owner
+        // read as a defect.
+        if (byHand && _world.CurrentTick == tickBefore && _state is { MomentOfTruth.Open: true })
+        {
+            ExplainHeldTime();
+            UpdateHud();
+        }
     }
 
     /// <summary>
@@ -389,6 +408,7 @@ public partial class Main
         _feedback!.Text = panels.Feedback;
         _roster!.Text = panels.Roster;
         RefreshControls();
+        RefreshMomentOfTruthBand();
     }
 
     /// <summary>

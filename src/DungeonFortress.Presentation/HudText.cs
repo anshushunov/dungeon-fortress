@@ -466,11 +466,29 @@ public static class HudText
 
         foreach (var card in pause.Cards)
         {
-            var answer = card.Verdict is { } verdict ? $" → {verdict}" : string.Empty;
-            lines.Add($"{card.Name} · {Headline(card)} · {Breakdown(card)}{answer}");
+            lines.Add(MomentOfTruthCardLine(card));
         }
 
         return string.Join("\n", lines);
+    }
+
+    /// <summary>
+    /// One card as a sentence: who, what the domain says about them, the named
+    /// terms behind it, and the answer already given.
+    ///
+    /// <para>Public because the same line is now read in two places. It is the
+    /// body of the inspector-side panel above, and it is the text of the
+    /// clickable card <see cref="MomentOfTruthPanel"/> puts under the map
+    /// (Issue #331). Two wordings of one card would be two things to keep in
+    /// step, and the owner's playtest found the panel nobody was looking at —
+    /// so the fix is one sentence shown where the player is looking, not a
+    /// second sentence.</para>
+    /// </summary>
+    public static string MomentOfTruthCardLine(PrototypeMomentOfTruthCard card)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        var answer = card.Verdict is { } verdict ? $" → {verdict}" : string.Empty;
+        return $"{card.Name} · {Headline(card)} · {Breakdown(card)}{answer}";
     }
 
     /// <summary>
