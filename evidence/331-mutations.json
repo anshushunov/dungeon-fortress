@@ -1,0 +1,60 @@
+{
+  "issue": 331,
+  "recordedAt": "2026-08-08",
+  "model": "anthropic/claude-opus-5[1m]",
+  "baseCommit": "137a7da",
+  "note": "Мутанты применялись поверх закоммиченного состояния и снимались через `git checkout -- <файл>`; иначе откат снёс бы саму правку (урок #147). Подстановки записаны дословно: change.from и change.to — точный текст кода, а не пересказ.",
+  "green": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~MomentOfTruthPanelTests\"",
+    "result": "Пройден!   : не пройдено     0, пройдено    18, пропущено     0, всего    18"
+  },
+  "mutants": [
+    {
+      "id": "M1",
+      "claim": "Карточки момента истины видны вне панели инспектора.",
+      "substitution": "Полоса всегда отвечает «закрыто», то есть карточки остаются только текстом инспектора — ровно тот дефект, о котором заведена Issue #331.",
+      "file": "src/DungeonFortress.Presentation/UiControls.cs",
+      "symbol": "MomentOfTruthPanel.Of",
+      "change": {
+        "from": "        var pause = state.MomentOfTruth;\n        if (!pause.Open)\n        {\n            return ClosedPrompt;\n        }",
+        "to": "        var pause = state.MomentOfTruth;\n        if (!pause.Open || true)\n        {\n            return ClosedPrompt;\n        }"
+      },
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~MomentOfTruthPanelTests\"",
+      "result": "red",
+      "summary": "Не пройден!: не пройдено     8, пройдено    10, пропущено     0, всего    18",
+      "failedTests": [
+        "MomentOfTruthPanelTests.Every_card_is_offered_outside_the_inspector_panel",
+        "MomentOfTruthPanelTests.Pressing_a_card_points_at_the_creature_it_is_about",
+        "MomentOfTruthPanelTests.An_answered_card_carries_its_verdict",
+        "MomentOfTruthPanelTests.The_heading_carries_the_unanswered_count_and_the_countdown",
+        "MomentOfTruthPanelTests.The_countdown_falls_as_the_window_is_spent",
+        "MomentOfTruthPanelTests.The_explanation_names_both_ways_the_window_closes",
+        "MomentOfTruthPanelTests.The_selected_creature_lights_its_own_row",
+        "MomentOfTruthPanelTests.The_worst_case_band_is_never_narrower_than_the_live_one"
+      ],
+      "verbatimFailure": "  Не пройден DungeonFortress.Presentation.Tests.MomentOfTruthPanelTests.Every_card_is_offered_outside_the_inspector_panel [565 ms]\n  Сообщение об ошибке:\n   The window is open in canonical state but the band says it is closed, so the cards exist only in the inspector column — the defect Issue #331 is about.\n  Трассировка стека:\n     at DungeonFortress.Presentation.Tests.MomentOfTruthPanelTests.Every_card_is_offered_outside_the_inspector_panel() in C:\\gamedev\\_wt-331-moment-ui\\tests\\DungeonFortress.Presentation.Tests\\MomentOfTruthPanelTests.cs:line 74",
+      "revert": "git checkout -- src/DungeonFortress.Presentation/UiControls.cs"
+    },
+    {
+      "id": "M2",
+      "claim": "Клик по карточке выбирает то существо, о котором эта карточка.",
+      "substitution": "Попадание мыши отвязано от выбора: любая нажатая кнопка полосы отвечает существом первой карточки, а не своей строки.",
+      "file": "src/DungeonFortress.Presentation/UiControls.cs",
+      "symbol": "MomentOfTruthPanel.Press",
+      "change": {
+        "from": "            if (kind is { } pressed)\n            {\n                return new MomentOfTruthPress(pressed, card.CreatureId);\n            }",
+        "to": "            if (kind is { } pressed)\n            {\n                return new MomentOfTruthPress(pressed, prompt.Cards[0].CreatureId);\n            }"
+      },
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~MomentOfTruthPanelTests\"",
+      "result": "red",
+      "summary": "Не пройден!: не пройдено     2, пройдено    16, пропущено     0, всего    18",
+      "failedTests": [
+        "MomentOfTruthPanelTests.Pressing_a_card_points_at_the_creature_it_is_about",
+        "MomentOfTruthPanelTests.Both_verdicts_are_reachable_by_pressing_and_name_their_own_creature"
+      ],
+      "verbatimFailure": "  Не пройден DungeonFortress.Presentation.Tests.MomentOfTruthPanelTests.Pressing_a_card_points_at_the_creature_it_is_about [563 ms]\n  Сообщение об ошибке:\n   Assert.Equal() Failure: Values differ\nExpected: 7\nActual:   3\n  Трассировка стека:\n     at DungeonFortress.Presentation.Tests.MomentOfTruthPanelTests.Pressing_a_card_points_at_the_creature_it_is_about() in C:\\gamedev\\_wt-331-moment-ui\\tests\\DungeonFortress.Presentation.Tests\\MomentOfTruthPanelTests.cs:line 110",
+      "whyItCannotPass": "Проверка обходит все строки полосы и сравнивает результат свежего вызова Press со снапшотом симуляции, а не литерал с литералом: подстановка-константа права ровно на нулевой строке и падает на первой же следующей (ожидалось существо #7, получено #3).",
+      "revert": "git checkout -- src/DungeonFortress.Presentation/UiControls.cs"
+    }
+  ]
+}
