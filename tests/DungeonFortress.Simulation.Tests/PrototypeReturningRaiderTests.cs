@@ -195,16 +195,18 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
                 raider.Might - MightJitterOf(state, raider));
         }
 
-        // Health is read at entry, so it is compared on the tick the wave lands
+        // And stronger in exactly one way. He walks in with the health every
+        // raider walks in with: the health bonus that used to be here was removed
+        // by measurement, and asserting its absence is what keeps "the
+        // strengthening is one knob" a checked statement rather than a comment.
+        // Health is read at entry, so it is taken on the tick the wave lands
         // rather than at the end of the party, when everybody has been hit.
         var atEntry = PartyUntil(
             ShippedFixture,
             PrototypeTuning.DefaultSeed,
             world => world.GetSnapshot().Raiders.Any(raider => raider.ReturnedFromWave is not null));
         var returning = atEntry.Raiders.Single(raider => raider.ReturnedFromWave is not null);
-        Assert.Equal(
-            PrototypeTuning.RaiderHp + PrototypeTuning.ReturningRaiderHpBonus,
-            returning.Hp);
+        Assert.Equal(PrototypeTuning.RaiderHp, returning.Hp);
     }
 
     /// <summary>
@@ -221,9 +223,7 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
         {
             var body = state.Raiders.Single(raider =>
                 raider.Name == survivor.Name && raider.Wave == survivor.EscapedWave);
-            var startingHp = body.ReturnedFromWave is null
-                ? PrototypeTuning.RaiderHp
-                : PrototypeTuning.RaiderHp + PrototypeTuning.ReturningRaiderHpBonus;
+            const int startingHp = PrototypeTuning.RaiderHp;
             var expected = body.Hp >= startingHp
                 ? InjuryKind.None
                 : body.Hp * 100 > startingHp * PrototypeTuning.LightInjuryShare

@@ -90,7 +90,10 @@ public sealed partial class PrototypeWorld
         var raider = new RaiderState(
             _nextRaiderId++,
             wave.Number,
-            PrototypeTuning.RaiderHp + PrototypeTuning.ReturningRaiderHpBonus,
+            // The same health every raider walks in with. The strengthening is one
+            // knob and it is might; see PrototypeTuning for the measurement that
+            // retired the second one.
+            PrototypeTuning.RaiderHp,
             // His own wave's might plus the same jitter every raider gets, and the
             // bonus on top. Carrying over the might he had last time was the other
             // option and is wrong: renown only grows, so an old might is often

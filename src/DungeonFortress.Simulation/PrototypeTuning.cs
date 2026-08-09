@@ -373,13 +373,26 @@ public static class PrototypeTuning
     // never left" the same observation.
     public const int ReturningRaiderWaveGap = 2;
 
-    // What he brings back. Might is the whole of the strengthening and it is
-    // deliberately small: raiderMight is 3..5 over a party, so +1 is a fifth to a
-    // third of one raider and six of them are inside one wave of nine. The health
-    // is a second body's worth of blows on top, measured rather than guessed —
-    // see the contract document, section "Усиление".
+    // What he brings back, and it is one number rather than two.
+    //
+    // Might is the whole of the strengthening. It is deliberately the smallest
+    // bonus that is a bonus at all — might is an integer and raiderMight runs 3..5
+    // over a party — and that is a measurement rather than a taste: at +2 with
+    // twenty extra health the domain's score on baseline/20260726 falls from 636
+    // to 613 and one more portion goes out of the gate, which turns the return
+    // into a second driver of difficulty beside renown. Slice 1 proved that the
+    // strength of a wave is what the domain's own visibility bought, and a slice
+    // about stories may not quietly add to it.
+    //
+    // There was a health bonus here and it was removed by measurement rather than
+    // by taste. Over eight parties of baseline (seeds 20260726, 20260729,
+    // 20260730, 424242, 1, 2, 3, 7) there are 54 returning raiders; ten extra
+    // health keeps exactly one of them off the floor and leaves every party's
+    // score and every count of stolen portions identical to the tick. A tuning
+    // value whose effect cannot be read is a promise the contract cannot keep, so
+    // the strengthening is one knob whose effect is named in numbers —
+    // evidence/358-strengthening.json.
     public const int ReturningRaiderMightBonus = 1;
-    public const int ReturningRaiderHpBonus = 10;
 
     // How many creatures the domain has. It lives here because the static
     // pre-flight of a verdict needs to bound `creatureId` before any world
