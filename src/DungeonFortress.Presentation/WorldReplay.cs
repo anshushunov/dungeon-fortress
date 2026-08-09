@@ -61,10 +61,20 @@ public static class WorldReplay
     public static PrototypeWorld To(PrototypeCommandLog log, WorldPosition target)
     {
         ArgumentNullException.ThrowIfNull(log);
+        // How much of this log the target position has already heard. Counted
+        // once, off the log itself, so the loop below needs nothing from the
+        // world but two public numbers.
+        var due = log.Commands.Count(command => command.Tick <= target.Tick);
         var world = new PrototypeWorld(log);
-        while (!world.IsComplete && IsBehind(world, target))
+        // The second half of the address, kept here rather than read back out of
+        // a snapshot: a step that left the tick alone was a step of an open
+        // window, and a step that moved it ended one.
+        var waited = 0;
+        while (!world.IsComplete && IsBehind(world, waited, due, target))
         {
+            var tick = world.CurrentTick;
             world.Step();
+            waited = world.CurrentTick == tick ? waited + 1 : 0;
         }
 
         return world;
@@ -73,9 +83,44 @@ public static class WorldReplay
     /// <summary>
     /// Whether the world still has to take a step to reach the target.
     ///
-    /// <para>Addressed by the tick and by nothing else, which is the adapter's
-    /// rule as Issue #351 found it.</para>
+    /// <para><b>Away from a moment of truth</b> this is the tick and nothing
+    /// else, which is the rule the adapter has always had: a command dated at the
+    /// tick the player is standing on stays pending and takes effect on the next
+    /// one. That is what the feedback line has always promised, and nothing about
+    /// it changes.</para>
+    ///
+    /// <para><b>Inside one</b> the tick names up to forty-one different states, so
+    /// two more things have to be true before the replay may stop.</para>
+    ///
+    /// <list type="number">
+    /// <item><description>The window must have spent as many steps as the live
+    /// run had spent. Without this every press rewound the pause to the step it
+    /// opened on, and with it every verdict already answered
+    /// (Issue #351).</description></item>
+    /// <item><description>Every command the log dates at or before this position
+    /// must have been heard. This is the difference between a verdict that is
+    /// «accepted» and a verdict that is <em>answered</em>: while the window is
+    /// open the clock is stopped by design (Issue #331), so a command that waits
+    /// for the next step waits for a step that will never come unless the player
+    /// gives up the pause they are being asked to spend. It costs the window one
+    /// of its forty steps — the world does have to take a step to hear anything —
+    /// and it costs it once, because that one step hears every command dated at
+    /// the frozen tick, this press's and every earlier one's.</description></item>
+    /// </list>
+    ///
+    /// <para>Both clauses die with the window: once it closes the world runs the
+    /// tick it was holding back, the tick passes the target and the loop
+    /// stops. Nothing here changes a rule of the moment of truth — three cards,
+    /// forty steps and what silence costs are all the simulation's, untouched.</para>
     /// </summary>
-    private static bool IsBehind(PrototypeWorld world, WorldPosition target) =>
-        world.CurrentTick < target.Tick;
+    private static bool IsBehind(PrototypeWorld world, int waited, int due, WorldPosition target)
+    {
+        if (world.CurrentTick != target.Tick)
+        {
+            return world.CurrentTick < target.Tick;
+        }
+
+        return world.IsAwaitingVerdict &&
+            (waited < target.WaitedSteps || world.CommandsApplied < due);
+    }
 }

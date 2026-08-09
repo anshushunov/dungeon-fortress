@@ -138,9 +138,59 @@ public sealed class MomentOfTruthVerdictReplayTests
         Assert.Equal(opening.Unanswered - 2, band.Unanswered);
     }
 
+    /// <summary>
+    /// The third answer ends the pause, and the tick the pause was holding back
+    /// runs. This is not a new rule — <c>CloseMomentOfTruth</c> has always closed
+    /// a fully answered window — but it is the one visible consequence of
+    /// delivering a verdict at the moment it is cast, so it is written down
+    /// rather than left to be discovered.
+    /// </summary>
+    [Fact]
+    public void The_last_answer_closes_the_window_and_the_tick_it_held_back_runs()
+    {
+        var session = Session.PlayedToTheMomentOfTruth(Fixture);
+        var opening = session.Band();
+        var heldTick = session.Tick;
+
+        foreach (var card in opening.Cards)
+        {
+            Assert.True(session.Answer(card.CreatureId, VerdictKind.Reward), session.Feedback);
+        }
+
+        Assert.False(session.Band().Open, "every card was answered and the band still asks");
+        Assert.Equal(heldTick + 1, session.Tick);
+    }
+
     // ------------------------------------------------------------------
     // Criterion 4 — the other commands go through the same rebuild.
     // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Away from a moment of truth nothing about the rebuild changes: a command
+    /// dated at the tick the player is standing on stays pending and takes effect
+    /// on the next tick, which is what the feedback line has always promised.
+    /// The fix is not allowed to quietly make every command immediate.
+    /// </summary>
+    [Fact]
+    public void A_command_away_from_the_window_still_activates_on_the_next_tick()
+    {
+        var session = Session.PlayedForTicks(Fixture, 40);
+        Assert.False(session.Snapshot.MomentOfTruth.Open);
+
+        var before = session.Snapshot.Priorities[JobKind.Drill];
+        var wanted = before == 4 ? 3 : 4;
+        Assert.True(
+            session.Apply(new SetPriorityCommand(session.Tick, JobKind.Drill, wanted)),
+            session.Feedback);
+
+        Assert.Equal(before, session.Snapshot.Priorities[JobKind.Drill]);
+        Assert.Contains(
+            session.Snapshot.PendingCommands,
+            command => command.Tick == session.Tick && command.JobKind == JobKind.Drill);
+
+        session.Step(1);
+        Assert.Equal(wanted, session.Snapshot.Priorities[JobKind.Drill]);
+    }
 
     /// <summary>
     /// A priority nudge is not a verdict, but it takes the same rebuild, so it
@@ -238,6 +288,19 @@ public sealed class MomentOfTruthVerdictReplayTests
             Assert.True(
                 world.IsAwaitingVerdict,
                 $"{fixtureName} played a whole party without ever stopping between two waves.");
+            return new Session(log, world);
+        }
+
+        /// <summary>A party played for a plain number of ticks, away from any pause.</summary>
+        public static Session PlayedForTicks(string fixtureName, int ticks)
+        {
+            var log = PresentationFixtures.LogOf(fixtureName);
+            var world = new PrototypeWorld(log);
+            while (!world.IsComplete && world.CurrentTick < ticks)
+            {
+                world.Step();
+            }
+
             return new Session(log, world);
         }
 
