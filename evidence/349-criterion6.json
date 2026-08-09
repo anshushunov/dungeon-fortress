@@ -1,0 +1,33 @@
+{
+  "issue": 349,
+  "checkpoint": 5,
+  "what": "Criterion 6: the command the owner runs to see slice 5's returning-raider detour, verified on this working copy before being put in the PR body — not assembled from memory or from documentation.",
+  "background": "docs/design/SLICE_05_RETURNING_HERO.md §6.3 documents the detour as observable on baseline/20260729, naming two raiders: Крюк Немой (escaped wave 1, heavy scar, remembers (24,7)) and Секира (escaped wave 2, light scar, remembers (23,7)). scripts/run-game.ps1 had no -Seed before this Issue, so the owner's ordinary launch (baseline's own seed, 20260726) never reaches this: on 20260726 the only survivor with a scar remembers (14,7), the larder tile itself, which the design contract's §6.2 explicitly excludes from avoidance (a memory never takes away the objective) — so nothing to see. -Seed is what makes 20260729 reachable through the sanctioned entry point.",
+  "interactiveCommand": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729",
+    "whatYouSeeThatsNew": "The same graybox window as any other run-game.ps1 launch, but the party plays out on seed 20260729 instead of the fixture's own 20260726 — the seed the slice-5 design doc's detour evidence (evidence/358-memory.json) was captured on.",
+    "whatToWatch": "Paused at tick 1 by design (an interactive launch always starts there — Main.cs forces LoadFixture's tick target to 1 whenever no -ScreenshotPath is given). Press [4] for 16x speed, then [P] to run. Wave 3 starts at tick 2000 and ends by tick 2055 (dotnet test evidence below). Watch for a raider carrying a two-line name tag — 'Крюк Немой' / 'волна 1 · едва не добили (24,7)' — entering from the gate at the top-right and walking toward the kitchen/larder along the row-7 corridor. He never steps on tile (24,7): the corridor has a parallel row (row 8) directly below it, and he takes the one-tile detour around the blocked cell instead. A second raider, 'Секира' (wave 2, light scar, remembers (23,7)), does the same in wave 4 (tick 2350-2401)."
+  },
+  "verifiedScreenshotCommand": {
+    "why": "A static frame cannot show a route, but it can show the one fact a picture is uniquely suited to prove: the label is actually rendered, on the actual raider, during an actual party — not just claimed by a document. This is the command actually run on this working copy, not written from memory.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotPath 349-criterion6.png -CameraZoom 0.75 -UiScale 1 -FrameSize 1600x900 -CameraPosition 720,400 -ScreenshotTicks 2025",
+    "result": {
+      "event": "godot_graybox_screenshot",
+      "status": "ok",
+      "fixture": "baseline",
+      "seed": 20260729,
+      "tick": 2025,
+      "checksum": "448946d98f391646e5e84751dcbae1fc6ba9b3129144cff1edecbd2bc2a9adac",
+      "summaryLine": "BASELINE  •  t2025  •  PAUSED  •  jobs 15  •  448946d9  •  renown 94→  •  strength 4↓  •  crew 7\nWAVE 3/4 ACTIVE ×7  •  food 8+0  •  raw 21+18  •  stone 0L 0C 0/0S  •  dug 0  •  marks 0"
+    },
+    "screenshotPath": "evidence/349-criterion6.png",
+    "screenshotSha256": "bae41696565ed66f7ed1cbdf77a11e12034f6bd6cf78bdbae592c4ba1189db41",
+    "whatTheImageShows": "Wave 3 in progress, five raiders visible near the kitchen/larder area. One of them carries the two-line name tag 'Крюк Немой' with a second line naming his wave and the tile he was hit on — ReturningHeroLabel (docs/design/SLICE_05_RETURNING_HERO.md §8), drawn only over a raider with a scar and a remembered place (§8.2). This is the sanctioned-entry-point proof that slice 5's naming mechanism is live on the seed the design doc's detour claim was measured on; the route claim itself (he never re-visits (24,7)) is proven per-tick by the automated test below, which this screenshot's tick (2025) falls inside the window of (wave 3: tick 2000-2055)."
+  },
+  "supportingAutomatedProof": {
+    "why": "A screenshot is one tick; the avoidance claim is about every tick of a route. This is the same claim, proven exhaustively rather than sampled, and it is what the interactive/screenshot commands above are pointing the owner's own eyes at.",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~A_returning_raider_walks_round_the_place_it_was_hit_hardest\"",
+    "result": "Passed! - Failed: 0, Passed: 1, Skipped: 0, Total: 1",
+    "waveWindowForTheScreenshotTick": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_the_returning_raiders_of_the_shipped_journals\" reports, for baseline/seed 20260729: wave 3 raiderCount 7, endTick 2055 — the 2025 screenshot above is inside this wave's active window, which is why raiders including 'Крюк Немой' (returnedAsRaiderId 10) are on the map in it."
+  }
+}

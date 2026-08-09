@@ -193,7 +193,16 @@ public partial class Main
         return label;
     }
 
-    private void LoadFixture(string fixture, int ticks)
+    /// <param name="seedOverride">
+    /// Issue #349's addendum. Replaces the seed the fixture document carries
+    /// without touching the document or the fixture it names — the same record
+    /// <c>with</c> pattern the simulation's own test suite already uses to run
+    /// a fixture at a seed other than its own
+    /// (e.g. <c>tests/DungeonFortress.Simulation.Tests/PrototypeReturningRaiderTests.cs</c>).
+    /// <c>null</c> keeps the document's own seed, which is every call site of
+    /// this method that predates the parameter.
+    /// </param>
+    private void LoadFixture(string fixture, int ticks, ulong? seedOverride = null)
     {
         if (fixture is not ("baseline" or "prepared" or "neglected"))
         {
@@ -201,6 +210,11 @@ public partial class Main
         }
 
         _fixtureLog = PrototypeCommandDocument.Load(FixturePath(fixture));
+        if (seedOverride is { } seed)
+        {
+            _fixtureLog = _fixtureLog with { Seed = seed };
+        }
+
         _playerCommands.Clear();
         var world = new PrototypeWorld(_fixtureLog);
         var target = Math.Clamp(ticks, 0, PrototypeTuning.SessionTicks);

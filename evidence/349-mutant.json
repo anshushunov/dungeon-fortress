@@ -1,0 +1,56 @@
+{
+  "issue": 349,
+  "checkpoint": 3,
+  "what": "Criterion 3 (mutant obligatoire): a mutation that breaks the moment-of-truth band must redden the screenshots stage. Applied, run, observed red, reverted. Two mutants are recorded here, because the first one the Issue names as an example turned out to already redden the stage before #349 via an unrelated, pre-existing guard — a finding worth reporting rather than a clean demonstration of the gap #349 closes. The second mutant is the clean demonstration.",
+  "base": {
+    "commit": "81f0c07 (checkpoint 2, HEAD at the time both mutants were run)",
+    "howObtained": "git log -1 --format=%H before either mutant was applied"
+  },
+  "mutantA_theIssuesOwnExample": {
+    "file": "src/DungeonFortress.Game/Main.Hud.cs",
+    "was": "_momentBand!.Visible = prompt.Open;",
+    "became": "_momentBand!.Visible = false;",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage screenshots",
+    "resultOnCheckpoint2Code": {
+      "exitCode": 1,
+      "reason": "Godot emitted 1 unexpected ERROR line(s).",
+      "errorType": "InvalidOperationException",
+      "message_truncated": "The HUD loses text in 35 place(s): the moment of truth's 'momentTitle' needs 58 lines but only 0 fit in (1, 1) at viewport (1280, 720), UI scale 1; ... (34 more)",
+      "whichCaptureFailed": "the very first one — the ordinary baseline capture at tick 1, which has nothing to do with --demo-moment-of-truth or this checkpoint's new code"
+    },
+    "finding": {
+      "what": "The same mutant, applied to the ORIGINAL pre-#349 scripts/verify.ps1 (git show ad76e6b:scripts/verify.ps1, restored over the working copy for this one test, then put back), reddens the screenshots stage identically — same reason, same exit code, same first capture failing.",
+      "command": "git show ad76e6b:scripts/verify.ps1 > /tmp/verify-original.ps1; cp /tmp/verify-original.ps1 scripts/verify.ps1; powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage screenshots",
+      "result": { "exitCode": 1, "reason": "Godot emitted 1 unexpected ERROR line(s)." },
+      "why": "AssertLabelsFit's worst-case pass (Main.HudText.cs, MeasureMomentOfTruthBand) calls the exact same ShowMomentOfTruth(...) this mutant is in, with a synthetic MomentOfTruthPanel.WorstCase(_state) prompt, on every engine invocation — including the ordinary baseline screenshot that already existed in the screenshots stage before #349. That guard shipped with #331/#345 (already merged into origin/main before #349 was filed) and is unconditional: it does not depend on --demo-moment-of-truth, on this checkpoint's new capture, or on anything #349 adds.",
+      "conclusion": "Issue #349's own suggested example (“например _momentBand.Visible = false”) does redden the screenshots stage — dословно, as required — but it would have reddened it before #349 too, for an unrelated reason. Reported here rather than silently claimed as proof of what checkpoint 2 added, per AGENTS.md's «Правило факта»."
+    }
+  },
+  "mutantB_theCleanDemonstration": {
+    "file": "src/DungeonFortress.Game/Main.Hud.cs",
+    "was": "private MomentOfTruthPrompt CurrentMomentOfTruth() => _state is null\n        ? MomentOfTruthPanel.Closed\n        : MomentOfTruthPanel.Of(_state, _selectedCreatureId);",
+    "became": "private MomentOfTruthPrompt CurrentMomentOfTruth() => MomentOfTruthPanel.Closed;",
+    "why": "This breaks only the LIVE band (RefreshMomentOfTruthBand and the ui.momentOfTruth JSON field, both of which read CurrentMomentOfTruth()), not the synthetic worst-case pass AssertLabelsFit uses (MomentOfTruthPanel.WorstCase(_state), a separate construction). It is the shape of regression #349 was actually opened about: the band silently reads as always-closed on a real party, while every layout/fit guard — which only ever measured a synthetic worst case — stays green.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage screenshots",
+    "resultOnCheckpoint2Code": {
+      "exitCode": 1,
+      "capturesThatPassedBeforeTheFailure": [
+        "baseline-t1.png (godot_graybox_screenshot, status ok, tick 1)",
+        "baseline-t1-repeat.png (status ok)",
+        "prepared-raid.png (status ok, tick 1670)",
+        "moment-of-truth.png (status ok, tick 1336, checksum b541a239... — the engine itself captured the right frame)"
+      ],
+      "reason": "The moment-of-truth capture did not land on an open window.",
+      "thrownBy": "scripts/verify.ps1:1078, the ui.momentOfTruth.open assertion added in checkpoint 2",
+      "reading": "The engine ran the capture correctly (tick 1336, right checksum) but ui.momentOfTruth.open read false because CurrentMomentOfTruth() was mutated to always report Closed — exactly the class of regression a byte comparison against itself, or a layout-fit check against a synthetic worst case, cannot see."
+    },
+    "resultOnOriginalPre349VerifyPs1": {
+      "command": "cp /tmp/verify-original.ps1 scripts/verify.ps1 (same file as mutant A's finding); powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage screenshots",
+      "exitCode": 0,
+      "status": "ok",
+      "elapsedSeconds": 13,
+      "conclusion": "Confirms Issue #349's premise for this mutant: today (before #349) it passes green — the pre-#349 screenshots stage never ran --demo-moment-of-truth at all, so there was nothing for the bug to be visible to. After checkpoint 2's capture and its ui.momentOfTruth.open/visible assertions, the identical mutant reddens the stage."
+    }
+  },
+  "revert": "Both mutants were reverted with `git checkout -- src/DungeonFortress.Game/Main.Hud.cs` after their run; `git status --porcelain` was empty and `git diff --stat` was empty afterwards, confirmed before this evidence file was written. scripts/verify.ps1 was restored the same way after being temporarily swapped for the pre-#349 copy in the two `resultOnOriginalPre349VerifyPs1`/`finding` runs."
+}

@@ -3,6 +3,18 @@ param(
     [string]$GodotPath,
     [ValidateSet("baseline", "prepared", "neglected")]
     [string]$Fixture = "baseline",
+    # Overrides the seed the fixture document carries (Issue #349's addendum).
+    # A fixture bakes in one seed (scenarios\prototype1\*.commands.v2.json), and
+    # -Fixture alone cannot reach anything the shipped seed did not happen to
+    # produce — the gap the gate-decisions log recorded on 2026-08-02: the
+    # returning-raider detour of slice 5 (#358) exists only on seed 20260729,
+    # while this script's own baseline fixture carries 20260726. Omitted, the
+    # fixture's own seed is used unchanged, exactly as before this parameter
+    # existed. PrototypeCommandLog.Seed already accepts any value the document
+    # format allows (an unsigned 64-bit integer); this only reaches the
+    # constructor a different way, which is why no line in
+    # DungeonFortress.Simulation moves for it.
+    [Nullable[UInt64]]$Seed,
     [string]$ScreenshotPath,
     # Upper bound = T.session_ticks, the fuse a party can never run past. A
     # PowerShell attribute argument has to be a literal, so this number is a copy
@@ -28,6 +40,15 @@ param(
     [switch]$DemoDuel,
     [ValidateRange(0, 12)]
     [Nullable[int]]$DuelFrame,
+    # Issue #331/#345's probe scene, the other half of Issue #349: the frame a
+    # wave's moment-of-truth window opens on. It ran the engine only when called
+    # directly, mimicking this script's own --demo-duel and --demo-controls
+    # rather than being one, which is what made the flag's only reachable frame
+    # the one #349 was opened about (evidence/331-frame.json's command bypasses
+    # this script entirely). Engine-side behaviour is unchanged; this only wires
+    # the already-shipped --demo-moment-of-truth through, the same as every
+    # other -Demo* switch below.
+    [switch]$DemoMomentOfTruth,
     # Draws the flat six-pose pack where the cutout rig would be drawn, on the
     # same scene at the same moment. It is the A/B ADR 0020's revision condition
     # asks for, and it is what the "before" frames of Issue #244 were captured
@@ -213,6 +234,9 @@ $arguments += @(
     "--tile-size", $TileSize.ToString([Globalization.CultureInfo]::InvariantCulture),
     "--camera-position", $CameraPosition
 )
+if ($null -ne $Seed) {
+    $arguments += "--seed", ([UInt64]$Seed).ToString([Globalization.CultureInfo]::InvariantCulture)
+}
 # Absent, not empty: the game distinguishes "no frame declared" from a declared
 # one, and an empty --ui-scale would parse as a value.
 if ($hasCameraZoom) {
@@ -252,6 +276,9 @@ if ($DemoBuild) {
 }
 if ($DemoDuel) {
     $arguments += "--demo-duel"
+}
+if ($DemoMomentOfTruth) {
+    $arguments += "--demo-moment-of-truth"
 }
 if ($FlatBody) {
     $arguments += "--flat-body"
