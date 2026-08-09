@@ -545,7 +545,50 @@ public sealed record PrototypeRaiderSnapshot(
     int CarryingMeals,
     int StealTicks,
     bool ReturningToGate,
-    RaiderMode Mode);
+    RaiderMode Mode,
+    // Appended for slice 5 (Issue #358). Every raider has one, because a raider
+    // the domain never touched still has to be the same raider if it comes back;
+    // only the ones who have already been here are named on screen.
+    string Name = "",
+    // The wave this raider walked out of alive, and null for one arriving for the
+    // first time. It is what turns the three fields below from decoration into a
+    // claim the snapshot can be asked to prove.
+    int? ReturnedFromWave = null,
+    // What the previous raid left on this raider, derived from the damage it
+    // actually took and never assigned: None for one nobody reached.
+    InjuryKind Scar = InjuryKind.None,
+    // Where it was hit hardest last time, in the same shape a creature remembers
+    // a place in. Null for a raider with no scar — nobody got it, so there is no
+    // place to remember.
+    PrototypeRememberedPlace? RememberedPlace = null);
+
+/// <summary>
+/// One raider who walked out of the domain alive, and what the domain will get
+/// back (pitch 6.8, Issue #358).
+///
+/// <para>This section exists because "there is no wave left to come back to" has
+/// to be <b>visible</b> rather than silently dropped: a raider that escaped in the
+/// last two waves of the party is a return the domain never has to answer, and a
+/// slice that quietly forgot it would be indistinguishable from one whose return
+/// rule is broken.</para>
+/// </summary>
+/// <param name="Status">
+/// One of four: <c>awaiting</c> — the return wave has not arrived yet;
+/// <c>returned</c> — it walked back in; <c>no_wave_left</c> — the return wave is
+/// past the end of the party; <c>no_room_in_wave</c> — the return wave arrived
+/// with fewer places in it than there were survivors to fill them, and this one
+/// did not get one. The last one is the price of the composition rule: a returning
+/// raider takes a place in the wave instead of being added to it.
+/// </param>
+public sealed record PrototypeSurvivorSnapshot(
+    string Name,
+    int EscapedWave,
+    int EscapedTick,
+    int ReturnWave,
+    string Status,
+    InjuryKind Scar,
+    PrototypeRememberedPlace? RememberedPlace,
+    int? ReturnedAsRaiderId);
 
 /// <summary>
 /// The end of the party, not the end of a wave. <see cref="Outcome"/> is
@@ -617,7 +660,10 @@ public sealed record PrototypeSnapshot(
     IReadOnlyList<PrototypeRoomSnapshot> Rooms,
     // Appended for the same reason. The pause between two waves, its cards and
     // the answers already given.
-    PrototypeMomentOfTruthSnapshot MomentOfTruth);
+    PrototypeMomentOfTruthSnapshot MomentOfTruth,
+    // Appended for the same reason (Issue #358). Everybody who left the domain
+    // alive, when they are due back, and what became of that debt.
+    IReadOnlyList<PrototypeSurvivorSnapshot> Survivors);
 
 public sealed record PrototypeRunResult(
     int Tick,

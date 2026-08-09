@@ -518,7 +518,13 @@ public sealed partial class PrototypeWorld
         public void CountDefenderFled() => DefendersFled++;
     }
 
-    private sealed class RaiderState(int id, int wave, int hp, int might, GridPoint position)
+    private sealed class RaiderState(
+        int id,
+        int wave,
+        int hp,
+        int might,
+        GridPoint position,
+        string name)
     {
         public int Id { get; } = id;
         public int Wave { get; } = wave;
@@ -529,6 +535,99 @@ public sealed partial class PrototypeWorld
         public int StealTicks { get; set; }
         public bool ReturningToGate { get; set; }
         public RaiderMode Mode { get; set; } = RaiderMode.Raiding;
+
+        /// <summary>
+        /// What this one is called. It is drawn once, from the party's own
+        /// deterministic stream, and survives the raider: a survivor keeps it and
+        /// the body that walks back in two waves later carries the same string.
+        /// </summary>
+        public string Name { get; } = name;
+
+        /// <summary>
+        /// The wave this raider walked out of alive, if it is here because it did.
+        /// Null for a raider entering the domain for the first time.
+        /// </summary>
+        public int? ReturnedFromWave { get; init; }
+
+        /// <summary>
+        /// What the previous raid left on it, and the place it was hit hardest
+        /// then. Both are read off the damage that actually landed
+        /// (<see cref="Scar"/> below is a function of <see cref="LowestHp"/>), so
+        /// neither can be handed out by the wave that carries it.
+        /// </summary>
+        public InjuryKind ScarFromLastTime { get; init; }
+
+        /// <inheritdoc cref="ScarFromLastTime"/>
+        public PrototypeRememberedPlace? RememberedPlace { get; init; }
+
+        /// <summary>
+        /// The health this raider walked in with. A returning one walks in with
+        /// more, so the share the scar is read against has to be its own starting
+        /// health rather than the constant every fresh raider shares.
+        /// </summary>
+        public int StartingHp { get; } = hp;
+
+        /// <summary>The low-water mark of its health over this raid.</summary>
+        public int LowestHp { get; private set; } = hp;
+
+        /// <summary>
+        /// The single hardest blow it took this raid, and where it was standing
+        /// when it landed. The hardest and not the first: the first blow of a raid
+        /// is usually a graze traded on the way past, and «где его достали» is the
+        /// place the domain nearly finished it, not the place it walked through.
+        /// Ties go to the earlier tick, so the answer never depends on the order
+        /// two equal blows happened to be resolved in.
+        /// </summary>
+        public (int Damage, GridPoint Place, int Tick)? WorstBlow { get; private set; }
+
+        public void RecordBlow(int damage, int tick)
+        {
+            LowestHp = Math.Min(LowestHp, Hp);
+            if (WorstBlow is { } worst && worst.Damage >= damage)
+            {
+                return;
+            }
+
+            WorstBlow = (damage, Position, tick);
+        }
+
+        /// <summary>
+        /// What this raid left on it, read off the health it actually lost. A
+        /// raider nobody reached carries nothing; the share that separates a light
+        /// mark from a heavy one is <see cref="PrototypeTuning.LightInjuryShare"/>,
+        /// the same one the domain's own people are wounded by, so the two sides
+        /// of the fight are read with one ruler.
+        /// </summary>
+        public InjuryKind Scar =>
+            LowestHp >= StartingHp
+                ? InjuryKind.None
+                : LowestHp * 100 > StartingHp * PrototypeTuning.LightInjuryShare
+                    ? InjuryKind.Light
+                    : InjuryKind.Heavy;
+    }
+
+    /// <summary>
+    /// A raider who walked out of the domain alive and the return the domain owes
+    /// because of it. It is live state and not a snapshot projection: whether a
+    /// place in a wave was found for this one is decided while the wave is
+    /// entering, and the answer has to survive into the canonical document.
+    /// </summary>
+    private sealed class SurvivorState(
+        string name,
+        int escapedWave,
+        int escapedTick,
+        int returnWave,
+        InjuryKind scar,
+        PrototypeRememberedPlace? rememberedPlace)
+    {
+        public string Name { get; } = name;
+        public int EscapedWave { get; } = escapedWave;
+        public int EscapedTick { get; } = escapedTick;
+        public int ReturnWave { get; } = returnWave;
+        public InjuryKind Scar { get; } = scar;
+        public PrototypeRememberedPlace? RememberedPlace { get; } = rememberedPlace;
+        public string Status { get; set; } = "awaiting";
+        public int? ReturnedAsRaiderId { get; set; }
     }
 
     private sealed class EventState(

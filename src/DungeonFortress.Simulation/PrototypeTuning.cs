@@ -361,6 +361,26 @@ public static class PrototypeTuning
     public const int MomentOfTruthDeedWeight = 50;
     public const int MomentOfTruthWindowSteps = 40;
 
+    // ------------------------------------------------------------------
+    // The returning raider (slice 5 of the pitch's order of proof, section 6.8).
+    // Design contract: docs/design/SLICE_05_RETURNING_HERO.md. Tuning by ADR 0010;
+    // what is an invariant is stated in that document and not in these numbers.
+    // ------------------------------------------------------------------
+
+    // How many waves later a raider who left alive comes back. Two, which is the
+    // shortest reading of the pitch's «через несколько волн» that still leaves a
+    // wave the domain does not see him in: one would make "he is back" and "he
+    // never left" the same observation.
+    public const int ReturningRaiderWaveGap = 2;
+
+    // What he brings back. Might is the whole of the strengthening and it is
+    // deliberately small: raiderMight is 3..5 over a party, so +1 is a fifth to a
+    // third of one raider and six of them are inside one wave of nine. The health
+    // is a second body's worth of blows on top, measured rather than guessed —
+    // see the contract document, section "Усиление".
+    public const int ReturningRaiderMightBonus = 1;
+    public const int ReturningRaiderHpBonus = 10;
+
     // How many creatures the domain has. It lives here because the static
     // pre-flight of a verdict needs to bound `creatureId` before any world
     // exists, and the population is fixed for the whole of Prototype 1

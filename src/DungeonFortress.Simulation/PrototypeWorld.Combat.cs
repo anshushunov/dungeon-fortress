@@ -46,13 +46,17 @@ public sealed partial class PrototypeWorld
         while (wave.Entered < wave.RaiderCount &&
                CurrentTick >= wave.ArriveTick + wave.Entered * PrototypeTuning.RaiderEntryInterval)
         {
-            _raiders.Add(new RaiderState(
-                _nextRaiderId++,
-                wave.Number,
-                PrototypeTuning.RaiderHp,
-                wave.RaiderMight + CombatJitter(PrototypeTuning.RaiderMightJitter),
-                PrototypeMap.Gate));
+            // Who walks in is decided by NextRaiderOf; how many walk in is decided
+            // above it by the wave's own composition, which nothing in slice 5
+            // touches. A returning raider therefore takes one of these places and
+            // never adds one (Issue #358).
+            _raiders.Add(NextRaiderOf(wave));
             wave.Entered++;
+        }
+
+        if (wave.Entered == wave.RaiderCount)
+        {
+            CloseReturnsFor(wave);
         }
 
         if (!wave.Arrived)
@@ -187,6 +191,11 @@ public sealed partial class PrototypeWorld
         var damage = Math.Max(PrototypeTuning.DamageFloor,
             creature.Might + ComputeReadiness(creature) / PrototypeTuning.DamageReadinessDivisor + CombatJitter(PrototypeTuning.DamageJitter));
         target.Hp -= damage;
+        // The raider writes down what this cost it and where it was standing. It
+        // is the source of both the scar and the memory of place a return carries
+        // (Issue #358), and it is recorded here rather than derived later because
+        // "where" stops being answerable the moment the raider takes its next step.
+        target.RecordBlow(damage, CurrentTick);
         RecordDecision(creature, "combat_attack", new Dictionary<string, int> { ["raiderId"] = target.Id, ["damage"] = damage });
         if (target.Hp <= 0)
         {
@@ -349,7 +358,9 @@ public sealed partial class PrototypeWorld
                     continue;
                 }
             }
-            var next = _map.NextStep(raider.Position, target, _zones[ZoneKind.Forbidden]);
+            // Round the place the domain nearly finished him last time, when there
+            // is a way round: the raider side of memory of place (Issue #358).
+            var next = RaiderStep(raider, target);
             if (next is { } step)
             {
                 raider.Position = step;
@@ -357,6 +368,7 @@ public sealed partial class PrototypeWorld
             if (target == PrototypeMap.Gate && raider.Position == PrototypeMap.Gate)
             {
                 raider.Mode = RaiderMode.Escaped;
+                RecordSurvivor(raider);
             }
         }
 

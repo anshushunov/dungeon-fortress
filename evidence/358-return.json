@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "issue": 358,
+  "when": "2026-08-09, taken on branch feature/358-returning-hero at checkpoint 2",
+  "what": "Criteria 2 and 3 of Issue #358: the raider who left alive is back two waves later under the same name, and the wave he is back in did not grow.",
+  "base": {
+    "commit": "dc15bc2",
+    "howObtained": "git worktree add --detach ../_wt-358-base origin/main, then git log --oneline -1 in it"
+  },
+  "howObtained": {
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeReturningRaiderTests\" --logger \"console;verbosity=detailed\"",
+    "checks": [
+      "A_raider_who_left_alive_comes_back_two_waves_later_under_the_same_name",
+      "A_returning_raider_takes_a_place_in_the_wave_instead_of_adding_one",
+      "A_return_with_no_wave_left_is_written_down_rather_than_dropped"
+    ],
+    "result": "10 of 10 green",
+    "theNumbersBelow": "printed by Report_the_returning_raiders_of_the_shipped_journals in the same run"
+  },
+  "criterion2_absentThenBack": {
+    "fixture": "baseline.commands.v2.json",
+    "seed": 20260726,
+    "sample": {
+      "name": "Пепел Щербатый",
+      "escapedAsRaiderId": 5,
+      "escapedWave": 2,
+      "escapedTick": 1719,
+      "waveHeIsNotIn": 3,
+      "returnWave": 4,
+      "returnedAsRaiderId": 22,
+      "scarCarried": "light",
+      "remembers": "(14,7) written at tick 1697"
+    },
+    "allSixOfThatWave": [
+      "Бурый Щербатый: escapedWave 2 -> returnWave 4, raiderId 6 -> 19",
+      "Заноза: escapedWave 2 -> returnWave 4, raiderId 8 -> 20",
+      "Крюк: escapedWave 2 -> returnWave 4, raiderId 7 -> 21",
+      "Пепел Щербатый: escapedWave 2 -> returnWave 4, raiderId 5 -> 22",
+      "Плешь: escapedWave 2 -> returnWave 4, raiderId 9 -> 23",
+      "Хват Меньшой: escapedWave 2 -> returnWave 4, raiderId 10 -> 24"
+    ],
+    "whereItIsInTheSnapshot": "raiders[].returnedFromWave and raiders[].name, plus the survivors[] section, which carries the same six with status 'returned' and the raider id each came back as."
+  },
+  "criterion3_theWaveDidNotGrow": {
+    "wave": 4,
+    "renownAtAnnounce": 105,
+    "fromTheRenownFormula": "min(T.wave_max_raiders 12, T.wave_base_raiders 4 + 105 / T.renown_per_extra_raider 20) = 4 + 5 = 9",
+    "raiderCountInTheSnapshot": 9,
+    "raidersOfThatWaveOnTheMap": 9,
+    "ofWhichReturning": 6,
+    "beforeTheChange": {
+      "wave4RaiderCount": 9,
+      "howObtained": "the same fixture and seed run on dc15bc2 in ../_wt-358-base, see evidence/358-strengthening.json"
+    },
+    "reading": "the same nine places, six of them filled by people the domain has already met."
+  },
+  "returnsThePartyHasNoRoomFor": {
+    "rule": "escapedWave + T.returning_raider_wave_gap (2). A return wave past T.wave_count is recorded with status 'no_wave_left' rather than dropped.",
+    "observedOnBaseline20260726": {
+      "no_wave_left": 16,
+      "returned": 6,
+      "awaiting": 0,
+      "no_room_in_wave": 0
+    },
+    "whyNoRoomInWaveIsZeroHere": "the shipped party never has more survivors due back in one wave than that wave has places. The branch exists because it can be reached — twelve escapes into a four-place wave — and it is held by the same status vocabulary the test asserts over."
+  }
+}
