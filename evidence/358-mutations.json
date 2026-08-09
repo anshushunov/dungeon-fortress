@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "issue": 358,
+  "when": "2026-08-09, run on the committed tree at checkpoint 6 (b4ba572) and re-run afterwards",
+  "what": "Criterion 7 of Issue #358: one mutant per half of the change, not one for the change as a whole. A check that only reddens when the whole edit is reverted proves one half is covered and says nothing about the other.",
+  "howToReproduce": {
+    "runner": ".artifacts/mutate-358.py — applies each replacement to one source file, runs the checks, records the summary and the names that went red, and puts the file back in a finally block. It re-runs the checks afterwards, so the last line of its output is the shipped tree.",
+    "command": "python .artifacts/mutate-358.py",
+    "checks": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeReturningRaiderTests\"",
+    "baseline": "10 of 10 green on the shipped tree, run last, after every mutation was put back",
+    "whyThisSuite": "the ten checks of PrototypeReturningRaiderTests are the ones that state the four rules. The whole project is green too — 347 of 347, evidence/358-invariants.json — but a mutation pass over a suite that also holds 337 unrelated checks would report noise beside the signal.",
+    "whyAfterTheCommit": "a mutation is put back with a write and, if anything goes wrong, with `git checkout --`. On Issue #147 that restore was run against an uncommitted file and took the change with it. The tree was committed first."
+  },
+  "mutants": [
+    {
+      "half": "the return rule — escapedWave + T.returning_raider_wave_gap",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.ReturningRaiders.cs",
+      "edit": "var returnWave = raider.Wave + PrototypeTuning.ReturningRaiderWaveGap;  ->  var returnWave = raider.Wave + 1;",
+      "whyNotTheTuningConstant": "changing T.returning_raider_wave_gap moves the check as well, because the check reads the same constant. The mutant has to break the rule and not the number, so it is the expression that is edited.",
+      "result": "2 of 10 red",
+      "red": [
+        "A_raider_who_left_alive_comes_back_two_waves_later_under_the_same_name",
+        "A_return_with_no_wave_left_is_written_down_rather_than_dropped"
+      ]
+    },
+    {
+      "half": "the composition rule — a returning raider takes a place, never adds one",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs",
+      "edit": "wave.Entered++ becomes conditional on the entering raider being a stranger, so a returner arrives on top of the wave instead of inside it",
+      "result": "2 of 10 red",
+      "red": [
+        "A_returning_raider_takes_a_place_in_the_wave_instead_of_adding_one",
+        "A_returning_raider_is_stronger_than_the_wave_it_arrives_with"
+      ]
+    },
+    {
+      "half": "walking round the remembered place",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.ReturningRaiders.cs",
+      "edit": "RaiderBlockedTiles stops adding the remembered tile and returns the Forbidden zone unchanged",
+      "result": "1 of 10 red",
+      "red": ["A_returning_raider_walks_round_the_place_it_was_hit_hardest"],
+      "note": "A_memory_takes_away_a_road_and_never_the_objective stays green under this mutant, and correctly so: it asserts that the raider whose remembered tile is the larder does walk onto it, which is true with and without the avoidance. It is the bound and not the rule."
+    },
+    {
+      "half": "the name comes from the seed and from nothing else",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.ReturningRaiders.cs",
+      "edit": "the nickname index comes from Guid.NewGuid().GetHashCode() instead of from _raiderNameRandom",
+      "whyThisSource": "it is one of the seven forms criterion 1 forbids by name, so the mutant is the criterion's own counterexample rather than an invented one",
+      "result": "1 of 10 red",
+      "red": ["A_name_is_deterministic_and_no_two_raiders_of_one_party_share_one"]
+    }
+  ],
+  "shippedTree": "10 of 10 green, run after every mutant was put back"
+}
