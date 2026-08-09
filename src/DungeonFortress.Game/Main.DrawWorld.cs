@@ -169,6 +169,7 @@ public partial class Main
         DrawRoomLabels(rockTiles);
         DrawUnroomedObjects();
         DrawRememberedPlaces(rockTiles);
+        DrawReturningHeroLabels();
         BeginWorldDrawPass(WorldDrawPass.Interaction);
         DrawCellInteractionOverlays(rockTiles);
         DrawBrushPreview(rockTiles);
@@ -208,6 +209,64 @@ public partial class Main
                 : new Color("#fbbf24");
             DrawRect(rect.Grow(-3), color, false, 2.0f);
             DrawLine(rect.Position + rect.Size * 0.25f, rect.End - rect.Size * 0.25f, color, 2.0f);
+        }
+    }
+
+    /// <summary>
+    /// The raider the domain has already met, saying so (Issue #358).
+    ///
+    /// Who gets a caption, what it says and where it sits are all decided by
+    /// <c>DungeonFortress.Presentation.ReturningHeroLabel</c>; this routine
+    /// multiplies its reference geometry by the tile scale and hands the strings
+    /// to the engine. That split is the same one every other mark of this pass
+    /// takes, and it is why the wording of the caption can be checked by a CI job
+    /// that never opens Godot (ADR 0011).
+    /// </summary>
+    private void DrawReturningHeroLabels()
+    {
+        foreach (var caption in ReturningHeroLabel.Layout(_state!))
+        {
+            DrawReturningHeroLabel(caption, RaiderRenderCenter(caption.Raider));
+        }
+    }
+
+    /// <inheritdoc cref="DrawReturningHeroLabels"/>
+    private void DrawReturningHeroLabel(ReturningHeroCaption caption, Vector2 center)
+    {
+        var width = ScaleWorld((float)ReturningHeroLabel.LabelWidthRef);
+        var outline = Math.Max(1, (int)Math.Round(ScaleWorld((float)ReturningHeroLabel.OutlineRef)));
+        var lines = caption.Lines;
+        var sizes = new[] { ReturningHeroLabel.NameTextRef, ReturningHeroLabel.StoryTextRef };
+        var colors = new[] { ReturningHeroLabel.NameColor, ReturningHeroLabel.StoryColor };
+        for (var index = 0; index < lines.Count; index++)
+        {
+            var origin = center + ScaleWorld(
+                0,
+                (float)(ReturningHeroLabel.TopRefOf(caption.Slot) +
+                    (index * ReturningHeroLabel.LineHeightRef))) -
+                new Vector2(width / 2f, 0);
+            var size = Math.Max(1, (int)Math.Round(ScaleWorld((float)sizes[index])));
+
+            // The rim first, for the reason the damage numbers of Issue #210 have
+            // one: a caption drawn straight over a goblin cannot be read, and a
+            // plate under it would be the fill this mark is declared not to have.
+            DrawStringOutline(
+                ThemeDB.FallbackFont,
+                origin,
+                lines[index],
+                HorizontalAlignment.Center,
+                width,
+                size,
+                outline,
+                new Color(ReturningHeroLabel.OutlineColor));
+            DrawString(
+                ThemeDB.FallbackFont,
+                origin,
+                lines[index],
+                HorizontalAlignment.Center,
+                width,
+                size,
+                new Color(colors[index]));
         }
     }
 

@@ -87,10 +87,11 @@ public sealed class InformationalOverlayRuleTests
     /// nobody reads looks load-bearing and is not.
     ///
     /// <para>
-    /// The list is named rather than derived on purpose. Two marks are on it —
-    /// what a body <em>is</em> (<see cref="OverlayMark.BodyState"/>) and what has
+    /// The list is named rather than derived on purpose. Three marks are on it —
+    /// what a body <em>is</em> (<see cref="OverlayMark.BodyState"/>), what has
     /// just <em>happened</em> to it (<see cref="OverlayMark.BlowFeedback"/>, Issue
-    /// #210) — and a third one joining them has to be an edit here, because
+    /// #210) and <em>who it is</em> (<see cref="OverlayMark.ReturningHero"/>,
+    /// Issue #358) — and a fourth one joining them has to be an edit here, because
     /// declaring a cell mark as a body mark is how the one rule of this pass would
     /// be escaped rather than answered.
     /// </para>
@@ -99,7 +100,7 @@ public sealed class InformationalOverlayRuleTests
     public void Only_a_body_readout_is_outside_the_rule_and_the_cell_flag_is_never_dead()
     {
         Assert.Equal(
-            new[] { OverlayMark.BodyState, OverlayMark.BlowFeedback },
+            new[] { OverlayMark.BodyState, OverlayMark.BlowFeedback, OverlayMark.ReturningHero },
             InformationalOverlays.All
                 .Where(rule => rule.Subject != OverlayMarkSubject.Cell)
                 .Select(rule => rule.Mark)

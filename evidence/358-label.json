@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "issue": 358,
+  "when": "2026-08-09, taken on branch feature/358-returning-hero at checkpoint 5",
+  "what": "Criterion 8 of Issue #358: the game runs and the caption over the returning raider is on screen. The command was run on this working copy, not assembled from memory.",
+  "base": {
+    "commit": "dc15bc2",
+    "howObtained": "git worktree add --detach ../_wt-358-base origin/main, then git log --oneline -1 in it"
+  },
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -ScreenshotTicks 2380 -ScreenshotPath \".artifacts/probe/358-label.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0",
+  "whyTick2380": "wave 4 of baseline arrives at tick 2350 and is resolved at 2415; the six returning raiders of wave 2 are inside the domain for that whole stretch. Anything before T.first_raid_tick + 3 * T.wave_interval_ticks shows no return at all, because nobody has come back yet.",
+  "result": {
+    "event": "godot_graybox_screenshot",
+    "status": "ok",
+    "tick": 2380,
+    "checksum": "4739a5f8d53bdef04977391c7be381c19a91cb88d23e225842944d100778390a",
+    "frame": "evidence/358-label.png"
+  },
+  "whatIsInTheFrame": [
+    "«Пепел Щербатый» with a second line «волна 2 · достали (14,7)» — the only one of the six with a scar, so the only one with a past encounter to name",
+    "«Крюк», «Заноза», «Бурый Щербатый» with a name and nothing else — they walked out untouched, so there is no encounter to put under the name",
+    "the other raiders of the wave carry no caption at all: they are here for the first time"
+  ],
+  "whatTheFirstCaptureShowedAndWhatChanged": {
+    "before": "one caption at one height per body. Raiders bunch — they all walk to the same larder tile — so five of the six names were printed on top of one another and the second line was clipped by the label width.",
+    "after": "captions that would collide take the next band up (ReturningHeroLabel.Layout), the label is 130 reference pixels wide instead of 80, and a returner without a scar gets one line instead of two.",
+    "heldBy": "ReturningHeroLabelTests.Captions_that_would_collide_are_laid_in_bands_above_one_another"
+  },
+  "whatToLookAt": "whether the returning raiders read as people you have met — and whether knowing that changes what you do in wave 4. That question cannot be closed by a test run and is the playtest question of the slice."
+}
