@@ -728,8 +728,58 @@ public static class PrototypeCanonical
             writer.WriteNumber("stealTicks", raider.StealTicks);
             writer.WriteBoolean("returningToGate", raider.ReturningToGate);
             writer.WriteString("mode", ToJson(raider.Mode));
+
+            // The returning raider (Issue #358). Additive, like `rememberedPlaces`
+            // and `loyalty` before it: four new fields on an existing section, no
+            // field renamed, removed, retyped or re-pointed, so the schema version
+            // does not move — see docs/engineering/PROTOTYPE_HEADLESS.md,
+            // "Версионирование канонического снапшота". No mid-party frame before
+            // the first wave moves either, because the section is empty until a
+            // raider walks through the gate.
+            writer.WriteString("name", raider.Name);
+            if (raider.ReturnedFromWave is { } returnedFromWave)
+            {
+                writer.WriteNumber("returnedFromWave", returnedFromWave);
+            }
+            else
+            {
+                writer.WriteNull("returnedFromWave");
+            }
+
+            writer.WriteString("scar", ToJson(raider.Scar));
+            WriteRememberedPlace(writer, "rememberedPlace", raider.RememberedPlace);
             writer.WriteEndObject();
         }
+        writer.WriteEndArray();
+
+        // Everybody who left the domain alive and the return each escape owes it
+        // (Issue #358). A top-level section rather than a derivation of `raiders`,
+        // because a survivor outlives the body that carried him: the raider is off
+        // the map and the debt is not, and "there was no wave left to come back
+        // to" has to be readable rather than inferred from an absence.
+        writer.WriteStartArray("survivors");
+        foreach (var survivor in state.Survivors)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("name", survivor.Name);
+            writer.WriteNumber("escapedWave", survivor.EscapedWave);
+            writer.WriteNumber("escapedTick", survivor.EscapedTick);
+            writer.WriteNumber("returnWave", survivor.ReturnWave);
+            writer.WriteString("status", survivor.Status);
+            writer.WriteString("scar", ToJson(survivor.Scar));
+            WriteRememberedPlace(writer, "rememberedPlace", survivor.RememberedPlace);
+            if (survivor.ReturnedAsRaiderId is { } returnedAsRaiderId)
+            {
+                writer.WriteNumber("returnedAsRaiderId", returnedAsRaiderId);
+            }
+            else
+            {
+                writer.WriteNull("returnedAsRaiderId");
+            }
+
+            writer.WriteEndObject();
+        }
+
         writer.WriteEndArray();
         writer.WriteStartObject("sessionResult");
         if (state.SessionResult.Outcome is { } outcome) writer.WriteString("outcome", outcome); else writer.WriteNull("outcome");
@@ -809,6 +859,29 @@ public static class PrototypeCanonical
         }
 
         writer.WriteEndArray();
+    }
+
+    /// <summary>
+    /// One remembered place, or <c>null</c> where there is none. The same three
+    /// properties a creature's memory is written with, in the same order, so the
+    /// two sides of the fight remember a place in one shape.
+    /// </summary>
+    private static void WriteRememberedPlace(
+        Utf8JsonWriter writer,
+        string name,
+        PrototypeRememberedPlace? place)
+    {
+        if (place is not { } remembered)
+        {
+            writer.WriteNull(name);
+            return;
+        }
+
+        writer.WriteStartObject(name);
+        WritePoint(writer, "place", remembered.Place);
+        writer.WriteNumber("tick", remembered.Tick);
+        writer.WriteString("cause", remembered.Cause);
+        writer.WriteEndObject();
     }
 
     private static void WriteDetails(

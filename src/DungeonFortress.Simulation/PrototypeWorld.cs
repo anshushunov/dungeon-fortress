@@ -32,6 +32,14 @@ public sealed partial class PrototypeWorld
     // consequence of how the domain played rather than of a wave counter, and it
     // is the seam an event layer would replace without touching combat.
     private readonly List<WaveState> _waves;
+
+    // Everybody who left the domain alive, oldest escape first. It is the whole
+    // of the return rule's memory: a wave's composition is still decided from
+    // renown alone, and this list only decides *who* fills the places that
+    // composition allows (Issue #358).
+    private readonly List<SurvivorState> _survivors = [];
+    private readonly HashSet<string> _raiderNames = new(StringComparer.Ordinal);
+    private DeterministicRandom _raiderNameRandom;
     private readonly DeterministicRandom _combatRandom;
     private readonly Dictionary<GridPoint, int> _stationOccupiedTicks =
         PrototypeMap.KitchenTiles
@@ -111,6 +119,10 @@ public sealed partial class PrototypeWorld
         _creatures = CreateCreatures(commandLog.Seed);
         _waves = CreateWaves();
         _combatRandom = new DeterministicRandom(commandLog.Seed ^ 0x636F6D626174UL);
+        // Its own stream, salted apart from combat: drawing a name must not move
+        // the jitter of anybody's blow (Issue #358).
+        _raiderNameRandom = new DeterministicRandom(
+            commandLog.Seed ^ PrototypeRaiderNames.StreamSalt);
     }
 
     /// <summary>
@@ -474,13 +486,15 @@ public sealed partial class PrototypeWorld
                 _waves.Count(wave => wave.Outcome is not null),
                 _waves.Count),
             _raiders.OrderBy(raider => raider.Id).Select(raider => new PrototypeRaiderSnapshot(
-                raider.Id, raider.Wave, raider.Hp, raider.Might, raider.Position, raider.CarryingMeals, raider.StealTicks, raider.ReturningToGate, raider.Mode)).ToArray(),
+                raider.Id, raider.Wave, raider.Hp, raider.Might, raider.Position, raider.CarryingMeals, raider.StealTicks, raider.ReturningToGate, raider.Mode,
+                raider.Name, raider.ReturnedFromWave, raider.ScarFromLastTime, raider.RememberedPlace)).ToArray(),
             BuildSessionResult(),
             // Derived here and stored nowhere (ADR 0013, variant C): a room is
             // whatever the zones and the map add up to at this tick, so it cannot
             // fall out of step with them and no command creates one directly.
             PrototypeRooms.Derive(_map, _zones, _priorities),
-            ToMomentOfTruthSnapshot());
+            ToMomentOfTruthSnapshot(),
+            [.. SurvivorSnapshots()]);
     }
 
     /// <summary>

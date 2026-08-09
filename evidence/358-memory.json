@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "issue": 358,
+  "when": "2026-08-09, taken on branch feature/358-returning-hero at checkpoint 4",
+  "what": "Criterion 5 of Issue #358: the route of the returning raider does not pass through the tile he remembers, and the route of the same raider before he remembered it does.",
+  "base": {
+    "commit": "dc15bc2",
+    "howObtained": "git worktree add --detach ../_wt-358-base origin/main, then git log --oneline -1 in it"
+  },
+  "howObtained": {
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~A_returning_raider_walks_round_the_place_it_was_hit_hardest\"",
+    "whatItDoes": "runs baseline.commands.v2.json at seed 20260729 tick by tick from T.first_raid_tick to the end of the party, records every tile every raider ever stood on, and compares the set of the returning body with the set of the body that carried the same name last time",
+    "result": "passed",
+    "secondCheck": "dotnet test ... --filter \"FullyQualifiedName~A_memory_takes_away_a_road_and_never_the_objective\" — passed"
+  },
+  "whyASeedAndNotTheShippedOne": {
+    "shipped": "baseline / 20260726 has exactly one survivor with a scar in a wave that has a return: Пепел Щербатый, hit hardest on (14,7)",
+    "problem": "(14,7) is PrototypeLayout.Read('L')[0] — the larder tile every raider walks to. There is nothing to walk round when the remembered place is the objective",
+    "answer": "the rule says so out loud (a memory takes away a road and never the objective) and the observable half is measured on a party where the hardest blow landed on the road"
+  },
+  "criterion5_theRouteChanged": {
+    "fixture": "baseline.commands.v2.json",
+    "seed": 20260729,
+    "samples": [
+      {
+        "name": "Крюк Немой",
+        "escapedWave": 1,
+        "escapedTick": 1380,
+        "scar": "heavy",
+        "remembers": "(24,7) written at tick 1327",
+        "returnWave": 3,
+        "returnedAsRaiderId": 10,
+        "beforeRemembering": "raider id 3, wave 1: stood on (24,7) — it is where he was hit hardest, so his route through it is what wrote the memory",
+        "afterRemembering": "raider id 10, wave 3: never stands on (24,7) over the whole wave",
+        "andStillGetsThere": "he leaves through the gate carrying two portions, so the memory took a road and not the raid"
+      },
+      {
+        "name": "Секира",
+        "escapedWave": 2,
+        "escapedTick": 1708,
+        "scar": "light",
+        "remembers": "(23,7) written at tick 1661",
+        "returnWave": 4,
+        "returnedAsRaiderId": 17,
+        "beforeRemembering": "raider id 4, wave 2: stood on (23,7)",
+        "afterRemembering": "raider id 17, wave 4: never stands on (23,7)", "andStillGetsThere": "he leaves through the gate carrying one portion, so the memory took a road and not the raid"
+      }
+    ],
+    "whyTheDetourExistsOnThisMap": "row 7 from x=16 to x=26 is the corridor from the gate hall to the larder, and row 8 under it is open floor for its whole width (PrototypeLayout). One blocked tile on row 7 therefore has a way round that costs tiles rather than the trip."
+  },
+  "theBound": {
+    "fixture": "baseline.commands.v2.json",
+    "seed": 20260726,
+    "sample": {
+      "name": "Пепел Щербатый",
+      "remembers": "(14,7), which is the first larder tile",
+      "observed": "raider id 22 of wave 4 does stand on (14,7)",
+      "why": "the avoidance is not applied when the remembered tile is the destination, and it falls back to the unavoided path when blocking the tile leaves no path at all. A memory may take away a road and may not take away the objective — the raider side of the bound Issue #171 put on a creature's memory."
+    }
+  },
+  "howTheMemoryIsWritten": {
+    "rule": "the tile the raider was standing on when it took the single hardest blow of the raid; ties go to the earlier tick",
+    "rejectedAlternative": "the tile of the first blow. It is rejected on the meaning rather than on a measurement, and the argument is checkable: a raid ends when the raider leaves or drops, so a raider that takes several blows takes the first one on the way in and the worst one where the domain actually stood in his way. «Где его достали» names the second. The two coincide for every raider hit once, which on the shipped fixtures is most of them, so choosing the harder rule costs nothing and says something different only in the case it is about.",
+    "scarAndMemoryAreOneDecision": "a raider nobody reached has no scar and nothing to remember. survivors[].rememberedPlace is null exactly when survivors[].scar is none, and A_scar_is_read_off_the_damage_that_landed_and_never_assigned holds the two together."
+  }
+}

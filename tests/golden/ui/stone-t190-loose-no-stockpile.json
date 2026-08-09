@@ -13,7 +13,7 @@
                   "stockpileCapacity":  0
               },
     "ui":  {
-               "summary":  "BASELINE  •  t190  •  PAUSED  •  jobs 11  •  94d7a550  •  renown 20  •  strength 11  •  crew 9\nWAVE 1/4 · warn t300  •  food 17+0  •  raw 3+0  •  stone 4L 0C 0/0S  •  dug 4  •  marks 0",
+               "summary":  "BASELINE  •  t190  •  PAUSED  •  jobs 11  •  83bcf75c  •  renown 20  •  strength 11  •  crew 9\nWAVE 1/4 · warn t300  •  food 17+0  •  raw 3+0  •  stone 4L 0C 0/0S  •  dug 4  •  marks 0",
                "inspector":  "CELL (25, 3)\n\ntile floor (excavated)\njobs none\n\nLOOSE STONE\n1 loose here. No material stockpile yet. Press [M], paint plain floor.\n\nDIG\nnot diggable: already excavated.",
                "feedback":  "EVENT FEEDBACK · 3 of 9 crew · 0 of 354 mattered\nt189 · Кремень stopped at (9,3): somebody in the way.\nt189 · Мотылёк stopped at (5,5): somebody in the way. (x2)\nt189 · Смола stopped at (5,1): somebody in the way. (x117)\n\nDiagnostics: 0",
                "roster":  "CREW  Брусок WORK  •  Кремень MOVE  •  Мотылёк MOVE  •  Смола MOVE  •  Дёготь READY  •  Уголёк WORK  •  Прель MOVE  •  Обух READY  •  Тишина MOVE\nDemo: DIG marked (25,1) (25,2) (25,3) (26,1); [M] paints the material stockpile (22,1) (23,1) at tick 200. Nobody was ordered to carry anything.\nLOG t1 dig_designate (1) | t200 paint MaterialStockpile (2)",

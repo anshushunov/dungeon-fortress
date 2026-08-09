@@ -92,6 +92,12 @@ public sealed class PrototypeSnapshotShapeTests
         // defined by the state it stops in and not by a tick number, because the
         // tick a wave ends on is emergent and a balance change would move it.
         ("baseline @ the moment of truth", "baseline", 0, true),
+        // A whole party of baseline, which is the only sample that reaches the
+        // returning raider (Issue #358): `survivors` is empty until somebody walks
+        // out of the gate alive, and `raiders[].rememberedPlace` stays null until
+        // one of them walks back in carrying a scar. `neglected @ session end`
+        // does not reach it — that domain falls before the first wave is resolved.
+        ("baseline @ session end", "baseline", PrototypeTuning.SessionTicks, false),
     ];
 
     /// <summary>
@@ -107,7 +113,7 @@ public sealed class PrototypeSnapshotShapeTests
     /// </summary>
     private static readonly string[] RecordedShape =
     [
-        "$ -> beds, buildSites, commandsApplied, creatures, digDesignations, domain, economy, events, jobs, labor, looseItems, map, materialStockpile, momentOfTruth, nextJobId, pendingCommands, priorities, raiders, rooms, rules, schemaVersion, seed, sessionResult, stations, stocks, threat, tick, waves, zones",
+        "$ -> beds, buildSites, commandsApplied, creatures, digDesignations, domain, economy, events, jobs, labor, looseItems, map, materialStockpile, momentOfTruth, nextJobId, pendingCommands, priorities, raiders, rooms, rules, schemaVersion, seed, sessionResult, stations, stocks, survivors, threat, tick, waves, zones",
         "$.beds[] -> growthProgress, position, ripe",
         "$.buildSites[] -> delivered, incomingReserved, jobId, progressTicks, reachable, required, requiredTicks, reservedBy, statusCode, tile",
         "$.creatures[] -> affinities, blockedTicks, carryAmount, carrying, currentJobId, fatigue, grit, hp, id, injury, isMustering, lastDecision, lastMoveTick, lastYieldTick, loyalty, martialForm, maxHp, mealReserved, mealTarget, mealTicksRemaining, might, mode, moveCount, musterNeedsRation, musterTarget, name, position, readiness, readinessAtRaid, recoveryTicks, rememberedPlaces, satiety, watchTicks, workTicks, yieldCount",
@@ -129,12 +135,15 @@ public sealed class PrototypeSnapshotShapeTests
         "$.momentOfTruth -> cards, open, openedTick, waitedSteps, waveNumber, windowSteps",
         "$.momentOfTruth.cards[] -> benefitThisWave, creatureId, dominantAxis, fearThisWave, grudgeThisWave, name, notability, raidersDowned, verdict",
         "$.pendingCommands[] -> creatureId, jobKind, kind, ruleId, tick, tiles, value, verdict, zoneKind",
-        "$.raiders[] -> carryingMeals, hp, id, might, mode, position, returningToGate, stealTicks, wave",
+        "$.raiders[] -> carryingMeals, hp, id, might, mode, name, position, rememberedPlace, returnedFromWave, returningToGate, scar, stealTicks, wave",
+        "$.raiders[].rememberedPlace -> cause, place, tick",
         "$.rooms[] -> complete, contents, id, perimeter, purpose, statusCode",
         "$.rooms[].contents[] -> kind, position",
         "$.sessionResult -> defendersDowned, defendersFled, endTick, lastWaveOutcome, mealsLeft, mealsStolen, outcome, raidersDowned, renown, score, strength, unresolved, waveCount, wavesRepelled, wavesResolved",
         "$.stations[] -> kind, occupiedBy, occupiedTicks, position",
         "$.stocks -> capacity, carriedStone, looseMeals, looseRawMushroom, looseStone, meals, mealsEaten, mealsProduced, rawMushroom, reservedStone, siteStone, stockpileCapacity, storedStone",
+        "$.survivors[] -> escapedTick, escapedWave, name, rememberedPlace, returnWave, returnedAsRaiderId, scar, status",
+        "$.survivors[].rememberedPlace -> cause, place, tick",
         "$.threat -> active, announceTick, announced, arriveTick, raiderCount, raiderMight, ticksRemaining, waveCount, waveNumber",
         "$.waves[] -> announceTick, announced, arriveTick, arrived, defendersDowned, defendersFled, endTick, mealsStolen, number, outcome, raiderCount, raiderMight, raidersDowned, renownAtAnnounce",
     ];

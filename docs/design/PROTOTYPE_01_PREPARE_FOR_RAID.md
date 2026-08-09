@@ -1712,6 +1712,40 @@ raiderMight = T.raider_might_base + renown / T.renown_per_raider_might
 Вышедший за ворота налётчик покидает карту; унесённые порции считаются
 потерянными.
 
+**Правило (у налётчика есть имя).** Каждый налётчик несёт имя в каноническом
+состоянии. Имя разыгрывается из закрытого пула отдельным потоком
+`DeterministicRandom` с seed партии и уникально внутри партии: занятое прозвище
+берёт эпитет. Имя переживает тело — вернувшийся налётчик носит то же имя.
+
+**Правило (ушедший живым возвращается).** Налётчик, дошедший до `escaped`,
+записывается в `survivors` и возвращается в волне
+`escapedWave + T.returning_raider_wave_gap`. Возвращаясь, он **занимает место в
+составе волны, а не добавляется к нему**: `raiderCount` и `raiderMight` волны
+по-прежнему вычисляются один раз на её `announceTick` из дурной славы, и правило
+возврата решает только, кто встанет в уже существующее место. Волна возврата за
+пределами партии не пропадает молча — запись остаётся со `status`
+`no_wave_left`.
+
+Вернувшийся отличается от чужака тремя вещами и больше ничем:
+
+- **сила** — `raiderMight` волны + обычный джиттер + `T.returning_raider_might_bonus`;
+- **шрам** — `injury`, выведенная из нижней точки его здоровья в прошлом набеге
+  по той же доле `T.light_injury_share`, которой ранят защитников; налётчик, до
+  которого никто не дотянулся, возвращается без шрама;
+- **память о месте** — одна запись формы 11.1 (`place`, `tick`, `cause`) о тайле,
+  на котором он стоял в момент самого тяжёлого удара за прошлый набег. Память
+  есть тогда и только тогда, когда есть шрам.
+
+**Правило (память меняет маршрут).** Вернувшийся налётчик не прокладывает
+маршрут через запомненный тайл: тайл входит в то же запретное множество, которым
+уже работает зона `Forbidden`. Исключения два, и оба про границу «память отнимает
+дорогу, а не цель»: запрет не применяется, если запомненный тайл является целью
+шага или тайлом, на котором налётчик стоит сейчас, и не применяется, если он
+оставляет маршрут пустым.
+
+Правила этого блока, их обоснование и замеры — в
+[`SLICE_05_RETURNING_HERO.md`](SLICE_05_RETURNING_HERO.md); значения — в 15.8.
+
 ### 10.2. Защитники
 
 **Правило.** Участие проверяется на тике прибытия текущей волны и далее
@@ -2425,7 +2459,8 @@ reason code не отрисовывается «как похожий»: ада�
 | `Station` | `position`, `kind`, `occupiedBy` |
 | `StockpileCell` | `position`, `stored`, `capacity`, `incomingReserved`, `reachable`, `statusCode` |
 | `Job` | `jobId`, `kind`, `targetTile`, `resource?`, `reservedBy`, `remainingTicks`, `storeCell?`, `storeReserved`, `sourceCell?` |
-| `Raider` | `id`, `wave`, `hp`, `might`, `position`, `carrying`, `state` |
+| `Raider` | `id`, `wave`, `hp`, `might`, `position`, `carrying`, `state`, `name`, `returnedFromWave?`, `scar`, `rememberedPlace?` |
+| `Survivor` | `name`, `escapedWave`, `escapedTick`, `returnWave`, `status` (`awaiting`/`returned`/`no_wave_left`/`no_room_in_wave`), `scar`, `rememberedPlace?`, `returnedAsRaiderId?` |
 | `Wave` | `number`, `announceTick`, `arriveTick`, `announced`, `arrived`, `raiderCount`, `raiderMight`, `outcome`, `endTick`, `raidersDowned`, `defendersDowned`, `defendersFled`, `mealsStolen`, `renownAtAnnounce` |
 | `Threat` | волна в руках: `waveNumber`, `waveCount`, `announceTick`, `arriveTick`, `raiderCount`, `raiderMight`, `ticksRemaining`, `announced`, `active` |
 | `Domain` | `renown`, `strength`, `renownAtPreviousWave`, `strengthAtPreviousWave`, `livingCreatures`, `downedCreatures`, `injuredCreatures`, `peakMeals`, `wavesArrived`, `wavesResolved`, `waveCount` |
@@ -3220,6 +3255,8 @@ python -c "import json,io; d=json.load(io.open(r'docs/playtests/data/prototype-0
 | `T.strength_per_might` | 2 | вклад врождённой мощи в силу владения |
 | `T.strength_martial_divisor` | 10 | делитель вклада боевой формы |
 | `T.strength_readiness_scale` | 100 | делитель, которым готовность масштабирует вклад |
+| `T.returning_raider_wave_gap` | 2 | через сколько волн возвращается ушедший живым (10.1) |
+| `T.returning_raider_might_bonus` | 1 | прибавка к силе вернувшегося (10.1) |
 
 `T.renown_per_wave_arrived` намеренно равно `T.renown_per_extra_raider`: тем
 самым каждая следующая волна строго сильнее предыдущей при любой игре, а

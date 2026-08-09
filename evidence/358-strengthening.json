@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "issue": 358,
+  "when": "2026-08-09, taken on branch feature/358-returning-hero at checkpoint 3",
+  "what": "Criterion 4 of Issue #358: what the wave with the returning raiders costs the domain against the same wave without them, on the same seed, in numbers.",
+  "base": {
+    "commit": "dc15bc2",
+    "howObtained": "git worktree add --detach ../_wt-358-base origin/main, then git log --oneline -1 in it"
+  },
+  "howObtained": {
+    "before": "cd ../_wt-358-base && dotnet run -c Release --project ./tests/DungeonFortress.Scenarios -- --prototype --commands <fixture with the seed replaced> --ticks 2700 --snapshot <file>",
+    "after": "the same command in the branch worktree",
+    "whyAWorktreeAndNotAFlag": "the 'without them' arm is origin/main itself. A switch inside the branch would be a second code path nothing else runs, and the comparison would be of the switch rather than of the change.",
+    "seedReplacement": "the fixture json is copied with its \"seed\" field replaced; commands are untouched"
+  },
+  "whatChangedInTheCode": {
+    "might": "+T.returning_raider_might_bonus = 1 over the wave's own raiderMight plus the same jitter every raider of that wave gets",
+    "hp": "unchanged: a returning raider walks in with T.raider_hp = 30, exactly like a stranger",
+    "nothingElse": "the composition of the wave, the combat stream and the jitter of every blow are untouched; the naming stream is salted apart from combat on purpose"
+  },
+  "baseline_20260726": {
+    "wave4": {
+      "arriveTick": 2350,
+      "raiderCount": 9,
+      "returningRaiders": 6,
+      "before": {
+        "outcome": "larder_raided",
+        "endTick": 2421,
+        "lengthInTicks": 71,
+        "raidersDowned": 1,
+        "mealsStolen": 24,
+        "defendersDowned": 0,
+        "defendersFled": 7
+      },
+      "after": {
+        "outcome": "overrun",
+        "endTick": 2415,
+        "lengthInTicks": 65,
+        "raidersDowned": 0,
+        "mealsStolen": 24,
+        "defendersDowned": 0,
+        "defendersFled": 7
+      },
+      "reading": "the one raider the domain used to put down in this wave now walks out alive, the outcome falls from larder_raided to overrun, and the wave is over six ticks sooner. Waves 1 to 3 are identical to the tick, because nobody is back yet."
+    },
+    "session": {
+      "before": { "outcome": "raided", "endTick": 2421, "score": 636, "raidersDowned": 6, "mealsStolen": 66, "wavesRepelled": 1 },
+      "after": { "outcome": "raided", "endTick": 2415, "score": 636, "raidersDowned": 5, "mealsStolen": 66, "wavesRepelled": 1 }
+    }
+  },
+  "baseline_20260729": {
+    "whyThisSeedToo": "it is the party the memory of place actually bites on (evidence/358-memory.json), so it measures the strengthening and the detour together rather than the strengthening alone",
+    "wave3": {
+      "returningRaiders": 1,
+      "before": { "outcome": "overrun", "endTick": 2055, "raidersDowned": 0, "mealsStolen": 8, "defendersDowned": 1, "defendersFled": 4 },
+      "after": { "outcome": "overrun", "endTick": 2055, "raidersDowned": 0, "mealsStolen": 8, "defendersDowned": 2, "defendersFled": 3 }
+    },
+    "wave4": {
+      "returningRaiders": 6,
+      "before": { "outcome": "overrun", "endTick": 2404, "raidersDowned": 0, "mealsStolen": 9, "defendersDowned": 1, "defendersFled": 4 },
+      "after": { "outcome": "overrun", "endTick": 2401, "raidersDowned": 0, "mealsStolen": 3, "defendersDowned": 0, "defendersFled": 3 }
+    },
+    "session": {
+      "before": { "outcome": "raided", "endTick": 2404, "score": 698, "mealsStolen": 38, "raidersDowned": 3 },
+      "after": { "outcome": "raided", "endTick": 2401, "score": 754, "mealsStolen": 32, "raidersDowned": 3 }
+    },
+    "readingAndTheFindingInIt": "on this seed the domain ends 56 points better off, not worse. That is not the strengthening failing to bite; it is the second half of the same change pulling the other way. Two of the returners here walk round the tile they were hit on, which costs them tiles of walking inside a wave that ends when the last raider leaves, and six fewer portions go out of the gate. Naming it is the point: the returning raider is a harder body on a longer road, and on a map whose only corridor to the larder has a parallel one, the road can matter more than the body."
+  },
+  "prepared_20260726": {
+    "returningRaiders": 0,
+    "why": "on prepared nobody escapes before wave 3, and wave 3 + 2 = 5 is past the end of the party",
+    "before": { "waves": ["repelled_costly@1326", "repelled_costly@1684", "larder_raided@2085", "larder_raided@2423"], "score": 796, "mealsStolen": 38, "raidersDowned": 17 },
+    "after": { "waves": ["repelled_costly@1326", "repelled_costly@1684", "larder_raided@2085", "larder_raided@2423"], "score": 796, "mealsStolen": 38, "raidersDowned": 17 },
+    "reading": "a party with no return is unchanged tick for tick. That is the control arm: it says the deltas above are the return and not the naming, the survivors section or the new fields."
+  },
+  "howTheSizeWasChosen": {
+    "chosen": "might +1, and no health bonus at all",
+    "howObtained": "the tuning constants were edited on the committed tree, tests/DungeonFortress.Scenarios rebuilt, baseline replayed at the seeds below, and PrototypeTuning.cs restored with `git checkout --`. The edit was made after the checkpoint was committed, so a restore could not take the change with it (the lesson of Issue #147).",
+    "wave4OfBaseline20260726": {
+      "origin/main (no return at all)": { "outcome": "larder_raided", "endTick": 2421, "raidersDowned": 1, "mealsStolen": 24, "sessionScore": 636 },
+      "might +0, hp +10": { "outcome": "overrun", "endTick": 2416, "raidersDowned": 0, "mealsStolen": 24, "sessionScore": 636 },
+      "might +1, hp +0 (shipped)": { "outcome": "overrun", "endTick": 2415, "raidersDowned": 0, "mealsStolen": 24, "sessionScore": 636 },
+      "might +1, hp +10": { "outcome": "overrun", "endTick": 2415, "raidersDowned": 0, "mealsStolen": 24, "sessionScore": 636 },
+      "might +2, hp +20": { "outcome": "overrun", "endTick": 2417, "raidersDowned": 0, "mealsStolen": 25, "sessionScore": 613 }
+    },
+    "session20260729": {
+      "origin/main": 698,
+      "might +0, hp +10": 698,
+      "might +1, hp +0 (shipped)": 754,
+      "might +1, hp +10": 754,
+      "might +2, hp +20": 734
+    },
+    "whyNotBigger": "at +2 and +20 the domain's score on the shipped seed falls from 636 to 613 and one more portion goes out of the gate. That is the return becoming a second driver of difficulty beside renown, and slice 1 proved that the strength of a wave is what the domain's own visibility bought.",
+    "whyNoHealthBonus": {
+      "sweep": "baseline replayed at eight seeds — 20260726, 20260729, 20260730, 424242, 1, 2, 3, 7 — with might +1 and the health bonus at 0 and at 10",
+      "returningRaidersOverTheSweep": 54,
+      "returningRaidersPutDown": { "hp +0": 1, "hp +10": 0 },
+      "sumOfPartyScores": { "hp +0": 5698, "hp +10": 5698 },
+      "sumOfMealsStolen": { "hp +0": 324, "hp +10": 324 },
+      "reading": "ten extra health keeps one raider in fifty-four off the floor and moves no party's score and no count of stolen portions at all. A tuning value whose effect cannot be read is a promise the contract cannot keep, so the strengthening is one knob and it is might."
+    },
+    "whyNotSmaller": "might is an integer and raiderMight runs 3..5 over a party, so +1 is the smallest bonus that exists. Zero is not a strengthening."
+  }
+}

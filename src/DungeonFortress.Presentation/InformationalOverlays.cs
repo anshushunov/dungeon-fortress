@@ -120,6 +120,12 @@ public enum OverlayMark
     RoomBorder,
     RoomLabel,
     UnroomedObject,
+
+    // Issue #358. Not part of BodyState: the state of a body is what it is now,
+    // and this is who it is and what happened to it in an earlier wave. It is
+    // also the only mark in this list that is drawn for some bodies and not for
+    // others, which is the decision ReturningHeroLabel argues.
+    ReturningHero,
 }
 
 /// <param name="Mark">The reading this rule governs.</param>
@@ -358,6 +364,22 @@ public static class InformationalOverlays
             "the refusal is only readable if the player can see somebody standing " +
             "next to it still working. The mark is a ring and a cross-hatch with " +
             "no fill, so it cannot hide whoever is on the tile."),
+        new(
+            OverlayMark.ReturningHero,
+            OverlayMarkSubject.Body,
+            CellCanHoldBody: null,
+            OverlayMarkPolicy.StrokeOnly,
+            1.0,
+            1.0,
+            "The caption over a raider the domain has already met is that raider's " +
+            "own readout, anchored to the body and not to a cell, and it is above " +
+            "the depth pass for the reason the HP bar is: a raised wall top erased " +
+            "a body's readout completely in the first review round of Issue #83. " +
+            "Two lines of text and a rim under them, no fill — the rim is a stroke " +
+            "outline of the glyphs, which is what makes a caption readable over a " +
+            "goblin without a plate (the finding of Issue #210's damage numbers). " +
+            "It sits above the body rather than below it, where the bar and the " +
+            "damage numbers already are."),
     ];
 
     public static IReadOnlyList<OverlayMarkRule> All => Rules;

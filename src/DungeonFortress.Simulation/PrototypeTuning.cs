@@ -361,6 +361,39 @@ public static class PrototypeTuning
     public const int MomentOfTruthDeedWeight = 50;
     public const int MomentOfTruthWindowSteps = 40;
 
+    // ------------------------------------------------------------------
+    // The returning raider (slice 5 of the pitch's order of proof, section 6.8).
+    // Design contract: docs/design/SLICE_05_RETURNING_HERO.md. Tuning by ADR 0010;
+    // what is an invariant is stated in that document and not in these numbers.
+    // ------------------------------------------------------------------
+
+    // How many waves later a raider who left alive comes back. Two, which is the
+    // shortest reading of the pitch's «через несколько волн» that still leaves a
+    // wave the domain does not see him in: one would make "he is back" and "he
+    // never left" the same observation.
+    public const int ReturningRaiderWaveGap = 2;
+
+    // What he brings back, and it is one number rather than two.
+    //
+    // Might is the whole of the strengthening. It is deliberately the smallest
+    // bonus that is a bonus at all — might is an integer and raiderMight runs 3..5
+    // over a party — and that is a measurement rather than a taste: at +2 with
+    // twenty extra health the domain's score on baseline/20260726 falls from 636
+    // to 613 and one more portion goes out of the gate, which turns the return
+    // into a second driver of difficulty beside renown. Slice 1 proved that the
+    // strength of a wave is what the domain's own visibility bought, and a slice
+    // about stories may not quietly add to it.
+    //
+    // There was a health bonus here and it was removed by measurement rather than
+    // by taste. Over eight parties of baseline (seeds 20260726, 20260729,
+    // 20260730, 424242, 1, 2, 3, 7) there are 54 returning raiders; ten extra
+    // health keeps exactly one of them off the floor and leaves every party's
+    // score and every count of stolen portions identical to the tick. A tuning
+    // value whose effect cannot be read is a promise the contract cannot keep, so
+    // the strengthening is one knob whose effect is named in numbers —
+    // evidence/358-strengthening.json.
+    public const int ReturningRaiderMightBonus = 1;
+
     // How many creatures the domain has. It lives here because the static
     // pre-flight of a verdict needs to bound `creatureId` before any world
     // exists, and the population is fixed for the whole of Prototype 1

@@ -173,6 +173,17 @@ public static class WorldDrawOrder
             "DrawRememberedPlaces",
             WorldDrawPass.Informational,
             OverlayMark.RememberedPlace),
+        // Issue #358. Last of the informational pass, because it is the only mark
+        // that is a sentence: whatever else this pass draws on the same tiles, the
+        // caption of the raider the domain has already met reads over it.
+        new(
+            "DrawReturningHeroLabels",
+            WorldDrawPass.Informational,
+            OverlayMark.ReturningHero),
+        new(
+            "DrawReturningHeroLabel",
+            WorldDrawPass.Informational,
+            OverlayMark.ReturningHero),
 
         // Pass 4 — input affordances.
         new(
@@ -211,6 +222,7 @@ public static class WorldDrawOrder
         "DrawRoomLabels",
         "DrawUnroomedObjects",
         "DrawRememberedPlaces",
+        "DrawReturningHeroLabels",
         "DrawCellInteractionOverlays",
         "DrawBrushPreview",
     ];

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "issue": 358,
+  "when": "2026-08-09, taken on branch feature/358-returning-hero",
+  "what": "Criterion 6 of Issue #358: the invariants already proved did not fall. Slice 3 twice showed that a change to the magnitudes of combat drops them, so the two the Issue names are read out separately from the suite that holds them.",
+  "base": {
+    "commit": "dc15bc2",
+    "howObtained": "git worktree add --detach ../_wt-358-base origin/main, then git log --oneline -1 in it"
+  },
+  "wholeSuite": {
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release",
+    "result": "347 passed, 0 failed on the branch; 337 passed, 0 failed on dc15bc2 in ../_wt-358-base, run with the same command",
+    "note": "the ten new ones are PrototypeReturningRaiderTests. No existing check was changed except PrototypeSnapshotShapeTests, which got one more sample and an additive update to the recorded composition."
+  },
+  "preparationMakesTheRaidCheaper": {
+    "invariant": "contract invariant 4, held by PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix and Preparation_outscores_its_absence_over_the_matrix",
+    "result": "green",
+    "readOutOnTheShippedSeed": {
+      "seed": 20260726,
+      "before": { "preparedMealsStolen": 38, "baselineMealsStolen": 66, "preparedScore": 796, "baselineScore": 636 },
+      "after": { "preparedMealsStolen": 38, "baselineMealsStolen": 66, "preparedScore": 796, "baselineScore": 636 },
+      "whyItIsUnmoved": "prepared has no return in it at all — its first escape is in wave 3 and 3 + 2 = 5 is past the end of the party — so the arm the invariant compares against did not move"
+    }
+  },
+  "theFloorOnFlight": {
+    "invariant": "PrototypeMoraleTests: No_single_tick_breaks_more_than_a_third_of_the_domain, The_average_tick_of_flight_takes_one_creature_rather_than_a_group, Most_broken_defenders_actually_leave_the_tile_they_broke_on",
+    "result": "green",
+    "howObtained": "part of the whole-suite run above; the three run over the seed matrix rather than one seed"
+  },
+  "whatCouldHaveMovedThemAndDidNot": {
+    "combatStream": "untouched. The naming draw has its own DeterministicRandom salted apart from combat, and the number of CombatJitter calls per wave is still one per raider, because a returning raider is rolled the same jitter as the stranger whose place he takes.",
+    "waveComposition": "untouched. AnnounceWaves still reads raiderCount and raiderMight off renown alone; NextRaiderOf decides only who fills a place that already existed.",
+    "creatureSide": "untouched. Nothing in this change writes to a creature, to loyalty, to morale or to memory of place on the domain's side."
+  }
+}
