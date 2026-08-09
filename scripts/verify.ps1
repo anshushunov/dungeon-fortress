@@ -935,7 +935,7 @@ $stageCatalog = [ordered]@{
     }
 
     screenshots = [pscustomobject]@{
-        Summary = "Explicit-frame baseline captured twice byte-for-byte, plus prepared-raid sprite diagnostics."
+        Summary = "Explicit-frame baseline and moment-of-truth captured twice byte-for-byte, plus prepared-raid sprite diagnostics."
         Body = {
             Initialize-GameHostBuild
             Initialize-EngineRuntime
@@ -1031,8 +1031,86 @@ $stageCatalog = [ordered]@{
                 }
             }
 
+            # Issue #349. The moment-of-truth band (Issue #331/#345) was drawn by
+            # the engine and guarded by layout checks, but no stage ever captured
+            # the frame it is actually on — the gap #349 was opened about: the
+            # band was "guarded by a layout check, not by a picture". Same shape
+            # as the baseline capture above: --demo-moment-of-truth is
+            # deterministic (Main.Player.cs, ApplyDemoMomentOfTruth always stops
+            # the baseline fixture on the first wave's open window, tick 1336 -
+            # evidence/331-frame.json, evidence/349-frame.json), so it gets the
+            # same double-capture-and-compare treatment.
+            $momentOfTruthScreenshot = Join-Path $verifyRoot "moment-of-truth.png"
+            $momentOfTruthRepeatScreenshot = Join-Path $verifyRoot "moment-of-truth-repeat.png"
+            $momentOfTruthResult = Invoke-GodotChecked `
+                -GodotPath $godot `
+                -Arguments @(
+                    "--path", $gameProjectPath, "--resolution", "1600x900",
+                    "--", "--fixture", "baseline",
+                    "--demo-moment-of-truth",
+                    "--screenshot", $momentOfTruthScreenshot, "--screenshot-ticks", "1",
+                    "--tile-size", "40",
+                    "--camera-zoom", "0.5",
+                    "--camera-position", "560,320",
+                    "--ui-scale", "1",
+                    "--frame-size", "1600x900"
+                ) `
+                -ExpectedSuccessEvent "godot_graybox_screenshot"
+            Assert-GoblinSpriteDiagnostics `
+                -OutputLines $momentOfTruthResult.Output `
+                -EventName "godot_graybox_screenshot"
+            $momentOfTruthEvent = Get-GodotEvent `
+                -OutputLines $momentOfTruthResult.Output `
+                -EventName "godot_graybox_screenshot"
+            if (-not (Test-Path -LiteralPath $momentOfTruthScreenshot -PathType Leaf)) {
+                throw "Moment-of-truth smoke did not write its screenshot."
+            }
+            # The two facts a picture alone cannot assert: the frame actually
+            # landed on an open window (not a party that ran past every wave),
+            # and the band the window is answered on is actually visible on it.
+            # The second is the one #349's mutant is about: `_momentBand.Visible
+            # = false` leaves every layout guard green (nothing overflows,
+            # nothing is unreadable) and the repeated capture below would still
+            # match itself byte for byte, because both copies would be equally
+            # wrong. Only this JSON assertion, read off the same event a
+            # screenshot already prints, catches it.
+            if (-not [bool]$momentOfTruthEvent.ui.momentOfTruth.open) {
+                throw "The moment-of-truth capture did not land on an open window."
+            }
+            if (-not [bool]$momentOfTruthEvent.ui.momentOfTruth.visible) {
+                throw (
+                    "The moment-of-truth window is open but its band is not visible " +
+                    "on the captured frame (ui.momentOfTruth.visible is false)."
+                )
+            }
+            if (-not [bool]$momentOfTruthEvent.view.cameraSynchronizedAfterLayout) {
+                throw "The moment-of-truth screenshot was captured before Camera2D followed deferred HUD layout."
+            }
+            $momentOfTruthRepeatResult = Invoke-GodotChecked `
+                -GodotPath $godot `
+                -Arguments @(
+                    "--path", $gameProjectPath, "--resolution", "1600x900",
+                    "--", "--fixture", "baseline",
+                    "--demo-moment-of-truth",
+                    "--screenshot", $momentOfTruthRepeatScreenshot, "--screenshot-ticks", "1",
+                    "--tile-size", "40",
+                    "--camera-zoom", "0.5",
+                    "--camera-position", "560,320",
+                    "--ui-scale", "1",
+                    "--frame-size", "1600x900"
+                ) `
+                -ExpectedSuccessEvent "godot_graybox_screenshot"
+            Assert-GoblinSpriteDiagnostics `
+                -OutputLines $momentOfTruthRepeatResult.Output `
+                -EventName "godot_graybox_screenshot"
+            Assert-FilesEqual `
+                -ExpectedPath $momentOfTruthScreenshot `
+                -ActualPath $momentOfTruthRepeatScreenshot `
+                -Description "Repeated moment-of-truth screenshot"
+
             $script:screenshotResult = [pscustomobject]@{
                 RaidExitCode = $raidResult.ExitCode
+                MomentOfTruthExitCode = $momentOfTruthResult.ExitCode
                 Repeatable = $true
             }
         }
@@ -1297,6 +1375,7 @@ try {
     }
     if ($executedStages -contains "screenshots") {
         $summary["godotRaidExitCode"] = $screenshotResult.RaidExitCode
+        $summary["momentOfTruthExitCode"] = $screenshotResult.MomentOfTruthExitCode
         $summary["screenshotRepeatable"] = $screenshotResult.Repeatable
     }
     if ($executedStages -contains "ui") {

@@ -1,0 +1,25 @@
+{
+  "issue": 349,
+  "checkpoint": 2,
+  "what": "The moment-of-truth frame (Issue #331/#345's --demo-moment-of-truth) added to the screenshots stage of scripts/verify.ps1, next to the existing baseline and prepared-raid captures. Captured twice and compared byte-for-byte, the same way capture-evidence.ps1 already treats every capture. Two JSON assertions read off the printed godot_graybox_screenshot event guard what a byte comparison alone cannot: that the frame actually lands on an open window (ui.momentOfTruth.open) and that the band answering it is actually drawn (ui.momentOfTruth.visible).",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage screenshots",
+  "timing": {
+    "method": "git stash / git stash pop around scripts/verify.ps1 -Stage screenshots, run twice each side with warm dotnet/Godot caches so the comparison is the stage body's own added work and not cold-restore noise. elapsedSeconds is the verification_stage event's own measurement, not a shell-side timer.",
+    "before": {
+      "commit": "b8de188 (checkpoint 1, before the screenshots-stage edit)",
+      "elapsedSeconds": 13.1,
+      "log": "/tmp/verify-screenshots-before2.log (warm-cache run; a cold-cache first run measured 41.9s, discarded as not comparable)"
+    },
+    "after": {
+      "elapsedSeconds": 19,
+      "log": "/tmp/verify-screenshots-after2.log"
+    },
+    "delta": "+5.9s (~45%), from two more Godot invocations (primary + repeat capture of the moment-of-truth frame), matching the cost the existing baseline-repeat pair already pays."
+  },
+  "stageOutput": {
+    "godotRaidExitCode": 0,
+    "momentOfTruthExitCode": 0,
+    "screenshotRepeatable": true
+  },
+  "whatTheNewAssertionsCatch": "A picture is not enough on its own: the repeated capture would still match itself byte-for-byte even if the band were invisible on both copies (that is exactly what checkpoint 3's mutant proves). ui.momentOfTruth.open confirms the capture is not a party that ran past every wave without ever pausing on one; ui.momentOfTruth.visible is read off the live _momentBand node (Main.HudText.cs, MomentOfTruthState) rather than off the prompt, so it is the one field a regression in ShowMomentOfTruth's own Visible assignment can flip independently of everything else staying green."
+}
