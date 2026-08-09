@@ -1,0 +1,99 @@
+{
+  "issue": 351,
+  "recordedAt": "2026-08-09",
+  "model": "anthropic/claude-opus-5[1m]",
+  "baseCommit": "800d037",
+  "verifiedCommit": "94aea0c",
+  "baseStale": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-base-stale.ps1",
+    "result": "{\"event\":\"base_stale_check\",\"status\":\"fresh\",\"remote\":\"origin\",\"branch\":\"main\",\"behind\":0,\"ahead\":4,\"head\":\"d964b61\",\"remoteHead\":\"800d037\"}",
+    "reads": "behind 0 — дифф и замеры сняты на актуальной базе."
+  },
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
+  "scope": "full (10 of 10 stages)",
+  "stages": [
+    {
+      "stage": "scripts",
+      "status": "ok",
+      "elapsedSeconds": 111.7
+    },
+    {
+      "stage": "build",
+      "status": "ok",
+      "elapsedSeconds": 43.3
+    },
+    {
+      "stage": "tests",
+      "status": "ok",
+      "elapsedSeconds": 181.2
+    },
+    {
+      "stage": "mcp",
+      "status": "ok",
+      "elapsedSeconds": 6.4
+    },
+    {
+      "stage": "sim",
+      "status": "ok",
+      "elapsedSeconds": 0.4
+    },
+    {
+      "stage": "load",
+      "status": "ok",
+      "elapsedSeconds": 0.7
+    },
+    {
+      "stage": "godot",
+      "status": "ok",
+      "elapsedSeconds": 44.8
+    },
+    {
+      "stage": "ui",
+      "status": "ok",
+      "elapsedSeconds": 5
+    },
+    {
+      "stage": "screenshots",
+      "status": "ok",
+      "elapsedSeconds": 6.3
+    },
+    {
+      "stage": "token-budget",
+      "status": "ok",
+      "elapsedSeconds": 96.2
+    }
+  ],
+  "finalEvent": "{\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"full\",\"stagesExecuted\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\",\"token-budget\"],\"stagesNotRun\":[],\"prerequisites\":[\"restore\",\"solution-build\",\"scenario-build\",\"game-host-build\",\"engine-runtime\"],\"seed\":424242,\"temporaryRoot\":\"C:\\\\gamedev\\\\df-verify-aa373b10\",\"deterministicChecksum\":\"e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f\",\"changedSeedChecksum\":\"cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2\",\"loadChecksum\":\"7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045\",\"loadElapsedMilliseconds\":[220.899,212.185],\"godotVersion\":\"4.7.1.stable.mono.official.a13da4feb\",\"godotExitCode\":0,\"godotControlsExitCode\":0,\"godotCameraExitCode\":0,\"invalidViewFailuresChecked\":5,\"hudGuardRegressionExitCode\":1,\"hudReadabilityRegressionExitCode\":1,\"hudSmallestPhysicalTextPixels\":{\"Authored\":8,\"OwnerMaximized\":16},\"cameraTransformRegressionExitCode\":1,\"cameraInputChecks\":15,\"cameraTransformChecks\":15,\"cameraBoundsChecks\":10,\"cameraPanChecks\":5,\"viewInvariantChecksum\":\"94d7a550b96af32b75400510194d02b7b23975da47677a7058aa85571792bb56\",\"viewCases\":[\"base\",\"overview-shifted\",\"detail-scaled-ui\",\"large-same-zoom\"],\"goblinScreenPixels\":{\"Overview\":30.909090909090907,\"Base\":61.818181818181813,\"Detail\":92.72727272727272},\"godotRaidExitCode\":0,\"screenshotRepeatable\":true,\"goldenUiFrames\":[\"stone-t190-loose-no-stockpile\",\"stone-t336-in-transit\",\"stone-t950-stockpile-full\"]}",
+  "checksums": {
+    "claim": "Ни одна контрольная сумма не сдвинулась. Правка не касается src/DungeonFortress.Simulation/** вообще — она меняет только то, до какой позиции адаптер догоняет пересобранный мир.",
+    "deterministicChecksum": {
+      "thisRun": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+      "priorBaseline": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+      "recordedIn": "docs/engineering/STACK_EVALUATION.md:136, tests/DungeonFortress.Simulation.Tests/SimulationDeterminismTests.cs:57, evidence/331-full-verify.json:93",
+      "identical": true
+    },
+    "changedSeedChecksum": {
+      "thisRun": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
+      "priorBaseline": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
+      "identical": true
+    },
+    "loadChecksum": {
+      "thisRun": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+      "priorBaseline": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+      "identical": true
+    },
+    "viewInvariantChecksum": {
+      "thisRun": "94d7a550b96af32b75400510194d02b7b23975da47677a7058aa85571792bb56",
+      "priorBaseline": "94d7a550b96af32b75400510194d02b7b23975da47677a7058aa85571792bb56",
+      "recordedIn": "evidence/331-full-verify.json:116",
+      "identical": true
+    }
+  },
+  "targeted": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests",
+    "onBase800d037": "Пройден!: не пройдено 0, пройдено 661, всего 661 (сверено косвенно: с пятью красными рубежа 1 прогон дал «не пройдено 5, пройдено 661, всего 666»)",
+    "beforeFix": "Не пройден!: не пройдено     5, пройдено   661, пропущено     0, всего   666, длительность 43 s.",
+    "afterFix": "Пройден!   : не пройдено     0, пройдено   671, пропущено     0, всего   671, длительность 38 s.",
+    "reads": "661 базовых + 10 новых. Ни один существующий тест правка не сломала."
+  }
+}

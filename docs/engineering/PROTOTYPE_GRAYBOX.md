@@ -1700,6 +1700,105 @@ Invoke-GodotChecked -GodotPath (Resolve-GodotExecutable) -Arguments @(
 The frame it produces, and the readings taken from it, are
 `evidence/331-moment-of-truth.png` and `evidence/331-frame.json`.
 
+### Where a command lands while the window is open (Issue #351)
+
+Every command the player issues is *proved rather than trusted*: the adapter
+appends it to the session's log, validates the whole log, replays it from tick 0
+and makes the world that replay produces the live one. So a running session stays
+a function of its log, and the position that replay is driven to is what decides
+which state the player is looking at.
+
+That position is **a tick and the number of steps an open moment of truth has
+spent** — `DungeonFortress.Presentation.WorldPosition` — and not a tick alone.
+That names two of the three states tick `T` can be in; the third one it still
+cannot name is the caveat below. A
+tick alone stopped naming one state in Issue #312: while the window is open
+`PrototypeWorld.Step` spends a step waiting and never moves `CurrentTick`, so one
+tick number names up to 41 different states of the same party. Addressed by the
+tick alone, every press rebuilt the world to the step the window *opened* on: the
+counter stayed at `3 of 3 unanswered` no matter what was pressed, and the second
+answer silently erased the first. That was the Issue #351 playtest blocker; the
+rule now lives in one place, `WorldReplay`, and
+`MomentOfTruthVerdictReplayTests` walks the whole circle — press, rebuild,
+snapshot, band — on it.
+
+Three consequences worth knowing at the keyboard:
+
+- **An answer is visible at once.** Away from the window a command still
+  activates on the *next* tick, exactly as the feedback line says. Inside it the
+  clock is stopped on purpose, so a command that waited for the next step would
+  wait for a step that never comes; the replay therefore runs the window on far
+  enough for the world to hear it. That costs one of the 40 steps, and costs it
+  once — the same step hears every command dated at the frozen tick.
+- **Answering the last card ends the pause.** `CloseMomentOfTruth` has always
+  closed a fully answered window, so the tick it was holding back runs and the
+  band disappears. Nothing else runs: exactly one tick.
+- **`REPLAY` (`Y`) agrees while the window is open.** It replays the session's own
+  log to the same address, so a session whose verdicts were cast inside an open
+  window reproduces its own checksum instead of reporting
+  `replay checksum MISMATCH`. It does **not** agree once the window has run out —
+  see the caveat below.
+
+No rule of the moment of truth moved: three cards, 40 steps and what silence
+costs are all `PrototypeWorld`'s, and `src/DungeonFortress.Simulation/**` is
+untouched by this change.
+
+#### The state this address still cannot name (Issue #354)
+
+Tick `T` has **three** distinguishable states, and `WorldPosition` names two of
+them. The third is *the window has closed by running out of its 40 steps and the
+tick it was holding back has not run yet*: a snapshot of it reads
+`tick = T, open = false`, which is the same reading a snapshot taken before the
+window ever opened gives. `WorldReplay.PositionOf` therefore answers
+`WaitedSteps = 0` — a closed window carries no step count in the snapshot at
+all — and a rebuild from that address lands back where the window *opened*.
+
+Measured by independent review of PR #353 on `baseline`, whose first window opens
+on tick 1336:
+
+```
+after 40 steps: tick=1336 open=False
+grudges after silence: 2,2,0
+REPLAY agrees? False
+after the nudge: tick=1336 open=True unanswered=3 stepsLeft=39
+grudges after the nudge: 0,0,0
+```
+
+The "nudge" is an ordinary `SetPriorityCommand`. So a player who spent the whole
+window in silence, and was charged the grudge that silence costs, has that charge
+undone by the next press of anything — and `REPLAY` reports a mismatch about the
+same stretch of the session.
+
+This predates Issue #351 and is not a regression of it: on the base commit the
+same press also erased every verdict already cast. What Issue #351 closed is the
+open window; the expired one is
+[#354](https://github.com/anshushunov/dungeon-fortress/issues/354), with the
+reproduction above and the cure independent review proposed — the adapter
+counting steps itself, so that an expired window is addressed as `(T, 40)`
+instead of as a tick with nothing after it. Curing it needs `Main.Session.cs`,
+which was outside the partition of Issue #351.
+
+#### The presentation layer now holds a rule that runs the world
+
+`WorldReplay` is the first inhabitant of `DungeonFortress.Presentation` that
+**builds and runs** a `PrototypeWorld` rather than projecting a snapshot of one.
+Everything else in the assembly — `MomentOfTruthPanel`, `HudText`,
+`MapProjection`, `BlowReadout` — is a pure function of canonical state.
+
+It is here for the reason [ADR
+0011](../decisions/0011-presentation-layer-without-engine.md) put the other rules
+here: no test project references `DungeonFortress.Game`, so a rule that lives
+there can only be read as text. The rebuild is the seam every player command
+passes through, and while it lived in `Main` nothing executed it in a test —
+which is exactly how a verdict that never reached the screen survived two rounds
+of independent review and two playtests.
+
+The widening is written down rather than left to be discovered: **"engine-free"
+is not the same as "simulation-free"**. ADR 0011 is not amended by this —
+changing a decision already taken is its own decision and needs its own ADR — but
+a reader who takes the ADR's title literally should know that the layer now also
+owns the answer to *which position a rebuilt world is driven to*.
+
 ## Wave checkpoints
 
 A party is a sequence of waves, not one raid. At tick 300 the HUD announces wave

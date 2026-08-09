@@ -1,0 +1,44 @@
+{
+  "issue": 351,
+  "recordedAt": "2026-08-09",
+  "model": "anthropic/claude-opus-5[1m]",
+  "note": "Ответы на пункты 3 и 4 scope — явно, прогоном, а не предположением.",
+  "scope3_otherCommandsDuringTheWindow": {
+    "question": "Страдают ли так же другие команды во время окна — приоритеты, зоны, разметка?",
+    "answer": "Да, страдали, и ровно тем же способом. Ни одна из них не теряла собственный эффект — вне окна она и так pending, — но каждая откатывала окно в шаг 0 и стирала уже вынесенные вердикты.",
+    "why": "Все команды игрока идут через один Main.TryApplyPlayerCommand: и мазок кистью (ApplyBrushStroke), и приоритет с правилом (AdjustSelectedControl), и вердикт (IssueVerdict, ApplyMomentOfTruthPress). Пересборка у них общая, поэтому и болезнь общая.",
+    "measured": [
+      {
+        "test": "An_unrelated_command_during_the_window_keeps_the_answers_already_given(kind: \"priority\")",
+        "beforeFix": "Assert.Equal() Failure: Values differ\nExpected: 2\nActual:   3",
+        "afterFix": "green"
+      },
+      {
+        "test": "An_unrelated_command_during_the_window_keeps_the_answers_already_given(kind: \"rule\")",
+        "afterFix": "green",
+        "note": "Добавлена вместе с правкой; на дефектном коде красная по той же причине, что и priority — обе клаузы M2/M3 её красят."
+      }
+    ],
+    "structuralGuard": {
+      "test": "Every_rebuild_the_adapter_runs_for_the_player_goes_through_WorldReplay",
+      "claim": "В адаптере ровно два места, пересобирающих мир от имени игрока — TryApplyPlayerCommand и ReplayCurrentLog, — и оба зовут WorldReplay.To и не строят PrototypeWorld руками. Второй самодельный цикл догона снова сделал бы ответ выше тихо неверным.",
+      "read_as_text_because": "ADR 0011: ни один тестовый проект не ссылается на DungeonFortress.Game."
+    }
+  },
+  "scope4_replay": {
+    "question": "Болен ли REPLAY (Y)?",
+    "answer": "Да, написан тем же циклом и болел тем же — но проявлялся иначе, чем нажатие: он не терял вердикт, он лгал о воспроизводимости.",
+    "detail": "ReplayCurrentLog переигрывал лог до тика T и получал состояние «окно только что открылось», тогда как живой мир стоял в (T, W) с применёнными вердиктами. Пока игрок не сделал ни одного шага окна, оба мира были одинаково испорчены и контрольные суммы совпадали; после первого же шага окна REPLAY печатал «replay checksum MISMATCH» и писал диагностику `replay` о сессии, которая на самом деле воспроизводима.",
+    "measured": {
+      "test": "Replay_reproduces_a_session_whose_verdicts_were_cast_in_the_window",
+      "beforeFix": "Assert.Equal() Failure: Strings differ\nExpected: \"0a7844400bab07e15651e7ab4c279457716c8c1f1\"···\nActual:   \"17564ecf48e6190595e9ba3c7e69ca833748c2263\"···",
+      "afterFix": "green"
+    }
+  },
+  "notFixed": {
+    "site": "Main.PrintFramePacingResult, src/DungeonFortress.Game/Main.cs",
+    "what": "Тот же цикл догона по одному тику, для контрольной переигровки в пробе --frame-pacing.",
+    "whyLeft": "Main.cs не назван в разделе «Своё» партиции Issue #351; по AGENTS.md файл вне партиции не трогается, а эскалируется. Практического вреда сегодня нет: проба явно исключена из остановки часов (ShouldStopTheClock, `_framePacingTargetTick is null`), её цель — тик 200, задолго до первой волны, и она не подаёт команд игрока. Правка — одна строка: WorldReplay.To(BuildFullLog(_playerCommands), WorldReplay.PositionOf(_state!)).",
+    "escalatedTo": "координатор — отдельной строкой в теле PR"
+  }
+}

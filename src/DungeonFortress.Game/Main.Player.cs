@@ -289,14 +289,12 @@ public partial class Main
             var candidateCommands = _playerCommands.Append(command).ToArray();
             var candidateLog = BuildFullLog(candidateCommands);
             PrototypeCommandValidator.Validate(candidateLog);
-            var candidateWorld = new PrototypeWorld(candidateLog);
-            // Replayed to the same **tick** and not for the same number of steps:
-            // a step stopped being a tick when the party learned to stand still
-            // between two waves (Issue #312), and RunTicks counts steps.
-            while (!candidateWorld.IsComplete && candidateWorld.CurrentTick < _state!.Tick)
-            {
-                candidateWorld.Step();
-            }
+            // Driven back to where the player left the run. The address is a
+            // WorldPosition and not a tick, because a tick stopped naming one
+            // state when the party learned to stand still between two waves
+            // (Issue #312): the whole rule, and the test that walks this circle
+            // end to end, live in WorldReplay (Issue #351).
+            var candidateWorld = WorldReplay.To(candidateLog, WorldReplay.PositionOf(_state!));
             _playerCommands.Add(command);
             _world = candidateWorld;
             _controlFeedback = $"accepted {HudText.DescribeCommand(command)}; activates on next tick";
@@ -322,13 +320,12 @@ public partial class Main
 
     private void ReplayCurrentLog()
     {
-        var replay = new PrototypeWorld(BuildFullLog(_playerCommands));
-        var replayTarget = _state!.Tick;
-        while (!replay.IsComplete && replay.CurrentTick < replayTarget)
-        {
-            replay.Step();
-        }
-
+        // The same address the accepted command was replayed to, and for the same
+        // reason (Issue #351): replayed to a tick alone, REPLAY reported a
+        // mismatch about a session that was in fact reproducible, because the
+        // live run stood somewhere inside a moment of truth and the replay
+        // stopped at the step the window opened on.
+        var replay = WorldReplay.To(BuildFullLog(_playerCommands), WorldReplay.PositionOf(_state!));
         var checksum = PrototypeScenario.Capture(replay).Checksum;
         _controlFeedback = checksum == _checksum ? "replay checksum matches" : "replay checksum MISMATCH";
         if (checksum == _checksum)
