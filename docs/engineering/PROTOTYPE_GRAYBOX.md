@@ -1700,6 +1700,45 @@ Invoke-GodotChecked -GodotPath (Resolve-GodotExecutable) -Arguments @(
 The frame it produces, and the readings taken from it, are
 `evidence/331-moment-of-truth.png` and `evidence/331-frame.json`.
 
+### Where a command lands while the window is open (Issue #351)
+
+Every command the player issues is *proved rather than trusted*: the adapter
+appends it to the session's log, validates the whole log, replays it from tick 0
+and makes the world that replay produces the live one. So a running session stays
+a function of its log, and the position that replay is driven to is what decides
+which state the player is looking at.
+
+That position is **a tick and the number of steps an open moment of truth has
+spent** — `DungeonFortress.Presentation.WorldPosition` — and not a tick alone. A
+tick alone stopped naming one state in Issue #312: while the window is open
+`PrototypeWorld.Step` spends a step waiting and never moves `CurrentTick`, so one
+tick number names up to 41 different states of the same party. Addressed by the
+tick alone, every press rebuilt the world to the step the window *opened* on: the
+counter stayed at `3 of 3 unanswered` no matter what was pressed, and the second
+answer silently erased the first. That was the Issue #351 playtest blocker; the
+rule now lives in one place, `WorldReplay`, and
+`MomentOfTruthVerdictReplayTests` walks the whole circle — press, rebuild,
+snapshot, band — on it.
+
+Three consequences worth knowing at the keyboard:
+
+- **An answer is visible at once.** Away from the window a command still
+  activates on the *next* tick, exactly as the feedback line says. Inside it the
+  clock is stopped on purpose, so a command that waited for the next step would
+  wait for a step that never comes; the replay therefore runs the window on far
+  enough for the world to hear it. That costs one of the 40 steps, and costs it
+  once — the same step hears every command dated at the frozen tick.
+- **Answering the last card ends the pause.** `CloseMomentOfTruth` has always
+  closed a fully answered window, so the tick it was holding back runs and the
+  band disappears. Nothing else runs: exactly one tick.
+- **`REPLAY` (`Y`) agrees again.** It replays the session's own log to the same
+  address, so a session whose verdicts were cast inside a window reproduces its
+  own checksum instead of reporting `replay checksum MISMATCH`.
+
+No rule of the moment of truth moved: three cards, 40 steps and what silence
+costs are all `PrototypeWorld`'s, and `src/DungeonFortress.Simulation/**` is
+untouched by this change.
+
 ## Wave checkpoints
 
 A party is a sequence of waves, not one raid. At tick 300 the HUD announces wave

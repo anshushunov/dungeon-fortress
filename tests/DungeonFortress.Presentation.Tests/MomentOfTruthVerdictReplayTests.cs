@@ -193,30 +193,69 @@ public sealed class MomentOfTruthVerdictReplayTests
     }
 
     /// <summary>
-    /// A priority nudge is not a verdict, but it takes the same rebuild, so it
-    /// used to throw away every answer already given while the window was open.
-    /// Nothing about the card is asked here: the claim is that an unrelated
-    /// command leaves the answers alone.
+    /// A priority nudge and a rule nudge are not verdicts, but they take the same
+    /// rebuild, so each of them used to throw away every answer already given
+    /// while the window was open. Nothing about the card is asked here: the claim
+    /// is that an unrelated command leaves the answers alone.
     /// </summary>
-    [Fact]
-    public void An_unrelated_command_during_the_window_keeps_the_answers_already_given()
+    [Theory]
+    [InlineData("priority")]
+    [InlineData("rule")]
+    public void An_unrelated_command_during_the_window_keeps_the_answers_already_given(string kind)
     {
         var session = Session.PlayedToTheMomentOfTruth(Fixture);
         var opening = session.Band();
         var judged = opening.Cards[0].CreatureId;
         Assert.True(session.Answer(judged, VerdictKind.Reward), session.Feedback);
 
-        var priority = session.Snapshot.Priorities[JobKind.Drill];
-        Assert.True(
-            session.Apply(new SetPriorityCommand(session.Tick, JobKind.Drill, priority == 4 ? 3 : 4)),
-            session.Feedback);
+        Assert.True(session.Apply(Nudge(session, kind)), session.Feedback);
 
         var band = session.Band();
-        Assert.True(band.Open, "a priority nudge closed the moment of truth");
+        Assert.True(band.Open, $"a {kind} nudge closed the moment of truth");
         Assert.Equal(opening.Unanswered - 1, band.Unanswered);
         Assert.Equal(
             Reward,
             band.Cards.Single(card => card.CreatureId == judged).Verdict);
+    }
+
+    /// <summary>
+    /// An unrelated command that changes something the player can see, in the
+    /// smallest way each kind allows.
+    /// </summary>
+    private static PrototypeCommand Nudge(Session session, string kind) => kind switch
+    {
+        "priority" => new SetPriorityCommand(
+            session.Tick,
+            JobKind.Drill,
+            session.Snapshot.Priorities[JobKind.Drill] == 4 ? 3 : 4),
+        "rule" => new SetRuleCommand(
+            session.Tick,
+            "ration_reserve",
+            session.Snapshot.Rules["ration_reserve"] == 4 ? 3 : 4),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "unknown nudge"),
+    };
+
+    /// <summary>
+    /// Every rebuild the adapter runs on a player's behalf goes through
+    /// <see cref="WorldReplay"/>, so the rule this file executes is the rule the
+    /// game runs.
+    ///
+    /// <para>Read as text for the reason <see cref="AdapterSource"/> exists: no
+    /// test project references <c>DungeonFortress.Game</c> (ADR 0011). It is the
+    /// half of criterion 4 of Issue #351 that a behavioural test cannot reach —
+    /// the answer «do the other commands suffer too?» is «they take exactly this
+    /// path», and a second hand-rolled catch-up loop in the adapter would make
+    /// that answer quietly false again.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("TryApplyPlayerCommand")]
+    [InlineData("ReplayCurrentLog")]
+    public void Every_rebuild_the_adapter_runs_for_the_player_goes_through_WorldReplay(string routine)
+    {
+        var body = AdapterSource.Body(routine);
+
+        Assert.Contains("WorldReplay.To(", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("new PrototypeWorld(", body, StringComparison.Ordinal);
     }
 
     // ------------------------------------------------------------------
