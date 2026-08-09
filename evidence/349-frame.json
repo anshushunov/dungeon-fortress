@@ -1,0 +1,39 @@
+{
+  "issue": 349,
+  "checkpoint": 1,
+  "what": "-DemoMomentOfTruth wired into scripts/run-game.ps1's param() and prokinut into the engine's already-shipped --demo-moment-of-truth (PR #345). Before this checkpoint the flag was reachable only by calling the engine directly, bypassing run-game.ps1 — the gap Issue #349 was opened about.",
+  "base": {
+    "commit": "ad76e6b36543e457279c05494d6c691054dc0911",
+    "howObtained": "git log -1 --format=%H, run at the repository root before this checkpoint's changes"
+  },
+  "commands": {
+    "primary": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -DemoMomentOfTruth -ScreenshotPath 349-frame.png -CameraZoom 0.5 -UiScale 1 -FrameSize 1600x900 -ScreenshotTicks 1",
+    "repeat": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -DemoMomentOfTruth -ScreenshotPath 349-frame-repeat.png -CameraZoom 0.5 -UiScale 1 -FrameSize 1600x900 -ScreenshotTicks 1",
+    "sha256": "sha256sum .artifacts/349-frame.png .artifacts/349-frame-repeat.png"
+  },
+  "primaryEvent": {
+    "event": "godot_graybox_screenshot",
+    "status": "ok",
+    "fixture": "baseline",
+    "seed": 20260726,
+    "tick": 1336,
+    "checksum": "b541a23982ba52189a73835c032d134f122efc2a02e8b8935076966bd8a81946",
+    "momentOfTruth": { "open": true, "visible": true }
+  },
+  "repeatEvent": {
+    "event": "godot_graybox_screenshot",
+    "status": "ok",
+    "fixture": "baseline",
+    "seed": 20260726,
+    "tick": 1336,
+    "checksum": "b541a23982ba52189a73835c032d134f122efc2a02e8b8935076966bd8a81946",
+    "momentOfTruth": { "open": true, "visible": true }
+  },
+  "screenshotSha256": {
+    "primary": "7c5e74bffb1913c89b29c3e6af45a207c17958ee9fead8fd4fd949f89b613b91",
+    "repeat": "7c5e74bffb1913c89b29c3e6af45a207c17958ee9fead8fd4fd949f89b613b91",
+    "equal": true
+  },
+  "whyTheChecksumMovedFromEvidence331Frame": "evidence/331-frame.json recorded checksum c0b2d998... on tick 1336 of the same baseline/20260726 fixture. Docs/design/SLICE_05_RETURNING_HERO.md §7 documents that Issue #358 (merged before this branch was cut) added the survivors[] section to the canonical snapshot, which is additive and shifts the checksum of every frame including tick 1336 — not a regression in this checkpoint. Tick and momentOfTruth.open/visible are the load-bearing facts here, and both match evidence/331-frame.json exactly.",
+  "whyTick1336AndNotAnArbitraryOne": "--demo-moment-of-truth is deterministic: it always runs the baseline fixture forward until the first wave's window opens and stops there (Main.Player.cs, ApplyDemoMomentOfTruth). -ScreenshotTicks is irrelevant to which tick is captured; Main.cs already forces the internal tick target to 1 whenever the flag is set, and ApplyDemoMomentOfTruth runs the party from there. Tick 1336 is not chosen by this checkpoint — it is where the same deterministic search evidence/331-frame.json already photographed lands."
+}

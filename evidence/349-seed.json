@@ -1,0 +1,50 @@
+{
+  "issue": 349,
+  "checkpoint": 4,
+  "what": "The -Seed parameter of scripts/run-game.ps1 (Issue #349's addendum, scope point 4), prokinut into the engine as --seed and applied to the loaded fixture document as PrototypeCommandLog.Seed before the world is constructed (Main.Session.cs, LoadFixture). This closes the gap the gate-decisions log recorded on 2026-08-02: run-game.ps1 had -Fixture but no way to reach a seed other than the one the fixture document bakes in.",
+  "base": {
+    "commit": "ad76e6b36543e457279c05494d6c691054dc0911",
+    "howObtained": "git log -1 --format=%H, run at the repository root before this checkpoint's changes"
+  },
+  "howTheOverrideReachesTheWorld": "Main.cs reads --seed with the same CommandLineArguments.Read helper every other optional flag uses, parses it as UInt64, and passes it to LoadFixture. LoadFixture applies it with '_fixtureLog = _fixtureLog with { Seed = seed }' before constructing PrototypeWorld — the identical record-with pattern DungeonFortress.Simulation.Tests already uses (e.g. PrototypeReturningRaiderTests.cs, RouteSeed = 20_260_729UL) to run a fixture at a seed other than its own. No line in DungeonFortress.Simulation moves: PrototypeCommandLog.Seed already accepted any ulong the document schema allows.",
+  "criterion5_twoSidedCheck": {
+    "claim": "Two runs of the same fixture with DIFFERENT -Seed values produce different canonical checksums and different screenshot bytes; two runs with the SAME -Seed value (or the fixture's own default) produce byte-identical output. A parameter that is accepted and silently ignored would pass only the second half.",
+    "commonArguments": "-Fixture baseline -CameraZoom 0.5 -UiScale 1 -FrameSize 1280x720 -ScreenshotTicks 1",
+    "runs": [
+      {
+        "label": "A: -Seed 20260729, run 1",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotPath 349-seed-a.png -CameraZoom 0.5 -UiScale 1 -FrameSize 1280x720 -ScreenshotTicks 1",
+        "seedReported": 20260729,
+        "checksum": "f4b23b00f460984f2d7e9f5eca4a28ef8845cfe6c59199b218692dc3ba3fdf53",
+        "screenshotSha256": "56c2b2fdcc10a7b31538a3370fc20c0ebca0ef1b7b339489eff9056941d01fe9"
+      },
+      {
+        "label": "A2: -Seed 20260729, run 2 (reproducibility half of criterion 5)",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotPath 349-seed-a2.png -CameraZoom 0.5 -UiScale 1 -FrameSize 1280x720 -ScreenshotTicks 1",
+        "seedReported": 20260729,
+        "checksum": "f4b23b00f460984f2d7e9f5eca4a28ef8845cfe6c59199b218692dc3ba3fdf53",
+        "screenshotSha256": "56c2b2fdcc10a7b31538a3370fc20c0ebca0ef1b7b339489eff9056941d01fe9"
+      },
+      {
+        "label": "B: -Seed 20260726 (fixture's own baked-in seed, named explicitly) — divergence half of criterion 5",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260726 -ScreenshotPath 349-seed-b.png -CameraZoom 0.5 -UiScale 1 -FrameSize 1280x720 -ScreenshotTicks 1",
+        "seedReported": 20260726,
+        "checksum": "54985f1ce778d190d49c79e2c1b6236b05852dbd16168c5b72c7e56e44c35dc9",
+        "screenshotSha256": "10a9ee7613be47d75d05ed68c5176b88c0699be9ae0c89dd4b263dc634404200"
+      },
+      {
+        "label": "Default: no -Seed at all (backward compatibility — must equal B, since baseline.commands.v2.json's own seed is 20260726)",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -ScreenshotPath 349-seed-default.png -CameraZoom 0.5 -UiScale 1 -FrameSize 1280x720 -ScreenshotTicks 1",
+        "seedReported": 20260726,
+        "checksum": "54985f1ce778d190d49c79e2c1b6236b05852dbd16168c5b72c7e56e44c35dc9",
+        "screenshotSha256": "10a9ee7613be47d75d05ed68c5176b88c0699be9ae0c89dd4b263dc634404200"
+      }
+    ],
+    "reading": {
+      "sameSeedIsByteIdentical": "A and A2 (both -Seed 20260729): checksum and screenshot SHA-256 match exactly — f4b23b00... both times, 56c2b2fd... both times.",
+      "differentSeedDiverges": "A (20260729) and B (20260726) differ in both checksum (f4b23b00... vs 54985f1c...) and screenshot SHA-256 (56c2b2fd... vs 10a9ee76...). The parameter is not being silently ignored.",
+      "omittedSeedIsUnchangedBehaviour": "Default (no -Seed) and B (-Seed 20260726, the fixture's own value, named explicitly) match byte-for-byte in both checksum and screenshot. Omitting -Seed keeps exactly the behaviour run-game.ps1 had before this parameter existed.",
+      "conclusion": "Both halves of criterion 5 hold: same seed -> identical output; different seed -> different output; and the parameter's absence is provably a no-op rather than an assumption."
+    }
+  }
+}

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 using DungeonFortress.Presentation;
@@ -245,6 +246,18 @@ public partial class Main : Node2D
             var demoMomentOfTruth =
                 arguments.Contains("--demo-moment-of-truth", StringComparer.Ordinal);
             var duelFrame = CommandLineArguments.ReadInt(arguments, "--demo-duel-frame");
+            // Issue #349's addendum. A fixture document bakes in one seed
+            // (scenarios\prototype1\*.commands.v2.json); this lets a run ask for
+            // a different one without touching the document or the fixture it
+            // names. PrototypeCommandLog.Seed already accepts any value the
+            // document format allows — an unsigned 64-bit integer — so this
+            // reaches the same constructor a different way, which is why
+            // nothing in DungeonFortress.Simulation moves for it. Omitted, the
+            // fixture's own seed is used, exactly as before this flag existed.
+            var seedText = CommandLineArguments.Read(arguments, "--seed");
+            var seedOverride = seedText is null
+                ? (ulong?)null
+                : ulong.Parse(seedText, CultureInfo.InvariantCulture);
             _flatBody = arguments.Contains("--flat-body", StringComparer.Ordinal);
             var requiresSprites = !headlessSmoke && !controlsSmoke && !cameraSmoke;
 
@@ -277,7 +290,8 @@ public partial class Main : Node2D
                 demoControls || demoDig || demoStone || demoBuild || demoDuel ||
                 demoMomentOfTruth || controlsSmoke || _screenshotPath is null
                     ? 1
-                    : screenshotTicks);
+                    : screenshotTicks,
+                seedOverride);
             if (hudGuardRegression)
             {
                 InjectHudGuardRegression();
