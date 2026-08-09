@@ -3,11 +3,11 @@
   "recordedAt": "2026-08-09",
   "model": "anthropic/claude-opus-5[1m]",
   "baseCommit": "800d037",
-  "appliedOverCommit": "99f111c",
+  "appliedOverCommit": "d964b61",
   "note": "Мутанты применялись поверх закоммиченного проверяемого состояния и снимались через `git checkout -- src/DungeonFortress.Presentation/WorldReplay.cs`; иначе откат снёс бы саму правку (урок #147). Подстановки записаны дословно: change.from и change.to — точный текст кода, а не пересказ.",
   "green": {
     "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~MomentOfTruthVerdictReplayTests\"",
-    "result": "Пройден!   : не пройдено     0, пройдено     7, пропущено     0, всего     7"
+    "result": "Пройден!   : не пройдено     0, пройдено    10, пропущено     0, всего    10, длительность 6 s."
   },
   "mutants": [
     {
@@ -23,19 +23,22 @@
       },
       "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~MomentOfTruthVerdictReplayTests\"",
       "result": "red",
-      "summary": "Не пройден!: не пройдено     6, пройдено     1, пропущено     0, всего     7, длительность 6 s.",
+      "summary": "Не пройден!: не пройдено     7, пройдено     3, пропущено     0, всего    10, длительность 7 s.",
       "failed": [
         "A_verdict_the_player_issues_is_visible_on_the_band_it_answers",
         "A_second_verdict_does_not_undo_the_first",
         "A_window_that_has_spent_steps_is_not_rewound_by_the_next_press",
         "The_last_answer_closes_the_window_and_the_tick_it_held_back_runs",
-        "An_unrelated_command_during_the_window_keeps_the_answers_already_given",
+        "An_unrelated_command_during_the_window_keeps_the_answers_already_given(kind: \"priority\")",
+        "An_unrelated_command_during_the_window_keeps_the_answers_already_given(kind: \"rule\")",
         "Replay_reproduces_a_session_whose_verdicts_were_cast_in_the_window"
       ],
       "survived": [
-        "A_command_away_from_the_window_still_activates_on_the_next_tick"
+        "A_command_away_from_the_window_still_activates_on_the_next_tick",
+        "Every_rebuild_the_adapter_runs_for_the_player_goes_through_WorldReplay(routine: \"TryApplyPlayerCommand\")",
+        "Every_rebuild_the_adapter_runs_for_the_player_goes_through_WorldReplay(routine: \"ReplayCurrentLog\")"
       ],
-      "reads": "Единственная выжившая проверка — та, что стоит вне окна, и она обязана выживать: вне момента истины мутант и правка — один и тот же код. Это не дыра покрытия, а измерение того, что правка ничего не меняет за пределами окна."
+      "reads": "Выжившие три проверки обязаны выживать, и это измерение, а не дыра. «Вне окна» — там мутант и правка один и тот же код, то есть правка не расползлась за пределы окна. Два структурных гарда читают адаптер как текст: они держат то, что пересборка у игрока одна, и телом WorldReplay.IsBehind не управляются."
     },
     {
       "id": "M2",
@@ -49,12 +52,13 @@
       },
       "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~MomentOfTruthVerdictReplayTests\"",
       "result": "red",
-      "summary": "Не пройден!: не пройдено     4, пройдено     3, пропущено     0, всего     7, длительность 5 s.",
+      "summary": "Не пройден!: не пройдено     5, пройдено     5, пропущено     0, всего    10, длительность 7 s.",
       "failed": [
         "A_verdict_the_player_issues_is_visible_on_the_band_it_answers",
         "A_second_verdict_does_not_undo_the_first",
         "The_last_answer_closes_the_window_and_the_tick_it_held_back_runs",
-        "An_unrelated_command_during_the_window_keeps_the_answers_already_given"
+        "An_unrelated_command_during_the_window_keeps_the_answers_already_given(kind: \"priority\")",
+        "An_unrelated_command_during_the_window_keeps_the_answers_already_given(kind: \"rule\")"
       ],
       "reads": "Это состояние «окно больше не откатывается, но ответ по-прежнему невидим» — половина правки, которая на кадре владельца выглядела бы точно так же, как дефект. Красное — значит проверка отличает две половины друг от друга."
     },
@@ -70,7 +74,7 @@
       },
       "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter \"FullyQualifiedName~MomentOfTruthVerdictReplayTests\"",
       "result": "red",
-      "summary": "Не пройден!: не пройдено     2, пройдено     5, пропущено     0, всего     7, длительность 6 s.",
+      "summary": "Не пройден!: не пройдено     2, пройдено     8, пропущено     0, всего    10, длительность 6 s.",
       "failed": [
         "A_window_that_has_spent_steps_is_not_rewound_by_the_next_press",
         "Replay_reproduces_a_session_whose_verdicts_were_cast_in_the_window"
