@@ -10,14 +10,25 @@ public sealed partial class PrototypeWorld
     /// One name out of <see cref="PrototypeRaiderNames"/>, drawn from the party's
     /// own stream and never handed out twice.
     ///
-    /// <para>The draw is a rejection loop over the nicknames and then over the
-    /// epithets, and both loops are bounded by the pool rather than by a retry
-    /// count, so the method either returns a free name or has walked the whole
-    /// pool. It cannot fall through: <see cref="PrototypeRaiderNames.Capacity"/>
-    /// is 240 against the 48 raiders the largest possible party can field
-    /// (<c>T.wave_max_raiders</c> × <c>T.wave_count</c>), and
-    /// <c>Every_name_a_party_can_need_fits_in_the_pool</c> is the check that says
-    /// so rather than this sentence.</para>
+    /// <para><b>Uniqueness is guaranteed; termination with a name is not, and the
+    /// difference is stated rather than glossed.</b> Never handed out twice is a
+    /// property of the <c>HashSet.Add</c> below and holds unconditionally. What
+    /// the loops do, however, is <b>sample with replacement</b>: each turn draws a
+    /// nickname — possibly one already drawn this call — and then up to
+    /// <see cref="PrototypeRaiderNames.Epithets"/><c>.Count</c> epithets for it,
+    /// also with replacement. The bounds are attempt counts, not an enumeration of
+    /// the pool, so the method can in principle fall through to the throw while
+    /// free names remain. It is improbable, not impossible.</para>
+    ///
+    /// <para>What actually keeps it from happening is the size of the pool against
+    /// the size of a party, and the shape of the greedy: bare nicknames are taken
+    /// first, so a raider only ever competes for the epithets of a nickname that is
+    /// already in use. <see cref="PrototypeRaiderNames.Capacity"/> is 240 against
+    /// the 48 raiders the largest possible party can field
+    /// (<c>T.wave_max_raiders</c> × <c>T.wave_count</c>), which is the margin
+    /// <c>Every_name_a_party_can_need_fits_in_the_pool</c> asserts. That check is
+    /// about the margin and not about this loop, and saying so is the point: it
+    /// cannot rule the fall-through out.</para>
     ///
     /// <para>Rejection rather than a hash of the id, and the difference is the
     /// point: a hash gives the same name to two raiders as soon as it collides,
@@ -48,12 +59,16 @@ public sealed partial class PrototypeWorld
             }
         }
 
-        // Unreachable while the pool is larger than the largest party, which is
-        // what the check named in the docstring holds. Throwing rather than
-        // inventing a name keeps that a fact instead of a hope.
+        // Reached when the draws above ran out of attempts, which is not the same
+        // thing as the pool running out of names: the draw samples with
+        // replacement, so this is the unlucky branch and not the impossible one.
+        // It throws rather than inventing a name because either reason for being
+        // here is a fact worth stopping on — a party grown past the pool, or a
+        // draw that lost a bet the margin was supposed to make unlosable.
         throw new InvalidOperationException(
-            "The raider name pool is exhausted. Widen PrototypeRaiderNames " +
-            $"(capacity {PrototypeRaiderNames.Capacity}) before a party can field more raiders.");
+            "The raider name pool ran out of attempts before it found a free name. " +
+            $"Capacity is {PrototypeRaiderNames.Capacity} names; if a party can now field " +
+            "that many raiders, widen PrototypeRaiderNames.");
     }
 
     /// <summary>

@@ -561,9 +561,21 @@ public sealed partial class PrototypeWorld
         public PrototypeRememberedPlace? RememberedPlace { get; init; }
 
         /// <summary>
-        /// The health this raider walked in with. A returning one walks in with
-        /// more, so the share the scar is read against has to be its own starting
-        /// health rather than the constant every fresh raider shares.
+        /// The health this raider walked in with.
+        ///
+        /// <para>Today it is <see cref="PrototypeTuning.RaiderHp"/> for everybody,
+        /// returning raider included: the health bonus a returner was first given
+        /// did not survive its own measurement — over eight parties it kept one
+        /// raider in fifty-four off the floor and moved no party's score
+        /// (<c>evidence/358-strengthening.json</c>), so the strengthening is one
+        /// knob and it is might.</para>
+        ///
+        /// <para>The field stays anyway, and not out of habit: <see cref="Scar"/>
+        /// reads the share of health a raider lost, and reading it against the
+        /// health <em>this</em> raider started with rather than against a constant
+        /// is what keeps that rule true if a body ever walks in with a different
+        /// amount. It is one line and it removes a whole class of silent
+        /// wrongness.</para>
         /// </summary>
         public int StartingHp { get; } = hp;
 

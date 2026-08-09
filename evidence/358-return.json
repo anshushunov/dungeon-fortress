@@ -57,10 +57,21 @@
   "returnsThePartyHasNoRoomFor": {
     "rule": "escapedWave + T.returning_raider_wave_gap (2). A return wave past T.wave_count is recorded with status 'no_wave_left' rather than dropped.",
     "observedOnBaseline20260726": {
-      "no_wave_left": 16,
+      "totalSurvivors": 23,
+      "no_wave_left": 17,
       "returned": 6,
       "awaiting": 0,
       "no_room_in_wave": 0
+    },
+    "byEscapedWave": {
+      "wave2": "6 returned",
+      "wave3": "8 no_wave_left",
+      "wave4": "9 no_wave_left"
+    },
+    "howTheCountWasObtained": {
+      "command": "dotnet run -c Release --project ./tests/DungeonFortress.Scenarios -- --prototype --commands ./scenarios/prototype1/baseline.commands.v2.json --ticks 2700 --snapshot ./.artifacts/probe/f2.json  &&  python -c \"import json, collections; s = json.load(open('.artifacts/probe/f2.json', encoding='utf-8')); print(len(s['survivors']), dict(collections.Counter(v['status'] for v in s['survivors']))); print(collections.Counter((v['escapedWave'], v['status']) for v in s['survivors']))\"",
+      "output": "23 {'returned': 6, 'no_wave_left': 17} / Counter({(4, 'no_wave_left'): 9, (3, 'no_wave_left'): 8, (2, 'returned'): 6})",
+      "correction": "this file and SLICE_05_RETURNING_HERO.md said 16 no_wave_left in the first round. That number was counted off the printed report by eye and was wrong by one; independent review of PR #360 caught it (F2). It is now read off survivors[].status by the command above."
     },
     "whyNoRoomInWaveIsZeroHere": "the shipped party never has more survivors due back in one wave than that wave has places. The branch exists because it can be reached — twelve escapes into a four-place wave — and it is held by the same status vocabulary the test asserts over."
   }
