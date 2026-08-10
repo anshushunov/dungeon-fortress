@@ -211,10 +211,16 @@ public sealed class WorldLabelInspectorTests
     ///
     /// <para><b>Re-pinned by Issue #361:</b> the crowd of the owner's frame moved
     /// from (15,7) to (14,7) and is still six bodies deep, so the cell and the
-    /// text it prints moved with it and the count did not. The cell the «selected
-    /// body stands elsewhere» case reads from moved for the same reason: (16,7) is
-    /// empty on this frame, and (15,7) is where a body that is not on the crowded
-    /// cell now stands.</para>
+    /// text it prints moved with it and the count did not.</para>
+    ///
+    /// <para>The cell the «selected body stands elsewhere» case reads from moved
+    /// as well, and that move was <b>not forced</b>: (16,7) still carries a body
+    /// this frame — one crew member — so the old source would have gone on
+    /// working. It reads <see cref="MixedCell"/> instead so that both checks of
+    /// this file take their «somewhere else» body from one named cell, the one
+    /// <see cref="The_pointer_answers_with_the_selected_body_when_it_stands_on_that_cell"/>
+    /// has to name anyway. Two literals drifting apart on one frame is how a
+    /// re-pin goes wrong quietly.</para>
     ///
     /// <para>It is not decoration. Cycling was chosen over a chooser popup partly
     /// <em>because</em> this line pays the cost of cycling: four raiders on one tile

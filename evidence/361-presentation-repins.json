@@ -66,14 +66,15 @@
       "check": "WorldLabelInspectorTests.The_pointer_answers_with_the_selected_body_when_it_stands_on_that_cell",
       "was": "cell (15,7), 6 bodies, bodies[0] is a Creature; the «selected body stands elsewhere» case read from (16,7)",
       "now": "cell (14,7), 6 bodies; the «elsewhere» case reads from (15,7); the crew-in-front case is asserted separately on (15,7)",
-      "whyTheWorldMoved": "The crowd of that room moved one tile west and is still six bodies deep, but it is now six raiders rather than a crew member in front of five raiders. (16,7) is empty on this frame, so the body that has to be standing somewhere else is taken from (15,7), which now holds the crew member Тишина in front of one raider.",
+      "whyTheWorldMoved": "The crowd of that room moved one tile west and is still six bodies deep, but it is now six raiders rather than a crew member in front of five raiders, so the crowded cell moved and the mixed case had to be asserted somewhere else.",
+      "whyTheElsewhereSourceMoved": "Not because it had to. (16,7) still carries one body on this frame — the crew member #4 — so the old BodiesAt((16,7)).First(b => !bodies.Contains(b)) would have gone on working; an earlier version of this file said (16,7) was empty and that was wrong, found by independent review of PR #377. The source reads (15,7) so that both checks of the file take their «somewhere else» body from one named cell, MixedCell, which the pointer check has to name anyway for the crew-in-front case. Measured with a temporary scan test in the same project: (14,7) bodies=6 all raiders, (15,7) bodies=2 [Creature#8, Raider#23], (16,7) bodies=1 [Creature#4].",
       "formChanged": "yes: an assertion was added, not moved. Re-pinning the cell alone would have quietly dropped «the player has clicked past a crew member», which is the half the rule was written for, because no single cell of this frame is both crowded and mixed any more. So the mixed case is asserted separately on (15,7). Nothing was removed and nothing was loosened; the assertion that bodies[0] is a Creature moved to the cell that still has one instead of being deleted or turned into a weaker claim."
     },
     {
       "check": "WorldLabelInspectorTests.The_feedback_line_says_which_body_of_how_many_the_click_reached",
       "was": "cell (15,7); the line reads «(15,7): n of 6 …»; the «elsewhere» case read from (16,7)",
       "now": "cell (14,7); the line reads «(14,7): n of 6 …»; the «elsewhere» case reads from (15,7)",
-      "whyTheWorldMoved": "The same move of the crowd. The count of six did not change, only which cell holds it.",
+      "whyTheWorldMoved": "The same move of the crowd. The count of six did not change, only which cell holds it. Its «elsewhere» source moved to MixedCell for the same reason as the row above, and equally not out of necessity.",
       "formChanged": "no."
     }
   ],

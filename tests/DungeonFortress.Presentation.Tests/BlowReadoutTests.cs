@@ -24,9 +24,18 @@ public sealed class BlowReadoutTests
     /// <para>It was tick 1318 with the same two strikers on the same raider, for 5
     /// and 2, until Issue #361 made the damage jitter live. The party is fought
     /// differently from the first blow onwards, so the tick the scene falls on
-    /// moved; the scene itself is the same one, found by walking the same journal
-    /// and taking the first tick that carries two blows on one body of which one
-    /// is a kill.</para>
+    /// moved; the scene itself is the same one.</para>
+    ///
+    /// <para><b>How to find it again, stated exactly, because the obvious recipe
+    /// is the wrong one.</b> Walk the same journal, collect every tick that
+    /// carries two blows on one body of which one is a kill, and take the first
+    /// one with <b>this cast</b> — Кремень (1) and Тишина (8) on raider 1. The
+    /// cast is the load-bearing half and «first» alone is not enough: this party
+    /// has two such ticks, and the first of them is 1306, where creature 2 hits
+    /// raider 0 for 3 and creature 3 puts it down for 5. Re-pinning by «the first
+    /// such tick» lands on 1306 — a different scene with different bodies — and
+    /// every id below would then be wrong for a reason nothing in this file would
+    /// explain.</para>
     /// </summary>
     private const int BlowTick = 1313;
 
