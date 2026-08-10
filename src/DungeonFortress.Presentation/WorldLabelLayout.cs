@@ -150,6 +150,55 @@ public sealed record WorldLabelFocus(
     public static WorldLabelFocus None { get; } = new(null, null);
 }
 
+/// <summary>
+/// The ring round the body the inspector is pointed at (Issue #364, point 3 of the
+/// addendum of 2026-08-10).
+///
+/// <para><b>Why the rule is here and not in the adapter.</b> It was in the adapter,
+/// and only for one of the two populations: <c>Main.DrawCreatureInformation</c>
+/// drew a ring when <c>_selectedCreatureId</c> matched, and
+/// <c>DrawRaiderInformation</c> had no such branch — until this Issue a raider
+/// could not be selected at all, so there was nothing for it to draw. Copying the
+/// four lines into the second routine would have left two statements of one
+/// decision in a file no CI job builds. The rule and its numbers live here
+/// instead and both routines read them, which is the seam
+/// <see cref="ReturningHeroLabel"/> is on and for the same reason (ADR 0011).</para>
+///
+/// <para>The numbers are the creature ring's own, unchanged. So a selected
+/// creature is drawn exactly as it was before this Issue, and a selected raider is
+/// drawn exactly like a selected creature — «так же однозначно» is the criterion,
+/// and identical geometry is the strongest reading of it available.</para>
+/// </summary>
+public static class WorldSelectionMark
+{
+    /// <summary>
+    /// Whether this body carries the ring.
+    ///
+    /// <para>Selection only, and deliberately not hover: the pointer already
+    /// answers with a label over the head, and a ring that followed the cursor
+    /// would blink round every body it crossed on the way. The two questions are
+    /// «which one am I asking about» and «which one have I chosen», and only the
+    /// second one is worth a mark that stays.</para>
+    /// </summary>
+    public static bool IsRinged(WorldLabelSubject body, WorldLabelFocus focus)
+    {
+        ArgumentNullException.ThrowIfNull(focus);
+        return focus.Selected == body;
+    }
+
+    /// <summary>How far from the body's render centre the ring sits, in reference pixels.</summary>
+    public const double RadiusRef = 10.0;
+
+    /// <summary>How thick the ring is drawn, in reference pixels.</summary>
+    public const double StrokeRef = 2.0;
+
+    /// <summary>How many segments the arc is drawn with.</summary>
+    public const int Segments = 16;
+
+    /// <summary>The colour of the ring.</summary>
+    public const string Color = "#ffffff";
+}
+
 /// <summary>Which side of the head a label took.</summary>
 public enum WorldLabelSide
 {

@@ -58,6 +58,58 @@ public sealed class WorldLabelInspectorTests
     }
 
     /// <summary>
+    /// Criterion 9's other half: the choice is <em>visible on the map</em> and not
+    /// merely recorded. Clicking a raider fills the panel, and until this the map
+    /// still said nothing about which body the panel was about.
+    ///
+    /// <para>One rule for both populations, so a raider is ringed under exactly the
+    /// condition a creature is and never under a different one.</para>
+    /// </summary>
+    [Fact]
+    public void The_selected_body_is_ringed_and_it_is_the_same_rule_for_both_kinds()
+    {
+        var creature = new WorldLabelSubject(WorldLabelKind.Creature, 3);
+        var raider = new WorldLabelSubject(WorldLabelKind.Raider, 3);
+
+        Assert.True(WorldSelectionMark.IsRinged(raider, new WorldLabelFocus(null, raider)));
+        Assert.True(WorldSelectionMark.IsRinged(creature, new WorldLabelFocus(null, creature)));
+        // The two populations number themselves independently, so choosing raider 3
+        // must not ring creature 3.
+        Assert.False(WorldSelectionMark.IsRinged(creature, new WorldLabelFocus(null, raider)));
+        Assert.False(WorldSelectionMark.IsRinged(raider, new WorldLabelFocus(null, creature)));
+        // Pointing at a body is not choosing it: a ring that followed the cursor
+        // would blink round every body it crossed.
+        Assert.False(WorldSelectionMark.IsRinged(raider, new WorldLabelFocus(raider, null)));
+        Assert.False(WorldSelectionMark.IsRinged(raider, WorldLabelFocus.None));
+    }
+
+    /// <summary>
+    /// And that the adapter really draws it for both — the one question a pure test
+    /// cannot ask of a value, asked of the adapter's source the way
+    /// <c>WorldDrawPassGuardTests</c> asks its own. No test project references
+    /// <c>DungeonFortress.Game</c> and none should (ADR 0011), so structure is read
+    /// as text.
+    ///
+    /// <para>This is what covers the ring instead of a fourth mutant. Deleting the
+    /// ring from <c>DrawRaiderInformation</c> — precisely the state this Issue
+    /// found the adapter in — reddens it, and so does replacing the shared rule
+    /// with a hand-written condition in either routine.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("DrawCreatureInformation")]
+    [InlineData("DrawRaiderInformation")]
+    public void The_adapter_rings_the_selected_body_of_either_kind(string routine)
+    {
+        var body = AdapterSource.Body(routine);
+
+        Assert.Contains(nameof(WorldSelectionMark.IsRinged), body, StringComparison.Ordinal);
+        Assert.Contains(nameof(WorldSelectionMark.RadiusRef), body, StringComparison.Ordinal);
+        Assert.Contains(nameof(WorldSelectionMark.StrokeRef), body, StringComparison.Ordinal);
+        Assert.Contains(nameof(WorldSelectionMark.Segments), body, StringComparison.Ordinal);
+        Assert.Single(AdapterSource.CallsTo(body, "DrawArc"));
+    }
+
+    /// <summary>
     /// The other side of the same function, so that "everything is a raider" would
     /// not pass the check above: a crew member is still picked where it stands, and
     /// an empty cell is still nobody.

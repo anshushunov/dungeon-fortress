@@ -138,13 +138,26 @@ public sealed class SideOutlineAdapterTests
     /// с кольцом стороны радиусом 27; после снятия колец единственная дуга в
     /// информационном проходе тела — это выделение. Второй <c>DrawArc</c>,
     /// появившийся здесь, снова нагружает канал двумя значениями.
+    ///
+    /// <para>Редакция Issue #364. Раньше проверка требовала у налётчика
+    /// <b>ноль</b> дуг, и это было верно ровно потому, что налётчика нельзя было
+    /// выбрать: любая дуга над ним означала бы что-то <em>кроме</em> выделения.
+    /// Теперь его можно выбрать, и дуга у него — то же самое выделение, что у
+    /// существа. Смысл гарда не ослаблен, а сохранён буквально: у каждого тела
+    /// ровно одна дуга, и приходит она из общего правила
+    /// <see cref="WorldSelectionMark"/>, а не из условия, написанного на месте.
+    /// Прежняя формулировка после #364 требовала бы, чтобы карта молчала о том,
+    /// кого выбрал игрок.</para>
     /// </summary>
-    [Fact]
-    public void The_circle_under_a_body_means_selection_and_nothing_else()
+    [Theory]
+    [InlineData("DrawCreatureInformation")]
+    [InlineData("DrawRaiderInformation")]
+    public void The_circle_under_a_body_means_selection_and_nothing_else(string routine)
     {
-        Assert.Single(AdapterSource.CallsTo(
-            AdapterSource.Body("DrawCreatureInformation"), "DrawArc"));
-        Assert.Empty(AdapterSource.CallsTo(
-            AdapterSource.Body("DrawRaiderInformation"), "DrawArc"));
+        var body = AdapterSource.Body(routine);
+
+        Assert.Single(AdapterSource.CallsTo(body, "DrawArc"));
+        Assert.Contains(nameof(WorldSelectionMark.IsRinged), body, StringComparison.Ordinal);
+        Assert.Contains(nameof(WorldSelectionMark.RadiusRef), body, StringComparison.Ordinal);
     }
 }
