@@ -90,6 +90,12 @@ public sealed record WorldLabelRequest(
 /// last line rather than moved somewhere it no longer belongs to anybody, and the
 /// sentence the player would have stopped to read is in the panel that opens when
 /// he stops: <see cref="InspectorText.Raider"/> carries the same words.</para>
+///
+/// <para><b>Since Issue #371 the panel is no longer the only way back to it:</b>
+/// pointing at the body — or selecting it — lays that caption whole on the map
+/// again, because a focused label puts its whole text down in the first pass
+/// (<see cref="WorldLabelLayout.FirstAttempt"/>). What is shed here is shed only
+/// while nobody is asking.</para>
 /// </param>
 /// <param name="Box">The rectangle it occupies, in world pixels.</param>
 /// <param name="Alignment">Which side of the head it took.</param>
