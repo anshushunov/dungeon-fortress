@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "issue": 364,
+  "what": "Criterion 5 and criterion 11 of Issue #364: one substitution per half of the guard, each reddening its own half and no other. Run against the committed state b312d97, not against a working copy — reverting a mutant applied to uncommitted work would take the work with it.",
+  "base": {
+    "commit": "b312d97",
+    "howObtained": "git log --oneline -1 in C:/gamedev/_wt-364-world-labels before the first mutant was applied"
+  },
+  "mutations": [
+    {
+      "half": "attachment — a caption must not drift off the body it names",
+      "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+      "was": "public const double MaximumAttachmentRef = ReferenceTileSize;",
+      "became": "public const double MaximumAttachmentRef = ReferenceTileSize * 20.0;",
+      "why": "This is the slot ladder without a ceiling, in one constant: the candidate rungs are built up to MaximumAttachmentRef, so raising it restores exactly the technique Issue #364 forbids — each next caption a step higher, with nothing stopping it.",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~No_label_ends_up_further_than_a_tile_from_its_own_body\"",
+      "output": [
+        "«Секира» sits 59,00 reference pixels from its body at tick 2380; the limit is 22.",
+        "«Крюк Немой» sits 37,00 reference pixels from its body at tick 2025; the limit is 22."
+      ],
+      "verdict": "red on both frames of the owner's scene"
+    },
+    {
+      "half": "overlap — two captions must not be printed over one another",
+      "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+      "was": "                taken = other != ignore && Overlap(placed[other].Box, box);",
+      "became": "                taken = false;",
+      "why": "Removes the resolution itself and nothing else. Every label then takes the first candidate — centred over its own head — which is where they were before bands existed.",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~No_two_labels_of_the_owners_scene_are_printed_over_one_another\"",
+      "output": [
+        "«Тишина READY» and «Секира» share pixels at tick 2380",
+        "«Кремень DOWN» and «Крюк Немой» share pixels at tick 2025"
+      ],
+      "verdict": "red on both frames — and the named pairs are one crew label against one raider caption, which is the collision that could not be resolved anywhere before this layout existed"
+    },
+    {
+      "half": "picking — a raider must be in the set the pointer chooses from",
+      "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+      "was": "            .. state.Raiders\n                .Where(raider => raider.Position == cell && raider.Mode != RaiderMode.Escaped)\n                .OrderBy(raider => raider.Id)\n                .Select(raider => new WorldLabelSubject(WorldLabelKind.Raider, raider.Id)),",
+      "became": "(the whole spread removed)",
+      "why": "Returns picking to «only the creatures of the domain», which is what Main.Player.cs did before the addendum of 2026-08-10. Restated for the rework round, because the raider branch moved into BodiesAt when repeated clicking was added; re-run in this form.",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~Every_raider_on_the_map_can_be_pointed_at_and_selected\"",
+      "output": [
+        "Assert.NotEmpty() Failure: Collection was empty — no raider is reachable on any cell"
+      ],
+      "verdict": "red"
+    },
+    {
+      "half": "picking — repeated clicking must reach every body of a cell",
+      "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+      "was": "        var current = selected is { } body ? IndexOf(bodies, body) : -1;\n        return bodies[(current + 1) % bodies.Count];",
+      "became": "        return bodies[0];",
+      "why": "Returns the answer to what it was before the rework round: a cell always answers with its first body, so everything standing behind that body is unreachable. This is the substitution finding F1 demands a guard against.",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~Every_raider_on_the_map_can_be_pointed_at_and_selected|FullyQualifiedName~Every_captioned_returner_of_the_owners_frame_can_be_reached_by_clicking\"",
+      "output": [
+        "Assert.DoesNotContain() Failure: Item found in collection — the cycle returns the same body twice and never reaches the rest"
+      ],
+      "verdict": "red on both frames and on the captioned-returner check"
+    }
+  ],
+  "afterEachMutation": "git checkout -- src/DungeonFortress.Presentation/WorldLabelLayout.cs, then git status --short printed nothing.",
+  "ringIsCoveredWithoutAFourthMutation": {
+    "why": "Point 3 of the addendum — the selection ring — is covered by criterion 9 rather than by a mutation of its own, which is what the coordinator allowed provided the cover is named.",
+    "named": "WorldLabelInspectorTests.The_adapter_rings_the_selected_body_of_either_kind reads the adapter source and requires both DrawCreatureInformation and DrawRaiderInformation to draw the ring through WorldSelectionMark.",
+    "measuredAnyway": {
+      "file": "src/DungeonFortress.Game/Main.DrawBodies.cs",
+      "was": "the eight-line ring block inside DrawRaiderInformation",
+      "became": "removed entirely — which is the state Issue #364 found the adapter in",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~The_adapter_rings_the_selected_body_of_either_kind\"",
+      "output": "Assert.Contains() Failure: Sub-string not found — the DrawRaiderInformation case red, the DrawCreatureInformation case still green, so the check separates the two halves rather than failing wholesale."
+    }
+  },
+  "reworkRound": {
+    "why": "Independent review of PR #368 returned RETURN on finding F1: WorldLabels answered a cell with one body, so four of the six captioned returners of the owner wave-4 frame could not be selected at all. Criterion 9 was green while the property was broken, because it filtered out exactly the cells where the defect lived.",
+    "measuredBefore": "review probe: #17 Секира at (15,7) pickedExactly=False crewOnCell=Тишина, and the same for #18 Сиплый, #19 Ловчий, #22 Косой. Only #20 Долговязый on (16,7) was selectable.",
+    "measuredAfter": "the same shape of probe, run on this branch after the fix, over every captioned returner of tick 2380: #17 Секира at (15,7) bodiesOnCell=6 crewOnCell=Тишина reachable=True clicks=2 | #18 Сиплый at (15,7) bodiesOnCell=6 crewOnCell=Тишина reachable=True clicks=3 | #19 Ловчий at (15,7) bodiesOnCell=6 crewOnCell=Тишина reachable=True clicks=4 | #20 Долговязый at (16,7) bodiesOnCell=2 crewOnCell=- reachable=True clicks=1 | #21 Гнилозуб at (16,7) bodiesOnCell=2 crewOnCell=- reachable=True clicks=2 | #22 Косой at (15,7) bodiesOnCell=6 crewOnCell=Тишина reachable=True clicks=5. Six of six reachable; the worst cell costs five clicks to go round.",
+    "heldBy": "WorldLabelInspectorTests.Every_raider_on_the_map_can_be_pointed_at_and_selected (both owner frames, no cell filter) and Every_captioned_returner_of_the_owners_frame_can_be_reached_by_clicking."
+  }
+}

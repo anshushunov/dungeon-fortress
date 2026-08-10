@@ -2,20 +2,6 @@ using DungeonFortress.Simulation;
 
 namespace DungeonFortress.Presentation;
 
-/// <param name="Raider">Whom the caption is about.</param>
-/// <param name="Slot">
-/// Which band above the bodies this caption sits in. Zero is the band directly
-/// over the raider; a caption that would have landed on top of a neighbour's gets
-/// the next one up.
-/// </param>
-/// <param name="Lines">
-/// One line for a raider the domain never touched, two for one it did.
-/// </param>
-public sealed record ReturningHeroCaption(
-    PrototypeRaiderSnapshot Raider,
-    int Slot,
-    IReadOnlyList<string> Lines);
-
 /// <summary>
 /// The caption over a raider the domain has already met (Issue #358, slice 5 of
 /// the pitch's order of proof).
@@ -115,89 +101,26 @@ public static class ReturningHeroLabel
             ? Story(raider) is { } story ? [Name(raider), story] : [Name(raider)]
             : [];
 
-    /// <summary>
-    /// Every caption of this frame, with the band each one sits in.
-    ///
-    /// <para><b>Bands exist because raiders bunch.</b> They all walk to the same
-    /// larder tile, so the six survivors of one wave arrive shoulder to shoulder,
-    /// and captions laid at one height over neighbouring tiles are printed on top
-    /// of one another — measured on the first captured frame of this change, where
-    /// five of six names were unreadable. A caption that would collide with one
-    /// already placed takes the next band up: greedy, in a fixed order, so the
-    /// layout is a function of the snapshot and not of the order the raiders
-    /// happened to be listed in.</para>
-    /// </summary>
-    public static IReadOnlyList<ReturningHeroCaption> Layout(PrototypeSnapshot state)
-    {
-        ArgumentNullException.ThrowIfNull(state);
-        var placed = new List<(GridPoint Position, int Slot)>();
-        var captions = new List<ReturningHeroCaption>();
-        foreach (var raider in state.Raiders
-                     .Where(IsCaptioned)
-                     .OrderBy(raider => raider.Position.Y)
-                     .ThenBy(raider => raider.Position.X)
-                     .ThenBy(raider => raider.Id))
-        {
-            var slot = 0;
-            while (placed.Any(other => other.Slot == slot && Collides(other.Position, raider.Position)))
-            {
-                slot++;
-            }
-
-            placed.Add((raider.Position, slot));
-            captions.Add(new ReturningHeroCaption(raider, slot, Lines(raider)));
-        }
-
-        return captions;
-    }
-
-    /// <summary>
-    /// Whether two captions in the same band would be printed over each other. The
-    /// caption is centred on the body and is <see cref="LabelWidthRef"/> wide, so
-    /// the span in tiles is that width over the reference tile, and a row above or
-    /// below still reaches because a caption is drawn well above the body it
-    /// belongs to.
-    /// </summary>
-    private static bool Collides(GridPoint one, GridPoint other) =>
-        Math.Abs(one.X - other.X) < CollisionSpanTiles &&
-        Math.Abs(one.Y - other.Y) <= CollisionRows;
-
-    /// <summary>The tile the reference geometry of this assembly is authored against.</summary>
-    private const double ReferenceTileSize = 22.0;
-
-    /// <inheritdoc cref="Collides"/>
-    public static int CollisionSpanTiles { get; } =
-        (int)Math.Ceiling(LabelWidthRef / ReferenceTileSize);
-
-    /// <inheritdoc cref="Collides"/>
-    public const int CollisionRows = 1;
-
-    /// <summary>
-    /// How far above the body the first line of band zero sits, in reference
-    /// pixels, and how far apart the two lines of one caption are. Reference
-    /// pixels rather than screen pixels for the reason every other geometry
-    /// constant in this assembly is: the adapter multiplies by the tile scale and
-    /// does nothing else.
-    ///
-    /// <para>The offset clears the HP bar, which
-    /// <c>Main.DrawCreatureInformation</c> puts eight reference pixels
-    /// <em>below</em> the body's centre, and the body itself, which is drawn
-    /// upwards from its feet. Above rather than below, because below is where the
-    /// bar and the damage numbers already are.</para>
-    /// </summary>
-    public const double LabelTopRef = -26.0;
-
-    /// <inheritdoc cref="LabelTopRef"/>
-    public const double LineHeightRef = 8.0;
-
-    /// <summary>
-    /// How far apart two bands are. Two lines plus a gap, so a one-line caption in
-    /// the band below never touches a two-line one above it.
-    /// </summary>
-    public const double SlotHeightRef = (LineHeightRef * 2) + 4.0;
-
-    /// <summary>The width the caption is centred inside, in reference pixels.</summary>
-    public const double LabelWidthRef = 130.0;
+    // -----------------------------------------------------------------------
+    // Where the caption sits is no longer decided here (Issue #364).
+    //
+    // It used to be: Layout(state) walked the captioned raiders and gave each one
+    // that would have collided the next band up — TopRefOf(slot), twenty
+    // reference pixels per slot, with no ceiling. The band resolved the overlap
+    // and lost the attachment: with four returning raiders in one corridor three
+    // names stood in a column over nobody at all (evidence/364-before.png), and
+    // the owner reported he could not tell whom he had met.
+    //
+    // Two further things were wrong with it and are worth recording, because both
+    // are easy to reintroduce. It declared a collision from a 130-reference-pixel
+    // centring box — six tiles wide — so raiders six tiles apart were separated
+    // for an overlap that was never going to happen. And it could not see the
+    // creature labels at all, which are the other half of the same frame.
+    //
+    // All of it now lives in WorldLabelLayout, which sees every label of the
+    // frame at once. What stays here is what this file was always about: who is
+    // captioned, and what the caption says.
+    // -----------------------------------------------------------------------
 
     /// <summary>The size of the name line and of the story line under it.</summary>
     public const double NameTextRef = 8.0;
@@ -212,9 +135,6 @@ public static class ReturningHeroLabel
     /// mark fills.
     /// </summary>
     public const double OutlineRef = 2.0;
-
-    /// <summary>Where the first line of a caption in this band sits.</summary>
-    public static double TopRefOf(int slot) => LabelTopRef - (slot * SlotHeightRef);
 
     /// <summary>The colour of the name, and of the line under it.</summary>
     public const string NameColor = "#fca5a5";

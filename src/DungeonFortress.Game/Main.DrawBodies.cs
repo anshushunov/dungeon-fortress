@@ -563,16 +563,32 @@ public partial class Main
             ScaleWorld(2.25f),
             CreatureStateColor(creature));
 
-        if (_selectedCreatureId == creature.Id)
+        // The ring round the body the inspector is pointed at. Whether it is drawn
+        // at all, and every number in it, is WorldSelectionMark's answer; the
+        // adapter multiplies by the tile scale and calls the engine (Issue #364).
+        //
+        // These lines are repeated in DrawRaiderInformation below rather than
+        // shared, for the reason DrawRoomBorderOverWall repeats DrawRoomBorder's
+        // loop: a private helper named DrawSomething is a drawing routine, and
+        // every drawing routine DrawMap can reach has to be declared in
+        // WorldDrawOrder — a manifest this Issue's partition does not hold. Naming
+        // it without the prefix would put a drawing body outside every check built
+        // on that manifest, which is the escape the manifest's own documentation
+        // warns about. Nothing that could drift is duplicated: the condition, the
+        // radius, the stroke, the segment count and the colour all come from the
+        // one pure call both bodies make.
+        if (WorldSelectionMark.IsRinged(
+                new WorldLabelSubject(WorldLabelKind.Creature, creature.Id),
+                CurrentWorldLabelFocus()))
         {
             DrawArc(
                 center,
-                ScaleWorld(10),
+                ScaleWorld((float)WorldSelectionMark.RadiusRef),
                 0,
                 Mathf.Tau,
-                16,
-                new Color("#ffffff"),
-                ScaleWorld(2));
+                WorldSelectionMark.Segments,
+                new Color(WorldSelectionMark.Color),
+                ScaleWorld((float)WorldSelectionMark.StrokeRef));
         }
 
         DrawBlowDamage(center, new BodyRef(BodyKind.Creature, creature.Id));
@@ -597,6 +613,24 @@ public partial class Main
         // #fecaca — so it carried no information the red outline (see LEGEND)
         // does not already give. Decision: removed rather than given a legend
         // row, since a row would document a color that means nothing.
+
+        // The other half of Issue #364: until it, a raider could not be selected at
+        // all, so the map had no way to say which one the player had chosen. Same
+        // rule, same numbers and the same lines as the crew above — the note there
+        // says why they are repeated rather than shared.
+        if (WorldSelectionMark.IsRinged(
+                new WorldLabelSubject(WorldLabelKind.Raider, raider.Id),
+                CurrentWorldLabelFocus()))
+        {
+            DrawArc(
+                center,
+                ScaleWorld((float)WorldSelectionMark.RadiusRef),
+                0,
+                Mathf.Tau,
+                WorldSelectionMark.Segments,
+                new Color(WorldSelectionMark.Color),
+                ScaleWorld((float)WorldSelectionMark.StrokeRef));
+        }
 
         DrawBlowDamage(center, new BodyRef(BodyKind.Raider, raider.Id));
     }

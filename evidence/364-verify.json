@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "issue": 364,
+  "what": "Criterion 8: the full verification, once, on the final state — re-run after the selection ring was added, because that change touches the world drawing pass.",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
+  "result": {
+    "event": "verification_result",
+    "status": "ok",
+    "scope": "full",
+    "stagesExecuted": [
+      "scripts",
+      "build",
+      "tests",
+      "mcp",
+      "sim",
+      "load",
+      "godot",
+      "ui",
+      "screenshots",
+      "token-budget"
+    ],
+    "stagesNotRun": [],
+    "seed": 424242,
+    "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+    "godotVersion": "4.7.1.stable.mono.official.a13da4feb",
+    "godotExitCode": 0,
+    "screenshotRepeatable": true
+  },
+  "criterion7": {
+    "assertLabelsFit": "green — hudGuardRegressionExitCode 1, i.e. the guard still refuses the injected overflow rather than merely reporting that today's layout fits.",
+    "readabilityGuard": "green — hudReadabilityRegressionExitCode 1, hudSmallestPhysicalTextPixels 8 authored / 16 owner-maximized.",
+    "worldDrawCallsGolden": "unchanged through all three runs. git diff --stat d178a9a HEAD -- tests/golden/ prints nothing, so there is no shift to explain line by line — the new selection rule changes which body a click answers with and draws nothing new, and the golden frame is fixture baseline at tick 1 with nothing selected and nobody returned."
+  },
+  "runs": [
+    {
+      "when": "first final state, commit 7365df9",
+      "status": "ok",
+      "note": "before the selection ring existed"
+    },
+    {
+      "when": "final state, commit 333091a",
+      "status": "ok",
+      "note": "after the selection ring and the contract update; this is the run the criterion is closed on"
+    },
+    {
+      "when": "rework round, after finding F1 (repeated clicking reaches every body of a cell)",
+      "status": "ok",
+      "note": "the round the criterion is closed on; the selection rule is executable code, so the full script was re-run rather than the affected stages"
+    }
+  ],
+  "criterion9Observability": "The ring cannot be photographed by a screenshot run: nothing is selected in a capture, and adding a flag to select one would touch scripts/**, which is outside this task partition. It is checked instead — WorldSelectionMark.IsRinged for the rule, and WorldLabelInspectorTests.The_adapter_rings_the_selected_body_of_either_kind reading the adapter source for the fact that both DrawCreatureInformation and DrawRaiderInformation draw it. Deleting the ring from DrawRaiderInformation reddens the second."
+}
