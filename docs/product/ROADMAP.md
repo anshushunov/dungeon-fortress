@@ -270,8 +270,13 @@ B разделён 2026-07-30: при едином B социальная и м�
 
 ### NOW — срез 5 после двух `ADJUST`: подача починена, третий заход владельца не сделан
 
-**Состояние на 2026-08-10.** `main` на `dcfbc1a`. Открыт один PR — эта правка;
+**Состояние на 2026-08-10.** `main` на `3e82295`. Открыт один PR — эта правка;
 утверждение относится к моменту записи, а не к моменту чтения.
+
+**Правка пролежала открытой дольше собственного review, и за это время
+`main` ушёл на два merge вперёд.** Это раздел исправлен, чтобы документ не
+утверждал неправду в момент, когда войдёт в дерево; исправление сделано
+**после** вердикта review и названо в теле PR отдельно.
 
 **Что владелец получил после двух `ADJUST`.** Подпись держится над головой того,
 кто её носит ([#364](https://github.com/anshushunov/dungeon-fortress/issues/364)/PR
@@ -295,21 +300,44 @@ B разделён 2026-07-30: при едином B социальная и м�
 проходов харнесс не хранит. Разбор, из которого выведены правила, — в строке
 журнала.
 
-**Идёт сейчас, на непересекающихся файлах:**
-[#361](https://github.com/anshushunov/dungeon-fortress/issues/361) — боевой
-разброс мёртв, `readonly`-поле мутабельной структуры не двигает генератор, из-за
-чего `T.raider_might_jitter` и `T.damage_jitter` — константы; идёт **перед**
-[#336](https://github.com/anshushunov/dungeon-fortress/issues/336), решением
-владельца 2026-08-08. И [#373](https://github.com/anshushunov/dungeon-fortress/issues/373)
-— фокус извне игры не задаётся, поэтому кадра с наведением не существует; из-за
-этого в #371 пришлось снять критерий готовности как невыполнимый.
+**Смержено, пока эта правка ждала команды владельца — по одному merge на
+задачу, обе на непересекающихся файлах:**
 
-**Очередь после них:** [#369](https://github.com/anshushunov/dungeon-fortress/issues/369),
+- [#373](https://github.com/anshushunov/dungeon-fortress/issues/373)/PR #376
+  (`07f59a8`) — фокус задаётся извне игры, и кадр с наведением или с выбранным
+  налётчиком наконец снимается; именно из-за его отсутствия в #371 пришлось
+  снять критерий готовности как невыполнимый;
+- [#361](https://github.com/anshushunov/dungeon-fortress/issues/361)/PR #377
+  (`3e82295`) — боевой разброс ожил: `readonly`-поле мутабельной структуры не
+  двигало генератор, и `T.raider_might_jitter` с `T.damage_jitter` были
+  константами партии. Это исполнение решения владельца 2026-08-08 «сделать
+  дамаг рандом какой-то»: механизм существовал и не работал. Попутно починен
+  второй дефект, живший в `main`, — `MomentOfTruthPanel.WorstCase` перебирал
+  одну ось из четырёх, которые знает `Breakdown`, поэтому ось страха в худшем
+  случае не измерялась никогда.
+
+**Цена оживления разброса названа, а не спрятана: он задел четыре чужие
+задачи**, чьи сцены запинились вокруг мёртвого механизма. Разбор каждой —
+[#380](https://github.com/anshushunov/dungeon-fortress/issues/380) (проверка
+отклика на работу потеряла выборку и помечена `Skip` дословно, вместо подкрутки
+потолка) и [#382](https://github.com/anshushunov/dungeon-fortress/issues/382)
+(порог подхода понижен, запас над до-#129 якорем сократился вдвое).
+
+**Очередь:** [#378](https://github.com/anshushunov/dungeon-fortress/issues/378),
+[#379](https://github.com/anshushunov/dungeon-fortress/issues/379),
+[#380](https://github.com/anshushunov/dungeon-fortress/issues/380),
+[#381](https://github.com/anshushunov/dungeon-fortress/issues/381),
+[#382](https://github.com/anshushunov/dungeon-fortress/issues/382),
+[#369](https://github.com/anshushunov/dungeon-fortress/issues/369),
 [#367](https://github.com/anshushunov/dungeon-fortress/issues/367),
-[#363](https://github.com/anshushunov/dungeon-fortress/issues/363) (держит
-`run-game.ps1`, идёт после #373),
+[#363](https://github.com/anshushunov/dungeon-fortress/issues/363),
 [#357](https://github.com/anshushunov/dungeon-fortress/issues/357),
-[#336](https://github.com/anshushunov/dungeon-fortress/issues/336).
+[#336](https://github.com/anshushunov/dungeon-fortress/issues/336). Освободились
+придержанные [#237](https://github.com/anshushunov/dungeon-fortress/issues/237),
+[#350](https://github.com/anshushunov/dungeon-fortress/issues/350),
+[#352](https://github.com/anshushunov/dungeon-fortress/issues/352),
+[#354](https://github.com/anshushunov/dungeon-fortress/issues/354),
+[#355](https://github.com/anshushunov/dungeon-fortress/issues/355).
 
 **Урок блока, обошедшийся дороже всех: шесть критериев готовности мерили не то.**
 Все шесть написал координатор. **Пять поймал независимый review** — два на PR
