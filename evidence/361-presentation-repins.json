@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "issue": 361,
+  "what": "The fourteen checks of tests/DungeonFortress.Presentation.Tests that reddened because the fix changed the party they are pinned to. One row per check: what it expected, what it expects now, why the world moved that way, and whether the form of the check changed as well as its number.",
+  "partition": "tests/DungeonFortress.Presentation.Tests/** was added to this Issue's partition by the coordinator on 2026-08-10, on the condition that no assertion is weakened and that every re-pin is explained. src/DungeonFortress.Presentation/** stayed outside it.",
+  "howTheNewValuesWereObtained": "A temporary scan test in the same project walked the same journals and printed the scene: for `prepared`, every tick between 1300 and 2400 carrying two blows on one body of which one is a kill; for the owner's `baseline`/20260729 frames at ticks 2025 and 2380, the raiders on the map, the captioned returners, the labels placed with nothing pointed at, the labels whose lines were trimmed, and the occupancy of every shared cell. The scan file was deleted before the commit.",
+  "repins": [
+    {
+      "check": "BlowReadoutTests — the whole class, through its BlowTick constant",
+      "reddened": [
+        "A_recorded_blow_names_the_striker_the_target_and_the_damage",
+        "The_striker_winds_up_and_the_target_flinches",
+        "A_body_no_blow_touches_has_no_phase_and_a_quiet_tick_has_no_blows",
+        "A_hit_a_body_left_alone_and_a_body_put_down_read_differently",
+        "Several_blows_on_one_body_keep_the_worse_outcome"
+      ],
+      "was": "BlowTick = 1318; the hit is 5 damage and the kill is 2",
+      "now": "BlowTick = 1313; the hit is 6 damage and the kill is 4",
+      "whyTheWorldMoved": "The scene the class needs is «one tick of `prepared` carrying two blows on one body, one of them a kill». With the jitter frozen it fell on tick 1318; with it live the party is fought differently from the first blow onwards and the same scene falls on 1313. The cast is identical — Кремень (1) strikes raider 1, Тишина (8) puts it down — and only the two damage numbers moved, which is the jitter itself: 5 and 2 were both drawn from a stream that never advanced.",
+      "formChanged": "no. The only structural edit is that Only_the_tick_that_has_just_run_is_drawn now reads BlowTick and BlowTick + 1 instead of repeating 1318 and 1319 as literals — the same two values it always used, named once instead of twice.",
+      "stillHolds": "Assert.Equal(2, Blows.Count), one Assert.Single for the hit and one for the kill, the untouched raider 3 and the untouched creature 5 — all unchanged and all still on the same frame."
+    },
+    {
+      "check": "BlowJournalSourceTests.Every_blow_of_the_party_is_recoverable_tick_by_tick",
+      "was": "52 attack entries, worst fold 9, 136 crew blows recovered",
+      "now": "53 attack entries, worst fold 3, 68 crew blows recovered",
+      "whyTheWorldMoved": "Two independent consequences of the same fix. (1) 136 -> 68 blows: the party is shorter and fought differently — over the same journal raidersDowned falls 17 -> 9 and combat ticks 117 -> 98 (evidence/361-contract-numbers.json) — so there are about half as many blows to strike. (2) 9 -> 3 in the worst fold, and 52 -> 53 entries: PrototypeWorld.RecordDecision folds a repeat only when DetailsEqual holds (PrototypeWorld.Stores.cs:829), and the details of combat_attack carry `damage` (PrototypeWorld.Combat.cs:198). While the jitter was frozen a fighter striking the same raider twice produced a literally identical entry and it folded; with the jitter live the damage usually differs, so the same run of blows now makes several entries. Fewer blows and weaker folding together are why the entry count went slightly up while the blow count halved.",
+      "formChanged": "no. Three equalities moved their numbers; the tie between the recovered total and Sum(Repeats) is still an equality and is still the thing that would catch a recovery that stopped counting."
+    },
+    {
+      "check": "WorldLabelLayoutTests.Every_returning_raider_of_the_owners_scene_is_still_named",
+      "was": "wave-4 row: captioned 6, named 5",
+      "now": "wave-4 row: captioned 5, named 3",
+      "whyTheWorldMoved": "The owner's frame is baseline/20260729 stepped to tick 2380. A party fought with a live jitter puts a different set of raiders through the gate and back, so the frame carries twelve raiders instead of eleven, of whom five carry a caption instead of six. Three of those five are named on the quiet map because the other two are the overflow of one crowded cell — the next row of this table.",
+      "formChanged": "no. The wave-3 row did not move at all."
+    },
+    {
+      "check": "WorldLabelLayoutTests.The_name_that_is_not_shown_is_one_of_four_raiders_sharing_a_cell",
+      "was": "Assert.Single(unnamed); the crowded cell (15,7) carries 4 captioned raiders",
+      "now": "Assert.Equal(2, unnamed.Length); Assert.All(unnamed, ... 5 captioned on its cell); the crowded cell is (14,7)",
+      "whyTheWorldMoved": "The arithmetic of the check is untouched: a label is ten reference pixels tall and the ladder above one head is twenty-two long, so three labels fit and the rest do not. What moved is the size of the crowd — five captioned returners now stand on (14,7) where four stood on (15,7) — so the ladder leaves two over instead of one.",
+      "formChanged": "yes, and in two ways, both named on purpose. (1) Assert.Single became Assert.Equal(2, …): both are an equality on the same count, and xUnit only spells one specially, so the strength is the same and the number moved. (2) The second half — «and the reason is that its cell is crowded» — was asserted for the single unnamed raider and is now asserted with Assert.All for every one of them, which asks more of the frame than before, not less. The test was renamed to The_names_that_are_not_shown_are_raiders_sharing_one_cell because its old name states a count that is no longer true."
+    },
+    {
+      "check": "WorldLabelFocusTests.With_nothing_pointed_at_the_map_names_exactly_who_it_named_before",
+      "was": "wave-4 row: 11 raiders on the map, 5 labels",
+      "now": "wave-4 row: 12 raiders on the map, 3 labels",
+      "whyTheWorldMoved": "Same frame and same cause as the two rows above: twelve raiders standing instead of eleven, five captioned instead of six, two of the five crowded off one cell.",
+      "formChanged": "no. The two assertions that keep the numbers honest — every name on the quiet map belongs to a raider, and to one the domain has met — are untouched, and they are what stops the counts from being satisfied by naming the wrong bodies. The wave-3 row did not move."
+    },
+    {
+      "check": "WorldLabelFocusTests.The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer",
+      "was": "the trimmed caption is «Секира»",
+      "now": "the trimmed caption is «Сиплый», whose story is «волна 2 · достали (24,7)»",
+      "whyTheWorldMoved": "The frame carries a different set of returners, so the one whose second line the crowd trims is another of them. The check finds it the same way it always did — as the single label of the frame whose placed lines are fewer than its requested ones — and only the name it then expects is written out.",
+      "formChanged": "no. Assert.Single on the trimmed label stands, and the story is still read off the raider rather than written here."
+    },
+    {
+      "check": "WorldLabelInspectorTests.Every_captioned_returner_of_the_owners_frame_can_be_reached_by_clicking",
+      "was": "Assert.Equal(6, captioned.Length)",
+      "now": "Assert.Equal(5, captioned.Length)",
+      "whyTheWorldMoved": "Same frame, same cause: five captioned returners instead of six.",
+      "formChanged": "no. The walk under the count still visits every captioned returner and still asserts both halves — reachable by clicking, and the panel carries the caption's own lines."
+    },
+    {
+      "check": "WorldLabelInspectorTests.The_pointer_answers_with_the_selected_body_when_it_stands_on_that_cell",
+      "was": "cell (15,7), 6 bodies, bodies[0] is a Creature; the «selected body stands elsewhere» case read from (16,7)",
+      "now": "cell (14,7), 6 bodies; the «elsewhere» case reads from (15,7); the crew-in-front case is asserted separately on (15,7)",
+      "whyTheWorldMoved": "The crowd of that room moved one tile west and is still six bodies deep, but it is now six raiders rather than a crew member in front of five raiders, so the crowded cell moved and the mixed case had to be asserted somewhere else.",
+      "whyTheElsewhereSourceMoved": "Not because it had to. (16,7) still carries one body on this frame — the crew member #4 — so the old BodiesAt((16,7)).First(b => !bodies.Contains(b)) would have gone on working; an earlier version of this file said (16,7) was empty and that was wrong, found by independent review of PR #377. The source reads (15,7) so that both checks of the file take their «somewhere else» body from one named cell, MixedCell, which the pointer check has to name anyway for the crew-in-front case. Measured with a temporary scan test in the same project: (14,7) bodies=6 all raiders, (15,7) bodies=2 [Creature#8, Raider#23], (16,7) bodies=1 [Creature#4].",
+      "formChanged": "yes: an assertion was added, not moved. Re-pinning the cell alone would have quietly dropped «the player has clicked past a crew member», which is the half the rule was written for, because no single cell of this frame is both crowded and mixed any more. So the mixed case is asserted separately on (15,7). Nothing was removed and nothing was loosened; the assertion that bodies[0] is a Creature moved to the cell that still has one instead of being deleted or turned into a weaker claim."
+    },
+    {
+      "check": "WorldLabelInspectorTests.The_feedback_line_says_which_body_of_how_many_the_click_reached",
+      "was": "cell (15,7); the line reads «(15,7): n of 6 …»; the «elsewhere» case read from (16,7)",
+      "now": "cell (14,7); the line reads «(14,7): n of 6 …»; the «elsewhere» case reads from (15,7)",
+      "whyTheWorldMoved": "The same move of the crowd. The count of six did not change, only which cell holds it. Its «elsewhere» source moved to MixedCell for the same reason as the row above, and equally not out of necessity.",
+      "formChanged": "no."
+    }
+  ],
+  "notRepinnedBecauseItIsNotAPin": {
+    "check": "MomentOfTruthPanelTests.The_worst_case_band_is_never_narrower_than_the_live_one",
+    "message": "The worst case measures 69 characters but the live band already needs 70.",
+    "whyThisIsNotARePin": "The check carries no literal at all. It states a property — the layout guard's worst case must be at least as wide as what the player actually reads — and that property is now false for a state the shipped journal reaches on its own.",
+    "diagnosis": "MomentOfTruthPanel.WorstCase (src/DungeonFortress.Presentation/UiControls.cs:651) builds its widest card with DominantAxis: \"deed\". HudText.Breakdown routes \"deed\" to its default branch, which is the *benefit* axis, so the worst case only ever measures the benefit axis (or the grudge axis when a grudge is showing) and never the fear one. The overflowing live card is «Брусок · took the worst of it · fear 11 (+3 saw one fall, +8 put down)» at 70 characters, against a worst case of «Кремень · put 99 raiders down · benefit 0 (-8 faded, +8 fed) → punish» at 69.",
+    "whoseDefectItIs": "The gap is in the code of origin/main and does not depend on this change: WorstCase passes one axis and Breakdown has four. Issue #361 only made a party in which the fear axis grows two terms and eleven points, which is what turns an unreachable gap into a reachable one.",
+    "whatTheFixWouldBe": "Take the widest line over all of the axes Breakdown can choose rather than over «deed» alone — i.e. build the candidate line per creature per DominantAxis and keep the longest, with the same ordinal tie-break WorstCase already uses. It is confined to WorstCase.",
+    "whyItWasNotDone": "src/DungeonFortress.Presentation/** is outside this Issue's partition, and the coordinator's extension of 2026-08-10 named tests/DungeonFortress.Presentation.Tests/** only. Re-pointing the check at another fixture would hide a reachable defect rather than re-pin a scene, and weakening it is forbidden. Returned to the coordinator."
+  }
+}

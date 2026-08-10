@@ -28,11 +28,14 @@ public sealed class WorldLabelInspectorTests
     /// their own.
     ///
     /// <para><b>The filter this used to carry is what let a defect through.</b> It
-    /// skipped cells shared with a crew member, and on tick 2380 four of the six
-    /// captioned returners stand on (15,7) with «Тишина» — so the class of bodies
-    /// that could not be selected at all was exactly the class the check refused to
-    /// look at. Independent review of PR #368 measured it. The check is now written
-    /// so that the same defect reddens it.</para>
+    /// skipped cells shared with a crew member, and on the tick-2380 frame as it
+    /// stood then, four of the six captioned returners stood on (15,7) with
+    /// «Тишина» — so the class of bodies that could not be selected at all was
+    /// exactly the class the check refused to look at. Independent review of
+    /// PR #368 measured it. The check is now written so that the same defect
+    /// reddens it. Since Issue #361 made the damage jitter live the frame is a
+    /// different one — the crowd of that room now stands on (14,7) — which is
+    /// precisely why this check names no cell and no count of its own.</para>
     ///
     /// <para>Reachability is what is asserted rather than a single answer, because
     /// a cell holding five bodies cannot answer with all five at once: clicking it
@@ -60,14 +63,21 @@ public sealed class WorldLabelInspectorTests
     /// <summary>
     /// The finding of the returning round, as its own check: on the frame the owner
     /// played, every returning raider carrying a caption can be selected. Before the
-    /// fix four of the six could not be — «Секира», «Сиплый», «Ловчий» and «Косой»
-    /// all stand on (15,7) behind a crew member, and the cell answered «Тишина»
-    /// however many times it was clicked.
+    /// fix of Issue #364 four of the six could not be — «Секира», «Сиплый»,
+    /// «Ловчий» and «Косой» all stood on (15,7) behind a crew member, and the cell
+    /// answered «Тишина» however many times it was clicked.
     ///
     /// <para>It is separate from the check above because it is the one that makes
     /// the promise «the second line is not lost, it is in the panel» true. The panel
-    /// is reached by selecting, and «Секира» is precisely the caption whose second
-    /// line the layout sheds on this frame.</para>
+    /// is reached by selecting, and the caption whose second line the layout sheds
+    /// on this frame is among the ones it walks.</para>
+    ///
+    /// <para><b>Re-pinned by Issue #361:</b> the frame carries five captioned
+    /// returners where it carried six, because a party fought with a live damage
+    /// jitter puts a different set of survivors back through the gate. The count is
+    /// written out rather than derived for the same reason the other counts of this
+    /// scene are — so that a change which starts losing captions is noticed — and
+    /// the walk under it is over every one of them, as before.</para>
     /// </summary>
     [Fact]
     public void Every_captioned_returner_of_the_owners_frame_can_be_reached_by_clicking()
@@ -75,7 +85,7 @@ public sealed class WorldLabelInspectorTests
         var state = OwnerScene(WaveFourTick);
         var captioned = state.Raiders.Where(ReturningHeroLabel.IsCaptioned).ToArray();
 
-        Assert.Equal(6, captioned.Length);
+        Assert.Equal(5, captioned.Length);
         foreach (var raider in captioned)
         {
             Assert.Contains(
@@ -130,23 +140,32 @@ public sealed class WorldLabelInspectorTests
     /// player who has clicked past a crew member to the raider behind him does not
     /// get the crew member back at the next twitch of the mouse.</para>
     ///
-    /// <para>The cell is the owner's own (15,7) at tick 2380 — six bodies, the crew
-    /// member «Тишина» first and five raiders behind her — because a rule about
-    /// crowded cells checked on a cell of two would be checked where it cannot
-    /// fail.</para>
+    /// <para>The crowded cell is the owner's own (14,7) at tick 2380 — six bodies
+    /// — because a rule about crowded cells checked on a cell of two would be
+    /// checked where it cannot fail.</para>
+    ///
+    /// <para><b>Re-pinned by Issue #361, and one assertion was added rather than
+    /// moved.</b> The crowd used to stand on (15,7) and used to have the crew
+    /// member «Тишина» in front of five raiders. With the damage jitter live the
+    /// same journal puts six raiders on (14,7) instead, and no single cell of the
+    /// frame is now both crowded and mixed. Re-pinning the cell alone would have
+    /// dropped «the player has clicked past a <em>crew member</em>» — the half the
+    /// rule was written for — without saying so, so the mixed case is asserted
+    /// separately on the cell that still carries it, (15,7), where a crew member
+    /// stands in front of one raider. The rule under test, the assertions about it
+    /// and their form are unchanged; the frame simply no longer offers both halves
+    /// in one place.</para>
     /// </summary>
     [Fact]
     public void The_pointer_answers_with_the_selected_body_when_it_stands_on_that_cell()
     {
         var state = OwnerScene(WaveFourTick);
-        var cell = new GridPoint(15, 7);
+        var cell = new GridPoint(14, 7);
         var bodies = WorldLabels.BodiesAt(state, cell);
 
         Assert.Equal(6, bodies.Count);
-        Assert.Equal(WorldLabelKind.Creature, bodies[0].Kind);
 
-        // Nothing selected: the cell answers with its first body, which is the crew
-        // member standing in front of the five raiders.
+        // Nothing selected: the cell answers with its first body.
         Assert.Equal(bodies[0], WorldLabels.PointedAt(state, cell, null));
 
         // Every other body of that cell, once it is the selection, is what the
@@ -160,14 +179,48 @@ public sealed class WorldLabelInspectorTests
         // And a selection standing somewhere else does not follow the cursor: the
         // pointed cell answers with its own first body again.
         var elsewhere = WorldLabels
-            .BodiesAt(state, new GridPoint(16, 7))
+            .BodiesAt(state, MixedCell)
             .First(body => !bodies.Contains(body));
         Assert.Equal(bodies[0], WorldLabels.PointedAt(state, cell, elsewhere));
+
+        // The half the crowded cell of this frame no longer carries: a crew member
+        // in front of a raider. Clicking through to the raider must not hand the
+        // crew member back at the next twitch of the mouse.
+        var mixed = WorldLabels.BodiesAt(state, MixedCell);
+        Assert.Equal(2, mixed.Count);
+        Assert.Equal(WorldLabelKind.Creature, mixed[0].Kind);
+        Assert.Equal(WorldLabelKind.Raider, mixed[1].Kind);
+        Assert.Equal(mixed[0], WorldLabels.PointedAt(state, MixedCell, null));
+        foreach (var body in mixed)
+        {
+            Assert.Equal(body, WorldLabels.PointedAt(state, MixedCell, body));
+        }
     }
+
+    /// <summary>
+    /// The cell of the owner's wave-4 frame where a crew member stands in front of
+    /// a raider. See
+    /// <see cref="The_pointer_answers_with_the_selected_body_when_it_stands_on_that_cell"/>
+    /// for why it is named apart from the crowded one.
+    /// </summary>
+    private static readonly GridPoint MixedCell = new(15, 7);
 
     /// <summary>
     /// The feedback line after a click, and the three cases in which there is
     /// none — the second half of Issue #370.
+    ///
+    /// <para><b>Re-pinned by Issue #361:</b> the crowd of the owner's frame moved
+    /// from (15,7) to (14,7) and is still six bodies deep, so the cell and the
+    /// text it prints moved with it and the count did not.</para>
+    ///
+    /// <para>The cell the «selected body stands elsewhere» case reads from moved
+    /// as well, and that move was <b>not forced</b>: (16,7) still carries a body
+    /// this frame — one crew member — so the old source would have gone on
+    /// working. It reads <see cref="MixedCell"/> instead so that both checks of
+    /// this file take their «somewhere else» body from one named cell, the one
+    /// <see cref="The_pointer_answers_with_the_selected_body_when_it_stands_on_that_cell"/>
+    /// has to name anyway. Two literals drifting apart on one frame is how a
+    /// re-pin goes wrong quietly.</para>
     ///
     /// <para>It is not decoration. Cycling was chosen over a chooser popup partly
     /// <em>because</em> this line pays the cost of cycling: four raiders on one tile
@@ -181,14 +234,14 @@ public sealed class WorldLabelInspectorTests
     public void The_feedback_line_says_which_body_of_how_many_the_click_reached()
     {
         var state = OwnerScene(WaveFourTick);
-        var cell = new GridPoint(15, 7);
+        var cell = new GridPoint(14, 7);
         var bodies = WorldLabels.BodiesAt(state, cell);
 
         Assert.Equal(6, bodies.Count);
         for (var index = 0; index < bodies.Count; index++)
         {
             Assert.Equal(
-                $"(15,7): {index + 1} of 6 standing here; click the cell again for the next one.",
+                $"(14,7): {index + 1} of 6 standing here; click the cell again for the next one.",
                 WorldLabels.SelectionHint(state, cell, bodies[index]));
         }
 
@@ -208,7 +261,7 @@ public sealed class WorldLabelInspectorTests
         // And none when the selected body is not standing on the clicked cell,
         // because then the number it would print would be about somebody else.
         var elsewhere = WorldLabels
-            .BodiesAt(state, new GridPoint(16, 7))
+            .BodiesAt(state, MixedCell)
             .First(body => !bodies.Contains(body));
         Assert.Null(WorldLabels.SelectionHint(state, cell, elsewhere));
     }

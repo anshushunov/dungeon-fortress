@@ -11,19 +11,43 @@ namespace DungeonFortress.Presentation.Tests;
 /// <para>
 /// <c>PrototypeWorld.RecordDecision</c> folds an identical repeat into the
 /// creature's previous entry instead of adding a second one. Over the shipped
-/// <c>prepared</c> journal that turns 136 blows into 52 entries, up to nine folded
+/// <c>prepared</c> journal that turns 68 blows into 53 entries, up to three folded
 /// into one. The question that matters for the picture is not how many entries
 /// there are but whether a frame can still tell that <em>this</em> creature struck
 /// on <em>this</em> tick — and the answer is yes, because a fold moves
 /// <c>LastTick</c> to the tick of the latest repeat. Walking the party one tick at
 /// a time and reading each snapshot the way the adapter reads it recovers every
-/// one of the 136.
+/// one of the 68.
 /// </para>
 ///
 /// <para>
 /// This is also why nothing in the simulation had to change, and why nothing in it
 /// did: <c>src/DungeonFortress.Simulation</c> is untouched by Issue #210.
 /// </para>
+///
+/// <para><b>Re-pinned by Issue #361, and the fold got weaker for a nameable
+/// reason.</b> The three numbers were 136 blows, 52 entries and nine in the worst
+/// fold. Both halves of the move follow from the damage jitter coming back to
+/// life, and neither is a loosened claim:
+/// <list type="bullet">
+/// <item><description><b>136 -> 68 blows.</b> The party is fought differently and
+/// more shortly: over the same journal <c>raidersDowned</c> falls 17 -> 9 and
+/// combat ticks 117 -> 98 (<c>evidence/361-contract-numbers.json</c>), so there
+/// are about half as many blows to strike.</description></item>
+/// <item><description><b>nine -> three in the worst fold, and 52 -> 53
+/// entries.</b> <c>RecordDecision</c> folds only when <c>DetailsEqual</c> holds,
+/// and the details of <c>combat_attack</c> carry <c>damage</c>
+/// (<c>PrototypeWorld.Combat.cs:198</c>). While the jitter was frozen a fighter
+/// hitting the same raider twice produced literally the same entry and it folded;
+/// with the jitter live the damage usually differs, so the same run of blows now
+/// makes several entries instead of one. Fewer blows and less folding at once is
+/// why the entry count went slightly <em>up</em> while the blow count
+/// halved.</description></item>
+/// </list>
+/// The fold is still real — 68 blows in 53 entries — and what this test states is
+/// unchanged: every blow is recoverable tick by tick, and the recovered total is
+/// still tied to <c>Sum(Repeats)</c> by an equality rather than by a
+/// bound.</para>
 /// </summary>
 public sealed class BlowJournalSourceTests
 {
@@ -96,15 +120,15 @@ public sealed class BlowJournalSourceTests
             .Where(@event => @event.ReasonCode == BlowReadout.AttackReason)
             .ToArray();
 
-        // The fold is real: far fewer entries than blows, and the worst of them
-        // holds nine. If this stopped being true the claim below would be about
+        // The fold is real: fewer entries than blows, and the worst of them holds
+        // three. If this stopped being true the claim below would be about
         // nothing.
-        Assert.Equal(52, attackEntries.Length);
-        Assert.Equal(9, attackEntries.Max(@event => @event.Repeats));
+        Assert.Equal(53, attackEntries.Length);
+        Assert.Equal(3, attackEntries.Max(@event => @event.Repeats));
 
         // And it costs the picture nothing.
         Assert.Equal(attackEntries.Sum(@event => @event.Repeats), recoveredCrewBlows);
-        Assert.Equal(136, recoveredCrewBlows);
+        Assert.Equal(68, recoveredCrewBlows);
         Assert.Equal(
             final.Events.Count(@event =>
                 @event.ReasonCode == BlowReadout.RaiderDownedReason),

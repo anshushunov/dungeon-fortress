@@ -40,7 +40,20 @@ public sealed partial class PrototypeWorld
     private readonly List<SurvivorState> _survivors = [];
     private readonly HashSet<string> _raiderNames = new(StringComparer.Ordinal);
     private DeterministicRandom _raiderNameRandom;
-    private readonly DeterministicRandom _combatRandom;
+
+    // Deliberately not `readonly`, and the omission is the fix of Issue #361
+    // rather than an oversight. DeterministicRandom is a mutable struct: it
+    // carries its state in a field and advances it on every draw. C# answers a
+    // mutating call on a `readonly` field of a struct type with a defensive
+    // copy, so while this field was `readonly` the whole party's draws advanced
+    // throwaway copies, `_state` never moved, and CombatJitter returned one and
+    // the same number from the first blow to the last — T.raider_might_jitter
+    // and T.damage_jitter were dead settings.
+    //
+    // The same reason applies to _raiderNameRandom above and to
+    // SimulationWorld._random, which are declared the same way; the shape is
+    // held to by No_readonly_field_of_the_simulation_holds_a_mutable_struct.
+    private DeterministicRandom _combatRandom;
     private readonly Dictionary<GridPoint, int> _stationOccupiedTicks =
         PrototypeMap.KitchenTiles
             .Concat(PrototypeMap.AuthoredPostTiles)

@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "issue": 361,
+  "what": "Scope §2 of Issue #361 and criterion 4: the full list of places checked for the defect class «a readonly field whose type is a mutable struct», recorded before the fix so that the list stands independently of what turned out to be broken.",
+  "base": {
+    "commit": "dcfbc1a",
+    "howObtained": "git -C C:/gamedev/_wt-361-combat-random rev-parse --short HEAD, taken on the worktree created from origin/main before any edit"
+  },
+  "whyThisIsTheWholeSearchSpace": [
+    "A readonly field only suffers the defensive-copy defect when its declared type is a value type that has mutable state. A readonly field of a reference type (class, interface, array, delegate, string) is never copied on member access, and a readonly field of an immutable value type has no state to lose.",
+    "So the search is closed by two enumerations: (a) every struct type the repository declares, split into mutable and immutable; (b) every readonly field declaration in src/**, split by whether its declared type is a value type.",
+    "External value types (BCL, Godot) are covered by (b): the enumeration is over field declarations, not over our own types, so a readonly field of e.g. Godot.Vector2 would appear in it. None does."
+  ],
+  "enumerationA": {
+    "question": "which struct types does src/** declare, and which of them are mutable?",
+    "command": "rg -n \"^\\s*(public|internal|private|protected)?\\s*(readonly\\s+)?(record\\s+)?struct\\s+\\w+\" -g '*.cs' src --glob '!**/bin/**' --glob '!**/obj/**'",
+    "total": 23,
+    "immutable": {
+      "count": 21,
+      "why": "All 21 are declared `readonly record struct`. The compiler rejects any mutating instance member on a readonly struct, so a readonly field of one cannot lose a write — there is no write to lose.",
+      "types": [
+        "DungeonFortress.Simulation/AgentSnapshot.cs:3 AgentSnapshot",
+        "DungeonFortress.Simulation/PrototypeTypes.cs:5 GridPoint",
+        "DungeonFortress.Presentation/BodyMotion.cs:23 ExchangeFacing",
+        "DungeonFortress.Presentation/StrikeChain.cs:58 PartPose",
+        "DungeonFortress.Presentation/HudReadability.cs:11 HudTextSize",
+        "DungeonFortress.Presentation/BlowReadout.cs:18 BodyRef",
+        "DungeonFortress.Presentation/RoomGeometry.cs:6 ViewSegment",
+        "DungeonFortress.Presentation/RoomGeometry.cs:15 RoomBorderEdge",
+        "DungeonFortress.Presentation/RoomGeometry.cs:29 RoomBorderPiece",
+        "DungeonFortress.Presentation/RoomGeometry.cs:803 Side",
+        "DungeonFortress.Presentation/WorldReplay.cs:19 WorldPosition",
+        "DungeonFortress.Presentation/WorldLabelLayout.cs:21 WorldLabelSubject",
+        "DungeonFortress.Presentation/WorldLabelLayout.cs:577 WorldLabelCandidate",
+        "DungeonFortress.Presentation/WorldRenderOrder.cs:21 WorldRenderItem",
+        "DungeonFortress.Presentation/SelectionGeometry.cs:11 SelectionColumn",
+        "DungeonFortress.Presentation/WorldRenderGeometry.cs:64 WallStroke",
+        "DungeonFortress.Presentation/CameraView.cs:12 ViewPoint",
+        "DungeonFortress.Presentation/CameraView.cs:15 ViewSize",
+        "DungeonFortress.Presentation/CameraView.cs:21 ViewRect",
+        "DungeonFortress.Presentation/CameraView.cs:38 CameraFrame",
+        "DungeonFortress.Game/Main.HudText.cs:385 HudFitFrame"
+      ]
+    },
+    "mutable": {
+      "count": 2,
+      "types": [
+        {
+          "type": "DungeonFortress.Simulation/DeterministicRandom.cs:3 DeterministicRandom",
+          "mutableStateWhy": "private ulong _state, advanced in NextUInt64 (DeterministicRandom.cs:14)"
+        },
+        {
+          "type": "DungeonFortress.Simulation/SimulationWorld.cs:216 AgentState",
+          "mutableStateWhy": "five public instance fields, all written in SimulationWorld.Step"
+        }
+      ]
+    }
+  },
+  "enumerationB": {
+    "question": "which readonly field declarations does src/** have, and which of them are value-typed?",
+    "command": "rg -n \"^\\s*(private|public|internal|protected)[^(){}=;]*\\breadonly\\b\" -g '*.cs' src --glob '!**/bin/**' --glob '!**/obj/**'",
+    "total": 114,
+    "note": "23 of the 114 hits are the struct type declarations of enumeration A (they contain the word `readonly` in `readonly record struct`), not fields. The remaining 91 are field declarations.",
+    "valueTypedReadonlyFields": [
+      {
+        "field": "src/DungeonFortress.Simulation/PrototypeMap.cs:34 private static readonly GridPoint AuthoredGate",
+        "verdict": "clean",
+        "why": "GridPoint is a readonly record struct — enumeration A, immutable."
+      },
+      {
+        "field": "src/DungeonFortress.Presentation/CameraView.cs:99 public static readonly ViewSize DesignFrameSize",
+        "verdict": "clean",
+        "why": "ViewSize is a readonly record struct."
+      },
+      {
+        "field": "src/DungeonFortress.Presentation/HudReadability.cs:114 public static readonly ViewSize DefectFrame",
+        "verdict": "clean",
+        "why": "ViewSize is a readonly record struct."
+      },
+      {
+        "field": "src/DungeonFortress.Presentation/ViewLaunchOptions.cs:19 public static readonly ViewSize MinimumLogicalFrameSize",
+        "verdict": "clean",
+        "why": "ViewSize is a readonly record struct."
+      },
+      {
+        "field": "src/DungeonFortress.Simulation/PrototypeWorld.cs:43 private readonly DeterministicRandom _combatRandom",
+        "verdict": "DEFECT",
+        "why": "DeterministicRandom is mutable (enumeration A). Every call of _combatRandom.NextInt32 through this field is made on a defensive copy, so _state never moves and CombatJitter returns the same number for the whole party."
+      }
+    ],
+    "referenceTypedReadonlyFields": {
+      "count": 86,
+      "why": "Arrays (including AgentState[] and Side[]), List, Dictionary, SortedDictionary, HashSet, SortedSet, StringBuilder, string[], double[], sealed records and classes. A readonly field of a reference type is never defensively copied: readonly freezes the reference, not the object, and array elements are reached through the reference, not through a copy of it."
+    }
+  },
+  "otherHoldersOfAMutableStruct": [
+    {
+      "field": "src/DungeonFortress.Simulation/PrototypeWorld.cs:42 private DeterministicRandom _raiderNameRandom",
+      "verdict": "clean",
+      "why": "not readonly; PrototypeWorld.ReturningRaiders.cs:43 and :54 advance it in place"
+    },
+    {
+      "field": "src/DungeonFortress.Simulation/SimulationWorld.cs:13 private DeterministicRandom _random",
+      "verdict": "clean",
+      "why": "not readonly; SimulationWorld.cs:34-36 and :77 advance it in place"
+    },
+    {
+      "local": "src/DungeonFortress.Simulation/PrototypeWorld.cs:625 var random = new DeterministicRandom(seed ^ 0x776F726C645F696EUL)",
+      "verdict": "clean",
+      "why": "a mutable local, not a field; locals are never defensively copied"
+    },
+    {
+      "field": "src/DungeonFortress.Simulation/SimulationWorld.cs:11 private readonly AgentState[] _agents",
+      "verdict": "clean",
+      "why": "the field type is an array, a reference type. The elements are mutated through `ref var agent = ref _agents[index]` (SimulationWorld.cs:76, :206), which reaches the element in place. The two `ref readonly` uses at :119 and :133 only read."
+    }
+  ],
+  "notSearched": {
+    "what": "tests/**, tools/**, spikes/**, scripts/**",
+    "why": "Issue #361 scope §2 names src/** . For completeness, searching the word `struct` over tests, tools and spikes returns exactly one hit and it is a comment (tests/DungeonFortress.Simulation.Tests/PrototypePostCombatDispersalTests.cs:739). No struct is declared outside src/**, so no mutable struct exists there to be held in a readonly field.",
+    "command": "rg -n \"\\bstruct\\b\" -g '*.cs' tests tools spikes --glob '!**/bin/**' --glob '!**/obj/**'"
+  },
+  "conclusion": "One defect in src/**: src/DungeonFortress.Simulation/PrototypeWorld.cs:43. Four other value-typed readonly fields and four other holders of a mutable struct were checked and are clean."
+}

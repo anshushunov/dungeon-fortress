@@ -25,6 +25,26 @@ public sealed class PrototypeMomentOfTruthTests
 
     private static readonly ulong[] MatrixSeeds = [20_260_726UL, 20_260_727UL, 20_260_728UL];
 
+    /// <summary>
+    /// The seed the two checks about the <b>consequence</b> of a verdict are read
+    /// on — the third seed of the Issue #12 matrix rather than the journal's own.
+    ///
+    /// <para>Both are checks about a scene rather than about a number: one needs
+    /// a domain that punishes every card until somebody refuses to stand, the
+    /// other needs the creature on the first card to decide something different
+    /// for having been rewarded rather than punished. Issue #361 made the damage
+    /// jitter live, and on the journal's own seed neither scene happens any more:
+    /// nobody refuses, and the first card's creature decides the same things
+    /// either way. Scanned over <c>baseline</c> at seeds 20260726–20260755, both
+    /// scenes are present in eight parties; this one is taken because it is
+    /// already a seed of the shipped matrix, so the checks moved to another party
+    /// of the same measured set rather than to a party invented to hold them. It
+    /// carries one refusal and one witness — and «more than none» is exactly what
+    /// the two checks ask for, since what they state is that the behaviour is
+    /// reachable at all.</para>
+    /// </summary>
+    private const ulong ConsequenceSeed = 20_260_728UL;
+
     // ------------------------------------------------------------------
     // Criterion 1 — the three magnitudes are canonical state.
     // ------------------------------------------------------------------
@@ -420,11 +440,15 @@ public sealed class PrototypeMomentOfTruthTests
     /// review of PR #328 showed the other one to be structurally unreachable, and
     /// it is reached here by playing the story the mechanic is about rather than
     /// by moving a constant.
+    ///
+    /// <para>Read at <see cref="ConsequenceSeed"/>: since Issue #361 made the
+    /// damage jitter live, the journal's own seed produces a party in which
+    /// nobody ever gets far enough into a grudge to refuse.</para>
     /// </summary>
     [Fact]
     public void A_domain_that_punishes_without_cause_is_eventually_refused_the_line()
     {
-        var state = PlayPunishingEveryCard("baseline");
+        var state = PlayPunishingEveryCard("baseline", ConsequenceSeed);
         var refusals = state.Events
             .Where(item => item.ReasonCode == "combat_refused_grudge")
             .ToArray();
@@ -659,19 +683,24 @@ public sealed class PrototypeMomentOfTruthTests
     /// of Issue #312 held for one value out of two. The reward's own channel
     /// (<see cref="PrototypeWorld.LoyaltyReach"/>) is what this theory holds, and
     /// the mutant M7 zeroes it.</para>
+    /// <para>Read at <see cref="ConsequenceSeed"/>: since Issue #361 made the
+    /// damage jitter live, the creature on the first card of the journal's own
+    /// seed decides the same things whichever way it is answered, so that party
+    /// no longer contains the scene.</para>
     [Fact]
     public void A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave()
     {
-        var open = RunToMomentOfTruth("baseline");
+        var log = Fixture("baseline", ConsequenceSeed);
+        var open = RunToMomentOfTruth("baseline", ConsequenceSeed);
         var atTick = open.CurrentTick;
         var subject = PrototypeScenario.Capture(open).State.MomentOfTruth.Cards[0].CreatureId;
 
-        var silent = PlayOut(LoadFixture("baseline"));
-        var punished = PlayOut(LoadFixture("baseline") with
+        var silent = PlayOut(log);
+        var punished = PlayOut(log with
         {
             Commands = [new VerdictCommand(atTick, subject, VerdictKind.Punish)],
         });
-        var rewarded = PlayOut(LoadFixture("baseline") with
+        var rewarded = PlayOut(log with
         {
             Commands = [new VerdictCommand(atTick, subject, VerdictKind.Reward)],
         });
@@ -714,7 +743,7 @@ public sealed class PrototypeMomentOfTruthTests
             .Select(card => card.CreatureId)
             .Where(id =>
             {
-                var run = PlayOut(LoadFixture("baseline") with
+                var run = PlayOut(log with
                 {
                     Commands = [new VerdictCommand(atTick, id, VerdictKind.Reward)],
                 });
@@ -895,9 +924,9 @@ public sealed class PrototypeMomentOfTruthTests
     /// is what is being looked for: the tick a wave ends on is emergent, and a
     /// number here would be a balance value pretending to be a fixture.
     /// </summary>
-    private static PrototypeWorld RunToMomentOfTruth(string fixtureName)
+    private static PrototypeWorld RunToMomentOfTruth(string fixtureName, ulong? seed = null)
     {
-        var world = new PrototypeWorld(LoadFixture(fixtureName));
+        var world = new PrototypeWorld(Fixture(fixtureName, seed));
         while (!world.IsComplete && !world.IsAwaitingVerdict)
         {
             world.Step();
@@ -997,9 +1026,9 @@ public sealed class PrototypeMomentOfTruthTests
     /// creature a card is about are both emergent; each is an ordinary command of
     /// the dictionary, applied on its own tick like any other.
     /// </summary>
-    private static PrototypeSnapshot PlayPunishingEveryCard(string fixtureName)
+    private static PrototypeSnapshot PlayPunishingEveryCard(string fixtureName, ulong? seed = null)
     {
-        var log = LoadFixture(fixtureName);
+        var log = Fixture(fixtureName, seed);
         var issued = new List<PrototypeCommand>();
         for (var round = 0; round < PrototypeTuning.WaveCount; round++)
         {
@@ -1099,6 +1128,14 @@ public sealed class PrototypeMomentOfTruthTests
     private static PrototypeCommandLog LoadFixture(string fixtureName) =>
         PrototypeCommandDocument.Load(Path.Combine(
             FindRepositoryRoot(), "scenarios", "prototype1", $"{fixtureName}.commands.v2.json"));
+
+    /// <summary>
+    /// The shipped journal, optionally replayed at another seed. Every check here
+    /// still reads the journal's own seed unless it says otherwise and says why;
+    /// see <see cref="ConsequenceSeed"/>.
+    /// </summary>
+    private static PrototypeCommandLog Fixture(string fixtureName, ulong? seed) =>
+        seed is { } value ? LoadFixture(fixtureName) with { Seed = value } : LoadFixture(fixtureName);
 
     private static string FindRepositoryRoot()
     {

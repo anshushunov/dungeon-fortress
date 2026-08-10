@@ -646,31 +646,57 @@ public static class MomentOfTruthPanel
     /// story. This builds a full band out of the widest card <em>this</em>
     /// snapshot's creatures can produce, so the guard measures a real sentence
     /// rather than a hand-written imitation of one.</para>
+    ///
+    /// <para><b>Over every axis a card can be answered on, and that is the whole
+    /// of Issue #361's finding here.</b> This used to build its candidate with one
+    /// <c>dominantAxis</c>, <c>"deed"</c> — and <c>dominantAxis</c> is read twice
+    /// downstream, not once: <c>HudText.Headline</c> turns it into the sentence,
+    /// and <c>HudText.Breakdown</c> turns it into the ledger printed after it,
+    /// where <c>"deed"</c> falls into the default branch and prints
+    /// <em>benefit</em>. So the widest card was searched for among benefit
+    /// ledgers only, and a card answered on fear — whose ledger is a different
+    /// list of a different length — was never measured at all. The gap is not a
+    /// matter of one party: it was there for as long as the method was, and it
+    /// stayed invisible only while no live card's fear ledger happened to
+    /// outgrow every creature's benefit one. Making the combat jitter advance
+    /// again produced a party in which one does, at 70 characters against a worst
+    /// case of 69, and
+    /// <c>MomentOfTruthPanelTests.The_worst_case_band_is_never_narrower_than_the_live_one</c>
+    /// said so. The candidate is now the widest over creatures <b>and</b> axes,
+    /// which is what the method always claimed to return.</para>
+    ///
+    /// <para>The four axes are the four the simulation can put on a card
+    /// (<c>PrototypeWorld.MomentOfTruth.cs:185-190</c>), enumerated rather than
+    /// discovered: a fifth value would be a new game rule, and a worst case that
+    /// silently accepted one would be measuring a card the player cannot be
+    /// shown.</para>
     /// </summary>
     /// <param name="state">Canonical state, open window or not.</param>
     public static MomentOfTruthPrompt WorstCase(PrototypeSnapshot state)
     {
         ArgumentNullException.ThrowIfNull(state);
+        string[] axes = ["deed", "fear", "benefit", "grudge"];
         var widest = state.Creatures
-            .Select(creature => HudText.MomentOfTruthCardLine(new PrototypeMomentOfTruthCard(
-                creature.Id,
-                creature.Name,
-                creature.Loyalty,
-                0,
-                0,
-                0,
-                // The longest headline of the four Headline() can produce is the
-                // plural deed, and it is longest with a two-digit count.
-                RaidersDowned: 99,
-                DominantAxis: "deed",
-                Notability: 0,
-                // An answered card is the wider one: it carries the arrow and the
-                // verdict on top of everything an unanswered one has.
-                Verdict: WidestVerdict)))
+            .SelectMany(_ => axes, (creature, axis) => HudText.MomentOfTruthCardLine(
+                new PrototypeMomentOfTruthCard(
+                    creature.Id,
+                    creature.Name,
+                    creature.Loyalty,
+                    0,
+                    0,
+                    0,
+                    // Read only by the deed headline, and longest at two digits.
+                    RaidersDowned: 99,
+                    DominantAxis: axis,
+                    Notability: 0,
+                    // An answered card is the wider one: it carries the arrow and
+                    // the verdict on top of everything an unanswered one has.
+                    Verdict: WidestVerdict)))
             .Concat([string.Empty])
             .OrderByDescending(line => line.Length)
             // A tie-break, so two creatures with equally long lines cannot make
-            // the guard measure a different string on two runs of one seed.
+            // the guard measure a different string on two runs of one seed. It
+            // orders across axes for the same reason it orders across creatures.
             .ThenBy(line => line, StringComparer.Ordinal)
             .First();
 

@@ -101,6 +101,19 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
     /// threshold sits between the two and closer to the new floor than to the
     /// old ceiling, because the number it guards is the destination rule, not the
     /// jitter of a fight.
+    ///
+    /// <para><b>Re-measured for Issue #361, and the floor moved with the
+    /// measurement.</b> Until that fix the damage jitter was frozen for a whole
+    /// party, so every blow of every fight was struck with one and the same roll.
+    /// With it live the same six runs give 476 of 993 — 0.479, individually
+    /// 0.456–0.519 — against 818 of 1636, 0.500 (0.467–0.554), measured on the
+    /// same six runs immediately before the fix
+    /// (<c>evidence/361-contract-numbers.json</c>). The floor moves from 0.48 to
+    /// 0.45 by the recipe that chose it: between the pre-#129 aggregate of 0.418
+    /// and the aggregate that stands now, and below the smallest per-run share of
+    /// any post-#129 measurement. What it is a floor <b>of</b> does not change,
+    /// and the destination rule itself is asserted part by part elsewhere in this
+    /// class rather than through this number.</para>
     /// </summary>
     [Fact]
     public void The_places_beside_a_raider_are_taken_rather_than_queued_for()
@@ -110,9 +123,9 @@ public sealed class PrototypeCombatApproachTests(ITestOutputHelper output)
         var share = (double)taken / places;
 
         Assert.True(
-            share >= 0.48,
+            share >= 0.45,
             $"Fighters filled {taken} of the {places} places around a raider that the fighters " +
-            $"present for it could have filled — a share of {share:F3}, where 0.48 is the floor. " +
+            $"present for it could have filled — a share of {share:F3}, where 0.45 is the floor. " +
             "Below it they are queueing behind one another instead of taking the free tile " +
             $"beside the enemy.{Environment.NewLine}{Detail()}");
     }
