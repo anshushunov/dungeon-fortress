@@ -76,29 +76,34 @@ public sealed class WorldLabelFocusTests
     }
 
     /// <summary>
-    /// Criterion 2. «Сиплый» is the one caption of the owner's wave-4 frame whose
-    /// second line the layout sheds — five returners stand on cell (14,7) and the
-    /// sentence under his name is four and a half tiles wide, so on the quiet map
-    /// he is a bare name. Pointing at him gives the sentence back.
+    /// Criterion 2 of Issue #371, <b>re-stated by Issue #379 with the word the
+    /// original was missing</b>: the line the crowd took off a caption comes back
+    /// under the pointer <em>where there is room for it</em>.
     ///
-    /// <para><b>Re-pinned by Issue #361.</b> It was «Секира» on cell (15,7). With
-    /// the damage jitter live the party arrives at tick 2380 with a different set
-    /// of returners standing in the room, so the caption the crowd trims is
-    /// another one — found the same way, as the single label of the frame whose
-    /// placed lines are fewer than its requested ones. Everything else about the
-    /// check is untouched: it still asserts that exactly one caption is trimmed on
-    /// the quiet map and that pointing gives the sentence back whole.</para>
+    /// <para><b>What changed and why the wording is not cosmetic.</b> Issue #371
+    /// bought the unconditional version by letting a focused caption lay its whole
+    /// text in the first pass, ahead of its neighbours' names. Independent review of
+    /// PR #376 measured what that costs on the owner's own frame — pointing at
+    /// «Сиплый» takes the wave-4 map from three names to two — and Issue #379 took
+    /// the exemption away. So the promise is now conditional, and this states both
+    /// sides of the condition on the same frame rather than dropping the half that
+    /// stopped holding.</para>
     ///
-    /// <para><b>The shed itself is asserted first, on the same frame and in the
-    /// same test.</b> Without it the check would pass on a layout that never shed
-    /// anything — and a layout that shows every caption whole is not this game: it
-    /// is the one whose crowded frame Issue #364 measured at three names out of
-    /// six. So the check states both halves of the deal the owner was offered: the
-    /// map still gives the sentence up when the corridor is full, and the pointer
-    /// still gets it back.</para>
+    /// <para><b>The side that no longer holds, measured.</b> «Сиплый» stands on
+    /// (14,7) with five other bodies. They share one head, so they share one ladder
+    /// of places; the cursor serves him first, which puts his name on the lowest
+    /// rung with two neighbours' names above it, and a two-line box is seventeen and
+    /// a half reference pixels tall against the ten of a name. There is nowhere for
+    /// it to go, and pointing at him leaves a bare name. What answers him instead is
+    /// the panel, which since Issue #373 a click can reach on a crowded cell.</para>
+    ///
+    /// <para><b>The side that holds, measured on the same scene.</b> Every other
+    /// captioned raider of the frame keeps his sentence under the pointer, and the
+    /// quiet map is untouched by any of it — asserted first, so a layout that simply
+    /// stopped shedding anything could not pass.</para>
     /// </summary>
     [Fact]
-    public void The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer()
+    public void The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer_where_there_is_room()
     {
         var state = WorldLabelLayoutTests.OwnerScene(WaveFourTick);
         var shed = Assert.Single(
@@ -109,9 +114,15 @@ public sealed class WorldLabelFocusTests
 
         Assert.Equal("Сиплый", shed.Lines[0].Text);
         Assert.Single(shed.Lines);
-        var story = ReturningHeroLabel.Story(
-            state.Raiders.Single(raider => raider.Id == shed.Request.Subject.Id));
-        Assert.NotNull(story);
+        // Six bodies on his cell, which is the reason the sentence has nowhere to
+        // go — stated as the number it is, so a frame that thinned out would stop
+        // this check rather than let it keep asserting a bare name.
+        Assert.Equal(
+            6,
+            WorldLabels.BodiesAt(
+                state,
+                state.Raiders.Single(raider => raider.Id == shed.Request.Subject.Id).Position)
+                .Count);
 
         foreach (var focus in new[]
                  {
@@ -124,7 +135,31 @@ public sealed class WorldLabelFocusTests
                     .Of(state, focus, CameraView.DefaultTileSize)
                     .Where(placed => placed.Request.Subject == shed.Request.Subject));
 
-            Assert.Equal(["Сиплый", story], focused.Lines.Select(line => line.Text));
+            Assert.Equal(["Сиплый"], focused.Lines.Select(line => line.Text));
+        }
+
+        // And the other half: where the head is not shared, the pointer does hand
+        // the whole caption over. Wave 3's «Ржавый» is that body, and he carries his
+        // sentence on the quiet map and under both gestures alike.
+        var thinner = WorldLabelLayoutTests.OwnerScene(WaveThreeTick);
+        var alone = thinner.Raiders.Single(raider =>
+            ReturningHeroLabel.IsCaptioned(raider) && ReturningHeroLabel.Story(raider) is not null);
+        var body = new WorldLabelSubject(WorldLabelKind.Raider, alone.Id);
+        foreach (var focus in new[]
+                 {
+                     WorldLabelFocus.None,
+                     new WorldLabelFocus(body, null),
+                     new WorldLabelFocus(null, body),
+                 })
+        {
+            var label = Assert.Single(
+                WorldLabels
+                    .Of(thinner, focus, CameraView.DefaultTileSize)
+                    .Where(placed => placed.Request.Subject == body));
+
+            Assert.Equal(
+                [alone.Name, ReturningHeroLabel.Story(alone)],
+                label.Lines.Select(line => line.Text));
         }
     }
 
@@ -192,28 +227,41 @@ public sealed class WorldLabelFocusTests
     /// earlier in scene order does not take the only place there is.
     ///
     /// <para>Stated on values rather than on the owner's scene because it is a
-    /// statement about order, and an order needs a case where two labels want the
-    /// same place. Two returners on neighbouring cells are that case: a sentence is
-    /// four and a half tiles wide, so the two two-line boxes cannot both be drawn,
-    /// and whichever label is grown first is the one that gets it. The focused label
-    /// is the <em>later</em> of the two in scene order, so a second pass that walked
-    /// the placed labels in scene order instead of rank order would hand the place to
-    /// the other one — the substitution <c>evidence/379-mutants.json</c> runs.</para>
+    /// statement about order, and an order needs a scene where two labels want one
+    /// place. This is that scene: two returners carrying a sentence stand on
+    /// neighbouring cells with a bare name each beside them, the bare names take the
+    /// rungs the second sentence would have used, and one sentence is all that fits.
+    /// The focused label is the <em>later</em> of the two in scene order, so a second
+    /// pass that walked the placed labels in scene order instead of rank order would
+    /// hand the place to the other one — which is the substitution
+    /// <c>evidence/379-mutants.json</c> runs against this check.</para>
+    ///
+    /// <para><b>It says «offered», not «given».</b> Being first in the queue is not
+    /// the same as fitting: on a head five other bodies share, the label the cursor
+    /// is on is served its <em>name</em> first, which puts it at the bottom of the
+    /// ladder with its neighbours' names above it and no room to grow into. That is
+    /// the owner's wave-4 cell (14,7), it is measured in
+    /// <see cref="The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer_where_there_is_room"/>,
+    /// and it is the price named in <c>WorldLabelLayout.FirstAttempt</c>.</para>
     /// </summary>
     [Fact]
     public void The_body_under_the_cursor_is_offered_its_sentence_first()
     {
-        var neighbour = Caption(
-            1,
-            new GridPoint(20, 7),
-            "Косой",
-            WorldLabelRank.ReturningWithStory,
-            0);
-        var asked = Caption(2, new GridPoint(21, 7), "Сиплый", WorldLabelRank.Hovered, 1);
+        var mine = new GridPoint(20, 7);
+        var theirs = new GridPoint(21, 7);
+        var neighbour = Caption(1, mine, "Косой", WorldLabelRank.ReturningWithStory, 0);
+        var asked = Caption(2, theirs, "Сиплый", WorldLabelRank.Hovered, 1);
+        var crowd = new[]
+        {
+            Name(3, mine, "Бурый", 2),
+            Name(4, theirs, "Хват", 3),
+        };
 
-        var placed = WorldLabelLayout.Place([neighbour, asked], CameraView.DefaultTileSize);
+        var placed = WorldLabelLayout.Place(
+            [neighbour, asked, .. crowd],
+            CameraView.DefaultTileSize);
 
-        Assert.Equal(2, placed.Count);
+        Assert.Equal(4, placed.Count);
         Assert.Equal(
             2,
             placed.Single(label => label.Request.Subject == asked.Subject).Lines.Count);
@@ -241,6 +289,17 @@ public sealed class WorldLabelFocusTests
             .Select(label => $"{label.Request.Subject.Kind}#{label.Request.Subject.Id}")
             .OrderBy(text => text, StringComparer.Ordinal),
     ];
+
+    /// <summary>A raider nobody reached: one line, and no sentence to grow.</summary>
+    private static WorldLabelRequest Name(int id, GridPoint cell, string name, int order) =>
+        new(
+            new WorldLabelSubject(WorldLabelKind.Raider, id),
+            WorldLabelLayout.HeadOf(
+                CameraView.CellCenter(cell, CameraView.DefaultTileSize),
+                CameraView.DefaultTileSize),
+            [new WorldLabelLine(name, ReturningHeroLabel.NameTextRef)],
+            WorldLabelRank.Returning,
+            order);
 
     /// <summary>A two-line caption asking for a place over a named cell.</summary>
     private static WorldLabelRequest Caption(

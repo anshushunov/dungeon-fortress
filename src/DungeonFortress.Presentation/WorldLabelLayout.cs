@@ -92,10 +92,13 @@ public sealed record WorldLabelRequest(
 /// he stops: <see cref="InspectorText.Raider"/> carries the same words.</para>
 ///
 /// <para><b>Since Issue #371 the panel is no longer the only way back to it:</b>
-/// pointing at the body — or selecting it — lays that caption whole on the map
-/// again, because a focused label puts its whole text down in the first pass
-/// (<see cref="WorldLabelLayout.FirstAttempt"/>). What is shed here is shed only
-/// while nobody is asking.</para>
+/// pointing at the body — or selecting it — asks for that caption whole again.
+/// <b>Since Issue #379 it asks in the second pass and not the first</b>
+/// (<see cref="WorldLabelLayout.FirstAttempt"/>), so the answer is «yes where
+/// there is room beside you» rather than «yes, and your neighbour loses his
+/// name». On the owner's wave-4 frame, where six bodies share one head and one
+/// ladder of places, there is no room and the sentence stays in the panel; one
+/// cell over, there is.</para>
 /// </param>
 /// <param name="Box">The rectangle it occupies, in world pixels.</param>
 /// <param name="Alignment">Which side of the head it took.</param>
@@ -404,12 +407,20 @@ public static class WorldLabelLayout
     /// is the difference between a name that could have fitted and a name nobody
     /// sees.</para>
     ///
-    /// <para><b>One label is exempt from the first pass and it is the one the
-    /// player is pointing at</b> (Issue #371): it is laid with its whole text
-    /// straight away, because the second pass cannot give a crowded caption its
-    /// sentence back and the first pass is the only moment the room still exists.
-    /// The reason, the measurement and what the exemption costs the neighbours are
-    /// in <see cref="FirstAttempt"/>.</para>
+    /// <para><b>Nothing is exempt from the first pass, and the label the player is
+    /// pointing at least of all</b> (Issue #379). Between Issue #371 and this one a
+    /// focused label laid its whole text straight away, on the reasoning that the
+    /// second pass could not give a crowded caption its sentence back. It could not,
+    /// and the price of buying it in the first pass instead was measured on the
+    /// owner's own frame by independent review of PR #376: pointing at «Сиплый»
+    /// takes the wave-4 map from three names to two, because a sentence four and a
+    /// half tiles wide is served before his neighbour has asked for a name. That is
+    /// the greedy order this method exists to refuse, switched back on for one
+    /// label — so the exemption is gone and the ladder is the same for everybody.
+    /// What the focus keeps is <em>priority</em>, in both passes: it is served first
+    /// among the names and offered its sentence first among the second lines
+    /// (<see cref="GrowingOrder"/>). What it no longer has is the right to spend a
+    /// neighbour's name on its own sentence.</para>
     /// </summary>
     public static IReadOnlyList<PlacedWorldLabel> Place(
         IEnumerable<WorldLabelRequest> requests,
@@ -435,7 +446,7 @@ public static class WorldLabelLayout
             }
         }
 
-        for (var index = 0; index < placed.Count; index++)
+        foreach (var index in GrowingOrder(placed))
         {
             var request = placed[index].Request;
             for (var count = request.Lines.Count; count > placed[index].Lines.Count; count--)
@@ -453,41 +464,60 @@ public static class WorldLabelLayout
     }
 
     /// <summary>
-    /// How many lines a label puts on the table in the first pass — one, except
-    /// for the body the player is asking about right now, which puts down its
-    /// whole text.
+    /// The order the second pass offers the sentences back in: rank first, scene
+    /// order inside a rank — the same order the names were served in, and the same
+    /// order «Что выбрано» of <c>docs/product/REFERENCES.md</c> declares, «тело под
+    /// курсором → выбранное тело → вернувшийся налётчик».
     ///
-    /// <para><b>The exception is Issue #371's second half and it is bought, not
-    /// free.</b> A caption that will not fit whole is laid without its last line
-    /// (<see cref="PlacedWorldLabel.Lines"/>), and on the owner's wave-4 frame
-    /// «Секира» is that caption: four returners share cell (15,7), so the sentence
-    /// under her name has nowhere to go and the map shows a bare name. The owner
-    /// played that frame and read it as the map having less to say in the wave that
-    /// mattered most — «в последней волне только 1 детализированная надпись». The
-    /// shortened form stays; what changes is that it is no longer permanent, because
-    /// pointing at her hands the sentence back.</para>
+    /// <para><b>Why it is written out instead of walking the list as it stands.</b>
+    /// The list stands in that order today, because the first pass built it that way,
+    /// so this changes no frame the game draws. It is written out because it is now
+    /// the <em>only</em> thing the focus gets in exchange for the exemption Issue
+    /// #379 took away: where two labels want the one place a sentence fits in, the
+    /// one the player is asking about takes it. Left implicit, that promise would be
+    /// a side effect of a sort ten lines above, and a later change to the first
+    /// pass's order would move it without anything noticing —
+    /// <c>WorldLabelFocusTests.The_body_under_the_cursor_is_offered_its_sentence_first</c>
+    /// is what notices, and it can only notice something the code states.</para>
+    /// </summary>
+    private static IReadOnlyList<int> GrowingOrder(IReadOnlyList<PlacedWorldLabel> placed) =>
+    [
+        .. Enumerable
+            .Range(0, placed.Count)
+            .OrderBy(index => placed[index].Request.Rank)
+            .ThenBy(index => placed[index].Request.Order),
+    ];
+
+    /// <summary>
+    /// How many lines a label puts on the table in the first pass: <b>one, whoever
+    /// it belongs to</b> — its name, and never a word more.
     ///
-    /// <para><b>Why in the first pass and not by growing her afterwards.</b>
-    /// Growing was already tried first for her — the second pass walks the placed
-    /// labels in rank order and hers is the highest rank there is — and it fails,
-    /// because by then the three labels of her own cell are down and the two-line
-    /// box has no free candidate left. Measured, not supposed: on tick 2380 of
-    /// <c>baseline</c>/<c>20260729</c> she was laid with one line of two while
-    /// hovered. The only pass in which the place she needs is still free is the
-    /// first one.</para>
+    /// <para><b>The one line is the whole of Issue #379.</b> Between Issue #371 and
+    /// that one this method answered <c>Lines.Count</c> for a hovered or a selected
+    /// label, so the body the player was asking about bid its sentence before its
+    /// neighbours had bid their names. On <c>baseline</c>/<c>20260729</c> at tick
+    /// 2380 that is measured, not supposed: hovering «Сиплый» left the map with two
+    /// names where the quiet map has three, and the one it took was «Долговязый»'s
+    /// (<c>evidence/379-before.json</c>). A gesture that adds a sentence about one
+    /// body must not subtract a name from another — a name is the answer to «кто
+    /// это», which is the only question a caption exists for, and a sentence is the
+    /// answer to a question the player has not asked yet.</para>
     ///
-    /// <para><b>What it costs, named.</b> One sentence — two at most, a hovered
-    /// body and a selected one — now bids ahead of its neighbours' names, which is
-    /// the very thing two passes exist to prevent. It is bounded by the same rank
-    /// order that grants it: only the body the player is pointing at can outbid a
-    /// name, only while he points at it, and a focused label that finds no room for
-    /// its whole text falls back through the same steps every other label does
-    /// rather than disappearing.</para>
+    /// <para><b>What that costs, named, because it is Issue #371's promise being
+    /// made conditional.</b> «Наведение возвращает снятую строку» now reads «where
+    /// there is room for it»: the sentence comes back in the second pass, and on a
+    /// head shared by five other bodies the second pass has nothing to offer. The
+    /// arithmetic is the ladder's own — a name's box is ten reference pixels tall
+    /// and a two-line caption's is seventeen and a half, against a ceiling of
+    /// twenty-two — so on cell (14,7) of the owner's wave-4 frame «Сиплый» keeps a
+    /// bare name under the cursor. What answers him there is the panel that opens on
+    /// the click (<see cref="InspectorText.Raider"/>), reachable on a crowded cell
+    /// since Issue #373. The alternative — leaving the exemption in place — is the
+    /// defect this Issue was opened about, and it costs a neighbour's name every
+    /// time the corridor is full.</para>
     /// </summary>
     private static int FirstAttempt(WorldLabelRequest request) =>
-        request.Rank is WorldLabelRank.Hovered or WorldLabelRank.Selected
-            ? request.Lines.Count
-            : Math.Min(1, request.Lines.Count);
+        Math.Min(1, request.Lines.Count);
 
     /// <summary>
     /// The nearest free place for these lines, or <c>null</c> when every candidate
