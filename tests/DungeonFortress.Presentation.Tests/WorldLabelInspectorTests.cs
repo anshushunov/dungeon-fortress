@@ -14,35 +14,46 @@ namespace DungeonFortress.Presentation.Tests;
 /// </summary>
 public sealed class WorldLabelInspectorTests
 {
-    private const ulong OwnerSeed = 20260729UL;
-
     private const int WaveThreeTick = 2025;
 
+    private const int WaveFourTick = 2380;
+
+    /// <inheritdoc cref="WorldLabelLayoutTests.OwnerScene"/>
     private static PrototypeSnapshot OwnerScene(int ticks) =>
-        PrototypeScenario.Run(
-            PresentationFixtures.LogOf("baseline") with { Seed = OwnerSeed },
-            ticks).State;
+        WorldLabelLayoutTests.OwnerScene(ticks);
 
     /// <summary>
     /// Criterion 9, on the owner's scene rather than on a raider written here. It
-    /// walks every raider standing on the map at that moment, because "raiders can
-    /// be picked" is a claim about the population and not about a lucky one.
+    /// walks every cell a raider stands on at that moment, because "raiders can be
+    /// picked" is a claim about the population and not about one lucky body.
+    ///
+    /// <para>The claim is about the cell and not about a named raider, and it has
+    /// to be: several raiders share a cell on this frame — four of them stand on
+    /// (15,7) — so the answer for such a cell is <em>one</em> of them rather than a
+    /// particular one. What has to be true is that the answer is a raider who is
+    /// standing there.</para>
     /// </summary>
     [Fact]
     public void Every_raider_on_the_map_can_be_pointed_at_and_selected()
     {
         var state = OwnerScene(WaveThreeTick);
-        var onMap = state.Raiders
+        var cells = state.Raiders
             .Where(raider => raider.Mode != RaiderMode.Escaped)
             .Where(raider => !state.Creatures.Any(crew => crew.Position == raider.Position))
+            .Select(raider => raider.Position)
+            .Distinct()
             .ToArray();
 
-        Assert.NotEmpty(onMap);
-        foreach (var raider in onMap)
+        Assert.NotEmpty(cells);
+        foreach (var cell in cells)
         {
-            Assert.Equal(
-                new WorldLabelSubject(WorldLabelKind.Raider, raider.Id),
-                WorldLabels.At(state, raider.Position));
+            var picked = WorldLabels.At(state, cell);
+
+            Assert.NotNull(picked);
+            Assert.Equal(WorldLabelKind.Raider, picked!.Value.Kind);
+            Assert.Contains(
+                state.Raiders,
+                raider => raider.Id == picked.Value.Id && raider.Position == cell);
         }
     }
 
@@ -109,7 +120,7 @@ public sealed class WorldLabelInspectorTests
     [Fact]
     public void The_panel_of_a_returning_raider_says_what_his_caption_says()
     {
-        var state = OwnerScene(2380);
+        var state = OwnerScene(WaveFourTick);
         var returning = state.Raiders
             .Where(ReturningHeroLabel.IsCaptioned)
             .Where(raider => ReturningHeroLabel.Story(raider) is not null)
@@ -134,7 +145,7 @@ public sealed class WorldLabelInspectorTests
     [Fact]
     public void The_panel_of_any_raider_names_him_and_says_what_he_is_doing()
     {
-        var state = OwnerScene(2380);
+        var state = OwnerScene(WaveFourTick);
 
         Assert.NotEmpty(state.Raiders);
         foreach (var raider in state.Raiders)

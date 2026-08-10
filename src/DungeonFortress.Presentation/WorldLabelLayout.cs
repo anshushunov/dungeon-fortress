@@ -328,14 +328,26 @@ public static class WorldLabelLayout
     /// <summary>
     /// Every label of this frame, placed. Labels are served in rank order and,
     /// inside a rank, in scene order; each takes the nearest free place to its own
-    /// head. A caption that will not fit whole is tried again without its last
-    /// line, and one that will not fit even as a bare name is left out of the
-    /// result entirely.
+    /// head, and one that finds none inside <see cref="MaximumAttachmentRef"/> is
+    /// left out of the result entirely.
     ///
-    /// <para>The order of the two loops is the decision. Whole text at a further
-    /// place beats truncated text at a nearer one, so the line count is the outer
-    /// loop: a caption is only shortened when <em>no</em> place inside the limit
-    /// would take it whole.</para>
+    /// <para><b>Names first, sentences after — and that is two passes, not a
+    /// tidier way of writing one.</b> The second line of a returning raider's
+    /// caption is a sentence: «волна 2 · достали (23,7)» is a hundred reference
+    /// pixels, nearly five tiles, against thirty for the name above it. Laid
+    /// greedily — each label taking its whole text before the next one is
+    /// considered — one such caption fills the places of five neighbours, and on
+    /// the owner's own wave-4 frame that is measured, not supposed: three names of
+    /// six survived and three were given up. So the first pass places every label
+    /// as its name alone, and only then does the second pass grow each one back to
+    /// its full text where there is still room beside it. A name is never
+    /// outbid by somebody else's sentence, and a sentence never appears anywhere
+    /// but directly under the name it belongs to.</para>
+    ///
+    /// <para>That ordering is what makes the suppression of «приём 5» land last:
+    /// a label disappears only after the shortened form has been tried too, which
+    /// is the difference between a name that could have fitted and a name nobody
+    /// sees.</para>
     /// </summary>
     public static IReadOnlyList<PlacedWorldLabel> Place(
         IEnumerable<WorldLabelRequest> requests,
@@ -350,34 +362,63 @@ public static class WorldLabelLayout
                      .ThenBy(request => request.Subject.Kind)
                      .ThenBy(request => request.Subject.Id))
         {
-            if (Fit(request, placed, scale) is { } fitted)
+            if (request.Lines.Count > 0 &&
+                Fit(request, request.Lines.Take(1).ToArray(), placed, null, scale) is { } named)
             {
-                placed.Add(fitted);
+                placed.Add(named);
+            }
+        }
+
+        for (var index = 0; index < placed.Count; index++)
+        {
+            var request = placed[index].Request;
+            for (var count = request.Lines.Count; count > placed[index].Lines.Count; count--)
+            {
+                if (Fit(request, request.Lines.Take(count).ToArray(), placed, index, scale)
+                    is { } grown)
+                {
+                    placed[index] = grown;
+                    break;
+                }
             }
         }
 
         return placed;
     }
 
-    /// <inheritdoc cref="Place"/>
+    /// <summary>
+    /// The nearest free place for these lines, or <c>null</c> when every candidate
+    /// inside the limit is taken.
+    /// </summary>
+    /// <param name="ignore">
+    /// Which already-placed label is this one, when the caller is growing a label
+    /// it has already put down. A label must not collide with the box it is about
+    /// to give up.
+    /// </param>
     private static PlacedWorldLabel? Fit(
         WorldLabelRequest request,
+        IReadOnlyList<WorldLabelLine> lines,
         IReadOnlyList<PlacedWorldLabel> placed,
+        int? ignore,
         double scale)
     {
-        for (var count = request.Lines.Count; count >= 1; count--)
+        foreach (var candidate in Candidates)
         {
-            var lines = request.Lines.Take(count).ToArray();
-            foreach (var candidate in Candidates)
+            var box = BoxOf(request.Head, lines, candidate, scale);
+            var attachment = DistanceRef(request.Head, box, scale);
+            if (attachment > MaximumAttachmentRef)
             {
-                var box = BoxOf(request.Head, lines, candidate, scale);
-                var attachment = DistanceRef(request.Head, box, scale);
-                if (attachment > MaximumAttachmentRef ||
-                    placed.Any(other => Overlap(other.Box, box)))
-                {
-                    continue;
-                }
+                continue;
+            }
 
+            var taken = false;
+            for (var other = 0; other < placed.Count && !taken; other++)
+            {
+                taken = other != ignore && Overlap(placed[other].Box, box);
+            }
+
+            if (!taken)
+            {
                 return new PlacedWorldLabel(request, lines, box, candidate.Side, attachment);
             }
         }
