@@ -39,13 +39,13 @@ public partial class Main
         header.AddThemeConstantOverride("separation", 2);
         column.AddChild(header);
 
-        _title = MakeHudLabel(15, new Color("#dbeafe"));
+        _title = MakeHudLabel(HudFontSizes.TitleFontSize, new Color("#dbeafe"));
         _title.AutowrapMode = TextServer.AutowrapMode.Off;
         _title.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         _title.Text = "DUNGEON FORTRESS  //  PROTOTYPE 1 GRAYBOX";
         header.AddChild(_title);
 
-        _summary = MakeHudLabel(12, new Color("#bfdbfe"));
+        _summary = MakeHudLabel(HudFontSizes.SummaryFontSize, new Color("#bfdbfe"));
         header.AddChild(_summary);
         // The summary is always exactly two lines, and it is the one panel that
         // must never be squeezed: the line under it is the time toolbar.
@@ -77,7 +77,7 @@ public partial class Main
         // waits.
         column.AddChild(CreateMomentOfTruthBand());
 
-        _roster = MakeHudLabel(10, new Color("#cbd5e1"));
+        _roster = MakeHudLabel(HudFontSizes.RosterFontSize, new Color("#cbd5e1"));
         _roster.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         _roster.SizeFlagsStretchRatio = 1f;
         column.AddChild(_roster);
@@ -1039,7 +1039,7 @@ public partial class Main
         column.AddThemeConstantOverride("separation", HudPanelSeparation);
         panel.AddChild(column);
 
-        var heading = MakeHudLabel(13, new Color("#93c5fd"));
+        var heading = MakeHudLabel(HudFontSizes.InspectorHeadingFontSize, new Color("#93c5fd"));
         // Named because nothing holds a reference to it: the readability walk
         // finds it in the tree and reports it by path, and a path with a default
         // engine name in it is not a sentence anyone can act on.
@@ -1049,7 +1049,7 @@ public partial class Main
         column.AddChild(heading);
         heading.CustomMinimumSize = new Vector2(0, HudTextHeight(heading, 1));
 
-        _inspector = MakeHudLabel(11, new Color("#e2e8f0"));
+        _inspector = MakeHudLabel(HudFontSizes.InspectorFontSize, new Color("#e2e8f0"));
         _inspector.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         _inspector.SizeFlagsStretchRatio = 3;
         column.AddChild(_inspector);
@@ -1059,7 +1059,7 @@ public partial class Main
         // static map key from the live event feed above and below it.
         column.AddChild(new HSeparator { MouseFilter = Control.MouseFilterEnum.Ignore });
 
-        _feedback = MakeHudLabel(12, new Color("#94a3b8"));
+        _feedback = MakeHudLabel(HudFontSizes.FeedbackFontSize, new Color("#94a3b8"));
         _feedback.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         _feedback.SizeFlagsStretchRatio = 2;
         column.AddChild(_feedback);
@@ -1096,25 +1096,25 @@ public partial class Main
                      // "LEGEND" heading (previously its own 9pt row) is folded into
                      // the shortest content row below instead of dropped, keeping
                      // every word this legend already had at eight rows total.
-                     ("LEGEND — amber X = dig mark / yellow bar = dig progress", 8, "#cbd5e1"),
-                     ("teal outline = crew / red outline = raider / bar = HP / white X = downed", 8, "#cbd5e1"),
+                     ("LEGEND — amber X = dig mark / yellow bar = dig progress", HudFontSizes.LegendFontSize, "#cbd5e1"),
+                     ("teal outline = crew / red outline = raider / bar = HP / white X = downed", HudFontSizes.LegendFontSize, "#cbd5e1"),
                      // Issue #222. The state dot is the small circle at the upper-
                      // right corner of each own body. It disappears behind the
                      // legend row "bar = HP" on the line above, so this row is
                      // the one that keeps the copy honest when the test walks the
                      // live subtree (see HudReadabilityTests.AuthoredHud).
-                     ("dot: blue=idle amber=fighting pink=fled green=working gray=downed", 8, "#bfdbfe"),
+                     ("dot: blue=idle amber=fighting pink=fled green=working gray=downed", HudFontSizes.LegendFontSize, "#bfdbfe"),
                      // Issue #52. It replaces the quarters' rest rule rather than
                      // joining it: the panel column is under the same overflow
                      // guard as everything else, and the rest rule now sits on the
                      // room line of the inspector, where clicking the quarters
                      // puts it. What could not move anywhere is the amber ring —
                      // it is the one mark on the map with no words next to it.
-                     ("room = own floor + outline + caption; amber ring = object with no room", 8, "#fcd34d"),
-                     ("light warm block = diggable rock / dark = map edge", 8, "#d6d3d1"),
-                     ("red X = unreachable / pale tile = new floor / gray dot = loose stone", 8, "#fca5a5"),
-                     ("[M] stockpile: cornered square = material cell / grey box on a crew = carried stone", 8, "#e2e8f0"),
-                     ("filled pip = stored / hollow blue pip = booked by a carrier on the way", 8, "#7dd3fc"),
+                     ("room = own floor + outline + caption; amber ring = object with no room", HudFontSizes.LegendFontSize, "#fcd34d"),
+                     ("light warm block = diggable rock / dark = map edge", HudFontSizes.LegendFontSize, "#d6d3d1"),
+                     ("red X = unreachable / pale tile = new floor / gray dot = loose stone", HudFontSizes.LegendFontSize, "#fca5a5"),
+                     ("[M] stockpile: cornered square = material cell / grey box on a crew = carried stone", HudFontSizes.LegendFontSize, "#e2e8f0"),
+                     ("filled pip = stored / hollow blue pip = booked by a carrier on the way", HudFontSizes.LegendFontSize, "#7dd3fc"),
                  })
         {
             var line = MakeHudLabel(size, new Color(color));

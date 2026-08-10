@@ -3,9 +3,8 @@ using System;
 namespace DungeonFortress.Presentation;
 
 /// <summary>
-/// The font sizes and width the toolbar and its tooltip are authored at, and
-/// the one arithmetic rule that turns an authored size into a physical one at
-/// a given UI scale.
+/// Every font size the HUD is authored at, and the one arithmetic rule that
+/// turns an authored size into a physical one at a given UI scale.
 ///
 /// <para>
 /// Issue #127: the tooltip body was authored two points smaller than the
@@ -19,13 +18,29 @@ namespace DungeonFortress.Presentation;
 /// </para>
 ///
 /// <para>
-/// Putting the numbers here rather than as literals in <c>HudButton.cs</c>
-/// does two things a Godot-side literal cannot: the ordering between the
-/// button label and its tooltip becomes one comparison instead of two numbers
-/// a reader has to compare by hand, and the scaling arithmetic itself becomes
-/// provable without starting the engine — <c>DungeonFortress.Game</c> needs
-/// the Godot runtime and no test project may reference it (ADR 0011), so this
-/// is the only layer <c>HudFontSizesTests</c> can reach.
+/// Issue #352 widened this file from the toolbar and its tooltip to every
+/// text surface <c>Main.Hud.cs</c> draws. Before it, seven of the eleven were
+/// bare literals passed straight to <c>MakeHudLabel</c> or a legend tuple —
+/// the same "a fact stated twice, only one copy checked" shape Issue #350
+/// named, except the unchecked copy here was a number nobody had reason to
+/// look at until the owner reported the tooltip unreadable on the playtest of
+/// slice 3 (2026-08-09). <c>HudReadabilityTests.AuthoredHud</c> is the fixture
+/// that is supposed to keep every one of them honest; it could not, for the
+/// four now named here (<see cref="RosterFontSize"/>,
+/// <see cref="InspectorFontSize"/> and the eight <see cref="LegendFontSize"/>
+/// rows), because they were never routed through a shared, named place a test
+/// could point at.
+/// </para>
+///
+/// <para>
+/// Putting the numbers here rather than as literals in <c>Main.Hud.cs</c> or
+/// <c>HudButton.cs</c> does two things a Godot-side literal cannot: an
+/// ordering between two sizes becomes one comparison instead of two numbers a
+/// reader has to compare by hand, and the arithmetic itself becomes provable
+/// without starting the engine — <c>DungeonFortress.Game</c> needs the Godot
+/// runtime and no test project may reference it (ADR 0011), so this is the
+/// only layer <c>HudFontSizesTests</c> and <c>HudReadabilityTests</c> can
+/// reach.
 /// </para>
 /// </summary>
 public static class HudFontSizes
@@ -65,6 +80,85 @@ public static class HudFontSizes
     /// </para>
     /// </summary>
     public const int HotkeyBadgeFontSize = (int)HudReadability.MinimumPhysicalTextPixels;
+
+    /// <summary>
+    /// The HUD's own title, set in <c>CreateSideColumn</c>. Already above
+    /// <see cref="HudReadability.MinimumPhysicalTextPixels"/> before Issue
+    /// #352 raised the floor, and unchanged by it — named here only so it
+    /// stops being a bare literal, the same reason <see cref="SummaryFontSize"/>,
+    /// <see cref="InspectorHeadingFontSize"/> and <see cref="FeedbackFontSize"/>
+    /// are named rather than left as the three other literals that already
+    /// cleared the floor.
+    /// </summary>
+    public const int TitleFontSize = 15;
+
+    /// <summary>
+    /// The summary line: session identity, tick, renown and the wave/resource
+    /// line beneath it. Already at the floor before Issue #352; named for the
+    /// same reason as <see cref="TitleFontSize"/>.
+    /// </summary>
+    public const int SummaryFontSize = 12;
+
+    /// <summary>
+    /// The crew roster line, control feedback and the tail of the command log
+    /// (<c>HudText.Roster</c>).
+    ///
+    /// <para>
+    /// Raised from 10 by Issue #352, for the same reason
+    /// <see cref="ButtonLabelFontSize"/> was: at the design frame an authored
+    /// size is the physical one, and 10 no longer clears
+    /// <see cref="HudReadability.MinimumPhysicalTextPixels"/>.
+    /// </para>
+    /// </summary>
+    public const int RosterFontSize = 12;
+
+    /// <summary>
+    /// The side-column heading above the inspector text (<c>CreateSideColumn</c>).
+    /// Already at the floor before Issue #352; named for the same reason as
+    /// <see cref="TitleFontSize"/>.
+    /// </summary>
+    public const int InspectorHeadingFontSize = 13;
+
+    /// <summary>
+    /// The inspector body: the explanation for whatever cell or creature is
+    /// selected.
+    ///
+    /// <para>
+    /// Raised from 11 by Issue #352, for the same reason as
+    /// <see cref="RosterFontSize"/>.
+    /// </para>
+    /// </summary>
+    public const int InspectorFontSize = 12;
+
+    /// <summary>
+    /// The event feed / creature story panel (<c>HudText.Feedback</c>).
+    /// Already at the floor before Issue #352; named for the same reason as
+    /// <see cref="TitleFontSize"/>.
+    /// </summary>
+    public const int FeedbackFontSize = 12;
+
+    /// <summary>
+    /// The eight legend rows explaining the map's marks and colours
+    /// (<c>CreateLegend</c>). One constant for all eight rather than eight
+    /// repeated numbers, because Issues #52, #222 and #86 already show the
+    /// row count and wording change on their own schedule — the font size is
+    /// not a per-row decision and giving it eight copies would only be eight
+    /// chances for one of them to drift.
+    ///
+    /// <para>
+    /// Raised from 8 by Issue #352, the largest jump of any HUD surface: 8 was
+    /// simultaneously the previous floor and the size every legend row
+    /// happened to be authored at, so raising the floor without raising this
+    /// constant would leave the guard refusing the legend on every supported
+    /// frame, starting with the design frame itself. The owner named the
+    /// price of this particular jump directly — a legend block roughly one
+    /// and a half times taller, because its sentences are the longest text in
+    /// the HUD and wrap more often at a larger size — and asked for the fit to
+    /// be measured before this constant's value is treated as settled
+    /// (<c>evidence/352-fit.json</c>).
+    /// </para>
+    /// </summary>
+    public const int LegendFontSize = (int)HudReadability.MinimumPhysicalTextPixels;
 
     /// <summary>
     /// The tooltip's first line: the name of the action. Larger than the body

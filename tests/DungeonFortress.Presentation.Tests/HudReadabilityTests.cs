@@ -25,15 +25,16 @@ public sealed class HudReadabilityTests
     /// tooltip counterpart <c>--smoke-hud-tooltip-readability-regression</c>.
     ///
     /// <para>
-    /// The tooltip, toolbar-button and hotkey-badge entries are
-    /// <see cref="HudFontSizes"/> constants rather than repeated literals, for
-    /// the same reason <c>Main.Hud.cs</c> reads them from there instead of
-    /// restating them: one number, one place. <c>roster</c>, <c>inspector</c>
-    /// and the eight <c>legend</c> rows stay literal because Issue #352 could
-    /// not move them into the same constant class — that authored text lives in
-    /// <c>src/DungeonFortress.Game/Main.Hud.cs</c> outside the file's partition
-    /// for that Issue — and this fixture is a copy of what is actually authored,
-    /// not of what the guard would like to be authored.
+    /// Every entry below is a <see cref="HudFontSizes"/> constant rather than a
+    /// repeated literal, for the same reason <c>Main.Hud.cs</c> reads them from
+    /// there instead of restating them: one number, one place. Issue #352
+    /// widened this from the tooltip/toolbar/badge trio to all eleven —
+    /// <c>roster</c>, <c>inspector</c> and the eight <c>legend</c> rows used to
+    /// stay literal here because the authored text lived in
+    /// <c>src/DungeonFortress.Game/Main.Hud.cs</c> outside that Issue's first
+    /// partition; the partition was widened to the whole file once the guard's
+    /// own fixture — this one — proved a floor the HUD itself failed at four
+    /// unrelated call sites was not a floor.
     /// </para>
     ///
     /// The <c>heading</c> row below is why the adapter walks the tree. It used to
@@ -44,20 +45,20 @@ public sealed class HudReadabilityTests
     /// </summary>
     private static readonly HudTextSize[] AuthoredHud =
     [
-        new("title", 15),
-        new("summary", 12),
-        new("roster", 10),
-        new("inspector", 11),
-        new("feedback", 12),
-        new("heading", 13),
-        new("legend[0]", 8),
-        new("legend[1]", 8),
-        new("legend[2]", 8),
-        new("legend[3]", 8),
-        new("legend[4]", 8),
-        new("legend[5]", 8),
-        new("legend[6]", 8),
-        new("legend[7]", 8),
+        new("title", HudFontSizes.TitleFontSize),
+        new("summary", HudFontSizes.SummaryFontSize),
+        new("roster", HudFontSizes.RosterFontSize),
+        new("inspector", HudFontSizes.InspectorFontSize),
+        new("feedback", HudFontSizes.FeedbackFontSize),
+        new("heading", HudFontSizes.InspectorHeadingFontSize),
+        new("legend[0]", HudFontSizes.LegendFontSize),
+        new("legend[1]", HudFontSizes.LegendFontSize),
+        new("legend[2]", HudFontSizes.LegendFontSize),
+        new("legend[3]", HudFontSizes.LegendFontSize),
+        new("legend[4]", HudFontSizes.LegendFontSize),
+        new("legend[5]", HudFontSizes.LegendFontSize),
+        new("legend[6]", HudFontSizes.LegendFontSize),
+        new("legend[7]", HudFontSizes.LegendFontSize),
         new("control[inspect]", HudFontSizes.ButtonLabelFontSize),
         new("hotkey[0]", HudFontSizes.HotkeyBadgeFontSize),
         new("tooltip.title", HudFontSizes.TooltipTitleFontSize),
@@ -103,14 +104,16 @@ public sealed class HudReadabilityTests
     public void The_owner_maximized_frame_leaves_no_HUD_text_in_the_eight_to_fifteen_pixel_band()
     {
         // The acceptance criterion of Issue #86, as a number: at 3044x1722 the
-        // automatic policy has to reach scale 2, and 8 px legend rows have to
-        // become 16 physical pixels rather than staying in the band the owner
-        // could not read.
+        // automatic policy has to reach scale 2, and the smallest authored text
+        // has to become at least twice the band the owner could not read. Issue
+        // #352 raised the smallest authored size itself from 8 (the legend) to
+        // 12 (the floor, now shared by the legend, roster and inspector), so
+        // the physical figure here follows: 24 rather than 16.
         var uiScale = CameraView.AutomaticUiScale(HudReadability.DefectFrame);
         Assert.Equal(2.0, uiScale);
 
         var smallest = HudReadability.SmallestPhysicalTextPixels(AuthoredHud, uiScale);
-        Assert.Equal(16.0, smallest);
+        Assert.Equal((double)(2 * HudFontSizes.LegendFontSize), smallest);
         Assert.True(
             smallest > 15.0,
             $"The smallest HUD text is {smallest} physical pixels, still inside the 8-15 band.");

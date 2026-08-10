@@ -1,0 +1,27 @@
+{
+  "issue": 352,
+  "checkpoint": "1 (revised order) — measurement before completion, per coordinator's instruction",
+  "what": "Every HUD font size Main.Hud.cs authors is now routed through a named HudFontSizes constant, and every one below the new 12 px floor was raised to it: RosterFontSize 10->12, InspectorFontSize 11->12, LegendFontSize 8->12 (all eight legend rows). This measures whether the raised HUD still fits its rectangles on the overflow guard (AssertLabelsFit), which is a different check from the pure-arithmetic readability guard (HudReadability) that is already fully green — see evidence/352-checkpoint1.json and evidence/352-checkpoint2-blocked.json for that one.",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage godot",
+  "note_on_command": "scripts/verify.ps1 was invoked as-is (read-only usage) to reuse its existing Godot smoke plumbing; the script itself was not edited, per the Issue's non-goal on scripts/** and per Issue #378 owning HudVerification.ps1.",
+  "result": "does NOT fit",
+  "failure": "InvalidOperationException from Main.AssertLabelsFit() (src/DungeonFortress.Game/Main.HudText.cs:568), thrown from Main._Ready() (Main.cs:407), on the first headless smoke run (fixture 'baseline', seed 424242, tick 1): \"The HUD loses text in 2 place(s): 'feedback' needs 8 lines but only 7 fit in (287, 146) at viewport (1024, 768), UI scale 1; 'feedback' needs 8 lines but only 6 fit in (287, 126) at viewport (2048, 1440), UI scale 2. Text that does not fit its rectangle is dropped or drawn over the panel below it.\"",
+  "checkedViewports": [
+    "[1280,1280] (the run's own live pair)",
+    "[1280,720] uiScale 1 — fits",
+    "[1366,768] uiScale 1 — fits",
+    "[1600,900] uiScale 1 — fits",
+    "[1024,768] uiScale 1 — SHORT BY 1 LINE (needs 8, 7 fit)",
+    "[1920,1080] uiScale 1.25 — fits",
+    "[2048,1440] uiScale 2 — SHORT BY 2 LINES (needs 8, 6 fit)",
+    "[3044,1722] uiScale 2 — fits"
+  ],
+  "shortfall": {
+    "1024x768@1": "feedback panel needs 8 lines, 7 fit — short by 1 line",
+    "2048x1440@2": "feedback panel needs 8 lines, 6 fit — short by 2 lines"
+  },
+  "rootCauseAnalysis": "The panel that overflows is 'feedback' (the event feed / creature story panel), whose own font size (HudFontSizes.FeedbackFontSize = 12) was already at the floor before this Issue and was not raised. It overflows because the panels sharing its column grew taller above it: roster (10->12), the inspector heading (unchanged, 13), the inspector body (11->12), and — the largest single contributor — the eight legend rows (8->12, a jump the coordinator named in advance as roughly a one-and-a-half-times height increase, HudFontSizes.cs:LegendFontSize doc comment). The side column's total height is fixed by the viewport; every pixel the legend and roster/inspector gained above 'feedback' is a pixel 'feedback' no longer has below them. This is not a font-size defect in 'feedback' itself, it is the same fixed-height column the legend's own history (#52, #222, #86) already treats as scarce.",
+  "readabilityGuardStatus": "Fully green independent of this failure: dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -v minimal -> 717/717 passed (evidence already covers this arithmetic; AssertLabelsFit is a separate, Godot-only check that no C# unit test can reach).",
+  "instructionFollowed": "Per the coordinator's decision on Issue #352: this is the 'does not fit' branch. Stopping here with this measurement rather than deciding what to cut from the legend or any other panel; the legend's own copy was not touched (rows #52, #222 and #86 each stand on their own reason, per the coordinator's explicit instruction not to shorten it unilaterally).",
+  "workingTreeState": "All eleven HudFontSizes constants exist and are wired into Main.Hud.cs (whole file now in partition per the coordinator's second extension). This commit is deliberately red on the Godot 'godot' stage — the readability arithmetic is proven, the fit is not, and that gap is exactly what is being escalated."
+}
