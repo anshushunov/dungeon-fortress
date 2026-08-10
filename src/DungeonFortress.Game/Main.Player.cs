@@ -68,13 +68,27 @@ public partial class Main
     {
         _lastPanPointer = position;
         _hoverCell = ScreenToCell(position);
-        var hovered = _hoverCell is { } cell ? WorldLabels.At(_state!, cell) : null;
+        // The selected body when it is standing on the pointed cell, so that having
+        // clicked past a crew member to the raider behind him and then pointed at
+        // that same tile does not answer with the crew member again.
+        var hovered = _hoverCell is { } cell
+            ? WorldLabels.PointedAt(_state!, cell, CurrentWorldLabelFocus().Selected)
+            : null;
         _hoverCreatureId = IdOf(hovered, WorldLabelKind.Creature);
         _hoverRaiderId = IdOf(hovered, WorldLabelKind.Raider);
         UpdateCreatureLabels();
         QueueRedraw();
     }
 
+    /// <summary>
+    /// One click selects; a second click on the same cell takes the next body
+    /// standing on it, and round to the first again after the last.
+    ///
+    /// <para>Which body that is, in what order, and why cycling rather than a
+    /// chooser popup, is all <c>WorldLabels.NextAt</c>'s answer. The adapter
+    /// contributes the cell and the memory of what was selected a moment ago, and
+    /// nothing else.</para>
+    /// </summary>
     private void SelectAt(Vector2 position)
     {
         var cell = ScreenToCell(position);
@@ -84,9 +98,16 @@ public partial class Main
         }
 
         _selectedCell = selected;
-        var body = WorldLabels.At(_state!, selected);
+        var body = WorldLabels.NextAt(_state!, selected, CurrentWorldLabelFocus().Selected);
         _selectedCreatureId = IdOf(body, WorldLabelKind.Creature);
         _selectedRaiderId = IdOf(body, WorldLabelKind.Raider);
+        // Only where there is something to say. A cell holding one body says
+        // nothing, because the single click already answered it whole.
+        if (WorldLabels.SelectionHint(_state!, selected, body) is { } hint)
+        {
+            _controlFeedback = hint;
+        }
+
         UpdateHud();
         UpdateCreatureLabels();
         QueueRedraw();

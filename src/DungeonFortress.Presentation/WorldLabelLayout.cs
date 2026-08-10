@@ -566,31 +566,143 @@ public static class WorldLabelLayout
 public static class WorldLabels
 {
     /// <summary>
-    /// The body standing on a cell, or <c>null</c> for an empty one. This is the
-    /// whole of "what did the player click on", and it is one function so that
-    /// hover, selection and the inspector cannot disagree about who is there.
+    /// <b>Every</b> body standing on a cell, in the order clicking cycles through
+    /// them: the crew first, by id, then the raiders, by id.
     ///
-    /// <para>A creature outranks a raider on a shared cell: the crew is what the
-    /// player commands, and the raider standing on the same tile is already
-    /// answerable through the cell beside it. A raider that has left through the
-    /// gate is not on the map at all and is skipped, exactly as the drawing does
-    /// (<c>Main.Rendering.SceneRaiders</c>); a downed one is not, because his body
-    /// is still lying there and is still worth asking about.</para>
+    /// <para><b>Every, and that word is the whole finding.</b> This used to answer
+    /// with one body — the first creature on the cell, or failing that the first
+    /// raider — and the reasoning attached to it, that a raider sharing a tile is
+    /// «already answerable through the cell beside it», was false on the very frame
+    /// this Issue is about. On tick 2380 of <c>baseline</c>/<c>20260729</c> four of
+    /// the six captioned returners — «Секира», «Сиплый», «Ловчий» and «Косой» —
+    /// stand on (15,7) together with the crew member «Тишина», so clicking that
+    /// cell answered «Тишина» four times over and none of the four could be
+    /// selected at all. The neighbouring cell does not help: (16,7) holds two
+    /// <em>other</em> raiders.</para>
+    ///
+    /// <para>A raider that has left through the gate is not on the map and is
+    /// skipped, exactly as the drawing does (<c>Main.Rendering.SceneRaiders</c>); a
+    /// downed one is kept, because his body is still lying there and is still worth
+    /// asking about.</para>
     /// </summary>
-    public static WorldLabelSubject? At(PrototypeSnapshot state, GridPoint cell)
+    public static IReadOnlyList<WorldLabelSubject> BodiesAt(
+        PrototypeSnapshot state,
+        GridPoint cell)
     {
         ArgumentNullException.ThrowIfNull(state);
-        if (state.Creatures.FirstOrDefault(creature => creature.Position == cell)
-            is { } standing)
+        return
+        [
+            .. state.Creatures
+                .Where(creature => creature.Position == cell)
+                .OrderBy(creature => creature.Id)
+                .Select(creature => new WorldLabelSubject(
+                    WorldLabelKind.Creature,
+                    creature.Id)),
+            .. state.Raiders
+                .Where(raider => raider.Position == cell && raider.Mode != RaiderMode.Escaped)
+                .OrderBy(raider => raider.Id)
+                .Select(raider => new WorldLabelSubject(WorldLabelKind.Raider, raider.Id)),
+        ];
+    }
+
+    /// <summary>
+    /// The body a fresh click on this cell answers with: the first of
+    /// <see cref="BodiesAt"/>, or <c>null</c> for an empty cell.
+    /// </summary>
+    public static WorldLabelSubject? At(PrototypeSnapshot state, GridPoint cell) =>
+        BodiesAt(state, cell) is [var first, ..] ? first : null;
+
+    /// <summary>
+    /// The body the next click on this cell selects, given what is selected now.
+    ///
+    /// <para><b>Clicking the same cell again takes the next body on it</b>, and
+    /// round to the first again after the last. That is the mechanism chosen for
+    /// «налётчик участвует в выборе наравне с существом владения» when several
+    /// bodies share a tile, and it is the cheap canonical one: no new input, no
+    /// modifier key, no list to open, and one click still selects on a cell that
+    /// holds a single body. Clicking a <em>different</em> cell always starts from
+    /// its first body, because the body selected a moment ago is not on it.</para>
+    ///
+    /// <para><b>The alternative it was chosen over</b> is a chooser: a click on a
+    /// crowded cell opens a small list of the bodies standing there and the player
+    /// picks one. It is better at four bodies — it says how many there are and
+    /// takes one click instead of four — and it was rejected because it is a new
+    /// piece of interface with its own placement, its own dismissal and its own
+    /// collision problems on exactly the crowded frames it would appear on, which
+    /// is the defect this Issue exists to fix arriving through a third door.
+    /// Cycling costs the player up to one click per body on the tile and tells him
+    /// nothing about how many there are until he has been round; that cost is paid
+    /// down by the feedback line <see cref="SelectionHint"/> writes, which names
+    /// the count.</para>
+    /// </summary>
+    public static WorldLabelSubject? NextAt(
+        PrototypeSnapshot state,
+        GridPoint cell,
+        WorldLabelSubject? selected)
+    {
+        var bodies = BodiesAt(state, cell);
+        if (bodies.Count == 0)
         {
-            return new WorldLabelSubject(WorldLabelKind.Creature, standing.Id);
+            return null;
         }
 
-        return state.Raiders.FirstOrDefault(raider =>
-                raider.Position == cell && raider.Mode != RaiderMode.Escaped)
-            is { } raider
-            ? new WorldLabelSubject(WorldLabelKind.Raider, raider.Id)
-            : null;
+        var current = selected is { } body ? IndexOf(bodies, body) : -1;
+        return bodies[(current + 1) % bodies.Count];
+    }
+
+    /// <summary>
+    /// Which body the pointer reports on this cell. The selected one when it is
+    /// standing here, so that having cycled to «Ловчий» and then pointed at his
+    /// tile does not answer «Тишина» again; otherwise the cell's first body.
+    /// </summary>
+    public static WorldLabelSubject? PointedAt(
+        PrototypeSnapshot state,
+        GridPoint cell,
+        WorldLabelSubject? selected) =>
+        selected is { } body && IndexOf(BodiesAt(state, cell), body) >= 0
+            ? body
+            : At(state, cell);
+
+    /// <summary>
+    /// What the feedback line says after a click, or <c>null</c> when the cell
+    /// holds nothing worth a sentence — nobody, or one body, which is the case the
+    /// player already understands without being told.
+    ///
+    /// <para>It exists because a mechanism nobody can discover is not a mechanism:
+    /// four raiders on one tile look exactly like one raider on one tile, so
+    /// without this line the second click reads as the map changing its mind.</para>
+    /// </summary>
+    public static string? SelectionHint(
+        PrototypeSnapshot state,
+        GridPoint cell,
+        WorldLabelSubject? selected)
+    {
+        var bodies = BodiesAt(state, cell);
+        if (bodies.Count < 2 || selected is not { } body)
+        {
+            return null;
+        }
+
+        var index = IndexOf(bodies, body);
+        return index < 0
+            ? null
+            : $"({cell.X},{cell.Y}): {index + 1} of {bodies.Count} standing here; " +
+                "click the cell again for the next one.";
+    }
+
+    private static int IndexOf(
+        IReadOnlyList<WorldLabelSubject> bodies,
+        WorldLabelSubject body)
+    {
+        for (var index = 0; index < bodies.Count; index++)
+        {
+            if (bodies[index] == body)
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>
@@ -643,7 +755,7 @@ public static class WorldLabels
                      .ThenBy(raider => raider.Id))
         {
             var subject = new WorldLabelSubject(WorldLabelKind.Raider, raider.Id);
-            var lines = LinesOf(raider);
+            var lines = CaptionOf(raider);
             if (lines.Count == 0)
             {
                 continue;
@@ -679,7 +791,7 @@ public static class WorldLabels
     /// so the world does not have to, and changing §8.2 to buy something the panel
     /// already gives would be a product decision taken sideways.</para>
     /// </summary>
-    private static IReadOnlyList<WorldLabelLine> LinesOf(PrototypeRaiderSnapshot raider) =>
+    public static IReadOnlyList<WorldLabelLine> CaptionOf(PrototypeRaiderSnapshot raider) =>
     [
         .. ReturningHeroLabel.Lines(raider)
             .Select((text, index) => new WorldLabelLine(
@@ -723,7 +835,7 @@ public static class WorldLabels
         return
         [
             .. state.Creatures.Select(CreatureLine),
-            .. state.Raiders.SelectMany(LinesOf),
+            .. state.Raiders.SelectMany(CaptionOf),
         ];
     }
 

@@ -98,7 +98,7 @@ public sealed class WorldLabelLayoutTests
             foreach (var other in placed.Where(item => item != one))
             {
                 Assert.False(
-                    WorldLabelLayout.Overlap(one.Box, other.Box),
+                    Intersect(one.Box, other.Box),
                     $"«{one.Lines[0].Text}» and «{other.Lines[0].Text}» " +
                     $"share pixels at tick {ticks}: {one.Box} against {other.Box}.");
             }
@@ -280,6 +280,22 @@ public sealed class WorldLabelLayoutTests
         Assert.Contains(placed, label => label.Lines.Count == 1);
         Assert.All(placed, label => Assert.Equal("Секира", label.Lines[0].Text));
     }
+
+    /// <summary>
+    /// Whether two rectangles share a pixel, written here rather than called on
+    /// <c>WorldLabelLayout.Overlap</c>.
+    ///
+    /// <para>Independent review of PR #368 pointed out that the guard was
+    /// self-referential: it asserted «no overlap» with the very function
+    /// <c>Fit</c> uses to avoid overlap, so substituting <c>Overlap =&gt; false</c>
+    /// left the guard green. Four neighbouring checks with counts closed the hole
+    /// in practice; this closes it at the source, and the cost is four lines.</para>
+    /// </summary>
+    private static bool Intersect(ViewRect one, ViewRect other) =>
+        one.X < other.X + other.Width &&
+        other.X < one.X + one.Width &&
+        one.Y < other.Y + other.Height &&
+        other.Y < one.Y + one.Height;
 
     private static WorldLabelRequest Request(
         int id,

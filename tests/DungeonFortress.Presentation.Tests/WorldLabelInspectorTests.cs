@@ -23,38 +23,98 @@ public sealed class WorldLabelInspectorTests
         WorldLabelLayoutTests.OwnerScene(ticks);
 
     /// <summary>
-    /// Criterion 9, on the owner's scene rather than on a raider written here. It
-    /// walks every cell a raider stands on at that moment, because "raiders can be
-    /// picked" is a claim about the population and not about one lucky body.
+    /// Criterion 9, on the owner's scene rather than on a raider written here, and
+    /// on <b>every</b> raider standing on the map — not only the ones whose tile is
+    /// their own.
     ///
-    /// <para>The claim is about the cell and not about a named raider, and it has
-    /// to be: several raiders share a cell on this frame — four of them stand on
-    /// (15,7) — so the answer for such a cell is <em>one</em> of them rather than a
-    /// particular one. What has to be true is that the answer is a raider who is
-    /// standing there.</para>
+    /// <para><b>The filter this used to carry is what let a defect through.</b> It
+    /// skipped cells shared with a crew member, and on tick 2380 four of the six
+    /// captioned returners stand on (15,7) with «Тишина» — so the class of bodies
+    /// that could not be selected at all was exactly the class the check refused to
+    /// look at. Independent review of PR #368 measured it. The check is now written
+    /// so that the same defect reddens it.</para>
+    ///
+    /// <para>Reachability is what is asserted rather than a single answer, because
+    /// a cell holding five bodies cannot answer with all five at once: clicking it
+    /// again has to reach the next one, and come back round after the last.</para>
     /// </summary>
-    [Fact]
-    public void Every_raider_on_the_map_can_be_pointed_at_and_selected()
+    [Theory]
+    [InlineData(WaveThreeTick)]
+    [InlineData(WaveFourTick)]
+    public void Every_raider_on_the_map_can_be_pointed_at_and_selected(int ticks)
     {
-        var state = OwnerScene(WaveThreeTick);
-        var cells = state.Raiders
+        var state = OwnerScene(ticks);
+        var onMap = state.Raiders
             .Where(raider => raider.Mode != RaiderMode.Escaped)
-            .Where(raider => !state.Creatures.Any(crew => crew.Position == raider.Position))
-            .Select(raider => raider.Position)
-            .Distinct()
             .ToArray();
 
-        Assert.NotEmpty(cells);
-        foreach (var cell in cells)
+        Assert.NotEmpty(onMap);
+        foreach (var raider in onMap)
         {
-            var picked = WorldLabels.At(state, cell);
-
-            Assert.NotNull(picked);
-            Assert.Equal(WorldLabelKind.Raider, picked!.Value.Kind);
             Assert.Contains(
-                state.Raiders,
-                raider => raider.Id == picked.Value.Id && raider.Position == cell);
+                new WorldLabelSubject(WorldLabelKind.Raider, raider.Id),
+                Reachable(state, raider.Position));
         }
+    }
+
+    /// <summary>
+    /// The finding of the returning round, as its own check: on the frame the owner
+    /// played, every returning raider carrying a caption can be selected. Before the
+    /// fix four of the six could not be — «Секира», «Сиплый», «Ловчий» and «Косой»
+    /// all stand on (15,7) behind a crew member, and the cell answered «Тишина»
+    /// however many times it was clicked.
+    ///
+    /// <para>It is separate from the check above because it is the one that makes
+    /// the promise «the second line is not lost, it is in the panel» true. The panel
+    /// is reached by selecting, and «Секира» is precisely the caption whose second
+    /// line the layout sheds on this frame.</para>
+    /// </summary>
+    [Fact]
+    public void Every_captioned_returner_of_the_owners_frame_can_be_reached_by_clicking()
+    {
+        var state = OwnerScene(WaveFourTick);
+        var captioned = state.Raiders.Where(ReturningHeroLabel.IsCaptioned).ToArray();
+
+        Assert.Equal(6, captioned.Length);
+        foreach (var raider in captioned)
+        {
+            Assert.Contains(
+                new WorldLabelSubject(WorldLabelKind.Raider, raider.Id),
+                Reachable(state, raider.Position));
+            // And the panel that selection opens carries the caption's own lines,
+            // so reaching him is reaching the sentence the layout took off his head.
+            var panel = InspectorText.Raider(state, raider);
+            foreach (var line in WorldLabels.CaptionOf(raider))
+            {
+                Assert.Contains(line.Text, panel, StringComparison.Ordinal);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Every body repeated clicking on one cell reaches, in order, stopping when the
+    /// cycle closes. A cycle that skipped a body, repeated one or never came back
+    /// round shows up here rather than on the owner's screen.
+    /// </summary>
+    private static IReadOnlyList<WorldLabelSubject> Reachable(
+        PrototypeSnapshot state,
+        GridPoint cell)
+    {
+        var bodies = WorldLabels.BodiesAt(state, cell);
+        var reached = new List<WorldLabelSubject>();
+        WorldLabelSubject? selected = null;
+        for (var click = 0; click < bodies.Count; click++)
+        {
+            selected = WorldLabels.NextAt(state, cell, selected);
+            Assert.NotNull(selected);
+            Assert.DoesNotContain(selected!.Value, reached);
+            reached.Add(selected.Value);
+        }
+
+        Assert.NotEmpty(reached);
+        // The click after the last body comes back to the first.
+        Assert.Equal(reached[0], WorldLabels.NextAt(state, cell, selected));
+        return reached;
     }
 
     /// <summary>
@@ -182,9 +242,14 @@ public sealed class WorldLabelInspectorTests
         foreach (var raider in returning)
         {
             var panel = InspectorText.Raider(state, raider);
-            foreach (var line in ReturningHeroLabel.Lines(raider))
+            // Compared against the lines the caption is actually composed of —
+            // WorldLabels.CaptionOf — and not against ReturningHeroLabel.Lines one
+            // step behind it. Independent review of PR #368 noted that a
+            // substitution inside the composer would not have reddened the older
+            // form; this closes that step.
+            foreach (var line in WorldLabels.CaptionOf(raider))
             {
-                Assert.Contains(line, panel, StringComparison.Ordinal);
+                Assert.Contains(line.Text, panel, StringComparison.Ordinal);
             }
         }
     }
