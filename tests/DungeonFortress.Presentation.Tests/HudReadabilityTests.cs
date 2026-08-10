@@ -238,13 +238,23 @@ public sealed class HudReadabilityTests
     {
         // The mutant this test exists to catch, named literally in Issue #352:
         // adding "feedback" (or anything else that is not a legend row) to
-        // HudReadability.LegendReadabilityExemption must turn this red. Every
-        // other name AuthoredHud actually carries is listed, so the set this
-        // check runs against is not invented separately from what the HUD
-        // draws.
+        // HudReadability.LegendReadabilityExemption must turn this red.
+        //
+        // Filtering AuthoredHud's own names by "not already in the exemption"
+        // — the first version of this test — is circular: once "feedback" is
+        // added to the exemption, that filter excuses "feedback" from the
+        // list being checked along with it, and the assertion passes for
+        // exactly the wrong reason. Measured: applying the mutant against that
+        // version left this test green while
+        // The_legend_exception_is_exactly_the_eight_legend_rows still caught
+        // it alone (evidence/352-mutants.json) — one red test out of two is
+        // not the pair Issue #352's criterion 3 asks for. Filtering by name
+        // shape instead ("not a legend row") is independent of whatever the
+        // exemption set currently holds, so it cannot be excused by the
+        // mutation it exists to catch.
         var everyOtherAuthoredSurface = AuthoredHud
             .Select(entry => entry.Name)
-            .Where(name => !HudReadability.LegendReadabilityExemption.Contains(name))
+            .Where(name => !name.StartsWith("legend[", StringComparison.Ordinal))
             .Distinct()
             .ToArray();
 
