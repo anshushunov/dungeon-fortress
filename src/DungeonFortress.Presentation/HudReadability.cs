@@ -72,8 +72,83 @@ public static class HudReadability
     /// re-laying-out the HUD, leaving the width guard of Issue #106 in force.
     /// Decision recorded 2026-08-10 in <c>docs/product/GATE_DECISIONS.md</c>.
     /// </para>
+    ///
+    /// <para>
+    /// Applies to every HUD surface except <see cref="LegendReadabilityExemption"/>
+    /// — see that member for why the legend alone does not have to clear this
+    /// floor, and for why the exception is a named set rather than a second,
+    /// softer rule.
+    /// </para>
     /// </summary>
     public const double MinimumPhysicalTextPixels = 12.0;
+
+    /// <summary>
+    /// The one named exception to <see cref="MinimumPhysicalTextPixels"/>: the
+    /// map legend's eight rows, by name, and nothing else.
+    ///
+    /// <para>
+    /// <b>Decided by the owner, 2026-08-10 (Issue #352).</b> The 12 px floor
+    /// covers everything a player reads while deciding something mid-party —
+    /// tooltips, hotkeys, the roster, the inspector and its heading, the
+    /// feedback line, the title, the summary. The legend is a symbol
+    /// reference, read once at the start of a party and consulted for nothing
+    /// a player decides afterward, so it was kept at its pre-#352 size instead
+    /// of paying the one-and-a-half-times height growth 12 px would have cost
+    /// it. Three alternatives were named and rejected with their own price:
+    /// moving the legend behind a hotkey (new state a first-time player would
+    /// not discover on their own); cutting it to five or six rows (every row
+    /// belongs to Issues #52, #222 or #86, each for its own reason, and none
+    /// of those reasons went away); a 10 px floor for everything (never
+    /// measured to fit, and the owner had already named 12).
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Named set, not a softer rule.</b> "Reference text may be smaller
+    /// than the floor" cannot be checked by a machine — <c>reference</c> is a
+    /// judgment call, and code that accepted it would accept it for anything
+    /// the next author called reference. A set this class's own tests assert
+    /// the exact membership of is the only shape that stays an exception
+    /// instead of becoming a hole in the floor: <c>HudReadabilityTests</c>
+    /// pins the count and every name, and reds if the legend's own row count
+    /// changes without this set changing to match, or if anything that is not
+    /// a legend row — <c>feedback</c> named literally, because that is the
+    /// mutant the exception exists to catch — is ever added to it.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Exempt from <see cref="MinimumPhysicalTextPixels"/>, not from every
+    /// floor.</b> A name in this set is held to
+    /// <see cref="LegendReadabilityFloor"/> instead — the legend's own
+    /// pre-#352 authored size, which it must still not be shrunk below. The
+    /// first version of this exception skipped the floor check outright for
+    /// these names, and that quietly disarmed Issue #86's own regression
+    /// proof: <c>InjectHudReadabilityRegression</c> in
+    /// <c>Main.Session.cs</c> re-authors <c>legend[0]</c> at 4 px specifically
+    /// to prove the guard still says no to that, and a guard that no longer
+    /// checks the name at all cannot. <c>Every_supported_frame_...</c> and
+    /// <c>A_legend_row_re_authored_below_its_own_floor_still_fails_the_guard</c>
+    /// in <c>HudReadabilityTests</c> are what would have caught it, had they
+    /// existed before the mistake did.
+    /// </para>
+    /// </summary>
+    public static readonly IReadOnlySet<string> LegendReadabilityExemption = new HashSet<string>(
+        ["legend[0]", "legend[1]", "legend[2]", "legend[3]", "legend[4]", "legend[5]", "legend[6]", "legend[7]"],
+        StringComparer.Ordinal);
+
+    /// <summary>
+    /// The floor a <see cref="LegendReadabilityExemption"/> row is still held
+    /// to, in place of <see cref="MinimumPhysicalTextPixels"/>: its own
+    /// pre-#352 authored size, read from <see cref="HudFontSizes.LegendFontSize"/>
+    /// rather than repeated as a second 8 — the same "one number, one place"
+    /// this exception's own doc comment insists on for its membership. The
+    /// reference runs the opposite direction from <c>HudFontSizes</c>'
+    /// <c>HotkeyBadgeFontSize</c>, which reads <see cref="MinimumPhysicalTextPixels"/>
+    /// from here; both are compile-time constants resolved against a literal
+    /// in the other file, not against each other, so nothing about this is
+    /// circular — only mutual, in the way two doors can each open onto the
+    /// same room.
+    /// </summary>
+    public const double LegendReadabilityFloor = HudFontSizes.LegendFontSize;
 
     /// <summary>
     /// How much denser than the authored rectangle a frame may be before its
@@ -184,12 +259,17 @@ public static class HudReadability
         foreach (var entry in text)
         {
             var physical = PhysicalTextPixels(entry.LogicalPixels, uiScale);
-            if (physical + 1e-9 < MinimumPhysicalTextPixels)
+            var isExemptLegendRow = LegendReadabilityExemption.Contains(entry.Name);
+            var floor = isExemptLegendRow ? LegendReadabilityFloor : MinimumPhysicalTextPixels;
+            if (physical + 1e-9 < floor)
             {
+                var floorDescription = isExemptLegendRow
+                    ? $"{Format(floor)} px legend floor (Issue #352's named exception from the " +
+                        "general floor, not an exemption from every floor)"
+                    : $"{Format(floor)} px floor";
                 failures.Add(
                     $"'{entry.Name}' is drawn at {Format(physical)} physical pixels on frame " +
-                    $"{Format(frame)} at UI scale {Format(uiScale)}, under the " +
-                    $"{Format(MinimumPhysicalTextPixels)} px floor");
+                    $"{Format(frame)} at UI scale {Format(uiScale)}, under the {floorDescription}");
             }
         }
 

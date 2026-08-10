@@ -146,19 +146,24 @@ public static class HudFontSizes
     /// chances for one of them to drift.
     ///
     /// <para>
-    /// Raised from 8 by Issue #352, the largest jump of any HUD surface: 8 was
-    /// simultaneously the previous floor and the size every legend row
-    /// happened to be authored at, so raising the floor without raising this
-    /// constant would leave the guard refusing the legend on every supported
-    /// frame, starting with the design frame itself. The owner named the
-    /// price of this particular jump directly — a legend block roughly one
-    /// and a half times taller, because its sentences are the longest text in
-    /// the HUD and wrap more often at a larger size — and asked for the fit to
-    /// be measured before this constant's value is treated as settled
-    /// (<c>evidence/352-fit.json</c>).
+    /// Issue #352 raised every other HUD font size to
+    /// <see cref="HudReadability.MinimumPhysicalTextPixels"/> and measured
+    /// this one instead of raising it on the same schedule:
+    /// <c>evidence/352-fit.json</c> found that growing all eleven surfaces to
+    /// 12 px overflowed the <c>feedback</c> panel on two of the eight checked
+    /// resolutions, because the legend's own rows would have grown roughly
+    /// one and a half times taller in the same fixed-height column. Put to the
+    /// owner with the measurement, the choice was to keep the legend at its
+    /// pre-#352 size rather than shrink the legend's copy or the feedback
+    /// panel to make room. <b>This constant is therefore deliberately not
+    /// tied to the floor</b> — unlike <see cref="HotkeyBadgeFontSize"/>, which
+    /// still is — and <see cref="HudReadability.LegendReadabilityExemption"/>
+    /// is what tells the readability guard not to expect it to clear the
+    /// floor. See that member for the full decision record, dated
+    /// 2026-08-10.
     /// </para>
     /// </summary>
-    public const int LegendFontSize = (int)HudReadability.MinimumPhysicalTextPixels;
+    public const int LegendFontSize = 8;
 
     /// <summary>
     /// The tooltip's first line: the name of the action. Larger than the body

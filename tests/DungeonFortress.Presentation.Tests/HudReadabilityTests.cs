@@ -37,6 +37,15 @@ public sealed class HudReadabilityTests
     /// unrelated call sites was not a floor.
     /// </para>
     ///
+    /// <para>
+    /// <c>legend[0..7]</c> carry <see cref="HudFontSizes.LegendFontSize"/>,
+    /// which the owner's 2026-08-10 decision kept at 8 rather than the 12 px
+    /// floor everything else here clears — see
+    /// <see cref="HudReadability.LegendReadabilityExemption"/> for why that is
+    /// still readable rather than a second, silent regression of the defect
+    /// this Issue was opened about.
+    /// </para>
+    ///
     /// The <c>heading</c> row below is why the adapter walks the tree. It used to
     /// list the nodes it held references to, and the heading is a local variable
     /// in <c>CreateSideColumn</c> held by nothing: this fixture claimed a
@@ -72,14 +81,21 @@ public sealed class HudReadabilityTests
     }
 
     [Fact]
-    public void The_smallest_authored_text_is_what_the_physical_floor_is_set_to()
+    public void The_smallest_authored_text_outside_the_legend_exception_is_what_the_physical_floor_is_set_to()
     {
         // If the HUD is ever re-authored smaller than the floor, this is the test
         // that says the floor was chosen for a HUD that no longer exists, rather
-        // than the guard quietly failing on every frame.
+        // than the guard quietly failing on every frame. The legend is filtered
+        // out first: it is the one surface the owner decided does not have to
+        // clear the floor (HudReadability.LegendReadabilityExemption), and left
+        // in this comparison it would make the "smallest" permanently 8 rather
+        // than ever reflecting the floor everything else is held to.
+        var governed = AuthoredHud
+            .Where(entry => !HudReadability.LegendReadabilityExemption.Contains(entry.Name))
+            .ToArray();
         Assert.Equal(
             HudReadability.MinimumPhysicalTextPixels,
-            HudReadability.SmallestPhysicalTextPixels(AuthoredHud, 1.0));
+            HudReadability.SmallestPhysicalTextPixels(governed, 1.0));
     }
 
     [Fact]
@@ -104,16 +120,21 @@ public sealed class HudReadabilityTests
     public void The_owner_maximized_frame_leaves_no_HUD_text_in_the_eight_to_fifteen_pixel_band()
     {
         // The acceptance criterion of Issue #86, as a number: at 3044x1722 the
-        // automatic policy has to reach scale 2, and the smallest authored text
-        // has to become at least twice the band the owner could not read. Issue
-        // #352 raised the smallest authored size itself from 8 (the legend) to
-        // 12 (the floor, now shared by the legend, roster and inspector), so
-        // the physical figure here follows: 24 rather than 16.
+        // automatic policy has to reach scale 2, and 8 px legend rows have to
+        // become 16 physical pixels rather than staying in the band the owner
+        // could not read. The legend is still the smallest raw authored size
+        // after Issue #352 (HudFontSizes.LegendFontSize is deliberately kept
+        // at 8 — HudReadability.LegendReadabilityExemption — while every other
+        // surface moved to the 12 px floor), so this figure is unchanged by
+        // that Issue: SmallestPhysicalTextPixels is a raw measurement and does
+        // not know about the exemption, on purpose (see the field the Godot
+        // adapter publishes it as, which a human reads to sanity-check the
+        // truly smallest drawn text and would be misled by a filtered number).
         var uiScale = CameraView.AutomaticUiScale(HudReadability.DefectFrame);
         Assert.Equal(2.0, uiScale);
 
         var smallest = HudReadability.SmallestPhysicalTextPixels(AuthoredHud, uiScale);
-        Assert.Equal((double)(2 * HudFontSizes.LegendFontSize), smallest);
+        Assert.Equal(16.0, smallest);
         Assert.True(
             smallest > 15.0,
             $"The smallest HUD text is {smallest} physical pixels, still inside the 8-15 band.");
@@ -121,16 +142,19 @@ public sealed class HudReadabilityTests
     }
 
     [Fact]
-    public void Every_supported_frame_gets_at_least_the_authored_physical_text_size()
+    public void Every_supported_frame_gets_at_least_the_authored_physical_text_size_outside_the_legend_exception()
     {
+        var governed = AuthoredHud
+            .Where(entry => !HudReadability.LegendReadabilityExemption.Contains(entry.Name))
+            .ToArray();
         foreach (var frame in HudReadability.SupportedFrames)
         {
             var uiScale = CameraView.AutomaticUiScale(frame);
             Assert.True(
-                HudReadability.SmallestPhysicalTextPixels(AuthoredHud, uiScale) >=
+                HudReadability.SmallestPhysicalTextPixels(governed, uiScale) >=
                     HudReadability.MinimumPhysicalTextPixels,
-                $"Frame {frame.Width}x{frame.Height} at UI scale {uiScale} drops HUD text under " +
-                $"{HudReadability.MinimumPhysicalTextPixels} physical pixels.");
+                $"Frame {frame.Width}x{frame.Height} at UI scale {uiScale} drops floor-governed HUD " +
+                $"text under {HudReadability.MinimumPhysicalTextPixels} physical pixels.");
         }
     }
 
@@ -139,13 +163,75 @@ public sealed class HudReadabilityTests
     {
         // The negative case the policy exists for: nothing about the layout
         // changed, no line is clipped, and the guard has to say no anyway.
+        // "roster" rather than "legend[0]" on purpose: a legend row is held to
+        // its own, lower floor (HudReadability.LegendReadabilityFloor) rather
+        // than no floor at all, and that is the next test below — this one
+        // stays about the general 12 px floor every other surface answers to.
+        HudTextSize[] shrunk = [.. AuthoredHud, new HudTextSize("roster", 4)];
+
+        var failure = Assert.Throws<InvalidOperationException>(
+            () => HudReadability.AssertReadable(shrunk));
+
+        Assert.Contains("roster", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("physical pixels", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_legend_row_re_authored_below_its_own_floor_still_fails_the_guard()
+    {
+        // The regression this Issue's own exception could have reintroduced:
+        // an earlier version of LegendReadabilityExemption skipped the floor
+        // check outright for legend rows, which would have silently disarmed
+        // Issue #86's own proof — InjectHudReadabilityRegression in
+        // Main.Session.cs re-authors legend[0] at 4 px specifically to prove
+        // the guard still says no. This is that proof, one layer down: no
+        // engine needed to catch a legend row shrunk below
+        // HudReadability.LegendReadabilityFloor (8 px, HudFontSizes.LegendFontSize),
+        // even though it no longer has to clear the general 12 px floor.
         HudTextSize[] shrunk = [.. AuthoredHud, new HudTextSize("legend[0]", 4)];
 
         var failure = Assert.Throws<InvalidOperationException>(
             () => HudReadability.AssertReadable(shrunk));
 
         Assert.Contains("legend[0]", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("physical pixels", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("legend floor", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_legend_exception_is_exactly_the_eight_legend_rows()
+    {
+        // Criterion 3 of Issue #352: the exemption is a named set whose exact
+        // membership is asserted, not a threshold "reference text may be
+        // smaller" that anything could later qualify for.
+        var expected = Enumerable.Range(0, 8).Select(i => $"legend[{i}]").ToArray();
+
+        Assert.Equal(expected.Length, HudReadability.LegendReadabilityExemption.Count);
+        foreach (var name in expected)
+        {
+            Assert.Contains(name, HudReadability.LegendReadabilityExemption);
+        }
+    }
+
+    [Fact]
+    public void The_legend_exemption_refuses_every_other_HUD_surface()
+    {
+        // The mutant this test exists to catch, named literally in Issue #352:
+        // adding "feedback" (or anything else that is not a legend row) to
+        // HudReadability.LegendReadabilityExemption must turn this red. Every
+        // other name AuthoredHud actually carries is listed, so the set this
+        // check runs against is not invented separately from what the HUD
+        // draws.
+        var everyOtherAuthoredSurface = AuthoredHud
+            .Select(entry => entry.Name)
+            .Where(name => !HudReadability.LegendReadabilityExemption.Contains(name))
+            .Distinct()
+            .ToArray();
+
+        Assert.NotEmpty(everyOtherAuthoredSurface);
+        foreach (var name in everyOtherAuthoredSurface)
+        {
+            Assert.DoesNotContain(name, HudReadability.LegendReadabilityExemption);
+        }
     }
 
     [Fact]
