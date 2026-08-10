@@ -397,6 +397,13 @@ public static class WorldLabelLayout
     /// a label disappears only after the shortened form has been tried too, which
     /// is the difference between a name that could have fitted and a name nobody
     /// sees.</para>
+    ///
+    /// <para><b>One label is exempt from the first pass and it is the one the
+    /// player is pointing at</b> (Issue #371): it is laid with its whole text
+    /// straight away, because the second pass cannot give a crowded caption its
+    /// sentence back and the first pass is the only moment the room still exists.
+    /// The reason, the measurement and what the exemption costs the neighbours are
+    /// in <see cref="FirstAttempt"/>.</para>
     /// </summary>
     public static IReadOnlyList<PlacedWorldLabel> Place(
         IEnumerable<WorldLabelRequest> requests,
@@ -411,10 +418,14 @@ public static class WorldLabelLayout
                      .ThenBy(request => request.Subject.Kind)
                      .ThenBy(request => request.Subject.Id))
         {
-            if (request.Lines.Count > 0 &&
-                Fit(request, request.Lines.Take(1).ToArray(), placed, null, scale) is { } named)
+            for (var count = FirstAttempt(request); count >= 1; count--)
             {
-                placed.Add(named);
+                if (Fit(request, request.Lines.Take(count).ToArray(), placed, null, scale)
+                    is { } named)
+                {
+                    placed.Add(named);
+                    break;
+                }
             }
         }
 
@@ -434,6 +445,43 @@ public static class WorldLabelLayout
 
         return placed;
     }
+
+    /// <summary>
+    /// How many lines a label puts on the table in the first pass — one, except
+    /// for the body the player is asking about right now, which puts down its
+    /// whole text.
+    ///
+    /// <para><b>The exception is Issue #371's second half and it is bought, not
+    /// free.</b> A caption that will not fit whole is laid without its last line
+    /// (<see cref="PlacedWorldLabel.Lines"/>), and on the owner's wave-4 frame
+    /// «Секира» is that caption: four returners share cell (15,7), so the sentence
+    /// under her name has nowhere to go and the map shows a bare name. The owner
+    /// played that frame and read it as the map having less to say in the wave that
+    /// mattered most — «в последней волне только 1 детализированная надпись». The
+    /// shortened form stays; what changes is that it is no longer permanent, because
+    /// pointing at her hands the sentence back.</para>
+    ///
+    /// <para><b>Why in the first pass and not by growing her afterwards.</b>
+    /// Growing was already tried first for her — the second pass walks the placed
+    /// labels in rank order and hers is the highest rank there is — and it fails,
+    /// because by then the three labels of her own cell are down and the two-line
+    /// box has no free candidate left. Measured, not supposed: on tick 2380 of
+    /// <c>baseline</c>/<c>20260729</c> she was laid with one line of two while
+    /// hovered. The only pass in which the place she needs is still free is the
+    /// first one.</para>
+    ///
+    /// <para><b>What it costs, named.</b> One sentence — two at most, a hovered
+    /// body and a selected one — now bids ahead of its neighbours' names, which is
+    /// the very thing two passes exist to prevent. It is bounded by the same rank
+    /// order that grants it: only the body the player is pointing at can outbid a
+    /// name, only while he points at it, and a focused label that finds no room for
+    /// its whole text falls back through the same steps every other label does
+    /// rather than disappearing.</para>
+    /// </summary>
+    private static int FirstAttempt(WorldLabelRequest request) =>
+        request.Rank is WorldLabelRank.Hovered or WorldLabelRank.Selected
+            ? request.Lines.Count
+            : Math.Min(1, request.Lines.Count);
 
     /// <summary>
     /// The nearest free place for these lines, or <c>null</c> when every candidate

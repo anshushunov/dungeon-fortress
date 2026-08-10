@@ -74,6 +74,51 @@ public sealed class WorldLabelFocusTests
     }
 
     /// <summary>
+    /// Criterion 2. «Секира» is the one caption of the owner's wave-4 frame whose
+    /// second line the layout sheds — four returners stand on cell (15,7) and the
+    /// sentence under her name is four and a half tiles wide, so on the quiet map
+    /// she is a bare name. Pointing at her gives the sentence back.
+    ///
+    /// <para><b>The shed itself is asserted first, on the same frame and in the
+    /// same test.</b> Without it the check would pass on a layout that never shed
+    /// anything — and a layout that shows every caption whole is not this game: it
+    /// is the one whose crowded frame Issue #364 measured at three names out of
+    /// six. So the check states both halves of the deal the owner was offered: the
+    /// map still gives the sentence up when the corridor is full, and the pointer
+    /// still gets it back.</para>
+    /// </summary>
+    [Fact]
+    public void The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer()
+    {
+        var state = WorldLabelLayoutTests.OwnerScene(WaveFourTick);
+        var shed = Assert.Single(
+            WorldLabels
+                .Of(state, WorldLabelFocus.None, CameraView.DefaultTileSize)
+                .Where(placed => placed.Request.Subject.Kind == WorldLabelKind.Raider)
+                .Where(placed => placed.Lines.Count < placed.Request.Lines.Count));
+
+        Assert.Equal("Секира", shed.Lines[0].Text);
+        Assert.Single(shed.Lines);
+        var story = ReturningHeroLabel.Story(
+            state.Raiders.Single(raider => raider.Id == shed.Request.Subject.Id));
+        Assert.NotNull(story);
+
+        foreach (var focus in new[]
+                 {
+                     new WorldLabelFocus(shed.Request.Subject, null),
+                     new WorldLabelFocus(null, shed.Request.Subject),
+                 })
+        {
+            var focused = Assert.Single(
+                WorldLabels
+                    .Of(state, focus, CameraView.DefaultTileSize)
+                    .Where(placed => placed.Request.Subject == shed.Request.Subject));
+
+            Assert.Equal(["Секира", story], focused.Lines.Select(line => line.Text));
+        }
+    }
+
+    /// <summary>
     /// Criterion 3. Pointing at a body must not buy its second line with somebody
     /// else's place: on both of the owner's frames, and with <b>every</b> raider of
     /// the frame pointed at in turn, no two labels share a pixel and none ends up
