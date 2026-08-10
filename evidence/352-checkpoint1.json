@@ -1,0 +1,29 @@
+{
+  "issue": 352,
+  "checkpoint": 1,
+  "what": "minimumPhysicalTextPixels raised from 8 to 12 (HudReadability.cs). Proof that the guard now reds on the previous magnitude, per Scope item 2: an unchanged HUD must trip the new floor, otherwise only a number moved rather than the guard.",
+  "before": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~HudReadabilityTests|FullyQualifiedName~HudFontSizesTests\" -v minimal",
+    "state": "MinimumPhysicalTextPixels = 8.0 (pre-#352 value)",
+    "observed": "Пройден! : не пройдено     0, пройдено    21, пропущено     0, всего    21, длительность 32 ms."
+  },
+  "after": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~HudReadabilityTests|FullyQualifiedName~HudFontSizesTests\" -v minimal",
+    "state": "MinimumPhysicalTextPixels = 12.0 (this commit), no other file touched yet",
+    "observed": "Не пройден!: не пройдено     3, пройдено    18, пропущено     0, всего    21, длительность 38 ms.",
+    "failures": [
+      "The_smallest_authored_text_is_what_the_physical_floor_is_set_to: Expected 12, Actual 8",
+      "The_authored_HUD_stays_readable_on_every_supported_frame: HudReadability.AssertReadable throws — 48 violations across the frame matrix",
+      "Every_supported_frame_gets_at_least_the_authored_physical_text_size: 'Frame 1280x720 at UI scale 1 drops HUD text under 12 physical pixels.'"
+    ],
+    "violatingEntriesAtDesignFrame": [
+      "roster: 10px (Main.Hud.cs:80, literal)",
+      "inspector: 11px (Main.Hud.cs:1052, literal)",
+      "legend[0..7]: 8px each (Main.Hud.cs:1099-1117, eight literals)",
+      "control[inspect]: 10px (Main.Hud.cs:215, HudFontSizes.ButtonLabelFontSize — fixed in the same commit as this checkpoint's follow-up)",
+      "hotkey[0]: 8px (Main.Hud.cs:235, literal — fixed via the partition extension the coordinator granted for this one line)",
+      "tooltip.body: 10px (HudFontSizes.TooltipBodyFontSize — fixed in the same follow-up)"
+    ]
+  },
+  "note": "This run also served as the diagnostic that found the second, larger partition conflict escalated in the Issue #352 comment thread: roster, inspector and the eight legend rows are hardcoded literals in src/DungeonFortress.Game/Main.Hud.cs outside the single authorized line (235, the hotkey badge), so criterion 2 (all eight resolutions green) cannot be reached without a further partition decision."
+}

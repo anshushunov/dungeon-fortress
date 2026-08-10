@@ -51,13 +51,29 @@ public readonly record struct HudTextSize(string Name, double LogicalPixels);
 public static class HudReadability
 {
     /// <summary>
-    /// The smallest text the HUD is authored with, on the frame it is authored
-    /// for: the 8 px legend rows at 1280x720 and UI scale 1. It is a floor, not
-    /// a target — it says automatic scaling may never make text smaller than
-    /// the baseline, and it is deliberately not larger, because raising it
-    /// would fail the authored frame itself.
+    /// The smallest a player can actually read without leaning at the screen,
+    /// rather than the smallest size the HUD happened to be authored with.
+    ///
+    /// <para>
+    /// Issue #352: the previous value, 8, was exactly the smallest authored
+    /// size (the legend rows), by definition — so the guard could never catch
+    /// anything smaller than whatever the HUD already did, including the
+    /// tooltip body the owner reported as unreadable at 10 px on the playtest
+    /// of slice 3 (2026-08-09). Raising the floor to a size nothing was
+    /// authored at yet is the point: <b>this constant no longer promises to
+    /// equal today's smallest label</b>, and a HUD that has not caught up is
+    /// exactly what is supposed to fail until it does.
+    /// </para>
+    ///
+    /// <para>
+    /// 12 is the owner's choice among three candidates named on the frame the
+    /// defect was found on — 10, 12, 14 — with the price stated alongside it:
+    /// a one-and-a-half-times rise from the previous floor, without
+    /// re-laying-out the HUD, leaving the width guard of Issue #106 in force.
+    /// Decision recorded 2026-08-10 in <c>docs/product/GATE_DECISIONS.md</c>.
+    /// </para>
     /// </summary>
-    public const double MinimumPhysicalTextPixels = 8.0;
+    public const double MinimumPhysicalTextPixels = 12.0;
 
     /// <summary>
     /// How much denser than the authored rectangle a frame may be before its
