@@ -46,5 +46,16 @@
       "verdict": "red"
     }
   ],
-  "afterEachMutation": "git checkout -- src/DungeonFortress.Presentation/WorldLabelLayout.cs, then git status --short printed nothing."
+  "afterEachMutation": "git checkout -- src/DungeonFortress.Presentation/WorldLabelLayout.cs, then git status --short printed nothing.",
+  "ringIsCoveredWithoutAFourthMutation": {
+    "why": "Point 3 of the addendum — the selection ring — is covered by criterion 9 rather than by a mutation of its own, which is what the coordinator allowed provided the cover is named.",
+    "named": "WorldLabelInspectorTests.The_adapter_rings_the_selected_body_of_either_kind reads the adapter source and requires both DrawCreatureInformation and DrawRaiderInformation to draw the ring through WorldSelectionMark.",
+    "measuredAnyway": {
+      "file": "src/DungeonFortress.Game/Main.DrawBodies.cs",
+      "was": "the eight-line ring block inside DrawRaiderInformation",
+      "became": "removed entirely — which is the state Issue #364 found the adapter in",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~The_adapter_rings_the_selected_body_of_either_kind\"",
+      "output": "Assert.Contains() Failure: Sub-string not found — the DrawRaiderInformation case red, the DrawCreatureInformation case still green, so the check separates the two halves rather than failing wholesale."
+    }
+  }
 }
