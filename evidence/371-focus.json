@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "issue": 371,
+  "what": "Criteria 1-4 of Issue #371, measured on the owner's own two frames rather than on a fixture written for the measurement. The scene is the shipped baseline journal at the seed the owner ran it with; the ticks are the two frames evidence/364-before.png and evidence/364-before-wave3.png were captured at.",
+  "scene": {
+    "fixture": "baseline",
+    "seed": 20260729,
+    "ticks": [2025, 2380],
+    "howReproduced": "PrototypeWorld stepped to the tick, exactly as WorldLabelLayoutTests.OwnerScene does; the same two numbers reproduce the owner's frames through scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks <tick>."
+  },
+  "howMeasured": {
+    "before": "A throwaway xunit probe added to tests/DungeonFortress.Presentation.Tests in a second worktree checked out at 3f5fb75 (origin/main, the merge of PR #368), run with dotnet test --filter FullyQualifiedName~Probe371Tests, then the worktree removed. It reported, for every raider of the frame with Mode != Escaped: how many labels WorldLabels.Of returns for him while he is hovered, how many lines that label carries, and how many labels the whole frame carries.",
+    "after": "The same probe on this branch at b54549f.",
+    "whyAProbeAndNotTheGuard": "The guard states the property that must hold; these are the numbers on both sides of the change, and a number that is the same before and after — criterion 4 — cannot be read off a test that only asserts the after."
+  },
+  "criterion1": {
+    "claim": "Every raider on the map is named while the pointer is on him, and again while he is the selected body. No filter of any kind.",
+    "before": {
+      "tick2025": "1 of 10 raiders on the map answered under the pointer — «Крюк Немой», the only returner. The other nine (three downed at (24,7) and (25,7), six strangers) had no world label under any condition.",
+      "tick2380": "6 of 11 — the six captioned returners. «Бурый», «Хват Старший» and the three downed bodies had none."
+    },
+    "after": {
+      "tick2025": "10 of 10",
+      "tick2380": "11 of 11"
+    },
+    "heldBy": "WorldLabelFocusTests.Every_raider_on_the_map_is_named_under_the_pointer_and_when_selected, both frames, both halves of the focus.",
+    "whyNoFilter": "Criterion 9 of Issue #364 filtered out cells shared with a crew member, which was exactly the class the defect lived in, and stayed green through it. This check walks every raider the snapshot has on the map and additionally asserts that the frame contains at least one raider the domain has never met, so the loop cannot quietly become a loop over returners."
+  },
+  "criterion2": {
+    "claim": "The line the crowd took off a caption comes back under the pointer.",
+    "subject": "«Секира», raider #17 on cell (15,7) of tick 2380 — the one caption of that frame whose second line the layout sheds, and the one the owner's «в последней волне только 1 детализированная надпись» is about.",
+    "before": "hovered: 1 line of the 2 her request carries. Growing her in the second pass was already tried first — that pass walks the placed labels in rank order and hers is the highest rank there is — and failed, because by then the three labels of her own cell are down and no free candidate is left for a two-line box.",
+    "after": "hovered: 2 of 2, and selected: 2 of 2. The second line is ReturningHeroLabel.Story of raider #17 verbatim.",
+    "heldBy": "WorldLabelFocusTests.The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer, which asserts the shed on the quiet map first so that a layout which never sheds anything cannot pass it."
+  },
+  "criterion3": {
+    "claim": "Focus breaks neither the spacing guard nor the attachment guard of Issue #364.",
+    "measured": "On both frames, with every body of the frame pointed at in turn — 10 raiders and the crew at tick 2025, 11 raiders and the crew at tick 2380 — no two placed labels share a pixel and no label sits further than 22 reference pixels from its own head. The limit is written out as 22 rather than read from WorldLabelLayout.MaximumAttachmentRef, for the reason the guard of #364 gives: a check measured against whatever the layout currently declares its limit to be passes for any limit at all.",
+    "heldBy": "WorldLabelFocusTests.Pointing_at_any_body_of_the_frame_breaks_neither_spacing_nor_attachment, plus the two guards of #364 themselves (WorldLabelLayoutTests.No_two_labels_of_the_owners_scene_are_printed_over_one_another and No_label_ends_up_further_than_a_tile_from_its_own_body), which are unchanged and still run with a hovered and a selected body."
+  },
+  "criterion4": {
+    "claim": "The permanent map did not move. Two numbers.",
+    "labelsWithNothingPointedAt": {
+      "tick2025": { "before": 1, "after": 1 },
+      "tick2380": { "before": 5, "after": 5 }
+    },
+    "andNotOnlyTheCount": "WorldLabelFocusTests.With_nothing_pointed_at_the_map_names_exactly_who_it_named_before also asserts that every one of those labels belongs to a raider ReturningHeroLabel.IsCaptioned answers true for — so a rule that started naming strangers or crew members on the quiet map would redden it even if the total happened to match.",
+    "why": "The owner chose naming under the cursor, not naming everybody. A rule that leaked into the quiet map would be his decision taken wider than he took it, and it would walk straight back into the complaint of Issue #355 that twenty captions a party make the frame unreadable."
+  },
+  "priceNamed": {
+    "what": "While the pointer is on «Секира», the wave-4 frame carries 3 labels instead of 5.",
+    "before": "hover «Секира» at tick 2380: frame total 5 labels, hers laid as a bare name.",
+    "after": "hover «Секира» at tick 2380: frame total 3 labels, hers laid whole.",
+    "why": "Her second line is a sentence four and a half tiles wide and it is now laid in the first pass, so it occupies the places two neighbouring names on cell (15,7) would have taken. That is the declared order of Issue #364 doing what it says — «тело под курсором → выбранное тело → вернувшийся налётчик», suppression last — applied to a label that is now two lines instead of one.",
+    "bounded": "It lasts exactly as long as the player points. Move the cursor off her and the frame is the same five labels it was; the numbers of criterion 4 are that statement measured.",
+    "notNew": "The frame total already depended on which body was hovered before this Issue: on the base commit, hovering «Долговязый» gave 4 labels against the 5 of the quiet frame, because rank order serves the hovered body first. Only the −2 on «Секира» is this Issue's.",
+    "alternativeRejected": "Letting a focused label displace already-placed neighbours in a re-entrant pass. It buys the same two names back and makes the layout's answer depend on the order in which displacements cascade, which is the one property Place is written to avoid — the layout is a function of the snapshot and the focus, not of a search path."
+  },
+  "fullPresentationRun": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj",
+    "output": "Пройден!: не пройдено 0, пройдено 715, пропущено 0, всего 715",
+    "atCommit": "b54549f"
+  }
+}
