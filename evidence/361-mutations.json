@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "issue": 361,
+  "what": "Criterion 3 of Issue #361: the check added by scope §3 goes red when the fix is undone and green when it stands. Two substitutions, because the check comes in two parts and each part is meant to catch a different shape of the same defect.",
+  "base": {
+    "commit": "1ed66dc",
+    "howObtained": "git rev-parse --short HEAD in C:/gamedev/_wt-361-combat-random before the first mutant was applied",
+    "why": "Reverting a mutant applied to uncommitted work would take the work with it."
+  },
+  "greenBeforeAndAfter": {
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeCombatRandomTests\"",
+    "output": "Пройден!: не пройдено 0, пройдено 4, пропущено 0, всего 4"
+  },
+  "mutations": [
+    {
+      "criterion": "#361 criterion 3 — the exact revert of the fix",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.cs",
+      "was": "    private DeterministicRandom _combatRandom;",
+      "became": "    private readonly DeterministicRandom _combatRandom;",
+      "why": "The state of origin/main at dcfbc1a, character for character. It is the substitution the Issue names.",
+      "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeCombatRandomTests\"",
+      "output": [
+        "Не пройден!: не пройдено 4, пройдено 0, пропущено 0, всего 4",
+        "baseline/20260726: a raider lost hit points on 55 tick(s) without the combat stream advancing — first at tick 1309. The state of _combatRandom stood at 0x0000636F6C574602 while a damage roll was being taken.",
+        "baseline/20260727: ... on 71 tick(s) ... first at tick 1309 ... stood at 0x0000636F6C574603",
+        "prepared/20260726: ... on 99 tick(s) ... first at tick 1302 ... stood at 0x0000636F6C574602",
+        "a readonly field of a mutable value type freezes that value ... Found: DungeonFortress.Simulation.PrototypeWorld._combatRandom : DungeonFortress.Simulation.DeterministicRandom"
+      ],
+      "verdict": "red on all four, and both halves of the check reddened: the behavioural one named the ticks on which a blow landed with a frozen stream, and the metadata one named the field."
+    },
+    {
+      "criterion": "#361 criterion 3 — a different shape of the same defect, to show the behavioural half is not a paraphrase of the declaration",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs",
+      "was": "    private int CombatJitter(int amplitude) => _combatRandom.NextInt32(amplitude * 2 + 1) - amplitude;",
+      "became": "    private int CombatJitter(int amplitude)\n    {\n        var random = _combatRandom;\n        return random.NextInt32(amplitude * 2 + 1) - amplitude;\n    }",
+      "why": "A defensive copy written by hand instead of by the compiler. The field stays declared without `readonly`, so the shape the metadata check looks for is absent and it has nothing to find — but the stream is frozen exactly as before. This is the realistic way the defect comes back once the declaration is right, and it is the reason the check does not consist of the metadata half alone.",
+      "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeCombatRandomTests\"",
+      "output": [
+        "Не пройден!: не пройдено 3, пройдено 1, пропущено 0, всего 4",
+        "baseline/20260726: a raider lost hit points on 55 tick(s) without the combat stream advancing — first at tick 1309. The state of _combatRandom stood at 0x0000636F6C574602",
+        "baseline/20260727: ... on 71 tick(s) ... stood at 0x0000636F6C574603",
+        "prepared/20260726: ... on 99 tick(s) ... stood at 0x0000636F6C574602"
+      ],
+      "verdict": "red on the three behavioural cases and green on No_readonly_field_of_the_simulation_holds_a_mutable_struct — which is the answer wanted: the two halves catch different things, and the party's numbers are identical to the exact revert's, so the defect really is the same one wearing another shape."
+    }
+  ],
+  "afterEachMutation": "git checkout -- <the one file>, then git status --short printed nothing."
+}
