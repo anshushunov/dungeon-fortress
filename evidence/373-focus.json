@@ -29,8 +29,8 @@
         "reading": "Large and expected: setting _selectedCell alone rewrites the whole right-hand inspector panel from \"Click a creature or map cell.\" to the CELL(16,7) card, on top of the bottom feedback line. This bbox alone is not proof the raider specifically was reached — the fixedVsMutant comparison below isolates that."
       },
       "fixedVsMutant": {
-        "bbox": [16, 589, 319, 601],
-        "reading": "With _selectedCell identical in both runs (16,7) and the inspector's generic CELL card therefore identical in both (a raider gets no creature-style card, same as an empty cell), the entire visible difference between reaching the raider and not reaching it collapses to one on-screen rectangle: the bottom feedback line, where \"(16,7): 1 of 2 standing here...\" (fixed) becomes \"--select-cell (16,7): nothing stands there.\" (mutant, evidence/373-mutations.json). That text line, not a ring, is what a screenshot alone proves criterion 2 by; see evidence/373-mutations.json for the full mutant record."
+        "bbox": [16, 589, 678, 601],
+        "reading": "With _selectedCell identical in both runs (16,7) and the inspector's generic CELL card therefore identical in both (a raider gets no creature-style card, same as an empty cell), the entire visible difference between reaching the raider and not reaching it collapses to one on-screen rectangle: the bottom feedback line, where \"(16,7): 1 of 2 standing here...\" (fixed) becomes the plain brush-picker sentence that was already there before any cell was named (mutant, evidence/373-mutations.json — the mutant cell holds zero bodies of ApplySelectCellArgument's filtered set, so WorldLabels.SelectionHint has nothing to say and leaves _controlFeedback untouched, same as an empty cell always has). That text line, not a ring, is what a screenshot alone proves criterion 2 by; see evidence/373-mutations.json for the full mutant record and for the golden-UI regression this exact question caught in an earlier draft of ApplySelectCellArgument."
       }
     }
   },

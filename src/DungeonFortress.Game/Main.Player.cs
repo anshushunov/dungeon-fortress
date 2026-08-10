@@ -156,20 +156,18 @@ public partial class Main
 
         _selectedCreatureId = IdOf(chosen, WorldLabelKind.Creature);
         _selectedRaiderId = IdOf(chosen, WorldLabelKind.Raider);
-        // Named explicitly and unconditionally, unlike SelectAt's own feedback:
-        // a click's player already sees the ring on screen, but a command-line
-        // capture is read from its printed state, so which body kind and id the
-        // focus landed on has to be legible there too, not only in the picture.
-        // WorldLabels.SelectionHint takes priority when it has something to add
-        // (an on-cell body count a single sentence could not otherwise show).
-        _controlFeedback = WorldLabels.SelectionHint(_state!, cell, chosen) ?? (chosen switch
+        // Same rule SelectAt already follows, and for the same reason: only
+        // where there is something to say. A cell with fewer than two bodies
+        // says nothing a single click (or a single --select-cell) does not
+        // already answer, and tests/golden/ui's --demo-stone frames depend on
+        // an uneventful --select-cell leaving whatever feedback the demo itself
+        // set — a cell without a second body to name is not this Issue's
+        // concern to comment on.
+        if (WorldLabels.SelectionHint(_state!, cell, chosen) is { } hint)
         {
-            { Kind: WorldLabelKind.Creature } body =>
-                $"--select-cell ({cell.X},{cell.Y}): focus on creature #{body.Id}.",
-            { Kind: WorldLabelKind.Raider } body =>
-                $"--select-cell ({cell.X},{cell.Y}): focus on raider #{body.Id}.",
-            _ => $"--select-cell ({cell.X},{cell.Y}): nothing stands there.",
-        });
+            _controlFeedback = hint;
+        }
+
         UpdateHud();
         UpdateCreatureLabels();
         QueueRedraw();
