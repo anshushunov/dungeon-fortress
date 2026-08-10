@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "issue": 364,
+  "when": "2026-08-10, taken on branch feature/364-world-labels before any code change",
+  "what": "Criterion 4 of Issue #364, the 'before' half: the owner's frame reproduced on his own scene. Both frames were captured with the working copy at origin/main and nothing edited, so they show the defect and not an intermediate state.",
+  "base": {
+    "commit": "d178a9a",
+    "howObtained": "git worktree add ../_wt-364-world-labels -b feature/364-world-labels origin/main, then git log --oneline -1 in it"
+  },
+  "frames": [
+    {
+      "frame": "evidence/364-before.png",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2380 -ScreenshotPath \"probe/364-before-wave4.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0",
+      "tick": 2380,
+      "wave": 4,
+      "checksum": "f8e26b05 (the eight digits the summary line prints; the run's own event line carries the full value)",
+      "whatIsInIt": "four captions. «Косой», «Ловчий» and «Сиплый» stand in a column in an empty corridor, one band apart, with no body under any of them; «Секира · волна 2 · достали (23,7)» is the only one still over its own head. This is the frame the owner described: «имена рейдеров появились только в последней волне… никого особо не запомнить»."
+    },
+    {
+      "frame": "evidence/364-before-wave3.png",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2025 -ScreenshotPath \".artifacts/probe/364-before.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0",
+      "tick": 2025,
+      "wave": 3,
+      "checksum": "448946d98f391646e5e84751dcbae1fc6ba9b3129144cff1edecbd2bc2a9adac",
+      "whatIsInIt": "one returning raider, «Крюк Немой · волна 1 · едва не добили (24,7)». One caption cannot collide with itself, which is why wave 3 shows the second half of the defect rather than the first: the caption is still 26 reference pixels above the render centre and its second line runs across the heads of the bodies beside it."
+    }
+  ],
+  "measuredNotGuessed": {
+    "theColumnIsBuiltIn": "Main.DrawWorld.cs:243-247 places every caption at ReturningHeroLabel.TopRefOf(caption.Slot) and TopRefOf has no ceiling: slot n sits n * SlotHeightRef = n * 20 reference pixels above the head.",
+    "whyEveryoneCollides": "ReturningHeroLabel.CollisionSpanTiles = ceil(LabelWidthRef / ReferenceTileSize) = ceil(130 / 22) = 6, so any two captioned raiders within six tiles of one another and one row apart are declared to collide — whether or not the drawn glyphs touch. That is why four bunched raiders produced four different bands.",
+    "theOwnCreatureLabelIsNotOverTheHead": "Main.Session.cs:522-525 puts the Label node's top-left at CreatureRenderCenter + (ScaleWorld(2) - tile/2, -ScaleWorld(14) - tile/2). At the shipped 40 px tile that is (-9, -25) reference pixels, and the node is ScaleWorld(98, 17) — 98 by 17 reference pixels, left-aligned. So the box runs from -9 to +89 reference pixels horizontally, four tiles to the right of the body it names, and from -25 to -8 vertically, the lower half of which is over the body's own head: the opaque pixels of the pack reach -20.6."
+  },
+  "howTheHeadHeightWasObtained": "CameraView.GoblinDrawRect(centre, tileSize).Y = centre.Y + GoblinFootLine - GoblinDrawSize * SpriteSupportFraction; at reference scale that is 20*(92/96-0.5) - 20*1.70*(188/192) = 9.1667 - 33.2917 = -24.125, and the first opaque row adds 20*1.70*(20/192) = 3.542, giving -20.583 reference pixels."
+}
