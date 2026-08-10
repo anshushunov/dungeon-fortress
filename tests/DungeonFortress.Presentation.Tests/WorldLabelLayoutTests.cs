@@ -111,23 +111,40 @@ public sealed class WorldLabelLayoutTests
     /// <see cref="WorldLabelLayout.MaximumAttachmentRef"/>: bodies stand a tile
     /// apart, so a label further than that from its own head is nearer somebody
     /// else's.
+    ///
+    /// <para><b>The number is written out here and not read from the constant.</b>
+    /// A check that measured the layout against whatever the layout currently
+    /// declares its own limit to be would pass for any limit at all — raising the
+    /// constant back to the unbounded ladder this replaces would move the
+    /// assertion along with it and stay green. Twenty-two is the tile the whole
+    /// assembly's geometry is authored against, and
+    /// <see cref="The_limit_is_one_tile_and_that_is_what_the_layout_declares"/>
+    /// is what ties the two together.</para>
     /// </summary>
     [Theory]
     [InlineData(WaveThreeTick)]
     [InlineData(WaveFourTick)]
     public void No_label_ends_up_further_than_a_tile_from_its_own_body(int ticks)
     {
+        const double oneTile = 22.0;
         var placed = Layout(ticks);
 
         Assert.NotEmpty(placed);
         foreach (var label in placed)
         {
             Assert.True(
-                label.AttachmentRef <= WorldLabelLayout.MaximumAttachmentRef,
+                label.AttachmentRef <= oneTile,
                 $"«{label.Lines[0].Text}» sits {label.AttachmentRef:F2} reference " +
-                $"pixels from its body at tick {ticks}; the limit is " +
-                $"{WorldLabelLayout.MaximumAttachmentRef}.");
+                $"pixels from its body at tick {ticks}; the limit is {oneTile}.");
         }
+    }
+
+    /// <inheritdoc cref="No_label_ends_up_further_than_a_tile_from_its_own_body"/>
+    [Fact]
+    public void The_limit_is_one_tile_and_that_is_what_the_layout_declares()
+    {
+        Assert.Equal(22.0, WorldLabelLayout.ReferenceTileSize);
+        Assert.Equal(22.0, WorldLabelLayout.MaximumAttachmentRef);
     }
 
     /// <summary>
