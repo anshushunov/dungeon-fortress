@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "issue": 371,
+  "what": "Criterion 8 of Issue #371: one full run of scripts/verify.ps1 on the final state, and the launch command the owner is handed.",
+  "verify": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify.ps1",
+    "atCommit": "58ca397",
+    "scope": "full (10 of 10 stages: scripts, build, tests, mcp, sim, load, godot, ui, screenshots, token-budget)",
+    "exitCode": 0,
+    "result": "{\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"full\",\"stagesNotRun\":[],\"seed\":424242,\"deterministicChecksum\":\"e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f\",\"changedSeedChecksum\":\"cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2\",\"loadChecksum\":\"7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045\",\"godotVersion\":\"4.7.1.stable.mono.official.a13da4feb\",\"godotExitCode\":0,\"screenshotRepeatable\":true}",
+    "stageSeconds": {
+      "scripts": 177.3,
+      "build": 27.6,
+      "tests": 213.9,
+      "mcp": 4.3,
+      "sim": 0.4,
+      "load": 0.7,
+      "godot": 37.7,
+      "ui": 4.5,
+      "screenshots": 10.8,
+      "token-budget": 113.5
+    }
+  },
+  "ownerRun": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\run-game.ps1 -Fixture baseline -Seed 20260729",
+    "checkedBy": "run here at commit 58ca397 and killed after 150 seconds; the engine reported Godot Engine v4.7.1.stable.mono.official.a13da4feb and the window opened with godot_process_guard status ok, engineErrorCount 0.",
+    "whatIsNewToSee": "Move the cursor over any raider in any wave, including the first ones: the map now names him over his head, whether or not the domain has met him before. Point at «Секира» in the last wave — the returner on the crowded cell whose caption the map shows as a bare name — and the line about her last visit comes back under it.",
+    "whatToCheck": "Whether recognising a raider changes what you do in the wave — that is the playtest question of the slice, and no run of anything can answer it.",
+    "note": "The fixture loads at tick 1 and the party plays forward, which is how the frames of tick 2025 and 2380 were reached on the playtest this Issue came from. Use the speed controls to get to the last wave."
+  },
+  "criterion7NotDelivered": {
+    "what": "The «after» frame at tick 2380 with a raider hovered is not in this branch.",
+    "why": "Nothing outside the running game can put the pointer on a body. The screenshot run has no cursor, and the only launch flags that set the focus — --select-creature and --select-cell — are parsed in src/DungeonFortress.Game/Main.cs, and --select-cell fills _selectedCreatureId from state.Creatures alone, so it cannot reach a raider at all. Cell (16,7) of tick 2380 holds two raiders and no crew member, and --select-cell 16,7 therefore selects nothing.",
+    "whatWouldBeNeeded": "One flag — a --hover-cell or a --select-cell that goes through WorldLabels.NextAt — parsed in Main.cs, plus a parameter in scripts/run-game.ps1 to reach it.",
+    "whyItWasNotDone": "Both files are outside the partition of Issue #371: Main.cs is in neither list and scripts/** is named «чужое, не трогать». The partition says a file outside «своё» is a stop and a return to the coordinator rather than an edit with an explanation afterwards.",
+    "returnedIn": "A comment on Issue #371."
+  }
+}

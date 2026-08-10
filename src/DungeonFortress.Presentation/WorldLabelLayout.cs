@@ -90,6 +90,12 @@ public sealed record WorldLabelRequest(
 /// last line rather than moved somewhere it no longer belongs to anybody, and the
 /// sentence the player would have stopped to read is in the panel that opens when
 /// he stops: <see cref="InspectorText.Raider"/> carries the same words.</para>
+///
+/// <para><b>Since Issue #371 the panel is no longer the only way back to it:</b>
+/// pointing at the body — or selecting it — lays that caption whole on the map
+/// again, because a focused label puts its whole text down in the first pass
+/// (<see cref="WorldLabelLayout.FirstAttempt"/>). What is shed here is shed only
+/// while nobody is asking.</para>
 /// </param>
 /// <param name="Box">The rectangle it occupies, in world pixels.</param>
 /// <param name="Alignment">Which side of the head it took.</param>
@@ -397,6 +403,13 @@ public static class WorldLabelLayout
     /// a label disappears only after the shortened form has been tried too, which
     /// is the difference between a name that could have fitted and a name nobody
     /// sees.</para>
+    ///
+    /// <para><b>One label is exempt from the first pass and it is the one the
+    /// player is pointing at</b> (Issue #371): it is laid with its whole text
+    /// straight away, because the second pass cannot give a crowded caption its
+    /// sentence back and the first pass is the only moment the room still exists.
+    /// The reason, the measurement and what the exemption costs the neighbours are
+    /// in <see cref="FirstAttempt"/>.</para>
     /// </summary>
     public static IReadOnlyList<PlacedWorldLabel> Place(
         IEnumerable<WorldLabelRequest> requests,
@@ -411,10 +424,14 @@ public static class WorldLabelLayout
                      .ThenBy(request => request.Subject.Kind)
                      .ThenBy(request => request.Subject.Id))
         {
-            if (request.Lines.Count > 0 &&
-                Fit(request, request.Lines.Take(1).ToArray(), placed, null, scale) is { } named)
+            for (var count = FirstAttempt(request); count >= 1; count--)
             {
-                placed.Add(named);
+                if (Fit(request, request.Lines.Take(count).ToArray(), placed, null, scale)
+                    is { } named)
+                {
+                    placed.Add(named);
+                    break;
+                }
             }
         }
 
@@ -434,6 +451,43 @@ public static class WorldLabelLayout
 
         return placed;
     }
+
+    /// <summary>
+    /// How many lines a label puts on the table in the first pass — one, except
+    /// for the body the player is asking about right now, which puts down its
+    /// whole text.
+    ///
+    /// <para><b>The exception is Issue #371's second half and it is bought, not
+    /// free.</b> A caption that will not fit whole is laid without its last line
+    /// (<see cref="PlacedWorldLabel.Lines"/>), and on the owner's wave-4 frame
+    /// «Секира» is that caption: four returners share cell (15,7), so the sentence
+    /// under her name has nowhere to go and the map shows a bare name. The owner
+    /// played that frame and read it as the map having less to say in the wave that
+    /// mattered most — «в последней волне только 1 детализированная надпись». The
+    /// shortened form stays; what changes is that it is no longer permanent, because
+    /// pointing at her hands the sentence back.</para>
+    ///
+    /// <para><b>Why in the first pass and not by growing her afterwards.</b>
+    /// Growing was already tried first for her — the second pass walks the placed
+    /// labels in rank order and hers is the highest rank there is — and it fails,
+    /// because by then the three labels of her own cell are down and the two-line
+    /// box has no free candidate left. Measured, not supposed: on tick 2380 of
+    /// <c>baseline</c>/<c>20260729</c> she was laid with one line of two while
+    /// hovered. The only pass in which the place she needs is still free is the
+    /// first one.</para>
+    ///
+    /// <para><b>What it costs, named.</b> One sentence — two at most, a hovered
+    /// body and a selected one — now bids ahead of its neighbours' names, which is
+    /// the very thing two passes exist to prevent. It is bounded by the same rank
+    /// order that grants it: only the body the player is pointing at can outbid a
+    /// name, only while he points at it, and a focused label that finds no room for
+    /// its whole text falls back through the same steps every other label does
+    /// rather than disappearing.</para>
+    /// </summary>
+    private static int FirstAttempt(WorldLabelRequest request) =>
+        request.Rank is WorldLabelRank.Hovered or WorldLabelRank.Selected
+            ? request.Lines.Count
+            : Math.Min(1, request.Lines.Count);
 
     /// <summary>
     /// The nearest free place for these lines, or <c>null</c> when every candidate
@@ -755,7 +809,8 @@ public static class WorldLabels
                      .ThenBy(raider => raider.Id))
         {
             var subject = new WorldLabelSubject(WorldLabelKind.Raider, raider.Id);
-            var lines = CaptionOf(raider);
+            var rank = RankOf(subject, focus);
+            var lines = rank is null ? CaptionOf(raider) : FocusedCaptionOf(raider);
             if (lines.Count == 0)
             {
                 continue;
@@ -765,7 +820,7 @@ public static class WorldLabels
                 subject,
                 HeadIn(subject, raider.Position, tileSize, centreOf),
                 lines,
-                RankOf(subject, focus) ?? (ReturningHeroLabel.Story(raider) is null
+                rank ?? (ReturningHeroLabel.Story(raider) is null
                     ? WorldLabelRank.Returning
                     : WorldLabelRank.ReturningWithStory),
                 order++));
@@ -775,30 +830,62 @@ public static class WorldLabels
     }
 
     /// <summary>
-    /// The lines of a raider's caption: the name, and the line about the last
-    /// encounter when there was one. Both come from
+    /// The caption a raider carries with nothing pointed at him: the name, and the
+    /// line about the last encounter when there was one. Both come from
     /// <see cref="ReturningHeroLabel"/> unchanged — Issue #364 moves the caption,
     /// it does not rewrite it.
     ///
-    /// <para><b>A raider the domain has never met gets no world label at all, not
-    /// even while the pointer is on him.</b> That is the decision of §8.2 of
-    /// <c>docs/design/SLICE_05_RETURNING_HERO.md</c> left standing on purpose:
-    /// every raider carries a name in the snapshot and only the returning one is
-    /// named on screen, because the caption is a claim — «вот этого ты отпустил».
-    /// The alternative, giving a hovered stranger the same label a hovered
-    /// creature gets, was rejected here rather than left unnoticed: since Issue
-    /// #364 the inspector answers "who is this" for any raider the player clicks,
-    /// so the world does not have to, and changing §8.2 to buy something the panel
-    /// already gives would be a product decision taken sideways.</para>
+    /// <para><b>A raider the domain has never met still gets no <em>permanent</em>
+    /// world label</b>, and that half of §8.2 of
+    /// <c>docs/design/SLICE_05_RETURNING_HERO.md</c> stands: every raider carries a
+    /// name in the snapshot and only the returning one is named on the quiet map,
+    /// because the caption is a claim — «вот этого ты отпустил» — and twenty names a
+    /// party would make the frame unreadable in exactly the place Issue #355
+    /// complained about.</para>
+    ///
+    /// <para><b>What no longer stands is the other half.</b> This docstring used to
+    /// say that a stranger gets no label «not even while the pointer is on him», and
+    /// named the alternative — giving a hovered stranger the same label a hovered
+    /// creature gets — as rejected, on the ground that the inspector already answers
+    /// "who is this" for any raider the player clicks. <b>The owner reversed that on
+    /// 2026-08-10</b>, on the playtest after the one Issue #364 came from: «для
+    /// врагов — в обычных волнах имен нет при наведении». The panel answering a
+    /// click is not the same offer as the map answering a cursor, and the waves
+    /// before the last one were silent under the pointer. Focus therefore names any
+    /// raider — <see cref="FocusedCaptionOf"/> — and this method is now only the
+    /// permanent rule.</para>
     /// </summary>
     public static IReadOnlyList<WorldLabelLine> CaptionOf(PrototypeRaiderSnapshot raider) =>
+        Sized(ReturningHeroLabel.Lines(raider));
+
+    /// <summary>
+    /// The caption a raider carries while the pointer is on him or he is selected:
+    /// his full text, whoever he is — the stranger his name, the returner both
+    /// lines.
+    ///
+    /// <para>It is the same offer a creature of the domain has always had, which is
+    /// what «симметрично своим» means as a rule rather than as a wish, and it is
+    /// bounded the same way: it lasts exactly as long as the player is asking. The
+    /// map with nothing pointed at is untouched — that is <see cref="CaptionOf"/>,
+    /// and Issue #371 changes nothing about it, because the owner chose naming
+    /// under the cursor and not naming everybody.</para>
+    /// </summary>
+    public static IReadOnlyList<WorldLabelLine> FocusedCaptionOf(PrototypeRaiderSnapshot raider) =>
+        Sized(ReturningHeroLabel.LinesUnderFocus(raider));
+
+    /// <summary>
+    /// A caption's lines at the sizes they are drawn: the name at
+    /// <see cref="ReturningHeroLabel.NameTextRef"/> and whatever is under it at
+    /// <see cref="ReturningHeroLabel.StoryTextRef"/>. One place, so the permanent
+    /// caption and the one focus gives cannot be drawn at different sizes.
+    /// </summary>
+    private static IReadOnlyList<WorldLabelLine> Sized(IReadOnlyList<string> texts) =>
     [
-        .. ReturningHeroLabel.Lines(raider)
-            .Select((text, index) => new WorldLabelLine(
-                text,
-                index == 0
-                    ? ReturningHeroLabel.NameTextRef
-                    : ReturningHeroLabel.StoryTextRef)),
+        .. texts.Select((text, index) => new WorldLabelLine(
+            text,
+            index == 0
+                ? ReturningHeroLabel.NameTextRef
+                : ReturningHeroLabel.StoryTextRef)),
     ];
 
     /// <summary>
@@ -828,6 +915,13 @@ public static class WorldLabels
     /// own width for each of these beside
     /// <see cref="WorldLabelLayout.GlyphAdvanceRef"/>'s estimate, and that report
     /// is what says whether the estimate is still the upper bound it claims to be.
+    ///
+    /// <para>Raiders are asked through <see cref="FocusedCaptionOf"/> and not
+    /// <see cref="CaptionOf"/>, because since Issue #371 that is the wider of the
+    /// two answers — it contains every line the permanent caption has and the
+    /// stranger's name besides. Measuring the narrower one would leave the lines
+    /// the pointer newly draws outside the only report that says whether the width
+    /// estimate still bounds them.</para>
     /// </summary>
     public static IReadOnlyList<WorldLabelLine> AllLines(PrototypeSnapshot state)
     {
@@ -835,7 +929,7 @@ public static class WorldLabels
         return
         [
             .. state.Creatures.Select(CreatureLine),
-            .. state.Raiders.SelectMany(CaptionOf),
+            .. state.Raiders.SelectMany(FocusedCaptionOf),
         ];
     }
 
