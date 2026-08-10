@@ -93,13 +93,45 @@ public static class ReturningHeroLabel
     };
 
     /// <summary>
-    /// The lines of the caption, in order. Empty for a raider that is not
-    /// captioned, so the adapter loops over the answer instead of asking twice.
+    /// The lines of the caption a raider carries <em>on his own</em>, with nothing
+    /// pointed at him. Empty for a raider that is not captioned, so the adapter
+    /// loops over the answer instead of asking twice.
     /// </summary>
     public static IReadOnlyList<string> Lines(PrototypeRaiderSnapshot raider) =>
         IsCaptioned(raider)
             ? Story(raider) is { } story ? [Name(raider), story] : [Name(raider)]
             : [];
+
+    /// <summary>
+    /// The lines a raider carries while the player is pointing at him or has
+    /// selected him: his name, and the line about the last encounter when there
+    /// was one. Empty only for a raider that has walked out through the gate,
+    /// because he is not on the map for anything to point at.
+    ///
+    /// <para><b>Every raider under the pointer is named — decision of the owner,
+    /// 2026-08-10, second <c>ADJUST</c> of slice 5</b>
+    /// (<see href="https://github.com/anshushunov/dungeon-fortress/issues/371">Issue
+    /// #371</see>). It replaces the rule of §8.2 that a raider the domain has never
+    /// met carries no world label under any condition: on the owner's second
+    /// playtest the waves before the last one answered nothing at all under the
+    /// cursor — «для врагов в обычных волнах имен нет при наведении». <see
+    /// cref="Lines"/> is unchanged and still answers the other question, «who is
+    /// captioned with nobody pointing», so the permanent map is exactly as it
+    /// was.</para>
+    ///
+    /// <para>A downed raider is here and is not in <see cref="Lines"/>. The two
+    /// answers differ on purpose: a body on the floor no longer <em>claims</em>
+    /// anything — the story of his return is over — but he is still lying on a
+    /// cell the player can point at, and a cell that answers nothing is the
+    /// complaint this rule exists to close.</para>
+    /// </summary>
+    public static IReadOnlyList<string> LinesUnderFocus(PrototypeRaiderSnapshot raider)
+    {
+        ArgumentNullException.ThrowIfNull(raider);
+        return raider.Mode == RaiderMode.Escaped
+            ? []
+            : Story(raider) is { } story ? [Name(raider), story] : [Name(raider)];
+    }
 
     // -----------------------------------------------------------------------
     // Where the caption sits is no longer decided here (Issue #364).

@@ -755,7 +755,8 @@ public static class WorldLabels
                      .ThenBy(raider => raider.Id))
         {
             var subject = new WorldLabelSubject(WorldLabelKind.Raider, raider.Id);
-            var lines = CaptionOf(raider);
+            var rank = RankOf(subject, focus);
+            var lines = rank is null ? CaptionOf(raider) : FocusedCaptionOf(raider);
             if (lines.Count == 0)
             {
                 continue;
@@ -765,7 +766,7 @@ public static class WorldLabels
                 subject,
                 HeadIn(subject, raider.Position, tileSize, centreOf),
                 lines,
-                RankOf(subject, focus) ?? (ReturningHeroLabel.Story(raider) is null
+                rank ?? (ReturningHeroLabel.Story(raider) is null
                     ? WorldLabelRank.Returning
                     : WorldLabelRank.ReturningWithStory),
                 order++));
@@ -775,30 +776,62 @@ public static class WorldLabels
     }
 
     /// <summary>
-    /// The lines of a raider's caption: the name, and the line about the last
-    /// encounter when there was one. Both come from
+    /// The caption a raider carries with nothing pointed at him: the name, and the
+    /// line about the last encounter when there was one. Both come from
     /// <see cref="ReturningHeroLabel"/> unchanged — Issue #364 moves the caption,
     /// it does not rewrite it.
     ///
-    /// <para><b>A raider the domain has never met gets no world label at all, not
-    /// even while the pointer is on him.</b> That is the decision of §8.2 of
-    /// <c>docs/design/SLICE_05_RETURNING_HERO.md</c> left standing on purpose:
-    /// every raider carries a name in the snapshot and only the returning one is
-    /// named on screen, because the caption is a claim — «вот этого ты отпустил».
-    /// The alternative, giving a hovered stranger the same label a hovered
-    /// creature gets, was rejected here rather than left unnoticed: since Issue
-    /// #364 the inspector answers "who is this" for any raider the player clicks,
-    /// so the world does not have to, and changing §8.2 to buy something the panel
-    /// already gives would be a product decision taken sideways.</para>
+    /// <para><b>A raider the domain has never met still gets no <em>permanent</em>
+    /// world label</b>, and that half of §8.2 of
+    /// <c>docs/design/SLICE_05_RETURNING_HERO.md</c> stands: every raider carries a
+    /// name in the snapshot and only the returning one is named on the quiet map,
+    /// because the caption is a claim — «вот этого ты отпустил» — and twenty names a
+    /// party would make the frame unreadable in exactly the place Issue #355
+    /// complained about.</para>
+    ///
+    /// <para><b>What no longer stands is the other half.</b> This docstring used to
+    /// say that a stranger gets no label «not even while the pointer is on him», and
+    /// named the alternative — giving a hovered stranger the same label a hovered
+    /// creature gets — as rejected, on the ground that the inspector already answers
+    /// "who is this" for any raider the player clicks. <b>The owner reversed that on
+    /// 2026-08-10</b>, on the playtest after the one Issue #364 came from: «для
+    /// врагов — в обычных волнах имен нет при наведении». The panel answering a
+    /// click is not the same offer as the map answering a cursor, and the waves
+    /// before the last one were silent under the pointer. Focus therefore names any
+    /// raider — <see cref="FocusedCaptionOf"/> — and this method is now only the
+    /// permanent rule.</para>
     /// </summary>
     public static IReadOnlyList<WorldLabelLine> CaptionOf(PrototypeRaiderSnapshot raider) =>
+        Sized(ReturningHeroLabel.Lines(raider));
+
+    /// <summary>
+    /// The caption a raider carries while the pointer is on him or he is selected:
+    /// his full text, whoever he is — the stranger his name, the returner both
+    /// lines.
+    ///
+    /// <para>It is the same offer a creature of the domain has always had, which is
+    /// what «симметрично своим» means as a rule rather than as a wish, and it is
+    /// bounded the same way: it lasts exactly as long as the player is asking. The
+    /// map with nothing pointed at is untouched — that is <see cref="CaptionOf"/>,
+    /// and Issue #371 changes nothing about it, because the owner chose naming
+    /// under the cursor and not naming everybody.</para>
+    /// </summary>
+    public static IReadOnlyList<WorldLabelLine> FocusedCaptionOf(PrototypeRaiderSnapshot raider) =>
+        Sized(ReturningHeroLabel.LinesUnderFocus(raider));
+
+    /// <summary>
+    /// A caption's lines at the sizes they are drawn: the name at
+    /// <see cref="ReturningHeroLabel.NameTextRef"/> and whatever is under it at
+    /// <see cref="ReturningHeroLabel.StoryTextRef"/>. One place, so the permanent
+    /// caption and the one focus gives cannot be drawn at different sizes.
+    /// </summary>
+    private static IReadOnlyList<WorldLabelLine> Sized(IReadOnlyList<string> texts) =>
     [
-        .. ReturningHeroLabel.Lines(raider)
-            .Select((text, index) => new WorldLabelLine(
-                text,
-                index == 0
-                    ? ReturningHeroLabel.NameTextRef
-                    : ReturningHeroLabel.StoryTextRef)),
+        .. texts.Select((text, index) => new WorldLabelLine(
+            text,
+            index == 0
+                ? ReturningHeroLabel.NameTextRef
+                : ReturningHeroLabel.StoryTextRef)),
     ];
 
     /// <summary>
@@ -828,6 +861,13 @@ public static class WorldLabels
     /// own width for each of these beside
     /// <see cref="WorldLabelLayout.GlyphAdvanceRef"/>'s estimate, and that report
     /// is what says whether the estimate is still the upper bound it claims to be.
+    ///
+    /// <para>Raiders are asked through <see cref="FocusedCaptionOf"/> and not
+    /// <see cref="CaptionOf"/>, because since Issue #371 that is the wider of the
+    /// two answers — it contains every line the permanent caption has and the
+    /// stranger's name besides. Measuring the narrower one would leave the lines
+    /// the pointer newly draws outside the only report that says whether the width
+    /// estimate still bounds them.</para>
     /// </summary>
     public static IReadOnlyList<WorldLabelLine> AllLines(PrototypeSnapshot state)
     {
@@ -835,7 +875,7 @@ public static class WorldLabels
         return
         [
             .. state.Creatures.Select(CreatureLine),
-            .. state.Raiders.SelectMany(CaptionOf),
+            .. state.Raiders.SelectMany(FocusedCaptionOf),
         ];
     }
 
