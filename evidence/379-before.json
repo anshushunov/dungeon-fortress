@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "issue": 379,
+  "checkpoint": 1,
+  "what": "The finding of Issue #379 reproduced on today's origin/main, and the two ways it differs from the numbers the Issue quotes. No production code is touched at this checkpoint: the two guards below are added and are red, which is what «reproduced» means here.",
+  "base": {
+    "commit": "ee2901e",
+    "branch": "fix/379-hover-neighbour",
+    "howObtained": "scripts/agent/take-task.ps1 -Issue 379 created C:\\gamedev\\_wt-379 off origin/main; the branch it made was renamed to fix/379-hover-neighbour. git rev-parse HEAD = ee2901ec2c9e8fcf46975e4c61f16b75e115b345"
+  },
+  "scene": {
+    "fixture": "baseline",
+    "seed": 20260729,
+    "ticks": [2025, 2380],
+    "howReproduced": "WorldLabelLayoutTests.OwnerScene(tick) for the pure measurements; scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2380 for the frames."
+  },
+  "theQuotedNumbersDoNotReproduce": {
+    "claim": "Issue #379 quotes review of PR #376: quiet frame «Ловчий, Сиплый, Секира, Гнилозуб, Долговязый» (5) against hovered (16,7) «Сиплый, Секира, Гнилозуб, Долговязый» (4), «Ловчий» going dark.",
+    "why": "Those two frames were captured on the base of PR #376, which merged before PR #377 (fix of Issue #361, commit 3e82295). #377 made the damage jitter live, so the party that reaches tick 2380 of this journal is a different party: twelve raiders on the map instead of eleven, five captioned instead of six, and the crowd stands on (14,7) instead of (15,7). The shipped guards were re-pinned to those numbers in PR #377 itself (WorldLabelLayoutTests.Every_returning_raider_of_the_owners_scene_is_still_named: wave-4 row 5, 3).",
+    "todayQuiet": {
+      "count": 3,
+      "names": ["Гнилозуб", "Долговязый", "Сиплый"],
+      "frame": "evidence/379-before-quiet.png",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2380 -ScreenshotPath \"probe/379-before-quiet.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0"
+    },
+    "todayHover16x7": {
+      "count": 5,
+      "names": ["Гнилозуб", "Долговязый", "Дёготь FLED", "Ловчий", "Сиплый"],
+      "reading": "The cell the Issue names now holds the crew member «Дёготь» and no raider. Pointing at it costs nobody his name today — it adds two. The cell moved with the scene; the defect did not."
+    },
+    "renderedFrameEqualsThePureLayout": "Checked on three frames before relying on it: quiet, -HoverCell \"15,7\" and -SelectCell \"15,7\" each draw exactly the set WorldLabels.Of returns for the same focus with canonical cell centres. So the pure measurements below describe the frame the owner would see, not a fixture."
+  },
+  "theDefectItselfReproduces": {
+    "claim": "A gesture that adds a sentence about one body takes a name away from another.",
+    "subject": "«Сиплый», raider #20 on cell (14,7) — the one caption of the wave-4 frame whose second line the quiet map sheds.",
+    "quiet": { "count": 3, "names": ["Гнилозуб", "Долговязый", "Сиплый"] },
+    "hovered": { "count": 2, "names": ["Гнилозуб", "Сиплый"], "focusedLines": "2 of 2", "lost": ["Долговязый"] },
+    "selected": { "count": 2, "names": ["Гнилозуб", "Сиплый"], "focusedLines": "2 of 2", "lost": ["Долговязый"] },
+    "mechanism": "WorldLabelLayout.FirstAttempt exempts a focused label from the first pass (Issue #371), so «Сиплый» bids his whole caption — a sentence 103.7 reference pixels wide, four and a half tiles — before any neighbour has bid its name. That is the greedy order Issue #364 rejected with numbers, switched back on for one label.",
+    "notReachableFromTheCommandLine": "This frame cannot be captured with -HoverCell: the flag reads WorldLabels.PointedAt, which answers a crowded cell with its first body — «Гнилозуб» for (14,7). There is no --hover-body-index counterpart of --select-body-index. Measured through the layout instead, which the paragraph above shows is the same answer."
+  },
+  "guards": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~WorldLabelFocusTests\"",
+    "output": "Не пройден!: не пройдено 2, пройдено 9, пропущено 0, всего 11",
+    "A_second_line_never_costs_a_neighbour_his_name": {
+      "state": "red at ee2901e",
+      "verbatim": "Assert.Equal() Failure: Collections differ / Expected: [\"Raider#17\", \"Raider#18\", \"Raider#20\"] / Actual: [\"Raider#17\", \"Raider#20\"]",
+      "reading": "Raider#18 is «Долговязый». The check compares the frame the game draws with the frame it would draw if no caption had a second line at all — same focus, same ranks, same order — so the difference it reports is exactly what the sentences cost."
+    },
+    "The_body_under_the_cursor_is_offered_its_sentence_first": {
+      "state": "red at ee2901e",
+      "verbatim": "Assert.Single() Failure: The collection contained 2 items / Collection: [Косой, волна 2 · достали (24,7)]",
+      "reading": "It states the second half of the rule — the focused label is the first one offered its sentence back once every name is down — and on the base commit the neighbour gets one too, because a label that bid two lines in the first pass leaves the second pass free for everybody else."
+    }
+  },
+  "twoFindingsWiderThanThePostingItself": {
+    "hoveringACrewMemberCostsTwoNames": {
+      "measured": "-HoverCell \"15,7\" (crew member «Тишина») at tick 2380: 2 labels against the quiet 3 — «Гнилозуб» and «Долговязый» both go dark, and «Сиплый» keeps his sentence.",
+      "frame": "evidence/379-before-hover-15-7.png",
+      "why": "«Тишина DOWN» is a one-line label 79.2 reference pixels wide and it is served first because the cursor outranks everybody. It bids one line, so the two-pass rule is not broken — this is «приём 5» working exactly as declared in REFERENCES.md, on a corridor with no room. It is named here because the owner-visible symptom is the same one («имена вокруг курсора гаснут») and this change does not fix it.",
+      "status": "reported, not fixed: fixing it means changing which body gives way when the corridor is full, which is the show rule the Issue's non-goals forbid touching."
+    },
+    "aSelectedRaiderIsNotFocusedInTheRunningGame": {
+      "measured": "-SelectCell \"17,7\" -SelectBodyIndex 1 selects raider #24 «Хват Старший»: the feedback line says «(17,7): 2 of 2 standing here», and the frame shows no label over him, no selection ring and a generic CELL panel. Same at (14,7) index 3 («Сиплый»: the frame is the quiet frame) and at (25,7).",
+      "frame": "evidence/379-before-select-17-7-1.png",
+      "expected": "WorldLabels.Of with focus.Selected = Raider#24 returns four labels including his; the layout is not what is failing.",
+      "alreadyVisibleInTheShippedEvidence": "evidence/373-body-index.json records the same thing without naming it as a defect — «inspector: CELL (15, 7) — generic cell panel, not a creature panel», and evidence/373-body-index-3.png shows the selected raider «Секира» with no ring and no second line.",
+      "status": "reported, not fixed: the gap is in the adapter (src/DungeonFortress.Game/**), which Issue #379's partition names as somebody else's. It also means criterion 2 of this Issue is measured through the layout and not through a captured frame."
+    }
+  }
+}

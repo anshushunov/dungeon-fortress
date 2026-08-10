@@ -129,6 +129,139 @@ public sealed class WorldLabelFocusTests
     }
 
     /// <summary>
+    /// <b>The guard of Issue #379: a sentence never costs anybody his name — not
+    /// somebody else's sentence, and not the sentence of the body under the
+    /// cursor.</b>
+    ///
+    /// <para>It is stated as a comparison of two layouts of the same frame: the one
+    /// the game draws, and the one it would draw if no caption had a second line at
+    /// all. Everything else about the two is identical — the same focus, the same
+    /// ranks, the same scene order, the same bodies asking — so the only thing the
+    /// comparison is sensitive to is what the second lines cost. <b>The set of named
+    /// bodies must be the same set.</b></para>
+    ///
+    /// <para><b>Why this shape and not «the frame never names fewer bodies».</b>
+    /// That statement is false for a reason no layout can fix and Issue #364 already
+    /// measured: five captioned raiders share cell (14,7) of the wave-4 frame, they
+    /// therefore share one head and one ladder of places, and three of them fit.
+    /// Pointing at a fourth means one of the three has to go — the crowd doing what
+    /// <see cref="WorldLabelLayoutTests.The_names_that_are_not_shown_are_raiders_sharing_one_cell"/>
+    /// states. Calling <em>that</em> the defect would be blaming the rule for the
+    /// tile. The defect independent review of PR #376 found is the other one: on the
+    /// base commit, pointing at «Сиплый» took the frame from three names to
+    /// <b>two</b>, because his caption bid its whole four-and-a-half-tile sentence in
+    /// the first pass and «Долговязый» lost his name to it.</para>
+    ///
+    /// <para>Both gestures and every body of the frame, because Issue #371 gave the
+    /// second line to hover <em>and</em> to selection: whatever one of them can cost,
+    /// the other can cost too.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(WaveThreeTick)]
+    [InlineData(WaveFourTick)]
+    public void A_second_line_never_costs_a_neighbour_his_name(int ticks)
+    {
+        var state = WorldLabelLayoutTests.OwnerScene(ticks);
+        var bodies = BodiesOf(state);
+
+        Assert.NotEmpty(bodies);
+        foreach (var focus in bodies
+                     .SelectMany(body => new[]
+                     {
+                         new WorldLabelFocus(body, null),
+                         new WorldLabelFocus(null, body),
+                     })
+                     .Prepend(WorldLabelFocus.None))
+        {
+            var requests = WorldLabels.Requests(state, focus, CameraView.DefaultTileSize);
+            var drawn = WorldLabelLayout.Place(requests, CameraView.DefaultTileSize);
+            var namesOnly = WorldLabelLayout.Place(
+                requests
+                    .Select(request => request with { Lines = new[] { request.Lines[0] } })
+                    .ToArray(),
+                CameraView.DefaultTileSize);
+
+            Assert.Equal(NamedBodies(namesOnly), NamedBodies(drawn));
+        }
+    }
+
+    /// <summary>
+    /// The other half of the same rule, and the half Issue #371 bought: the body the
+    /// player is asking about is the <b>first</b> one offered its sentence back once
+    /// every name is down. A neighbour that also carries a sentence and stands
+    /// earlier in scene order does not take the only place there is.
+    ///
+    /// <para>Stated on values rather than on the owner's scene because it is a
+    /// statement about order, and an order needs a case where two labels want the
+    /// same place. Two returners on neighbouring cells are that case: a sentence is
+    /// four and a half tiles wide, so the two two-line boxes cannot both be drawn,
+    /// and whichever label is grown first is the one that gets it. The focused label
+    /// is the <em>later</em> of the two in scene order, so a second pass that walked
+    /// the placed labels in scene order instead of rank order would hand the place to
+    /// the other one — the substitution <c>evidence/379-mutants.json</c> runs.</para>
+    /// </summary>
+    [Fact]
+    public void The_body_under_the_cursor_is_offered_its_sentence_first()
+    {
+        var neighbour = Caption(
+            1,
+            new GridPoint(20, 7),
+            "Косой",
+            WorldLabelRank.ReturningWithStory,
+            0);
+        var asked = Caption(2, new GridPoint(21, 7), "Сиплый", WorldLabelRank.Hovered, 1);
+
+        var placed = WorldLabelLayout.Place([neighbour, asked], CameraView.DefaultTileSize);
+
+        Assert.Equal(2, placed.Count);
+        Assert.Equal(
+            2,
+            placed.Single(label => label.Request.Subject == asked.Subject).Lines.Count);
+        Assert.Single(placed.Single(label => label.Request.Subject == neighbour.Subject).Lines);
+    }
+
+    /// <summary>Both populations of a frame, in one list.</summary>
+    private static IReadOnlyList<WorldLabelSubject> BodiesOf(PrototypeSnapshot state) =>
+    [
+        .. state.Raiders
+            .Where(raider => raider.Mode != RaiderMode.Escaped)
+            .Select(raider => new WorldLabelSubject(WorldLabelKind.Raider, raider.Id)),
+        .. state.Creatures
+            .Select(creature => new WorldLabelSubject(WorldLabelKind.Creature, creature.Id)),
+    ];
+
+    /// <summary>
+    /// Who is named by a layout, in a form two layouts can be compared by: the
+    /// bodies, sorted, without the boxes — which line each label ended up with is a
+    /// different question from whether the body is named at all.
+    /// </summary>
+    private static IReadOnlyList<string> NamedBodies(IReadOnlyList<PlacedWorldLabel> placed) =>
+    [
+        .. placed
+            .Select(label => $"{label.Request.Subject.Kind}#{label.Request.Subject.Id}")
+            .OrderBy(text => text, StringComparer.Ordinal),
+    ];
+
+    /// <summary>A two-line caption asking for a place over a named cell.</summary>
+    private static WorldLabelRequest Caption(
+        int id,
+        GridPoint cell,
+        string name,
+        WorldLabelRank rank,
+        int order) =>
+        new(
+            new WorldLabelSubject(WorldLabelKind.Raider, id),
+            WorldLabelLayout.HeadOf(
+                CameraView.CellCenter(cell, CameraView.DefaultTileSize),
+                CameraView.DefaultTileSize),
+            [
+                new WorldLabelLine(name, ReturningHeroLabel.NameTextRef),
+                new WorldLabelLine("волна 2 · достали (24,7)", ReturningHeroLabel.StoryTextRef),
+            ],
+            rank,
+            order);
+
+    /// <summary>
     /// Criterion 3. Pointing at a body must not buy its second line with somebody
     /// else's place: on both of the owner's frames, and with <b>every</b> raider of
     /// the frame pointed at in turn, no two labels share a pixel and none ends up
