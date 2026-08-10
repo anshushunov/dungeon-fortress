@@ -229,6 +229,17 @@ public partial class Main : Node2D
             ConfigureStartupFrame();
             var selectCreature = CommandLineArguments.ReadInt(arguments, "--select-creature");
             var selectCell = CommandLineArguments.Read(arguments, "--select-cell");
+            // Issue #373: which of several bodies sharing --select-cell's tile
+            // gets the focus, in the same order WorldLabels.BodiesAt cycles a
+            // click through — crew first by id, then raiders by id. Omitted, the
+            // first of that order is used, exactly as a single click would answer.
+            var selectBodyIndex = CommandLineArguments.ReadInt(arguments, "--select-body-index");
+            // Issue #373: the frame a synthetic pointer would report, since
+            // nothing outside the engine can move a real one. Reads the map the
+            // same way a live mouse move does (Main.Player.cs's UpdatePointer),
+            // so a raider it names is reachable from a screenshot capture exactly
+            // as it is reachable by hand.
+            var hoverCell = CommandLineArguments.Read(arguments, "--hover-cell");
             var demoControls = arguments.Contains("--demo-controls", StringComparer.Ordinal);
             var demoDig = arguments.Contains("--demo-dig", StringComparer.Ordinal);
             var demoStone = arguments.Contains("--demo-stone", StringComparer.Ordinal);
@@ -361,15 +372,31 @@ public partial class Main : Node2D
             // Cell selection is the map counterpart of --select-creature: it makes
             // a capture point at the tile whose explanation the frame is about,
             // instead of relying on whatever a demo happened to select last.
+            //
+            // Issue #373: until now this read _state.Creatures directly, so a
+            // raider standing on the named cell — sharing it with crew or alone —
+            // was never reachable no matter which cell --select-cell named.
+            // Routed through WorldLabels.BodiesAt instead, the same table SelectAt
+            // already cycles a click through, both populations answer, and a
+            // crowded cell's body is named by --select-body-index rather than
+            // always the first one in click order.
             if (selectCell is not null)
             {
-                _selectedCell = CommandLineArguments.ParseCell(selectCell);
-                _selectedCreatureId = _state!.Creatures
-                    .Where(creature => creature.Position == _selectedCell)
-                    .Select(creature => (int?)creature.Id)
-                    .FirstOrDefault();
-                UpdateHud();
-                QueueRedraw();
+                ApplySelectCellArgument(CommandLineArguments.ParseCell(selectCell), selectBodyIndex);
+            }
+            else if (selectBodyIndex is not null)
+            {
+                throw new ArgumentException(
+                    "--select-body-index requires --select-cell.", "--select-body-index");
+            }
+
+            // Issue #373: the hover counterpart of the selection above. Live play
+            // sets _hoverCell from a mouse move (UpdatePointer); a screenshot
+            // capture has no mouse to move, so without this a hovered frame simply
+            // does not exist to hand to the owner.
+            if (hoverCell is not null)
+            {
+                ApplyHoverCellArgument(CommandLineArguments.ParseCell(hoverCell));
             }
 
             // Every entry point pays for the fit guard, because _Ready still runs

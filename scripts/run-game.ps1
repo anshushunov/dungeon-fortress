@@ -28,6 +28,21 @@ param(
     [int]$SelectCreature = -1,
     [ValidatePattern("^\d{1,2},\d{1,2}$")]
     [string]$SelectCell,
+    # Issue #373. -SelectCell alone answers a crowded cell with its first body,
+    # in WorldLabels.BodiesAt order (crew by id, then raiders by id) — the same
+    # body a fresh click would take. This names which one instead, so a cell
+    # such as (15,7) of baseline/20260729's tick 2380, where six bodies stand
+    # together, can be captured with the focus on a named one of them rather
+    # than always the first: two frames with two different values are what make
+    # the choice provable, not just possible. Requires -SelectCell; sentinel -1
+    # means "not supplied", matching -SelectCreature's own convention.
+    [int]$SelectBodyIndex = -1,
+    # Issue #373. Nothing outside the engine can move a mouse, so without this a
+    # hovered frame does not exist to capture at all — the gap this Issue was
+    # opened about. Read the same way -SelectCell is: engine-side, through
+    # WorldLabels.PointedAt, the identical table a live pointer move consults.
+    [ValidatePattern("^\d{1,2},\d{1,2}$")]
+    [string]$HoverCell,
     [switch]$DemoControls,
     [switch]$DemoDig,
     [switch]$DemoStone,
@@ -261,6 +276,12 @@ if ($SelectCreature -ge 0) {
 }
 if (-not [string]::IsNullOrWhiteSpace($SelectCell)) {
     $arguments += "--select-cell", $SelectCell
+}
+if ($SelectBodyIndex -ge 0) {
+    $arguments += "--select-body-index", $SelectBodyIndex.ToString([Globalization.CultureInfo]::InvariantCulture)
+}
+if (-not [string]::IsNullOrWhiteSpace($HoverCell)) {
+    $arguments += "--hover-cell", $HoverCell
 }
 if ($DemoControls) {
     $arguments += "--demo-controls"

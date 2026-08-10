@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "issue": 373,
+  "criterion": 4,
+  "what": "Which body a crowded cell answers with is now named on the command line, not only decided by WorldLabels.BodiesAt's fixed order. -SelectBodyIndex (--select-body-index engine-side) picks the zero-based position in that order; two frames of the same crowded cell with two different indices are the proof, per the Issue's own wording.",
+  "base": {
+    "commit": "dcfbc1a",
+    "howObtained": "git worktree add ../_wt-373-focus-flag -b feature/373-focus-flag origin/main, then git rev-parse HEAD"
+  },
+  "scene": {
+    "fixture": "baseline",
+    "seed": 20260729,
+    "tick": 2380,
+    "cell": "15,7",
+    "why": "The cell Issue #373 names as holding six bodies: one crew member (Тишина) and five raiders sharing one tile."
+  },
+  "index0": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2380 -ScreenshotPath \"probe/373-15-7-idx0.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0 -SelectCell \"15,7\" -SelectBodyIndex 0",
+    "checksum": "f8e26b05546cad7183b81a344c0169404dd0e105ffecd2713da0ea64b1a24053",
+    "controlFeedback": "(15,7): 1 of 6 standing here; click the cell again for the next one.",
+    "selectedCreatureId": 8,
+    "inspector": "CREATURE #8 · Тишина — ALIVE HP 1/28 (a crew member: WorldLabels.BodiesAt lists crew first, by id, so index 0 is her)",
+    "fileSha256": "085e2d0aa8c8174a25eb0757cc9d41de9e5b3921814983d35cf93bac6a987726",
+    "savedFrame": "evidence/373-body-index-0.png"
+  },
+  "index3": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2380 -ScreenshotPath \"probe/373-15-7-idx3.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0 -SelectCell \"15,7\" -SelectBodyIndex 3",
+    "checksum": "f8e26b05546cad7183b81a344c0169404dd0e105ffecd2713da0ea64b1a24053",
+    "controlFeedback": "(15,7): 4 of 6 standing here; click the cell again for the next one.",
+    "selectedCreatureId": null,
+    "inspector": "CELL (15, 7) — generic cell panel, not a creature panel: index 3 (the fourth of six) is a raider.",
+    "fileSha256": "8bf7806b4b7160f4096bf7701adeac6a8800305ea9493771cc6b1c603a5e8877",
+    "savedFrame": "evidence/373-body-index-3.png"
+  },
+  "reading": {
+    "sameCanonicalState": "Both runs print the identical checksum (f8e26b05...) — selecting a different body never touches PrototypeWorld, same invariant as every selection path before this Issue.",
+    "differentFrame": "The two PNGs have different sha256 (085e2d0a... vs 8bf7806b...) and different feedback (\"1 of 6\" vs \"4 of 6\"), and the inspector panel switches between a named creature card and the generic cell card depending on which population the chosen index lands in. That is the named, reproducible, managed choice Issue #373 asks for: two frames, two bodies, both provable from the printed state rather than from eyeballing a crowd of overlapping sprites.",
+    "outOfRangeGuard": "An index the cell does not have throws ArgumentOutOfRangeException(\"--select-body-index\", ...) naming the cell and how many bodies it actually holds, the same refuse-rather-than-clamp style --select-creature already uses for an unknown id."
+  }
+}
