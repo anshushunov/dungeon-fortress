@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "issue": 361,
-  "what": "Criterion 3 of Issue #361: the check added by scope §3 goes red when the fix is undone and green when it stands. Two substitutions, because the check comes in two parts and each part is meant to catch a different shape of the same defect.",
+  "what": "Criterion 3 of Issue #361 and the mutant the coordinator required for the MomentOfTruthPanel.WorstCase defect. Three substitutions: two on the combat stream, one on the worst-case band. Each was applied to a committed state and reverted before the next.",
   "base": {
     "commit": "1ed66dc",
     "howObtained": "git rev-parse --short HEAD in C:/gamedev/_wt-361-combat-random before the first mutant was applied",
@@ -42,7 +42,25 @@
         "prepared/20260726: ... on 99 tick(s) ... stood at 0x0000636F6C574602"
       ],
       "verdict": "red on the three behavioural cases and green on No_readonly_field_of_the_simulation_holds_a_mutable_struct — which is the answer wanted: the two halves catch different things, and the party's numbers are identical to the exact revert's, so the defect really is the same one wearing another shape."
+    },
+    {
+      "criterion": "the defect found by this PR and fixed in it — MomentOfTruthPanel.WorstCase measured one axis",
+      "base": {
+        "commit": "c186076",
+        "howObtained": "git rev-parse --short HEAD in C:/gamedev/_wt-361-combat-random after committing the WorstCase fix and before applying this mutant"
+      },
+      "file": "src/DungeonFortress.Presentation/UiControls.cs",
+      "was": "        string[] axes = [\"deed\", \"fear\", \"benefit\", \"grudge\"];",
+      "became": "        string[] axes = [\"deed\"];",
+      "why": "The state of origin/main in one line: the candidate is searched for over a single dominantAxis, and HudText.Breakdown routes that one into the benefit branch, so the fear ledger is never measured. It is written as a one-element array rather than by restoring the old Select so that the substitution is the defect itself and nothing else — the enumeration shrinks, the search does not change shape.",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter \"FullyQualifiedName~MomentOfTruthPanelTests\"",
+      "output": [
+        "Не пройден!: не пройдено 1, пройдено 19, пропущено 0, всего 20",
+        "MomentOfTruthPanelTests.The_worst_case_band_is_never_narrower_than_the_live_one",
+        "The worst case measures 69 characters but the live band already needs 70."
+      ],
+      "verdict": "red, and with the same message and the same two numbers the defect was found by. One failure of twenty, and it is the check that states the property — which is what says the check catches the pre-existing gap and not merely this branch's scene: the mutant restores main's logic exactly, on this PR's own party, and the property fails."
     }
   ],
-  "afterEachMutation": "git checkout -- <the one file>, then git status --short printed nothing."
+  "afterEachMutation": "git checkout -- <the one file>, then git status --short printed nothing. For the third, `rg -n 'string\\[\\] axes' src/DungeonFortress.Presentation/UiControls.cs` confirmed the four axes were back."
 }
