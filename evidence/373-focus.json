@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "issue": 373,
+  "criterion": [2, 3],
+  "what": "--select-cell now reaches a raider. Before this change Main.cs's --select-cell handling read state.Creatures directly and nothing else, so a cell holding raiders and no crew — (16,7) of baseline/20260729 at tick 2380, the exact cell Issue #373 names — could never be focused no matter which cell was named.",
+  "base": {
+    "commit": "dcfbc1a",
+    "howObtained": "git worktree add ../_wt-373-focus-flag -b feature/373-focus-flag origin/main, then git rev-parse HEAD"
+  },
+  "scene": {
+    "fixture": "baseline",
+    "seed": 20260729,
+    "tick": 2380,
+    "cell": "16,7",
+    "populationOfCell": "1 of 2 standing here — two raiders, zero crew, confirmed below by selectedCreatureId being null while the selection nonetheless names a body"
+  },
+  "criterion2": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2380 -ScreenshotPath \"probe/373-select-16-7.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0 -SelectCell \"16,7\"",
+    "checksum": "f8e26b05546cad7183b81a344c0169404dd0e105ffecd2713da0ea64b1a24053",
+    "controlFeedback": "(16,7): 1 of 2 standing here; click the cell again for the next one.",
+    "selectedCell": [16, 7],
+    "selectedCreatureId": null,
+    "savedFrame": "evidence/373-focus-16-7.png",
+    "reading": "selectedCreatureId is null (no crew member sits at 16,7) yet the cell is reported as holding a focusable body (\"1 of 2\"). The white square visible in the crowd on this frame is present, pixel-identical, in the quiet frame and in the mutant frame below too (see pixelDiff) — it is an unrelated, pre-existing marker (a downed body, per the on-screen legend's \"white X = downed\") and is not evidence of anything this Issue changed; it is named here so the claim is not repeated by eye a second time.",
+    "pixelDiff": {
+      "howMeasured": "python -c \"from PIL import Image, ImageChops; ImageChops.difference(Image.open(a).convert('RGB'), Image.open(b).convert('RGB')).getbbox()\" on the two PNGs",
+      "quietVsFixed": {
+        "bbox": [16, 49, 1241, 601],
+        "reading": "Large and expected: setting _selectedCell alone rewrites the whole right-hand inspector panel from \"Click a creature or map cell.\" to the CELL(16,7) card, on top of the bottom feedback line. This bbox alone is not proof the raider specifically was reached — the fixedVsMutant comparison below isolates that."
+      },
+      "fixedVsMutant": {
+        "bbox": [16, 589, 678, 601],
+        "reading": "With _selectedCell identical in both runs (16,7) and the inspector's generic CELL card therefore identical in both (a raider gets no creature-style card, same as an empty cell), the entire visible difference between reaching the raider and not reaching it collapses to one on-screen rectangle: the bottom feedback line, where \"(16,7): 1 of 2 standing here...\" (fixed) becomes the plain brush-picker sentence that was already there before any cell was named (mutant, evidence/373-mutations.json — the mutant cell holds zero bodies of ApplySelectCellArgument's filtered set, so WorldLabels.SelectionHint has nothing to say and leaves _controlFeedback untouched, same as an empty cell always has). That text line, not a ring, is what a screenshot alone proves criterion 2 by; see evidence/373-mutations.json for the full mutant record and for the golden-UI regression this exact question caught in an earlier draft of ApplySelectCellArgument."
+      }
+    }
+  },
+  "criterion3": {
+    "claim": "Two prints of the exact same command give the same sha256, both of the engine's own canonical checksum and of the produced PNG file.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2380 -ScreenshotPath \"probe/373-repro-a.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0 -HoverCell \"16,7\" -SelectCell \"16,7\"",
+    "runs": [
+      {
+        "path": "probe/373-repro-a.png",
+        "checksum": "f8e26b05546cad7183b81a344c0169404dd0e105ffecd2713da0ea64b1a24053",
+        "fileSha256": "0d29d9a12fcda8538434ab186c484c5f18f3cad33da6ca121b71b7428c550c5c"
+      },
+      {
+        "path": "probe/373-repro-b.png",
+        "checksum": "f8e26b05546cad7183b81a344c0169404dd0e105ffecd2713da0ea64b1a24053",
+        "fileSha256": "0d29d9a12fcda8538434ab186c484c5f18f3cad33da6ca121b71b7428c550c5c"
+      }
+    ],
+    "measuredWith": "sha256sum on both PNG files after two independent, consecutive invocations of the identical command line (different -ScreenshotPath so the second run could not silently reuse the first's file)."
+  },
+  "howImplemented": {
+    "flag": "-SelectCell is not new; only its engine-side reach changed.",
+    "parsing": "src/DungeonFortress.Game/Main.cs's --select-cell handling now calls the new ApplySelectCellArgument instead of filtering state.Creatures directly.",
+    "application": "src/DungeonFortress.Game/Main.Player.cs's new ApplySelectCellArgument reads WorldLabels.BodiesAt(_state, cell) — the same crew-then-raiders table SelectAt already cycles a click through since Issue #364/#371 — and sets _selectedCreatureId/_selectedRaiderId from whichever body it names, instead of only ever considering state.Creatures.",
+    "alternativeRejected": "A second, parallel --select-raider flag mirroring --select-creature. Rejected because it would have left --select-cell's own defect — the one Issue #373 opens about — unfixed for anybody who names a cell instead of an id, and because WorldLabels.BodiesAt already is the single table both the click path and this path now share; a second flag would be a second, divergent source of the same answer."
+  }
+}

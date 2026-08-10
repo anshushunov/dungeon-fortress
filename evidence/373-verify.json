@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "issue": 373,
+  "criterion": 6,
+  "what": "Full scripts/verify.ps1, run once on the final state, per Issue #373's own requirement.",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
+  "atCommit": "7e441af (checkpoint 5; the commit that carried this evidence file follows it)",
+  "firstRun": {
+    "atCommit": "5b02f6f (checkpoint 3, before the regression fix)",
+    "result": "FAILED — ui stage, golden UI mismatch on tests/golden/ui/stone-t190-loose-no-stockpile.json (and the sibling stone-t336-in-transit / stone-t950-stockpile-full frames): ui.controlFeedback and ui.roster no longer matched the golden fixture because the first draft of ApplySelectCellArgument overwrote _controlFeedback unconditionally, clobbering the --demo-stone scenario's own feedback sentence on a --select-cell that names an empty cell.",
+    "action": "Fixed in the next commit (see evidence/373-mutations.json's regressionFoundAndFixed) and NOT counted as the \"one run\" this criterion asks for — this file records the run that mattered, after the fix."
+  },
+  "secondRun": {
+    "result": "ok",
+    "scope": "full",
+    "stagesExecuted": [
+      "scripts", "build", "tests", "mcp", "sim", "load", "godot", "ui",
+      "screenshots", "token-budget"
+    ],
+    "stagesNotRun": [],
+    "godotExitCode": 0,
+    "godotControlsExitCode": 0,
+    "godotCameraExitCode": 0,
+    "godotRaidExitCode": 0,
+    "momentOfTruthExitCode": 0,
+    "screenshotRepeatable": true,
+    "goldenUiFrames": [
+      "stone-t190-loose-no-stockpile",
+      "stone-t336-in-transit",
+      "stone-t950-stockpile-full"
+    ],
+    "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+    "changedSeedChecksum": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
+    "loadChecksum": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+    "fullEventLine": "See .artifacts/log (not committed — a local run log); the printed \"verification_result\" event carries every field quoted above plus hudGuardRegressionExitCode:1, hudReadabilityRegressionExitCode:1, cameraTransformRegressionExitCode:1 (the three deliberate-failure regression probes, all correctly red) and the camera/view invariant counters, none of which this Issue touches."
+  },
+  "howReadTheRerun": "The second run is on the exact tree this PR ships (commit 7e441af plus this file, which the run itself could not yet contain when it ran — the checksum and stage list are copied from its own printed verification_result event, not retyped)."
+}

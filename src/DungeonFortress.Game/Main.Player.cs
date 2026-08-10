@@ -117,6 +117,80 @@ public partial class Main
         body is { } subject && subject.Kind == kind ? subject.Id : null;
 
     /// <summary>
+    /// The <c>--select-cell</c> / <c>--select-body-index</c> counterpart of
+    /// <see cref="SelectAt"/>, for a caller that names a cell instead of clicking
+    /// a screen position (Issue #373). It goes through the same
+    /// <c>WorldLabels.BodiesAt</c> table a click cycles through — crew first by
+    /// id, then raiders by id — so a raider on the cell is reachable exactly as a
+    /// click reaches it, and a crowded cell answers with a named, reproducible
+    /// body instead of always the first one in that order.
+    /// </summary>
+    /// <param name="cell">The cell named on the command line.</param>
+    /// <param name="bodyIndex">
+    /// The zero-based position in <c>WorldLabels.BodiesAt</c>'s order, or
+    /// <c>null</c> to take the first body — the same body a fresh click on an
+    /// empty selection would take.
+    /// </param>
+    private void ApplySelectCellArgument(GridPoint cell, int? bodyIndex)
+    {
+        _selectedCell = cell;
+        var bodies = WorldLabels.BodiesAt(_state!, cell);
+        WorldLabelSubject? chosen;
+        if (bodyIndex is { } index)
+        {
+            if (index < 0 || index >= bodies.Count)
+            {
+                throw new ArgumentOutOfRangeException(
+                    "--select-body-index",
+                    $"Cell ({cell.X},{cell.Y}) holds {bodies.Count} " +
+                    (bodies.Count == 1 ? "body" : "bodies") +
+                    $"; index {index} is out of range.");
+            }
+
+            chosen = bodies[index];
+        }
+        else
+        {
+            chosen = bodies is [var first, ..] ? first : null;
+        }
+
+        _selectedCreatureId = IdOf(chosen, WorldLabelKind.Creature);
+        _selectedRaiderId = IdOf(chosen, WorldLabelKind.Raider);
+        // Same rule SelectAt already follows, and for the same reason: only
+        // where there is something to say. A cell with fewer than two bodies
+        // says nothing a single click (or a single --select-cell) does not
+        // already answer, and tests/golden/ui's --demo-stone frames depend on
+        // an uneventful --select-cell leaving whatever feedback the demo itself
+        // set — a cell without a second body to name is not this Issue's
+        // concern to comment on.
+        if (WorldLabels.SelectionHint(_state!, cell, chosen) is { } hint)
+        {
+            _controlFeedback = hint;
+        }
+
+        UpdateHud();
+        UpdateCreatureLabels();
+        QueueRedraw();
+    }
+
+    /// <summary>
+    /// The <c>--hover-cell</c> counterpart of <see cref="UpdatePointer"/>, for a
+    /// caller with no mouse to move (Issue #373). It reads the map exactly the
+    /// way a live pointer move does — the selected body wins when it is standing
+    /// on the named cell, otherwise the cell's first body — so a hovered frame
+    /// captured this way is indistinguishable from one a player produced by hand.
+    /// </summary>
+    private void ApplyHoverCellArgument(GridPoint cell)
+    {
+        _hoverCell = cell;
+        var hovered = WorldLabels.PointedAt(_state!, cell, CurrentWorldLabelFocus().Selected);
+        _hoverCreatureId = IdOf(hovered, WorldLabelKind.Creature);
+        _hoverRaiderId = IdOf(hovered, WorldLabelKind.Raider);
+        UpdateCreatureLabels();
+        QueueRedraw();
+    }
+
+    /// <summary>
     /// Points the inspector at one creature by name rather than by where it
     /// stands. Clicking the map has a cell and finds the creature on it; a card
     /// of the moment of truth has the creature and has to find the cell, and it

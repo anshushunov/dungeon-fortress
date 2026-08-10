@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "issue": 373,
+  "criterion": 5,
+  "what": "A substitution that reverts --select-cell's focus to \"only creatures of ownership\" — the exact defect Issue #373 opened about — has to redden criterion 2's check on (16,7). It does. This file also records a real regression this exercise caught in an earlier draft of the fix itself, and how it was found and corrected before this commit.",
+  "mutant": {
+    "file": "src/DungeonFortress.Game/Main.Player.cs",
+    "method": "ApplySelectCellArgument",
+    "was": "var bodies = WorldLabels.BodiesAt(_state!, cell);",
+    "became": "var bodies = WorldLabels.BodiesAt(_state!, cell)\n            .Where(body => body.Kind == WorldLabelKind.Creature)\n            .ToList();",
+    "appliedOnTopOf": "the committed, regression-fixed ApplySelectCellArgument (see regressionFoundAndFixed below), built, run and reverted without ever being committed itself"
+  },
+  "before": {
+    "note": "The fixed code, evidence/373-focus.json's criterion2 block.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2380 -ScreenshotPath \"probe/373b-select-16-7.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0 -SelectCell \"16,7\"",
+    "controlFeedback": "(16,7): 1 of 2 standing here; click the cell again for the next one.",
+    "selectedCreatureId": null,
+    "checksum": "f8e26b05546cad7183b81a344c0169404dd0e105ffecd2713da0ea64b1a24053",
+    "fileSha256": "840322d4b5d63028c0e3140208cb9533effa42599f4126d8083e90a519d396f9"
+  },
+  "after": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2380 -ScreenshotPath \"probe/373b-mutant-16-7.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0 -SelectCell \"16,7\"",
+    "controlFeedback": "Pick a brush, then drag a rectangle on the map: the whole area is marked by one command. Esc cancels a drag, then puts the brush away.",
+    "selectedCreatureId": null,
+    "checksum": "f8e26b05546cad7183b81a344c0169404dd0e105ffecd2713da0ea64b1a24053",
+    "fileSha256": "39e84a2ff76fd9ce930e2a78119ca872b50ff5f4053aadbb98610e9e6a47dd6f",
+    "reading": "Mutated, the cell holds zero bodies under ApplySelectCellArgument's creature-only filter, so WorldLabels.SelectionHint(state, cell, chosen=null) short-circuits on selected being null and never fires — _controlFeedback is left exactly as it was before any cell was named, the plain brush-picker sentence. That untouched sentence, standing where \"(16,7): 1 of 2 standing here...\" stood in the fixed run, is what the mutant reddens."
+  },
+  "reddened": {
+    "what": "Criterion 2 (\"the frame with the raider under focus\") is exactly what this mutant breaks: --select-cell 16,7 no longer reports two raiders standing there, although two do, reproducing verbatim the failure Issue #373 measured on the pre-fix codebase (\"--select-cell не дотягивается вовсе... заполняет _selectedCreatureId только из state.Creatures\").",
+    "howNotJustAsserted": "Both runs print the identical canonical checksum, so the mutant is presentation-only — it could not have been caught by any Simulation-layer test. The bottom feedback line is the one pixel region (bbox [16,589]-[678,601], measured with PIL ImageChops.difference, same method as evidence/373-focus.json's pixelDiff) that changes between the fixed screenshot and the mutant one; that is the check the mutant reddens, and it is legible from the printed JSON alone without opening the PNG."
+  },
+  "revert": {
+    "confirmedBy": "dotnet build src/DungeonFortress.Game/DungeonFortress.Game.csproj after restoring the was line reported 0 warnings, 0 errors; rerunning the before command reproduced controlFeedback \"(16,7): 1 of 2 standing here...\" and a PNG whose sha256 (840322d4...) matched the pre-mutant capture exactly.",
+    "note": "The mutant was written, built, run and reverted after the regression-fixed checkpoint was already committed, per Issue #373's own instruction that a mutant only runs after the checkpoint it could otherwise erase is safe."
+  },
+  "regressionFoundAndFixed": {
+    "what": "The first version of ApplySelectCellArgument unconditionally overwrote _controlFeedback on every --select-cell call, including cells with zero or one body, with a sentence this Issue invented (\"--select-cell (X,Y): focus on creature/raider #N.\" or \"...: nothing stands there.\"). scripts/verify.ps1's ui stage reddened on tests/golden/ui/stone-t190-loose-no-stockpile.json (and the other two --demo-stone golden frames): they run --demo-stone together with --select-cell on a cell that holds nobody, and depend on an uneventful --select-cell leaving the demo's own feedback sentence (\"Demo: DIG marked (25,1)...\") in place, exactly as it did before this Issue touched the method.",
+    "howFound": "The full scripts/verify.ps1 run named in this PR's checkpoint 5 failed on the ui stage with a golden-UI mismatch naming ui.controlFeedback and ui.roster on stone-t190-loose-no-stockpile, stone-t336-in-transit and stone-t950-stockpile-full.",
+    "fix": "ApplySelectCellArgument now only assigns _controlFeedback when WorldLabels.SelectionHint(state, cell, chosen) returns non-null (bodies.Count >= 2 and a chosen body among them) — the identical rule SelectAt (the click path) already follows for the same reason. A cell with zero or one body is left exactly as untouched as it always was.",
+    "consequenceForThisFile": "The mutant's \"after\" feedback text changed from an invented \"nothing stands there\" sentence to the plain pre-existing brush-picker sentence once the regression fix landed; both before and after captures in this file were re-measured against the regression-fixed build, not against the earlier, since-discarded draft."
+  }
+}

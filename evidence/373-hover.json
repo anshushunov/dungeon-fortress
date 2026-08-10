@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "issue": 373,
+  "criterion": 1,
+  "what": "A hovered frame can be captured through scripts/run-game.ps1 at all. Before this change no flag set _hoverCell from outside a live mouse move, so a hovered frame did not exist to hand to the owner; -HoverCell (--hover-cell engine-side) is the missing input.",
+  "base": {
+    "commit": "dcfbc1a",
+    "howObtained": "git worktree add ../_wt-373-focus-flag -b feature/373-focus-flag origin/main, then git rev-parse HEAD"
+  },
+  "scene": {
+    "fixture": "baseline",
+    "seed": 20260729,
+    "tick": 2380,
+    "cell": "16,7",
+    "why": "The frame and cell named in Issue #373 itself: two raiders and no crew stand on (16,7) at this tick of this seed."
+  },
+  "commands": {
+    "quiet": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2380 -ScreenshotPath \"probe/373-quiet.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0",
+      "checksum": "f8e26b05546cad7183b81a344c0169404dd0e105ffecd2713da0ea64b1a24053",
+      "fileSha256": "d683154cdc3ce2e6b3b8aae33537f0ac3e3dda3eb44ded11a920ef0827703d23",
+      "savedAs": "evidence/373-quiet.png"
+    },
+    "hoverOnly": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2380 -ScreenshotPath \"probe/373-hover-only.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0 -HoverCell \"16,7\"",
+      "checksum": "f8e26b05546cad7183b81a344c0169404dd0e105ffecd2713da0ea64b1a24053",
+      "fileSha256": "4d450dce2deaabb5a22323ce31898a613248c1df178249b751ee42fa2ace1358",
+      "savedAs": "evidence/373-hover.png"
+    }
+  },
+  "howMeasured": "The engine's own canonical checksum (the field named \"checksum\" in the printed godot_graybox_screenshot event) is identical between the quiet and the hovered run: hovering never touches PrototypeWorld. The PNG's own sha256 differs (d683154c... vs 4d450dce...), which is the frame actually changing. What changes is which raider captions WorldLabels.Of has room for: hovering (16,7) promotes one of its two raiders to WorldLabelRank.Hovered, which is exactly the label-priority mechanism Issue #371/#364 already ship and test (WorldLabelFocusTests) — --hover-cell only supplies the focus a live pointer would have supplied.",
+  "howImplemented": {
+    "flag": "-HoverCell in scripts/run-game.ps1, threaded to --hover-cell",
+    "parsing": "src/DungeonFortress.Game/Main.cs reads --hover-cell with CommandLineArguments.Read, the same helper --select-cell already used",
+    "application": "src/DungeonFortress.Game/Main.Player.cs's new ApplyHoverCellArgument sets _hoverCell and reads WorldLabels.PointedAt(_state, cell, CurrentWorldLabelFocus().Selected) — byte-for-byte the same call Main.Player.cs's UpdatePointer already makes for a real mouse move, so a synthetic hover cannot diverge from a live one by construction."
+  },
+  "reproducibility": {
+    "note": "Measured together with criterion 2 and 3 on the combined hover+select command; see evidence/373-focus.json's reproduction block for the two-runs-one-sha256 pair."
+  }
+}
