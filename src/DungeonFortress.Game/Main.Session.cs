@@ -179,15 +179,17 @@ public partial class Main
     /// HUD: they follow a creature, so they are positioned in map pixels and are
     /// not part of the Control layout.
     /// </summary>
-    private Label MakeMapLabel(Vector2 size, int fontSize, Color color)
+    private Label MakeMapLabel(Color color)
     {
         var label = new Label
         {
-            Size = size,
-            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            // Neither wrapped nor stretched (Issue #364): the box this node is
+            // given is the box the layout resolved collisions against, and a node
+            // that wrapped its text onto a second line would draw outside it.
+            AutowrapMode = TextServer.AutowrapMode.Off,
+            HorizontalAlignment = HorizontalAlignment.Center,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        label.AddThemeFontSizeOverride("font_size", fontSize);
         label.AddThemeColorOverride("font_color", color);
         AddChild(label);
         return label;
@@ -233,6 +235,7 @@ public partial class Main
         _paused = true;
         _tickAccumulator = 0;
         _selectedCreatureId = null;
+        _selectedRaiderId = null;
         _selectedCell = null;
         // A fixture is run in one go, so there is no "before" to measure a fall in
         // hit points against. The journal still names every blow of the last tick,
@@ -494,35 +497,55 @@ public partial class Main
         QueueRedraw();
     }
 
+    /// <summary>
+    /// The crew's half of the world labels (Issue #364).
+    ///
+    /// <para>Which crew names are on screen has not changed: a name per
+    /// overlapping creature made the economy unreadable, so it is still the
+    /// selected one and the one under the pointer. <b>Where</b> they go has.
+    /// Until this change the node sat at a fixed offset from the body's centre
+    /// and knew about nothing else on the map — which is the owner's complaint of
+    /// 2026-08-10, «имена своих же тоже наползают, они должны быть над головой».
+    /// At the shipped 40 px tile that offset put a 98-reference-pixel box four
+    /// tiles to the right of the body it named and dipped its lower half into the
+    /// body's own head. The box is now measured from the text, centred over the
+    /// head, and placed by <c>WorldLabelLayout</c> together with every caption of
+    /// the same frame.</para>
+    /// </summary>
     private void UpdateCreatureLabels()
     {
+        var placed = WorldLabelsOfThisFrame()
+            .Where(label => label.Request.Subject.Kind == WorldLabelKind.Creature)
+            .ToDictionary(label => label.Request.Subject.Id);
         foreach (var creature in _state!.Creatures)
         {
             if (!_nameLabels.TryGetValue(creature.Id, out var label))
             {
-                label = MakeMapLabel(
-                    ScaleWorld(98, 17),
-                    Math.Max(1, (int)Math.Round(ScaleWorld(10))),
-                    CreatureColors[creature.Id]);
+                label = MakeMapLabel(CreatureColors[creature.Id]);
                 _nameLabels.Add(creature.Id, label);
             }
 
-            // A name per overlapping creature made the economy unreadable. Names are
-            // now an intentional inspection affordance: selected or hovered only.
-            var visible = creature.Id == _selectedCreatureId || creature.Id == _hoverCreatureId;
-            label.Visible = visible;
-            if (!visible)
+            // Absent from the layout means one of two things, and the node is
+            // hidden for both: nobody is pointing at this creature, or somebody is
+            // and no place was left inside the attachment limit. A label the
+            // layout gave up on is not drawn somewhere else instead — not being
+            // drawn is what the limit buys.
+            label.Visible = placed.TryGetValue(creature.Id, out var slot);
+            if (!label.Visible)
             {
                 continue;
             }
 
-            label.Text = $"{creature.Name} {CreatureStateShort(creature)}";
-            // Follows the interpolated body, not the canonical tile, so the tag
-            // does not snap a whole tile ahead of the creature it names.
-            label.Position = CreatureRenderCenter(creature) +
-                new Vector2(
-                    ScaleWorld(2) - (_tileSize / 2f),
-                    -ScaleWorld(14) - (_tileSize / 2f));
+            var line = slot!.Lines[0];
+            label.Text = line.Text;
+            label.AddThemeFontSizeOverride(
+                "font_size",
+                Math.Max(1, (int)Math.Round(ScaleWorld((float)line.TextSizeRef))));
+            // The box the layout resolved collisions against, in world pixels, and
+            // the body it belongs to is the interpolated one: the tag does not snap
+            // a whole tile ahead of the creature it names.
+            label.Size = new Vector2((float)slot.Box.Width, (float)slot.Box.Height);
+            label.Position = new Vector2((float)slot.Box.X, (float)slot.Box.Y);
         }
     }
 
@@ -536,7 +559,17 @@ public partial class Main
     private void UpdateHud()
     {
         var panels = HudText.Build(CurrentHudView(), _projection);
-        _inspector!.Text = panels.Inspector;
+        // A selected raider replaces the panel and nothing else (Issue #364). The
+        // substitution is here rather than inside HudText because the raider is a
+        // selection this adapter owns: HudViewState carries the selected creature
+        // and the selected cell, and widening that value would put a second
+        // selection into every frame the HUD has ever been asked about. What the
+        // panel then says is decided in DungeonFortress.Presentation like all the
+        // other panels, so a CI job that never opens Godot still checks the words.
+        _inspector!.Text = _selectedRaiderId is { } raiderId &&
+            _state!.Raiders.FirstOrDefault(raider => raider.Id == raiderId) is { } selected
+                ? InspectorText.Raider(_state, selected)
+                : panels.Inspector;
         _summary!.Text = panels.Summary;
         _feedback!.Text = panels.Feedback;
         _roster!.Text = panels.Roster;

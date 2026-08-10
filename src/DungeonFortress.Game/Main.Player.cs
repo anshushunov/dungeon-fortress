@@ -29,13 +29,48 @@ public partial class Main
         RefreshState();
     }
 
+    // ---------------------------------------------------------------------
+    // Issue #364. Which raider the pointer is on and which one the inspector is
+    // pointed at.
+    //
+    // Both are new, and the reason they did not exist is the owner's second
+    // finding of the playtest of 2026-08-10: «Враги, кстати вообще не выбираются
+    // и при наведении ничего нет — запустил 1 волну». Until now UpdatePointer and
+    // SelectAt read _state.Creatures and nothing else, so a raider was a body the
+    // player could watch and could not ask about — the same hole as a caption
+    // that has drifted off its owner, approached from the other side.
+    //
+    // They are declared here rather than beside _selectedCreatureId in Main.cs
+    // because Main is a partial class and this file is the one that owns what the
+    // pointer does. Issue #364's partition names Main.Player.cs and not Main.cs.
+    // ---------------------------------------------------------------------
+
+    private int? _hoverRaiderId;
+
+    private int? _selectedRaiderId;
+
+    /// <summary>
+    /// What the pointer and the inspector are on, in the terms
+    /// <c>WorldLabelLayout</c> uses for both populations at once.
+    /// </summary>
+    private WorldLabelFocus CurrentWorldLabelFocus() => new(
+        SubjectOf(_hoverCreatureId, _hoverRaiderId),
+        SubjectOf(_selectedCreatureId, _selectedRaiderId));
+
+    private static WorldLabelSubject? SubjectOf(int? creatureId, int? raiderId) =>
+        creatureId is { } creature
+            ? new WorldLabelSubject(WorldLabelKind.Creature, creature)
+            : raiderId is { } raider
+                ? new WorldLabelSubject(WorldLabelKind.Raider, raider)
+                : null;
+
     private void UpdatePointer(Vector2 position)
     {
         _lastPanPointer = position;
         _hoverCell = ScreenToCell(position);
-        _hoverCreatureId = _hoverCell is { } hovered
-            ? _state!.Creatures.FirstOrDefault(creature => creature.Position == hovered)?.Id
-            : null;
+        var hovered = _hoverCell is { } cell ? WorldLabels.At(_state!, cell) : null;
+        _hoverCreatureId = IdOf(hovered, WorldLabelKind.Creature);
+        _hoverRaiderId = IdOf(hovered, WorldLabelKind.Raider);
         UpdateCreatureLabels();
         QueueRedraw();
     }
@@ -49,14 +84,16 @@ public partial class Main
         }
 
         _selectedCell = selected;
-        _selectedCreatureId = _state!.Creatures
-            .Where(creature => creature.Position == selected)
-            .Select(creature => (int?)creature.Id)
-            .FirstOrDefault();
+        var body = WorldLabels.At(_state!, selected);
+        _selectedCreatureId = IdOf(body, WorldLabelKind.Creature);
+        _selectedRaiderId = IdOf(body, WorldLabelKind.Raider);
         UpdateHud();
         UpdateCreatureLabels();
         QueueRedraw();
     }
+
+    private static int? IdOf(WorldLabelSubject? body, WorldLabelKind kind) =>
+        body is { } subject && subject.Kind == kind ? subject.Id : null;
 
     /// <summary>
     /// Points the inspector at one creature by name rather than by where it
@@ -74,6 +111,7 @@ public partial class Main
         }
 
         _selectedCreatureId = chosen.Id;
+        _selectedRaiderId = null;
         _selectedCell = chosen.Position;
         UpdateHud();
         UpdateCreatureLabels();
@@ -376,6 +414,7 @@ public partial class Main
         _editMode = BrushMode.Dig;
         _selectedCell = new GridPoint(25, 3);
         _selectedCreatureId = null;
+        _selectedRaiderId = null;
         _controlFeedback =
             "Demo: DIG marked (25,1) (25,2) (25,3) (26,1); CANCEL DIG withdrew (26,3). " +
             "(26,1) is walled in until a neighbour is dug.";
@@ -409,6 +448,7 @@ public partial class Main
 
         _selectedCell = new GridPoint(23, 1);
         _selectedCreatureId = null;
+        _selectedRaiderId = null;
         _controlFeedback =
             "Demo: DIG marked (25,1) (25,2) (25,3) (26,1); [M] paints the material " +
             $"stockpile (22,1) (23,1) at tick {DemoStoneZoneTick}. Nobody was ordered to carry anything.";
@@ -457,6 +497,7 @@ public partial class Main
         _brushZone = ZoneKind.TrainingGround;
         _selectedCell = DemoBuildSite;
         _selectedCreatureId = null;
+        _selectedRaiderId = null;
         _controlFeedback =
             "Demo: DIG marked (25,1) (25,2) (25,3) (26,1); [M] paints the material " +
             $"stockpile (22,1) (23,1) at tick {DemoStoneZoneTick}; [C] marks a training " +
@@ -525,6 +566,7 @@ public partial class Main
         // given when a wave ends, and the question the capture has to answer is
         // whether that frame explains itself.
         _selectedCreatureId = null;
+        _selectedRaiderId = null;
         _selectedCell = null;
         _controlFeedback =
             "Demo: the party stopped between two waves. The cards are under the map; " +
@@ -613,6 +655,7 @@ public partial class Main
             // body it names, and at this zoom it covers the chest of one of the
             // two bodies the scene exists to look at.
             _selectedCreatureId = null;
+            _selectedRaiderId = null;
             _selectedCell = null;
         }
 

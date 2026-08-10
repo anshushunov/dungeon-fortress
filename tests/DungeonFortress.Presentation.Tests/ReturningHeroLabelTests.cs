@@ -65,9 +65,16 @@ public sealed class ReturningHeroLabelTests
 
         Assert.All(state.Raiders, raider => Assert.NotEqual(string.Empty, raider.Name));
         Assert.Contains(state.Raiders, raider => raider.ReturnedFromWave is not null);
+        // Asked of the layout that actually draws them (Issue #364) and with
+        // nothing hovered or selected, which is the frame the rule is about: a
+        // caption nobody asked for belongs only to a raider who has been here.
         Assert.All(
-            ReturningHeroLabel.Layout(state),
-            caption => Assert.NotNull(caption.Raider.ReturnedFromWave));
+            WorldLabels
+                .Requests(state, WorldLabelFocus.None, CameraView.DefaultTileSize)
+                .Where(request => request.Subject.Kind == WorldLabelKind.Raider),
+            request => Assert.NotNull(
+                state.Raiders.Single(raider => raider.Id == request.Subject.Id)
+                    .ReturnedFromWave));
     }
 
     [Theory]
@@ -118,48 +125,27 @@ public sealed class ReturningHeroLabelTests
     }
 
     /// <summary>
-    /// Raiders bunch — they all walk to the same larder tile — so two captions at
-    /// one height over neighbouring bodies are printed on top of each other. A
-    /// caption that would collide takes the next band up.
+    /// Raiders bunch — they all walk to the same larder tile — so two captions
+    /// over neighbouring bodies would be printed on top of each other. Since Issue
+    /// #364 <b>where</b> they go instead is decided by <c>WorldLabelLayout</c>, in
+    /// one pass over every label of the frame, and is checked by
+    /// <c>WorldLabelLayoutTests</c>. What stays this file's business is that the
+    /// caption is only ever asked for on behalf of a raider who has been here
+    /// before, which is the check above.
+    ///
+    /// <para>The band rule this replaces — «каждому следующему строка вверх» — is
+    /// not merely superseded; it is named in
+    /// <c>docs/product/REFERENCES.md</c> as the source of the defect the owner
+    /// reported, because it resolved the overlap by giving up the attachment.</para>
     /// </summary>
     [Fact]
-    public void Captions_that_would_collide_are_laid_in_bands_above_one_another()
+    public void The_caption_reads_as_two_sizes_with_a_rim_under_both()
     {
-        var state = PresentationFixtures.Baseline(PrototypeTuning.FirstRaidTick + 5);
-        var shoulderToShoulder = state with
-        {
-            Raiders =
-            [
-                Raider(id: 1, remembered: null) with { Position = new GridPoint(20, 7) },
-                Raider(id: 2, name: "Секира", remembered: null) with { Position = new GridPoint(21, 7) },
-                Raider(id: 3, name: "Гвоздь", remembered: null) with { Position = new GridPoint(22, 8) },
-                // Far enough away that nothing above reaches it, so it is back in
-                // the band directly over its own head.
-                Raider(id: 4, name: "Клык", remembered: null) with { Position = new GridPoint(4, 7) },
-            ],
-        };
-
-        var layout = ReturningHeroLabel.Layout(shoulderToShoulder);
-
-        Assert.Equal(
-            new[] { ("Клык", 0), ("Крюк Немой", 0), ("Секира", 1), ("Гвоздь", 2) },
-            layout.Select(caption => (caption.Raider.Name, caption.Slot)));
-
-        // A higher band is further up the screen, and the two lines of a caption in
-        // one band never reach into the band above it.
-        Assert.True(ReturningHeroLabel.TopRefOf(1) < ReturningHeroLabel.TopRefOf(0));
-        Assert.True(ReturningHeroLabel.SlotHeightRef > ReturningHeroLabel.LineHeightRef * 2);
-    }
-
-    [Fact]
-    public void The_caption_sits_above_the_body_where_the_hp_bar_is_not()
-    {
-        // Negative is up in screen space, and the HP bar of a creature is drawn at
-        // +8 reference pixels from the centre (Main.DrawCreatureInformation).
-        Assert.True(ReturningHeroLabel.LabelTopRef < 0);
-        Assert.True(ReturningHeroLabel.LabelTopRef + ReturningHeroLabel.LineHeightRef < 0);
-        Assert.True(ReturningHeroLabel.LineHeightRef > 0);
+        // The story line is smaller than the name, because the name is the half
+        // meant to be recognised at a glance.
         Assert.True(ReturningHeroLabel.StoryTextRef < ReturningHeroLabel.NameTextRef);
+        // A rim rather than a plate: the mark is declared StrokeOnly, so the only
+        // thing standing between the text and a goblin is an outline.
         Assert.True(ReturningHeroLabel.OutlineRef > 0);
     }
 

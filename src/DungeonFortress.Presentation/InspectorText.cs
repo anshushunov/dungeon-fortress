@@ -99,6 +99,52 @@ public static class InspectorText
             "The world is a read-only projection of PrototypeWorld; Godot owns only selection, UI tempo and drawing.";
     }
 
+    /// <summary>
+    /// The panel of one raider (Issue #364).
+    ///
+    /// <para><b>Why it exists.</b> The owner's second finding on the playtest of
+    /// 2026-08-10 was «Враги, кстати вообще не выбираются и при наведении ничего
+    /// нет». A body the player can watch and cannot ask about is the same hole as
+    /// a caption that has drifted off its owner: in both cases the frame will not
+    /// say who that is.</para>
+    ///
+    /// <para><b>Why these fields and no others.</b> Nothing here is invented —
+    /// every line is a field of <c>PrototypeRaiderSnapshot</c> the domain already
+    /// publishes. Who he is and what he is doing now (name, wave, mode, health,
+    /// what he is carrying) is what the player asks of any body; the past
+    /// encounter is what he asks of <em>this</em> one, and it is the whole subject
+    /// of slice 5. The creature panel's <c>WHY</c> block has no counterpart here on
+    /// purpose: a raider carries no <c>LastDecision</c> in the snapshot, and a
+    /// panel that guessed one would be the screen disagreeing with the canonical
+    /// document.</para>
+    ///
+    /// <para><b>The past encounter is not written twice.</b> The two lines about it
+    /// are <see cref="ReturningHeroLabel.Name"/> and
+    /// <see cref="ReturningHeroLabel.Story"/> — the same calls the caption over his
+    /// head makes — so the panel and the caption cannot drift apart by anybody
+    /// editing one of them. Criterion 10 of Issue #364 asks for exactly that, and
+    /// <c>WorldLabelInspectorTests</c> compares the two rather than checking each
+    /// alone.</para>
+    /// </summary>
+    public static string Raider(PrototypeSnapshot state, PrototypeRaiderSnapshot raider)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(raider);
+        var past = ReturningHeroLabel.Story(raider) is { } story
+            ? $"\nLAST TIME\nволна {raider.ReturnedFromWave} · он уже был здесь\n{story}\n"
+            : raider.ReturnedFromWave is { } wave
+                ? $"\nLAST TIME\nволна {wave} · он уже был здесь, и никто до него не дотянулся\n"
+                : "\nfirst visit: the domain has not met this one before\n";
+        return
+            $"RAIDER #{raider.Id} · {ReturningHeroLabel.Name(raider)} — " +
+            $"{raider.Mode} HP {raider.Hp}/{PrototypeTuning.RaiderHp}\n\n" +
+            $"arrived with wave {raider.Wave} of {state.Threat.WaveCount}\n" +
+            $"might {raider.Might}   at ({raider.Position.X}, {raider.Position.Y})\n" +
+            $"carrying {(raider.CarryingMeals == 0 ? "nothing" : $"{raider.CarryingMeals} Meal")}" +
+            $"{(raider.ReturningToGate ? ", heading for the gate" : string.Empty)}\n" +
+            past;
+    }
+
     public static string TileDescription(MapProjection view, GridPoint cell)
     {
         ArgumentNullException.ThrowIfNull(view);

@@ -109,7 +109,48 @@ public partial class Main
             cameraTransformChecks = _cameraTransformChecks,
             cameraSynchronizedAfterLayout = _cameraSynchronizedAfterLayout,
             hudInputRejected = _hudInputRejected,
+            // Issue #364. Every line any body of this frame could carry, with the
+            // width the layout assumed for it beside the width the engine
+            // actually draws it at.
+            worldLabels = WorldLabelWidths(),
         };
+    }
+
+    /// <summary>
+    /// What the layout's width estimate claims, and what the font does.
+    ///
+    /// <para><c>WorldLabelLayout.GlyphAdvanceRef</c> is declared an <em>upper
+    /// bound</em> of the fallback font's advance, and the whole soundness of the
+    /// pure guard rests on that: a check that says two boxes are disjoint is only
+    /// worth anything if the drawn glyphs stay inside those boxes. The bound
+    /// cannot be checked where it is declared, because the assembly it lives in
+    /// has no font — so it is measured here, where there is one, and reported
+    /// rather than asserted, because a frame that refused to draw over a
+    /// typographic estimate would be a worse failure than the one it guards
+    /// against. <c>evidence/364-widths.json</c> is this report on the owner's
+    /// scene.</para>
+    /// </summary>
+    private object[] WorldLabelWidths()
+    {
+        if (_state is null)
+        {
+            return [];
+        }
+
+        var scale = WorldVisualScale;
+        return WorldLabels.AllLines(_state)
+            .Select(line => (object)new
+            {
+                text = line.Text,
+                sizeRef = line.TextSizeRef,
+                declaredWidthRef = WorldLabelLayout.WidthRef(line),
+                measuredWidthRef = ThemeDB.FallbackFont.GetStringSize(
+                    line.Text,
+                    HorizontalAlignment.Left,
+                    -1,
+                    Math.Max(1, (int)Math.Round(ScaleWorld((float)line.TextSizeRef)))).X / scale,
+            })
+            .ToArray();
     }
 
     /// <summary>
@@ -224,28 +265,26 @@ public partial class Main
     /// </summary>
     private void DrawReturningHeroLabels()
     {
-        foreach (var caption in ReturningHeroLabel.Layout(_state!))
+        foreach (var placed in WorldLabelsOfThisFrame())
         {
-            DrawReturningHeroLabel(caption, RaiderRenderCenter(caption.Raider));
+            if (placed.Request.Subject.Kind == WorldLabelKind.Raider)
+            {
+                DrawReturningHeroLabel(placed);
+            }
         }
     }
 
     /// <inheritdoc cref="DrawReturningHeroLabels"/>
-    private void DrawReturningHeroLabel(ReturningHeroCaption caption, Vector2 center)
+    private void DrawReturningHeroLabel(PlacedWorldLabel placed)
     {
-        var width = ScaleWorld((float)ReturningHeroLabel.LabelWidthRef);
+        var width = (float)placed.Box.Width;
         var outline = Math.Max(1, (int)Math.Round(ScaleWorld((float)ReturningHeroLabel.OutlineRef)));
-        var lines = caption.Lines;
-        var sizes = new[] { ReturningHeroLabel.NameTextRef, ReturningHeroLabel.StoryTextRef };
         var colors = new[] { ReturningHeroLabel.NameColor, ReturningHeroLabel.StoryColor };
-        for (var index = 0; index < lines.Count; index++)
+        for (var index = 0; index < placed.Lines.Count; index++)
         {
-            var origin = center + ScaleWorld(
-                0,
-                (float)(ReturningHeroLabel.TopRefOf(caption.Slot) +
-                    (index * ReturningHeroLabel.LineHeightRef))) -
-                new Vector2(width / 2f, 0);
-            var size = Math.Max(1, (int)Math.Round(ScaleWorld((float)sizes[index])));
+            var line = placed.Lines[index];
+            var origin = ToVector2(placed.LineOrigins[index]);
+            var size = Math.Max(1, (int)Math.Round(ScaleWorld((float)line.TextSizeRef)));
 
             // The rim first, for the reason the damage numbers of Issue #210 have
             // one: a caption drawn straight over a goblin cannot be read, and a
@@ -253,7 +292,7 @@ public partial class Main
             DrawStringOutline(
                 ThemeDB.FallbackFont,
                 origin,
-                lines[index],
+                line.Text,
                 HorizontalAlignment.Center,
                 width,
                 size,
@@ -262,12 +301,42 @@ public partial class Main
             DrawString(
                 ThemeDB.FallbackFont,
                 origin,
-                lines[index],
+                line.Text,
                 HorizontalAlignment.Center,
                 width,
                 size,
-                new Color(colors[index]));
+                new Color(colors[Math.Min(index, colors.Length - 1)]));
         }
+    }
+
+    /// <summary>
+    /// Every world label of this frame, placed — the crew names and the returning
+    /// raiders' captions together (Issue #364).
+    ///
+    /// <para>Two callers ask for it and both get the same answer: this routine
+    /// draws the raiders' half, and <c>UpdateCreatureLabels</c> positions the
+    /// <c>Label</c> nodes that are the crew's half. They repeat the call rather
+    /// than share a cached list for the reason <c>DrawRoomBorderOverWall</c>
+    /// repeats <c>DrawRoomBorder</c>'s loop: everything that could actually drift
+    /// — who is labelled, what the label says, where it goes — is decided by the
+    /// one pure call both of them make, and a field holding a frame's layout
+    /// between a <c>_Draw</c> and an input event would be a fourth thing that can
+    /// be stale.</para>
+    ///
+    /// <para>The centres are the interpolated ones the depth pass sorts bodies by,
+    /// so a label follows its body between two ticks instead of snapping a whole
+    /// tile ahead of it.</para>
+    /// </summary>
+    private IReadOnlyList<PlacedWorldLabel> WorldLabelsOfThisFrame() =>
+        WorldLabels.Of(_state!, CurrentWorldLabelFocus(), _tileSize, RenderCentreOf);
+
+    /// <inheritdoc cref="WorldLabelsOfThisFrame"/>
+    private ViewPoint RenderCentreOf(WorldLabelSubject subject)
+    {
+        var centre = subject.Kind == WorldLabelKind.Creature
+            ? CreatureRenderCenter(_state!.Creatures.Single(item => item.Id == subject.Id))
+            : RaiderRenderCenter(_state!.Raiders.Single(item => item.Id == subject.Id));
+        return new ViewPoint(centre.X, centre.Y);
     }
 
     private void DrawMapBackground() =>
