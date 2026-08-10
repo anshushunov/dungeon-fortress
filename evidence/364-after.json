@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "issue": 364,
+  "what": "Criterion 4 of Issue #364, the 'after' half. Same scene, same ticks, same frame parameters as evidence/364-before.json, taken on the branch with the new layout in it.",
+  "frames": [
+    {
+      "frame": "evidence/364-after.png",
+      "pairedWith": "evidence/364-before.png",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2380 -ScreenshotPath \"probe/364-after.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0",
+      "tick": 2380,
+      "wave": 4,
+      "checksum": "f8e26b05 in the summary line, identical to the before frame",
+      "whatChanged": "Before: «Косой», «Ловчий» and «Сиплый» stood in a column in the empty corridor above the bodies, with nobody underneath any of them, and only «Секира» was still over its own head. After: five names — «Ловчий», «Сиплый», «Гнилозуб», «Секира», «Долговязый» — sit in a tight band directly over the goblins that carry them, none further than one tile from its own head.",
+      "whatIsNotThere": "«Косой» has no label, and «Секира» is laid without its second line. Both are the declared degradation and not an accident: four of the six returning raiders stand on cell (15,7), so three labels fill the ladder above that one head and the fourth has nowhere inside the limit; and the sentence «волна 2 · достали (23,7)» is four and a half tiles wide, so on this frame there is no room to grow any caption back to its full text. The sentence is in the panel instead — click the raider."
+    },
+    {
+      "frame": "evidence/364-after-wave3.png",
+      "pairedWith": "evidence/364-before-wave3.png",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2025 -ScreenshotPath \"probe/364-after-wave3.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0",
+      "tick": 2025,
+      "wave": 3,
+      "checksum": "448946d98f391646e5e84751dcbae1fc6ba9b3129144cff1edecbd2bc2a9adac, identical to the before frame",
+      "whatChanged": "One returner, so nothing to collide with and nothing to shed: «Крюк Немой / волна 1 · едва не добили (24,7)» keeps both lines and now sits clear above the head instead of with its second line across it. This frame is in the pair because a scene with one caption is what shows that the layout did not buy the crowded frame by spoiling the quiet one."
+    }
+  ],
+  "theNumberBehindTheDifference": {
+    "before": "Main.DrawWorld.cs placed caption n at ReturningHeroLabel.TopRefOf(n) = -26 - n * 20 reference pixels from the body's render centre, with no ceiling. The fourth caption's first baseline therefore sat 86 reference pixels — 3.9 tiles at the shipped 40 px tile — above the centre of a body whose drawn pixels reach only 20.6.",
+    "after": "WorldLabelLayout.MaximumAttachmentRef = 22.0 reference pixels, one tile, measured from the head to the nearest point of the label's box. Every label of both frames is inside it, which is what WorldLabelLayoutTests.No_label_ends_up_further_than_a_tile_from_its_own_body measures rather than this file asserting it.",
+    "howFarItWouldDriftWithoutTheCeiling": "59 reference pixels for «Секира» at tick 2380 and 37 for «Крюк Немой» at tick 2025 — the numbers the first mutation of evidence/364-mutations.json printed."
+  },
+  "whatTheOwnerCannotBeShownByAnyFrame": "Whether he now recognises the raider who came back and whether recognising him changes what he does in the wave. That is the playtest question of the slice and the second ADJUST pass over it."
+}

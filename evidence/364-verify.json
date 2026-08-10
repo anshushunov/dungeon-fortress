@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "issue": 364,
+  "what": "Criterion 8: the full verification, once, on the final state.",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
+  "result": {
+    "event": "verification_result",
+    "status": "ok",
+    "scope": "full",
+    "stagesExecuted": ["scripts", "build", "tests", "mcp", "sim", "load", "godot", "ui", "screenshots", "token-budget"],
+    "stagesNotRun": [],
+    "seed": 424242,
+    "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+    "godotVersion": "4.7.1.stable.mono.official.a13da4feb",
+    "godotExitCode": 0,
+    "screenshotRepeatable": true
+  },
+  "criterion7": {
+    "assertLabelsFit": "green — hudGuardRegressionExitCode 1, i.e. the guard still refuses the injected overflow rather than merely reporting that today's layout fits.",
+    "readabilityGuard": "green — hudReadabilityRegressionExitCode 1, hudSmallestPhysicalTextPixels 8 authored / 16 owner-maximized.",
+    "worldDrawCallsGolden": "unchanged. git diff --stat d178a9a HEAD -- tests/golden/ prints nothing, so there is no shift to explain line by line. The golden frame is fixture baseline at tick 1: no raider has returned yet and nothing is hovered or selected, so the frame carries no world label either before this change or after it."
+  }
+}

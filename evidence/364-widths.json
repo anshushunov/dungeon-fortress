@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "issue": 364,
+  "what": "Every world label line of the owner wave-4 frame, with the width WorldLabelLayout assumed for it beside the width the engine draws it at. GlyphAdvanceRef is declared an upper bound of the fallback font advance and this is the measurement that says whether it still is.",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2380 -ScreenshotPath \"probe/364-after.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0",
+  "readFrom": "the worldLabels section of the godot_graybox_screenshot event the command prints",
+  "tick": 2380,
+  "checksum": "f8e26b05546cad7183b81a344c0169404dd0e105ffecd2713da0ea64b1a24053",
+  "glyphAdvanceRef": 0.72,
+  "labels": [
+    {
+      "text": "Брусок FLED",
+      "sizeRef": 10,
+      "glyphs": 11,
+      "declaredWidthRef": 79.2,
+      "measuredWidthRef": 60.5,
+      "advancePerGlyphPerSize": 0.55,
+      "withinDeclaredBox": true
+    },
+    {
+      "text": "Кремень READY",
+      "sizeRef": 10,
+      "glyphs": 13,
+      "declaredWidthRef": 93.6,
+      "measuredWidthRef": 78.65,
+      "advancePerGlyphPerSize": 0.605,
+      "withinDeclaredBox": true
+    },
+    {
+      "text": "Мотылёк FLED",
+      "sizeRef": 10,
+      "glyphs": 12,
+      "declaredWidthRef": 86.4,
+      "measuredWidthRef": 72.05,
+      "advancePerGlyphPerSize": 0.6004,
+      "withinDeclaredBox": true
+    },
+    {
+      "text": "Смола WORK",
+      "sizeRef": 10,
+      "glyphs": 10,
+      "declaredWidthRef": 72,
+      "measuredWidthRef": 64.35,
+      "advancePerGlyphPerSize": 0.6435,
+      "withinDeclaredBox": true
+    },
+    {
+      "text": "Дёготь READY",
+      "sizeRef": 10,
+      "glyphs": 12,
+      "declaredWidthRef": 86.4,
+      "measuredWidthRef": 68.75,
+      "advancePerGlyphPerSize": 0.5729,
+      "withinDeclaredBox": true
+    },
+    {
+      "text": "Уголёк MOVE",
+      "sizeRef": 10,
+      "glyphs": 11,
+      "declaredWidthRef": 79.2,
+      "measuredWidthRef": 65.45,
+      "advancePerGlyphPerSize": 0.595,
+      "withinDeclaredBox": true
+    },
+    {
+      "text": "Прель FIGHT",
+      "sizeRef": 10,
+      "glyphs": 11,
+      "declaredWidthRef": 79.2,
+      "measuredWidthRef": 62.7,
+      "advancePerGlyphPerSize": 0.57,
+      "withinDeclaredBox": true
+    },
+    {
+      "text": "Обух FLED",
+      "sizeRef": 10,
+      "glyphs": 9,
+      "declaredWidthRef": 64.8,
+      "measuredWidthRef": 50.6,
+      "advancePerGlyphPerSize": 0.5622,
+      "withinDeclaredBox": true
+    },
+    {
+      "text": "Тишина READY",
+      "sizeRef": 10,
+      "glyphs": 12,
+      "declaredWidthRef": 86.4,
+      "measuredWidthRef": 74.8,
+      "advancePerGlyphPerSize": 0.6233,
+      "withinDeclaredBox": true
+    },
+    {
+      "text": "Секира",
+      "sizeRef": 8,
+      "glyphs": 6,
+      "declaredWidthRef": 34.56,
+      "measuredWidthRef": 30.25,
+      "advancePerGlyphPerSize": 0.6302,
+      "withinDeclaredBox": true
+    },
+    {
+      "text": "волна 2 · достали (23,7)",
+      "sizeRef": 6,
+      "glyphs": 24,
+      "declaredWidthRef": 103.68,
+      "measuredWidthRef": 70.95,
+      "advancePerGlyphPerSize": 0.4927,
+      "withinDeclaredBox": true
+    },
+    {
+      "text": "Сиплый",
+      "sizeRef": 8,
+      "glyphs": 6,
+      "declaredWidthRef": 34.56,
+      "measuredWidthRef": 33.55,
+      "advancePerGlyphPerSize": 0.699,
+      "withinDeclaredBox": true
+    },
+    {
+      "text": "Ловчий",
+      "sizeRef": 8,
+      "glyphs": 6,
+      "declaredWidthRef": 34.56,
+      "measuredWidthRef": 32.45,
+      "advancePerGlyphPerSize": 0.676,
+      "withinDeclaredBox": true
+    },
+    {
+      "text": "Долговязый",
+      "sizeRef": 8,
+      "glyphs": 10,
+      "declaredWidthRef": 57.6,
+      "measuredWidthRef": 51.15,
+      "advancePerGlyphPerSize": 0.6394,
+      "withinDeclaredBox": true
+    },
+    {
+      "text": "Гнилозуб",
+      "sizeRef": 8,
+      "glyphs": 8,
+      "declaredWidthRef": 46.08,
+      "measuredWidthRef": 39.6,
+      "advancePerGlyphPerSize": 0.6188,
+      "withinDeclaredBox": true
+    },
+    {
+      "text": "Косой",
+      "sizeRef": 8,
+      "glyphs": 5,
+      "declaredWidthRef": 28.8,
+      "measuredWidthRef": 25.3,
+      "advancePerGlyphPerSize": 0.6325,
+      "withinDeclaredBox": true
+    }
+  ],
+  "worstMeasuredAdvance": {
+    "value": 0.699,
+    "text": "Сиплый"
+  },
+  "overDeclaredWidth": [],
+  "whyThisMatters": "If the estimate ever stopped being an upper bound, two boxes the pure guard calls disjoint could be drawn over each other and the guard would not notice. The first value tried, 0.62, was not a bound: seven of sixteen lines of this frame exceeded it, the worst being 0.699. 0.72 clears every one."
+}

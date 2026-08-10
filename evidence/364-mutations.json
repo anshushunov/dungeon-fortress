@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "issue": 364,
+  "what": "Criterion 5 and criterion 11 of Issue #364: one substitution per half of the guard, each reddening its own half and no other. Run against the committed state b312d97, not against a working copy — reverting a mutant applied to uncommitted work would take the work with it.",
+  "base": {
+    "commit": "b312d97",
+    "howObtained": "git log --oneline -1 in C:/gamedev/_wt-364-world-labels before the first mutant was applied"
+  },
+  "mutations": [
+    {
+      "half": "attachment — a caption must not drift off the body it names",
+      "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+      "was": "public const double MaximumAttachmentRef = ReferenceTileSize;",
+      "became": "public const double MaximumAttachmentRef = ReferenceTileSize * 20.0;",
+      "why": "This is the slot ladder without a ceiling, in one constant: the candidate rungs are built up to MaximumAttachmentRef, so raising it restores exactly the technique Issue #364 forbids — each next caption a step higher, with nothing stopping it.",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~No_label_ends_up_further_than_a_tile_from_its_own_body\"",
+      "output": [
+        "«Секира» sits 59,00 reference pixels from its body at tick 2380; the limit is 22.",
+        "«Крюк Немой» sits 37,00 reference pixels from its body at tick 2025; the limit is 22."
+      ],
+      "verdict": "red on both frames of the owner's scene"
+    },
+    {
+      "half": "overlap — two captions must not be printed over one another",
+      "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+      "was": "                taken = other != ignore && Overlap(placed[other].Box, box);",
+      "became": "                taken = false;",
+      "why": "Removes the resolution itself and nothing else. Every label then takes the first candidate — centred over its own head — which is where they were before bands existed.",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~No_two_labels_of_the_owners_scene_are_printed_over_one_another\"",
+      "output": [
+        "«Тишина READY» and «Секира» share pixels at tick 2380",
+        "«Кремень DOWN» and «Крюк Немой» share pixels at tick 2025"
+      ],
+      "verdict": "red on both frames — and the named pairs are one crew label against one raider caption, which is the collision that could not be resolved anywhere before this layout existed"
+    },
+    {
+      "half": "picking — a raider must be in the set the pointer chooses from",
+      "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+      "was": "        return state.Raiders.FirstOrDefault(raider =>\n                raider.Position == cell && raider.Mode != RaiderMode.Escaped)\n            is { } raider\n            ? new WorldLabelSubject(WorldLabelKind.Raider, raider.Id)\n            : null;",
+      "became": "        return null;",
+      "why": "Returns picking to «only the creatures of the domain», which is what Main.Player.cs did before the addendum of 2026-08-10: the raider branch disappears and a cell holding only raiders answers with nobody.",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~Every_raider_on_the_map_can_be_pointed_at_and_selected\"",
+      "output": [
+        "Assert.NotNull() Failure: Value of type 'Nullable<WorldLabelSubject>' does not have a value"
+      ],
+      "verdict": "red"
+    }
+  ],
+  "afterEachMutation": "git checkout -- src/DungeonFortress.Presentation/WorldLabelLayout.cs, then git status --short printed nothing."
+}
