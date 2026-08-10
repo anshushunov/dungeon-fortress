@@ -99,6 +99,27 @@ public sealed class HudReadabilityTests
     }
 
     [Fact]
+    public void The_floor_is_the_owners_chosen_twelve_and_not_a_number_that_follows_it()
+    {
+        // The mutant this Issue's own criteria name literally: revert
+        // MinimumPhysicalTextPixels from 12 to 8 (its pre-#352 value) and the
+        // guard has to redden. Measured, not assumed: every other test in this
+        // file computes its expectation FROM this constant, and
+        // HudFontSizes.HotkeyBadgeFontSize is deliberately defined AS this
+        // constant (Issue #352's own choice, so the badge never drifts from
+        // the floor) — so reverting the constant moves both the floor and the
+        // badge together, and the test above,
+        // The_smallest_authored_text_outside_the_legend_exception_..., stays
+        // green throughout, because it is comparing the floor to a value that
+        // tracks the floor by construction. Applying the mutant and running
+        // `dotnet test` before this test existed left all 720 cases green —
+        // recorded in evidence/352-mutants.json. This is the one independent,
+        // literal check: nothing here is allowed to move if the constant
+        // does.
+        Assert.Equal(12.0, HudReadability.MinimumPhysicalTextPixels);
+    }
+
+    [Fact]
     public void The_frame_the_defect_was_measured_on_is_refused_at_the_scale_it_was_measured_at()
     {
         var violations = HudReadability.Violations(
