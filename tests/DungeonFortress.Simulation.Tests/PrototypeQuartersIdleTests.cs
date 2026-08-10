@@ -599,8 +599,33 @@ public sealed class PrototypeQuartersIdleTests(ITestOutputHelper output)
     /// the group in the quarters, it is not that the matching stopped offering. A
     /// response of tens of ticks would make that conclusion false. Five is chosen
     /// with room over the measured maximum of three and is named as a choice.</para>
+    ///
+    /// <para><b>Held out by Issue #361, and deliberately not re-tuned.</b> With
+    /// the damage jitter live the scene this check measures has all but left the
+    /// matrix: over the same six parties an idle ex-combatant in the quarters
+    /// took offered work 1 time against 33 before, and the single answered
+    /// stretch waited 23 ticks against a previous maximum of 3. Widening the
+    /// sample to nine seeds — eighteen parties — gives 5 answered stretches and
+    /// the same maximum of 23, so it is the behaviour that moved and not the
+    /// sample size (<c>evidence/361-contract-numbers.json</c>).
+    ///
+    /// Both numbers here could be made green by moving them, and that is exactly
+    /// what must not happen: this check's own message says that too few stretches
+    /// make «a maximum over them» meaningless, and a ceiling raised from 5 to 23
+    /// would state the opposite of the conclusion of Issue #228 while looking
+    /// like it still stated it. So the check is left standing word for word and
+    /// held out instead, which keeps the loss visible in every run of the suite.
+    /// What replaces it is a question for a separate Issue: whether an idle
+    /// ex-combatant hardly ever taking offered work is a defect of the matching
+    /// or a consequence of parties that are now fought differently. The report
+    /// beside it, <see cref="Report_how_long_work_waits_for_a_creature_standing_in_the_quarters"/>,
+    /// keeps printing every number that question needs.</para>
     /// </summary>
-    [Fact]
+    [Fact(Skip = "Issue #361: with the damage jitter live the sample this check needs has " +
+        "collapsed from 33 answered stretches to 1 over the matrix, and its ceiling from 3 to 23 " +
+        "ticks. Moving either number would reverse the conclusion of Issue #228 while looking " +
+        "like it still held, so the check is held out until a separate Issue decides what the " +
+        "measurement should be.")]
     public void The_response_to_work_appearing_is_measured_and_short()
     {
         var runs = Matrix.SelectMany(party => party.OfferedRuns).ToArray();

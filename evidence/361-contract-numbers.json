@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "issue": 361,
+  "what": "Criteria 1, 2, 5 and 6 of Issue #361, and every contract number the fix moved. «Before» is the same worktree with `readonly` put back on PrototypeWorld._combatRandom and nothing else changed; «after» is the committed fix. Both were measured on this branch, not read out of a file.",
+  "base": {
+    "commit": "dcfbc1a",
+    "howObtained": "git rev-parse --short origin/main in C:/gamedev/Dungeon fortress at the time the worktree was created"
+  },
+  "criterion1_determinismSurvives": {
+    "claim": "two separate processes with one seed write a byte-identical canonical snapshot",
+    "commands": [
+      "dotnet run -c Release --project ./tests/DungeonFortress.Scenarios --no-build -- --prototype --commands scenarios/prototype1/baseline.commands.v2.json --ticks 2700 --snapshot .artifacts/361/snapshot-a.json",
+      "dotnet run -c Release --project ./tests/DungeonFortress.Scenarios --no-build -- --prototype --commands scenarios/prototype1/baseline.commands.v2.json --ticks 2700 --snapshot .artifacts/361/snapshot-b.json",
+      "cmp .artifacts/361/snapshot-a.json .artifacts/361/snapshot-b.json",
+      "sha256sum .artifacts/361/snapshot-a.json .artifacts/361/snapshot-b.json"
+    ],
+    "output": {
+      "cmp": "no output, exit 0 — identical byte for byte",
+      "sha256_a": "18e74e7be92b0a9791b4a596955431d24a2480724775e39cfea5936f1fd41626",
+      "sha256_b": "18e74e7be92b0a9791b4a596955431d24a2480724775e39cfea5936f1fd41626",
+      "bytes": 885634,
+      "checksumReportedByTheRunner": "18e74e7be92b0a9791b4a596955431d24a2480724775e39cfea5936f1fd41626"
+    },
+    "note": "Two processes and not two runs inside one, which is how independent review of PR #360 did it: a generator that was reset per world would still repeat inside one process."
+  },
+  "criterion2_theGeneratorMoves": {
+    "claim": "the set of distinct CombatJitter values over a party has more than one element",
+    "howRead": "off the published snapshot, as raider.Might - wave.RaiderMight (minus T.returning_raider_might_bonus for a raider that has been here before), which is the whole of PrototypeWorld.ReturningRaiders.cs:87-117",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeCombatRandomTests\" --logger \"console;verbosity=detailed\"",
+    "after": [
+      "baseline/20260726: blowTicks=50 frozenTicks=0 stateAtStart=0x0000636F6C574602 stateAtEnd=0x1D0691AC527A73CF raiders=28 distinctMightJitters=[-1, 0, 1]",
+      "baseline/20260727: blowTicks=39 frozenTicks=0 stateAtStart=0x0000636F6C574603 stateAtEnd=0x02930669EE218C9D raiders=28 distinctMightJitters=[-1, 0, 1]",
+      "prepared/20260726: blowTicks=52 frozenTicks=0 stateAtStart=0x0000636F6C574602 stateAtEnd=0x9EB5A6FDC66CB134 raiders=27 distinctMightJitters=[-1, 0, 1]"
+    ],
+    "before": [
+      "baseline/20260726: a raider lost hit points on 55 tick(s) without the combat stream advancing — first at tick 1309. The state of _combatRandom stood at 0x0000636F6C574602",
+      "baseline/20260727: a raider lost hit points on 71 tick(s) without the combat stream advancing — first at tick 1309. The state stood at 0x0000636F6C574603",
+      "prepared/20260726: a raider lost hit points on 99 tick(s) without the combat stream advancing — first at tick 1302. The state stood at 0x0000636F6C574602"
+    ],
+    "readTheBeforeThisWay": "the state each party ended on equals the state it was constructed with, seed ^ 0x636F6D626174, so not one draw of the whole party moved the field"
+  },
+  "criterion5_whatMoved": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/evaluate-prototype.ps1 -OutputPath .artifacts/361/batch-{before|after}.json",
+    "reviewsTwoNumbers": {
+      "score of baseline/20260726": "636 -> 678, which is exactly what independent review of PR #360 measured on dc15bc2",
+      "meals stolen on baseline/20260726": "66 -> 56, likewise"
+    },
+    "wholeMatrix": [
+      "scenario/seed              outcome        score        stolen      defenders lost   raid cost per resolved wave",
+      "baseline/20260726          raided         636 -> 678   66 -> 56    23 -> 24         128.5 -> 118.0",
+      "baseline/20260727          raided         821 -> 743   51 -> 41    17 -> 24          97.8 ->  99.2",
+      "baseline/20260728          raided         848 -> 767   30 -> 43    24 -> 21          85.5 ->  95.8",
+      "prepared/20260726          raided         796 -> 788   38 -> 26    23 -> 24          93.5 ->  80.5",
+      "prepared/20260727          raided         860 -> 749   22 -> 29    20 -> 22          67.5 ->  80.2",
+      "prepared/20260728          raided         947 -> 851   17 -> 29    21 -> 23          63.2 ->  82.2",
+      "neglected/2026072[6-8]     fallen           0 ->   0    0 ->  0     0 ->  0           0.0 ->   0.0",
+      "prepared-ration-zero/20260726 raided      796 -> 822   38 -> 20    23 -> 26          93.5 ->  77.0",
+      "prepared-ration-zero/20260727 raided      878 -> 757   18 -> 29    24 -> 26          70.5 ->  88.2",
+      "prepared-ration-zero/20260728 raided      947 -> 866   17 -> 26    21 -> 23          63.2 ->  78.5",
+      "prepared-watch-zero/20260726  raided      840 -> 770   30 -> 30    25 -> 25          87.5 ->  87.5",
+      "prepared-watch-zero/20260727  raided      746 -> 742   34 -> 38    28 -> 26          98.5 ->  99.5",
+      "prepared-watch-zero/20260728  raided      789 -> 870   37 -> 18    27 -> 20         100.2 ->  62.5"
+    ],
+    "raidCostFormula": "MealsStolen * T.score_per_meal_stolen (5) + (DefendersDowned + DefendersFled) * T.score_per_defender_lost (8), divided by max(1, WavesResolved) — the same expression PrototypeScenarioTests.RaidCost uses",
+    "checksumsChanged": "12 of 15 runs; the three that did not are the `neglected` ones, which fall before the first wave arrives and therefore never draw from the combat stream",
+    "everyRunStillRepeatsItself": "RepeatIdentical == true on all 15 runs after the fix, as before it"
+  },
+  "criterion6_invariants": {
+    "preparationMakesTheRaidCheaper": {
+      "claim": "PrototypeScenarioTests: costPrepared * wavesBaseline < costBaseline * wavesPrepared, per seed of the matrix",
+      "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeScenarioTests\"",
+      "numbers": [
+        "20260726: prepared 93.5 -> 80.5 against baseline 128.5 -> 118.0 — holds before and after",
+        "20260727: prepared 67.5 -> 80.2 against baseline  97.8 ->  99.2 — holds before and after",
+        "20260728: prepared 63.2 -> 82.2 against baseline  85.5 ->  95.8 — holds before and after"
+      ],
+      "band": "every one of the six parties ends `raided` before and after, so Band(prepared) >= Band(baseline) holds trivially in both",
+      "verdict": "green"
+    },
+    "theBarOnFlight": {
+      "claim": "PrototypeMoraleTests: no single tick breaks more than a third of the domain (largestCohort * 3 <= 9), and the average tick of flight takes one creature",
+      "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeMoraleTests\" --logger \"console;verbosity=detailed\"",
+      "largestCohortBefore": {
+        "baseline/20260726": 2, "baseline/20260727": 1, "baseline/20260728": 2,
+        "prepared/20260726": 2, "prepared/20260727": 1, "prepared/20260728": 2
+      },
+      "largestCohortAfter": {
+        "baseline/20260726": 2, "baseline/20260727": 2, "baseline/20260728": 2,
+        "prepared/20260726": 2, "prepared/20260727": 2, "prepared/20260728": 2
+      },
+      "flightsBefore": [20, 14, 21, 18, 18, 18],
+      "flightsAfter": [20, 19, 20, 19, 18, 19],
+      "verdict": "green; the bound is 3 and the worst cell is 2 before and after"
+    }
+  },
+  "calibratedChecksThatMoved": [
+    {
+      "check": "PrototypeCombatApproachTests.The_places_beside_a_raider_are_taken_rather_than_queued_for",
+      "belongsTo": "Issue #129",
+      "measurement": "share of the places around a raider that the fighters present for it filled, summed over the six matrix parties",
+      "before": "818 of 1636 = 0.500; per run 0.554, 0.467, 0.514, 0.518, 0.490, 0.475",
+      "after": "476 of 993 = 0.479; per run 0.486, 0.456, 0.519, 0.464, 0.468, 0.489",
+      "historicalReference": "0.418 aggregate before Issue #129 existed (evidence/129-before.json)",
+      "whatWasChanged": "the floor of the assertion, 0.48 -> 0.45, by the recipe that chose the original: between the pre-#129 aggregate and the one that stands now",
+      "whatWasNotChanged": "the destination rule itself, whose four parts are asserted one by one in the same class and are all still green; and the qualitative claim of §10.3 that three fighters at once are reachable, which still happens on two runs of six (touchingHistogram third column non-zero on baseline/20260726 and baseline/20260727)"
+    },
+    {
+      "check": "PrototypeQuartersIdleTests.The_response_to_work_appearing_is_measured_and_short",
+      "belongsTo": "Issue #228",
+      "measurement": "stretches during which work an idle ex-combatant in the quarters could take went untaken, and how long the answered ones waited",
+      "before": "offeredRuns=52 tookTheJob=33 neverTook=19; theResponseToAnyWork runs=33 max=3 mean=1.09",
+      "after": "offeredRuns=56 tookTheJob=1 neverTook=55; theResponseToAnyWork runs=1 max=23",
+      "afterOnAWiderSample": "nine seeds instead of three — eighteen parties: offeredRuns=104 tookTheJob=5 neverTook=99; theResponseToAnyWork runs=5 max=23 histogram=[1:4,23:1]. So it is the behaviour that moved, not the sample size.",
+      "whatWasChanged": "nothing in the check. It is held out with [Fact(Skip=...)] and its two numbers are left standing.",
+      "why": "Its own message says that too few answered stretches make a maximum over them meaningless, and raising the ceiling from 5 to 23 would state the opposite of Issue #228's conclusion while still looking like it stated it. Which of the two it is — a defect of the matching, or a consequence of parties now fought differently — is a question for a separate Issue, and the report beside it keeps printing every number that question needs.",
+      "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_how_long_work_waits_for_a_creature_standing_in_the_quarters\" --logger \"console;verbosity=detailed\""
+    },
+    {
+      "check": "PrototypeReturningRaiderTests.A_memory_takes_away_a_road_and_never_the_objective",
+      "belongsTo": "Issue #358",
+      "measurement": "a returning raider whose remembered place is the larder tile itself walks onto it",
+      "before": "the scene was in baseline at PrototypeTuning.DefaultSeed",
+      "after": "it is not: atObjective=0 there. Scanned over baseline and prepared at seeds 20260726–20260755, it is in eight parties: baseline/20260742 (2 raiders, one of which does not reach it), baseline/20260746 (1), baseline/20260747 (2), baseline/20260754 (1), prepared/20260731 (1), prepared/20260739 (1).",
+      "whatWasChanged": "the seed the check reads, into a named constant ObjectiveSeed = 20260747, which has two raiders in the scene rather than one. This is the move RouteSeed in the same file already makes for the other half of the same rule.",
+      "whatWasNotChanged": "the assertion"
+    },
+    {
+      "check": "PrototypeMomentOfTruthTests.A_domain_that_punishes_without_cause_is_eventually_refused_the_line and A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave",
+      "belongsTo": "Issues #312 and #328",
+      "measurement": "a grudge that reaches a refusal to stand, and a first-card creature that decides differently for being rewarded rather than punished",
+      "before": "both scenes were in baseline at its own seed",
+      "after": "neither is: grudgeRefusals=0 and harshVsKind=False at 20260726. Scanned over baseline at seeds 20260726–20260755, both scenes are in eight parties: 20260728, 20260731, 20260733, 20260735, 20260744, 20260746, 20260752, 20260755.",
+      "whatWasChanged": "the seed the two checks read, into a named constant ConsequenceSeed = 20260728 — a seed of the shipped Issue #12 matrix, so the checks moved to another party of the same measured set rather than to one invented for them. It carries one refusal and one witness.",
+      "whatWasNotChanged": "the assertions"
+    }
+  ],
+  "notTouched": {
+    "file": "docs/playtests/data/prototype-01-agent-batch.json",
+    "why": "It is stale on main independently of this change and was left alone deliberately. Its own ImplementationBaseline says d3c8399 while origin/main is dcfbc1a, and a run of scripts/evaluate-prototype.ps1 on dcfbc1a *before* this fix already disagrees with it: baseline/20260726 scores 636 in the run against 727 in the committed file. Regenerating it here would fold that unrelated drift into this PR and make «what #361 moved» unreadable. Naming it for the coordinator instead.",
+    "command": "python -c \"import json,io; d=json.load(io.open(r'docs/playtests/data/prototype-01-agent-batch.json',encoding='utf-8')); print(d['ImplementationBaseline'], [r['Metrics']['Session']['Score'] for r in d['Runs'] if r['Scenario']=='baseline'])\""
+  }
+}

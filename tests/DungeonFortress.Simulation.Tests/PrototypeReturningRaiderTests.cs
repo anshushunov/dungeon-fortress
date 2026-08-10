@@ -32,6 +32,15 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
     private const ulong RouteSeed = 20_260_729UL;
 
     /// <summary>
+    /// A party on which a returning raider's memory of place <b>is</b> the
+    /// objective — the tile he is walking to — so the rule has to let him walk
+    /// onto it. A seed for the same reason <see cref="RouteSeed"/> is one: the
+    /// shipped journal's own seed does not reach the case (see
+    /// <see cref="A_memory_takes_away_a_road_and_never_the_objective"/>).
+    /// </summary>
+    private const ulong ObjectiveSeed = 20_260_747UL;
+
+    /// <summary>
     /// Where every raider is walking to. It is read out of the authored layout
     /// rather than out of <c>PrototypeMap</c>, which is internal: the raiders go
     /// to the first larder tile in reading order, which is what
@@ -280,16 +289,25 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// The bound on the rule, and it is the shipped journal that needs it: the one
-    /// survivor of <c>baseline</c> with a scar was hit on the larder tile itself.
-    /// There is nothing to walk round when the remembered place is the objective,
-    /// so the raider walks onto it — and that is the raider side of the bound
-    /// Issue #171 put on a creature's memory.
+    /// The bound on the rule: when the remembered place <b>is</b> the objective
+    /// there is nothing to walk round, so the raider walks onto it — and that is
+    /// the raider side of the bound Issue #171 put on a creature's memory.
     /// </summary>
+    /// <para><b>Why it has its own seed.</b> It used to be read on the shipped
+    /// journal's own seed, where the one survivor of <c>baseline</c> with a scar
+    /// happened to have been hit on the larder tile itself. Issue #361 made the
+    /// damage jitter live, which changes who is hit where, and on
+    /// <c>PrototypeTuning.DefaultSeed</c> no returning raider remembers the
+    /// larder tile any more — the scene the bound is about is simply not in that
+    /// party. Scanned over <c>baseline</c> and <c>prepared</c> at seeds
+    /// 20260726–20260755, it is in eight parties; this one has two raiders in it
+    /// rather than one, which is why it and not the first hit was taken. This is
+    /// the same move <see cref="RouteSeed"/> already makes for the other half of
+    /// the rule, and for the same reason.</para>
     [Fact]
     public void A_memory_takes_away_a_road_and_never_the_objective()
     {
-        var (visits, state) = RaiderRoutes(ShippedFixture, PrototypeTuning.DefaultSeed);
+        var (visits, state) = RaiderRoutes(ShippedFixture, ObjectiveSeed);
 
         var atTheObjective = state.Raiders
             .Where(raider =>
