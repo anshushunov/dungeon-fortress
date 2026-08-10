@@ -21,7 +21,18 @@
     "selectedCell": [16, 7],
     "selectedCreatureId": null,
     "savedFrame": "evidence/373-focus-16-7.png",
-    "reading": "selectedCreatureId is null (no crew member sits at 16,7) yet the cell is reported as holding a focusable body (\"1 of 2\") and the frame carries a white selection ring drawn over one of the two raiders there (WorldSelectionMark.IsRinged, unmodified, reading _selectedRaiderId through CurrentWorldLabelFocus() exactly as it already does for _selectedCreatureId). That ring is the raider Issue #373 says was unreachable."
+    "reading": "selectedCreatureId is null (no crew member sits at 16,7) yet the cell is reported as holding a focusable body (\"1 of 2\"). The white square visible in the crowd on this frame is present, pixel-identical, in the quiet frame and in the mutant frame below too (see pixelDiff) — it is an unrelated, pre-existing marker (a downed body, per the on-screen legend's \"white X = downed\") and is not evidence of anything this Issue changed; it is named here so the claim is not repeated by eye a second time.",
+    "pixelDiff": {
+      "howMeasured": "python -c \"from PIL import Image, ImageChops; ImageChops.difference(Image.open(a).convert('RGB'), Image.open(b).convert('RGB')).getbbox()\" on the two PNGs",
+      "quietVsFixed": {
+        "bbox": [16, 49, 1241, 601],
+        "reading": "Large and expected: setting _selectedCell alone rewrites the whole right-hand inspector panel from \"Click a creature or map cell.\" to the CELL(16,7) card, on top of the bottom feedback line. This bbox alone is not proof the raider specifically was reached — the fixedVsMutant comparison below isolates that."
+      },
+      "fixedVsMutant": {
+        "bbox": [16, 589, 319, 601],
+        "reading": "With _selectedCell identical in both runs (16,7) and the inspector's generic CELL card therefore identical in both (a raider gets no creature-style card, same as an empty cell), the entire visible difference between reaching the raider and not reaching it collapses to one on-screen rectangle: the bottom feedback line, where \"(16,7): 1 of 2 standing here...\" (fixed) becomes \"--select-cell (16,7): nothing stands there.\" (mutant, evidence/373-mutations.json). That text line, not a ring, is what a screenshot alone proves criterion 2 by; see evidence/373-mutations.json for the full mutant record."
+      }
+    }
   },
   "criterion3": {
     "claim": "Two prints of the exact same command give the same sha256, both of the engine's own canonical checksum and of the produced PNG file.",
