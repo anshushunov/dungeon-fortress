@@ -97,10 +97,35 @@ public sealed class PrototypeCombatRandomTests(ITestOutputHelper output)
             "damages raiders; in both cases the witness has to be rebuilt before the assertion " +
             "above means anything again.");
 
+        var jitters = RaiderMightJitters(world);
         output.WriteLine(string.Create(
             CultureInfo.InvariantCulture,
             $"{fixtureName}/{seed}: blowTicks={blowTicks} frozenTicks={frozenTicks.Count} " +
-            $"stateAtStart=0x{stateAtStart:X16} stateAtEnd=0x{previousState:X16}"));
+            $"stateAtStart=0x{stateAtStart:X16} stateAtEnd=0x{previousState:X16} " +
+            $"raiders={jitters.Count} distinctMightJitters=" +
+            $"[{string.Join(", ", jitters.Distinct().Order())}]"));
+    }
+
+    /// <summary>
+    /// The jitter every raider of the party was rolled with, read back off the
+    /// published snapshot rather than off the generator: a raider's might is
+    /// <c>wave.RaiderMight + jitter</c>, plus
+    /// <see cref="PrototypeTuning.ReturningRaiderMightBonus"/> for one that has
+    /// been here before (<c>PrototypeWorld.ReturningRaiders.cs:95-117</c>), and
+    /// all three terms are in the snapshot. This is criterion 2 of Issue #361,
+    /// and it is deliberately <b>reported</b> and not asserted: «the values
+    /// differ» is green on a generator that is only partly stuck, so the
+    /// assertions of this test are the ones above, about the state itself.
+    /// </summary>
+    private static IReadOnlyList<int> RaiderMightJitters(PrototypeWorld world)
+    {
+        var state = world.GetSnapshot();
+        var mightOfWave = state.Waves.ToDictionary(wave => wave.Number, wave => wave.RaiderMight);
+        return state.Raiders
+            .Where(raider => mightOfWave.ContainsKey(raider.Wave))
+            .Select(raider => raider.Might - mightOfWave[raider.Wave] -
+                (raider.ReturnedFromWave is null ? 0 : PrototypeTuning.ReturningRaiderMightBonus))
+            .ToList();
     }
 
     /// <summary>
