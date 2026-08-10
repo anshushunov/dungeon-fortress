@@ -29,7 +29,7 @@
   "criterion7": {
     "assertLabelsFit": "green — hudGuardRegressionExitCode 1, i.e. the guard still refuses the injected overflow rather than merely reporting that today's layout fits.",
     "readabilityGuard": "green — hudReadabilityRegressionExitCode 1, hudSmallestPhysicalTextPixels 8 authored / 16 owner-maximized.",
-    "worldDrawCallsGolden": "unchanged, both before and after the selection ring. git diff --stat d178a9a HEAD -- tests/golden/ prints nothing, so there is no shift to explain line by line. The golden frame is fixture baseline at tick 1 with nothing selected and no raider returned yet, so it carries neither a world label nor a selection ring in either state."
+    "worldDrawCallsGolden": "unchanged through all three runs. git diff --stat d178a9a HEAD -- tests/golden/ prints nothing, so there is no shift to explain line by line — the new selection rule changes which body a click answers with and draws nothing new, and the golden frame is fixture baseline at tick 1 with nothing selected and nobody returned."
   },
   "runs": [
     {
@@ -41,6 +41,11 @@
       "when": "final state, commit 333091a",
       "status": "ok",
       "note": "after the selection ring and the contract update; this is the run the criterion is closed on"
+    },
+    {
+      "when": "rework round, after finding F1 (repeated clicking reaches every body of a cell)",
+      "status": "ok",
+      "note": "the round the criterion is closed on; the selection rule is executable code, so the full script was re-run rather than the affected stages"
     }
   ],
   "criterion9Observability": "The ring cannot be photographed by a screenshot run: nothing is selected in a capture, and adding a flag to select one would touch scripts/**, which is outside this task partition. It is checked instead — WorldSelectionMark.IsRinged for the rule, and WorldLabelInspectorTests.The_adapter_rings_the_selected_body_of_either_kind reading the adapter source for the fact that both DrawCreatureInformation and DrawRaiderInformation draw it. Deleting the ring from DrawRaiderInformation reddens the second."

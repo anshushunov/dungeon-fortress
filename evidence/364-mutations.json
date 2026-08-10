@@ -36,14 +36,26 @@
     {
       "half": "picking — a raider must be in the set the pointer chooses from",
       "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
-      "was": "        return state.Raiders.FirstOrDefault(raider =>\n                raider.Position == cell && raider.Mode != RaiderMode.Escaped)\n            is { } raider\n            ? new WorldLabelSubject(WorldLabelKind.Raider, raider.Id)\n            : null;",
-      "became": "        return null;",
-      "why": "Returns picking to «only the creatures of the domain», which is what Main.Player.cs did before the addendum of 2026-08-10: the raider branch disappears and a cell holding only raiders answers with nobody.",
+      "was": "            .. state.Raiders\n                .Where(raider => raider.Position == cell && raider.Mode != RaiderMode.Escaped)\n                .OrderBy(raider => raider.Id)\n                .Select(raider => new WorldLabelSubject(WorldLabelKind.Raider, raider.Id)),",
+      "became": "(the whole spread removed)",
+      "why": "Returns picking to «only the creatures of the domain», which is what Main.Player.cs did before the addendum of 2026-08-10. Restated for the rework round, because the raider branch moved into BodiesAt when repeated clicking was added; re-run in this form.",
       "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~Every_raider_on_the_map_can_be_pointed_at_and_selected\"",
       "output": [
-        "Assert.NotNull() Failure: Value of type 'Nullable<WorldLabelSubject>' does not have a value"
+        "Assert.NotEmpty() Failure: Collection was empty — no raider is reachable on any cell"
       ],
       "verdict": "red"
+    },
+    {
+      "half": "picking — repeated clicking must reach every body of a cell",
+      "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+      "was": "        var current = selected is { } body ? IndexOf(bodies, body) : -1;\n        return bodies[(current + 1) % bodies.Count];",
+      "became": "        return bodies[0];",
+      "why": "Returns the answer to what it was before the rework round: a cell always answers with its first body, so everything standing behind that body is unreachable. This is the substitution finding F1 demands a guard against.",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~Every_raider_on_the_map_can_be_pointed_at_and_selected|FullyQualifiedName~Every_captioned_returner_of_the_owners_frame_can_be_reached_by_clicking\"",
+      "output": [
+        "Assert.DoesNotContain() Failure: Item found in collection — the cycle returns the same body twice and never reaches the rest"
+      ],
+      "verdict": "red on both frames and on the captioned-returner check"
     }
   ],
   "afterEachMutation": "git checkout -- src/DungeonFortress.Presentation/WorldLabelLayout.cs, then git status --short printed nothing.",
@@ -57,5 +69,11 @@
       "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~The_adapter_rings_the_selected_body_of_either_kind\"",
       "output": "Assert.Contains() Failure: Sub-string not found — the DrawRaiderInformation case red, the DrawCreatureInformation case still green, so the check separates the two halves rather than failing wholesale."
     }
+  },
+  "reworkRound": {
+    "why": "Independent review of PR #368 returned RETURN on finding F1: WorldLabels answered a cell with one body, so four of the six captioned returners of the owner wave-4 frame could not be selected at all. Criterion 9 was green while the property was broken, because it filtered out exactly the cells where the defect lived.",
+    "measuredBefore": "review probe: #17 Секира at (15,7) pickedExactly=False crewOnCell=Тишина, and the same for #18 Сиплый, #19 Ловчий, #22 Косой. Only #20 Долговязый on (16,7) was selectable.",
+    "measuredAfter": "the same shape of probe, run on this branch after the fix, over every captioned returner of tick 2380: #17 Секира at (15,7) bodiesOnCell=6 crewOnCell=Тишина reachable=True clicks=2 | #18 Сиплый at (15,7) bodiesOnCell=6 crewOnCell=Тишина reachable=True clicks=3 | #19 Ловчий at (15,7) bodiesOnCell=6 crewOnCell=Тишина reachable=True clicks=4 | #20 Долговязый at (16,7) bodiesOnCell=2 crewOnCell=- reachable=True clicks=1 | #21 Гнилозуб at (16,7) bodiesOnCell=2 crewOnCell=- reachable=True clicks=2 | #22 Косой at (15,7) bodiesOnCell=6 crewOnCell=Тишина reachable=True clicks=5. Six of six reachable; the worst cell costs five clicks to go round.",
+    "heldBy": "WorldLabelInspectorTests.Every_raider_on_the_map_can_be_pointed_at_and_selected (both owner frames, no cell filter) and Every_captioned_returner_of_the_owners_frame_can_be_reached_by_clicking."
   }
 }
