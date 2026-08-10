@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "issue": 379,
+  "checkpoint": 5,
+  "criterion": 8,
+  "what": "The full verify.ps1 run, once, on the final state of the branch (rule 22 of docs/engineering/DEVELOPMENT_PACE.md: the intermediate checkpoints ran targeted tests).",
+  "state": {
+    "commit": "9b78373",
+    "base": "d109e1a (origin/main). scripts/check-base-stale.ps1 before the run: {\"status\":\"fresh\",\"behind\":0,\"ahead\":4}. The branch was rebased onto it after checkpoint 4: d109e1a touches docs/product/GATE_DECISIONS.md only, which this change does not."
+  },
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify.ps1",
+  "exitCode": 0,
+  "scope": "full (10 of 10 stages: scripts, build, tests, mcp, sim, load, godot, ui, screenshots, token-budget)",
+  "stages": {
+    "scripts": 128.2,
+    "build": 74.3,
+    "tests": 215.1,
+    "mcp": 6.0,
+    "sim": 0.4,
+    "load": 0.6,
+    "godot": 48.6,
+    "ui": 4.5,
+    "screenshots": 12.3,
+    "token-budget": 133.8
+  },
+  "result": {
+    "status": "ok",
+    "seed": 424242,
+    "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+    "changedSeedChecksum": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
+    "loadChecksum": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+    "viewInvariantChecksum": "83bcf75cfd6b518517d529b16c5f07e07262f6bdb204c7ba05ae841b5634d33f",
+    "godotVersion": "4.7.1.stable.mono.official.a13da4feb",
+    "screenshotRepeatable": true
+  },
+  "reading": "The change is inside DungeonFortress.Presentation and its tests, so the canonical checksums are the ones the branch inherited — a layout that moved a simulation number would show here. The golden UI frames and the world-geometry journal (tests/golden/world/draw-calls.json) are unchanged: the journal is recorded on tick 1 of the baseline fixture, where nothing is focused and no caption carries a sentence."
+}
