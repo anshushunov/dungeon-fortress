@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "issue": 371,
+  "what": "Criterion 5 of Issue #371 — one substitution per half of the new rule — and criterion 6, which is criterion 3 of the absorbed Issue #370: one substitution per function that round left uncovered. Four in all, each run against the committed state and reverted before the next.",
+  "base": {
+    "commit": "7c6571e",
+    "howObtained": "git rev-parse --short HEAD in C:/gamedev/_wt-371-hover-names before the first mutant was applied",
+    "why": "Reverting a mutant applied to uncommitted work would take the work with it."
+  },
+  "greenBeforeAndAfter": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj",
+    "output": "Пройден!: не пройдено 0, пройдено 717, пропущено 0, всего 717"
+  },
+  "mutations": [
+    {
+      "criterion": "#371 criterion 5, first half — a stranger under the pointer must be named",
+      "file": "src/DungeonFortress.Presentation/ReturningHeroLabel.cs",
+      "was": "        return raider.Mode == RaiderMode.Escaped\n            ? []\n            : Story(raider) is { } story ? [Name(raider), story] : [Name(raider)];",
+      "became": "        return Lines(raider);",
+      "why": "Returns an empty caption to any raider the domain has not met, under focus as well as without it — which is the rule of §8.2 exactly as it stood before the owner reversed it, restated in one statement. It leaves the routing in WorldLabels.Requests untouched, so what reddens is the rule and not the wiring.",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj",
+      "output": [
+        "WorldLabelFocusTests.Every_raider_on_the_map_is_named_under_the_pointer_and_when_selected(ticks: 2025) [FAIL] — Assert.Single() Failure: The collection was empty",
+        "WorldLabelFocusTests.Every_raider_on_the_map_is_named_under_the_pointer_and_when_selected(ticks: 2380) [FAIL] — Assert.Single() Failure: The collection was empty",
+        "WorldLabelFocusTests.A_raider_who_has_left_through_the_gate_is_named_by_nothing [FAIL]"
+      ],
+      "verdict": "red on both frames of the owner's scene. Three failures of 717, and all three are this Issue's own criterion-1 guards — the two on the owner's frames and the one that states the same rule on values, which is the pair a check of a rule is meant to come in."
+    },
+    {
+      "criterion": "#371 criterion 5, second half — the pointer must give back the line the crowd took off",
+      "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+      "was": "    private static int FirstAttempt(WorldLabelRequest request) =>\n        request.Rank is WorldLabelRank.Hovered or WorldLabelRank.Selected\n            ? request.Lines.Count\n            : Math.Min(1, request.Lines.Count);",
+      "became": "    private static int FirstAttempt(WorldLabelRequest request) =>\n        Math.Min(1, request.Lines.Count);",
+      "why": "Removes the exemption and nothing else: every label, focused or not, goes back to being laid as its bare name in the first pass and grown afterwards. That is the state of the layout on the base commit, where the second pass could not reach «Секира».",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj",
+      "output": [
+        "WorldLabelFocusTests.The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer [FAIL]",
+        "Assert.Equal() Failure: Collections differ — Expected: [\"Секира\", \"волна 2 · достали (23,7)\"], Actual: [\"Секира\"]"
+      ],
+      "verdict": "red, and only it: 1 failure of 717. The other half of the rule stays green, which is what says the two substitutions separate the two halves instead of both failing wholesale."
+    },
+    {
+      "criterion": "#371 criterion 6 / #370 criterion 3, first half — PointedAt",
+      "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+      "was": "        selected is { } body && IndexOf(BodiesAt(state, cell), body) >= 0\n            ? body\n            : At(state, cell);",
+      "became": "        At(state, cell);",
+      "why": "The revert Issue #370 was opened about, verbatim: the pointer answers with the cell's first body whatever is selected. Independent review of PR #368 measured that this revert reddened nothing at all.",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj",
+      "output": [
+        "WorldLabelInspectorTests.The_pointer_answers_with_the_selected_body_when_it_stands_on_that_cell [FAIL]",
+        "Expected: WorldLabelSubject { Kind = Raider, Id = 17 }, Actual: WorldLabelSubject { Kind = Creature, Id = 8 }"
+      ],
+      "verdict": "red, 1 failure of 717 — and the two bodies the message names are «Секира» behind the crew member «Тишина» on cell (15,7), which is the exact pair the rule exists for."
+    },
+    {
+      "criterion": "#371 criterion 6 / #370 criterion 3, second half — SelectionHint",
+      "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+      "was": "        var index = IndexOf(bodies, body);\n        return index < 0\n            ? null\n            : $\"({cell.X},{cell.Y}): {index + 1} of {bodies.Count} standing here; \" +\n                \"click the cell again for the next one.\";",
+      "became": "        return null;",
+      "why": "Takes away the feedback line and leaves cycling in place — the state in which a mechanism nobody can discover is not a mechanism, and in which the argument that rejected the chooser popup loses the half that paid for cycling.",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj",
+      "output": [
+        "WorldLabelInspectorTests.The_feedback_line_says_which_body_of_how_many_the_click_reached [FAIL]",
+        "Expected: \"(15,7): 1 of 6 standing here; click the c\"···, Actual: null"
+      ],
+      "verdict": "red, 1 failure of 717."
+    }
+  ],
+  "afterEachMutation": "git checkout -- <the one file>, then git status --short printed nothing."
+}
