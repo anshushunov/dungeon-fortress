@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "issue": 379,
+  "checkpoint": 3,
+  "what": "Criterion 5: one substitution per half of the change, each run against the committed state of the half it attacks, each showing which check goes red. Rule 9 of docs/engineering/DEVELOPMENT_PACE.md.",
+  "state": {
+    "commit": "478ba21",
+    "why": "Both mutants are applied to the committed fix and reverted with git checkout afterwards, not to the working copy before the commit: a mutant reverted over an uncommitted change takes the change with it (measured on Issue #147).",
+    "greenBaseline": {
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~WorldLabelFocusTests|FullyQualifiedName~WorldLabelLayoutTests\"",
+      "output": "Пройден!: не пройдено 0, пройдено 25, пропущено 0, всего 25"
+    }
+  },
+  "mutant1": {
+    "half": "The first pass: every label bids exactly its name.",
+    "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+    "member": "FirstAttempt",
+    "was": "private static int FirstAttempt(WorldLabelRequest request) =>\n        Math.Min(1, request.Lines.Count);",
+    "became": "private static int FirstAttempt(WorldLabelRequest request) =>\n        request.Rank is WorldLabelRank.Hovered or WorldLabelRank.Selected\n            ? request.Lines.Count\n            : Math.Min(1, request.Lines.Count);",
+    "meaning": "The exemption Issue #371 introduced, put back: a focused label lays its whole text in the first pass again.",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~WorldLabelFocusTests|FullyQualifiedName~WorldLabelLayoutTests\" --logger \"console;verbosity=detailed\"",
+    "reddens": {
+      "criterion1": {
+        "check": "WorldLabelFocusTests.A_second_line_never_costs_a_neighbour_his_name(ticks: 2380)",
+        "verbatim": "Assert.Equal() Failure: Collections differ / Expected: [\"Raider#17\", \"Raider#18\", \"Raider#20\"] / Actual: [\"Raider#17\", \"Raider#20\"]",
+        "reading": "Raider#18 is «Долговязый», and he is missing from the frame the game would draw while «Сиплый» is focused — the defect of Issue #379 verbatim."
+      },
+      "alsoRed": [
+        "WorldLabelFocusTests.The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer_where_there_is_room — «Сиплый» is laid with two lines again on the crowded cell, which is the same purchase seen from the other side.",
+        "WorldLabelFocusTests.The_body_under_the_cursor_is_offered_its_sentence_first — the constructed frame loses a label (4 expected, 3 placed), because a two-line bid in the first pass takes a place a name was going to use."
+      ]
+    }
+  },
+  "mutant2": {
+    "half": "The second pass: the focused label is offered its sentence first.",
+    "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+    "member": "GrowingOrder",
+    "was": ".OrderBy(index => placed[index].Request.Rank)\n            .ThenBy(index => placed[index].Request.Order),",
+    "became": ".OrderBy(index => placed[index].Request.Order),",
+    "meaning": "The focus keeps its place in the first pass and loses its priority in the second: the sentences are offered back in scene order, so a neighbour standing earlier in the scene takes the one place that fits.",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~WorldLabelFocusTests|FullyQualifiedName~WorldLabelLayoutTests\" --logger \"console;verbosity=detailed\"",
+    "reddens": {
+      "criterion4": {
+        "check": "WorldLabelFocusTests.The_body_under_the_cursor_is_offered_its_sentence_first",
+        "verbatim": "Assert.Equal() Failure: Values differ / Expected: 2 / Actual: 1",
+        "reading": "The body under the cursor is laid with one line of its two: «Косой», who stands earlier in scene order, grew into the only place a sentence fits. Nothing else in the two files goes red, which is the point — the two halves are separately load-bearing."
+      }
+    }
+  },
+  "whatTheMutantsDoNotClaim": "Mutant 2 changes no frame of today's owner scene, and that is stated rather than hidden: the second pass already walked the list in rank order because the first pass built it that way. GrowingOrder makes that promise a statement of the code instead of a side effect of a sort ten lines above it, and the constructed scene of the check is what can tell the two apart."
+}
