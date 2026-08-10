@@ -33,8 +33,38 @@ public static class HudFontSizes
     /// <summary>
     /// The toolbar button's own label, set in <c>CreateControlButton</c> in
     /// <c>Main.cs</c>.
+    ///
+    /// <para>
+    /// Raised from 10 by Issue #352: at the design frame (UI scale 1) an
+    /// authored size is also the physical one, and 10 no longer clears
+    /// <see cref="HudReadability.MinimumPhysicalTextPixels"/>. <see
+    /// cref="TooltipTitleFontSize"/> and <see cref="TooltipBodyFontSize"/> are
+    /// derived from this constant, so raising it once is what carries the
+    /// tooltip past the floor as well — the wording the owner reported unable
+    /// to read on the playtest of slice 3.
+    /// </para>
     /// </summary>
-    public const int ButtonLabelFontSize = 10;
+    public const int ButtonLabelFontSize = 12;
+
+    /// <summary>
+    /// The hotkey badge in a toolbar button's corner — the smallest font in the
+    /// toolbar on purpose (see the comment next to <c>_hotkeyBadges.Add</c> in
+    /// <c>Main.Hud.cs</c>): the readability guard is meant to be proven against
+    /// whatever is actually smallest, not against a size that happens to be
+    /// comfortable to reach.
+    ///
+    /// <para>
+    /// Tied to <see cref="HudReadability.MinimumPhysicalTextPixels"/> rather
+    /// than carrying its own literal, because the badge being <i>exactly</i> at
+    /// the floor is the property that makes the guard's negative half meaningful
+    /// for it — the same "own value or equal to the floor" question Issue #352
+    /// asked, decided in favour of the floor so the two numbers cannot drift
+    /// apart into the shape Issue #350 named (a fact stated twice with only one
+    /// copy kept honest). Before #352 the badge was a bare literal, 8, equal to
+    /// the floor of that time for the same reason.
+    /// </para>
+    /// </summary>
+    public const int HotkeyBadgeFontSize = (int)HudReadability.MinimumPhysicalTextPixels;
 
     /// <summary>
     /// The tooltip's first line: the name of the action. Larger than the body

@@ -232,7 +232,7 @@ public partial class Main
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Bottom,
         };
-        badge.AddThemeFontSizeOverride("font_size", 8);
+        badge.AddThemeFontSizeOverride("font_size", HudFontSizes.HotkeyBadgeFontSize);
         badge.AddThemeColorOverride("font_color", new Color("#e0f2fe"));
         // The badge sits on top of the icon, so it needs to be legible against
         // whatever the icon happens to put in that corner rather than against the

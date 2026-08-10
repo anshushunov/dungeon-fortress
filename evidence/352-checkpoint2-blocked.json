@@ -1,0 +1,25 @@
+{
+  "issue": 352,
+  "checkpoint": "2 (partial — blocked)",
+  "what": "Everything the current partition authorizes for bringing the HUD up to the 12 px floor: HudFontSizes.ButtonLabelFontSize raised 10 -> 12 (cascades TooltipTitleFontSize=14, TooltipBodyFontSize=12 by formula), new named constant HudFontSizes.HotkeyBadgeFontSize tied to HudReadability.MinimumPhysicalTextPixels, and the single authorized line in src/DungeonFortress.Game/Main.Hud.cs:235 routed through it instead of the bare literal 8.",
+  "filesChanged": [
+    "src/DungeonFortress.Presentation/HudFontSizes.cs",
+    "src/DungeonFortress.Game/Main.Hud.cs (line 235 only, per coordinator's partition extension)",
+    "tests/DungeonFortress.Presentation.Tests/HudFontSizesTests.cs",
+    "tests/DungeonFortress.Presentation.Tests/HudReadabilityTests.cs"
+  ],
+  "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -v minimal",
+  "observed": "Не пройден!: не пройдено     3, пройдено   714, пропущено     0, всего   717, длительность 45 s.",
+  "comparisonToCheckpoint1": "48 violations across the frame matrix (evidence/352-checkpoint1.json) dropped to 38 after this commit: hotkey[0], control[inspect] and tooltip.body no longer appear in the failure list at any frame. The remaining 38 are exclusively roster, inspector and legend[0..7] — text sizes hardcoded in src/DungeonFortress.Game/Main.Hud.cs outside the single authorized line.",
+  "remainingFailures": [
+    "The_smallest_authored_text_is_what_the_physical_floor_is_set_to: Expected 12, Actual 8 (legend is now the smallest authored text)",
+    "The_authored_HUD_stays_readable_on_every_supported_frame: 38 violations, all named roster / inspector / legend[0..7]",
+    "Every_supported_frame_gets_at_least_the_authored_physical_text_size: 'Frame 1280x720 at UI scale 1 drops HUD text under 12 physical pixels.'"
+  ],
+  "sourceOfRemainingViolations": {
+    "roster": "src/DungeonFortress.Game/Main.Hud.cs:80 — MakeHudLabel(10, ...), literal, not routed through HudFontSizes",
+    "inspector": "src/DungeonFortress.Game/Main.Hud.cs:1052 — MakeHudLabel(11, ...), literal",
+    "legend[0..7]": "src/DungeonFortress.Game/Main.Hud.cs:1099-1117 — eight (text, 8, color) tuples, literal font size 8 each"
+  },
+  "conclusion": "Criterion 2 (all eight resolutions green) cannot be reached under the current partition. Escalated in Issue #352 for a second, larger partition decision — same shape as the hotkey-badge blocker already resolved, but roughly ten call sites instead of one, all in Main.Hud.cs."
+}

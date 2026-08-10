@@ -25,9 +25,15 @@ public sealed class HudReadabilityTests
     /// tooltip counterpart <c>--smoke-hud-tooltip-readability-regression</c>.
     ///
     /// <para>
-    /// The tooltip entries are <see cref="HudFontSizes"/> constants rather than
-    /// the literals 12 and 10, for the same reason <c>HudButton</c> reads them
-    /// from there instead of repeating them: one number, one place.
+    /// The tooltip, toolbar-button and hotkey-badge entries are
+    /// <see cref="HudFontSizes"/> constants rather than repeated literals, for
+    /// the same reason <c>Main.Hud.cs</c> reads them from there instead of
+    /// restating them: one number, one place. <c>roster</c>, <c>inspector</c>
+    /// and the eight <c>legend</c> rows stay literal because Issue #352 could
+    /// not move them into the same constant class — that authored text lives in
+    /// <c>src/DungeonFortress.Game/Main.Hud.cs</c> outside the file's partition
+    /// for that Issue — and this fixture is a copy of what is actually authored,
+    /// not of what the guard would like to be authored.
     /// </para>
     ///
     /// The <c>heading</c> row below is why the adapter walks the tree. It used to
@@ -52,8 +58,8 @@ public sealed class HudReadabilityTests
         new("legend[5]", 8),
         new("legend[6]", 8),
         new("legend[7]", 8),
-        new("control[inspect]", 10),
-        new("hotkey[0]", 8),
+        new("control[inspect]", HudFontSizes.ButtonLabelFontSize),
+        new("hotkey[0]", HudFontSizes.HotkeyBadgeFontSize),
         new("tooltip.title", HudFontSizes.TooltipTitleFontSize),
         new("tooltip.body", HudFontSizes.TooltipBodyFontSize),
     ];
