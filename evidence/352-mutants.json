@@ -1,0 +1,43 @@
+{
+  "issue": 352,
+  "checkpoint": 3,
+  "checkpointCommit": "9d3e628",
+  "method": "Each mutant applied to the tracked file with sed, dotnet test run, output captured, then `git checkout -- src/DungeonFortress.Presentation/HudReadability.cs` to revert. Safe because the checked state (commit 9d3e628) was committed first, per the rule that a mutant revert must not also revert the fix itself.",
+  "mutants": [
+    {
+      "id": "a",
+      "name": "floor_reverted_to_pre_352_value",
+      "target": "src/DungeonFortress.Presentation/HudReadability.cs",
+      "was": "public const double MinimumPhysicalTextPixels = 12.0;",
+      "became": "public const double MinimumPhysicalTextPixels = 8.0;",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -v minimal",
+      "firstAttempt": {
+        "observed": "Пройден!   : не пройдено     0, пройдено   720, пропущено     0, всего   720 — all green, mutant NOT caught.",
+        "diagnosis": "HudFontSizes.HotkeyBadgeFontSize is deliberately defined as (int)HudReadability.MinimumPhysicalTextPixels (commit 511687f), so it recompiles to 8 alongside the mutated floor. The_smallest_authored_text_outside_the_legend_exception_is_what_the_physical_floor_is_set_to compares the floor to the smallest non-legend authored size, which is that same badge value — the comparison holds by construction regardless of what the floor actually is, so it proves nothing about the number 12 specifically.",
+        "fix": "Added The_floor_is_the_owners_chosen_twelve_and_not_a_number_that_follows_it, the one test in the file comparing the floor to an independent literal (12.0) rather than to a value derived from the same constant. Committed as b0db24c before re-running the mutant."
+      },
+      "finalResult": {
+        "observed": "Не пройден!: не пройдено     1, пройдено   720, пропущено     0, всего   721. The_floor_is_the_owners_chosen_twelve_and_not_a_number_that_follows_it FAIL: Assert.Equal() Failure: Values differ / Expected: 12 / Actual: 8.",
+        "result": "red as required"
+      }
+    },
+    {
+      "id": "b",
+      "name": "feedback_added_to_legend_exemption",
+      "target": "src/DungeonFortress.Presentation/HudReadability.cs",
+      "was": "[\"legend[0]\", \"legend[1]\", \"legend[2]\", \"legend[3]\", \"legend[4]\", \"legend[5]\", \"legend[6]\", \"legend[7]\"],",
+      "became": "[\"legend[0]\", \"legend[1]\", \"legend[2]\", \"legend[3]\", \"legend[4]\", \"legend[5]\", \"legend[6]\", \"legend[7]\", \"feedback\"],",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -v minimal",
+      "firstAttempt": {
+        "observed": "Не пройден!: не пройдено     1, пройдено   720 — only The_legend_exception_is_exactly_the_eight_legend_rows failed (Expected: 8, Actual: 9). The_legend_exemption_refuses_every_other_HUD_surface stayed green.",
+        "diagnosis": "That second test built its 'every other surface' list by filtering AuthoredHud's names to those NOT already in HudReadability.LegendReadabilityExemption. Once 'feedback' is added to the exemption by the mutation, the filter excuses 'feedback' from the very list it is supposed to check, alongside itself — the assertion passes for the wrong reason. One red test of two is not the pair Issue #352's criterion 3 asks for.",
+        "fix": "Rewrote the filter to select by name shape (\"does not start with 'legend['\") instead of by current exemption membership, so the list under test is independent of the mutation. Committed as 9d3e628 before re-running the mutant."
+      },
+      "finalResult": {
+        "observed": "Не пройден!: не пройдено     2, пройдено   719, пропущено     0, всего   721. The_legend_exemption_refuses_every_other_HUD_surface FAIL: Assert.DoesNotContain() Failure — Found: \"feedback\". The_legend_exception_is_exactly_the_eight_legend_rows FAIL: Expected 8, Actual 9.",
+        "result": "red as required, both tests"
+      }
+    }
+  ],
+  "note": "Both mutants initially failed to redden the suite as designed — not because the underlying fix was wrong, but because the tests written to prove it were each tautological in a different way (one compared two values that move together by construction, the other filtered its check set through the very membership it was testing). Both gaps were found by actually running the mutant before writing this file, not by inspection; both were closed with a real commit before the mutant was re-run for the record kept here."
+}
