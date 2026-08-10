@@ -118,6 +118,102 @@ public sealed class WorldLabelInspectorTests
     }
 
     /// <summary>
+    /// What the pointer reports on a crowded cell — the check Issue
+    /// <see href="https://github.com/anshushunov/dungeon-fortress/issues/370">#370</see>
+    /// was opened for and Issue #371 absorbed.
+    ///
+    /// <para><c>PointedAt</c> changed the meaning of hovering for <b>every</b> body
+    /// on the map and was covered by nothing: independent review of PR #368
+    /// measured that reverting it to the plain <c>At</c> it replaced reddened no
+    /// test at all. The rule it states is «the selected body when it is standing on
+    /// the pointed cell, the cell's first body otherwise», and its point is that a
+    /// player who has clicked past a crew member to the raider behind him does not
+    /// get the crew member back at the next twitch of the mouse.</para>
+    ///
+    /// <para>The cell is the owner's own (15,7) at tick 2380 — six bodies, the crew
+    /// member «Тишина» first and five raiders behind her — because a rule about
+    /// crowded cells checked on a cell of two would be checked where it cannot
+    /// fail.</para>
+    /// </summary>
+    [Fact]
+    public void The_pointer_answers_with_the_selected_body_when_it_stands_on_that_cell()
+    {
+        var state = OwnerScene(WaveFourTick);
+        var cell = new GridPoint(15, 7);
+        var bodies = WorldLabels.BodiesAt(state, cell);
+
+        Assert.Equal(6, bodies.Count);
+        Assert.Equal(WorldLabelKind.Creature, bodies[0].Kind);
+
+        // Nothing selected: the cell answers with its first body, which is the crew
+        // member standing in front of the five raiders.
+        Assert.Equal(bodies[0], WorldLabels.PointedAt(state, cell, null));
+
+        // Every other body of that cell, once it is the selection, is what the
+        // pointer answers with — not a sample of them, because the one this rule
+        // exists for is whichever raider the player has clicked through to.
+        foreach (var body in bodies)
+        {
+            Assert.Equal(body, WorldLabels.PointedAt(state, cell, body));
+        }
+
+        // And a selection standing somewhere else does not follow the cursor: the
+        // pointed cell answers with its own first body again.
+        var elsewhere = WorldLabels
+            .BodiesAt(state, new GridPoint(16, 7))
+            .First(body => !bodies.Contains(body));
+        Assert.Equal(bodies[0], WorldLabels.PointedAt(state, cell, elsewhere));
+    }
+
+    /// <summary>
+    /// The feedback line after a click, and the three cases in which there is
+    /// none — the second half of Issue #370.
+    ///
+    /// <para>It is not decoration. Cycling was chosen over a chooser popup partly
+    /// <em>because</em> this line pays the cost of cycling: four raiders on one tile
+    /// look exactly like one raider on one tile, so without it the second click
+    /// reads as the map changing its mind. Review of PR #368 wrote that the
+    /// compensation was «заявлена, верна, не доказана» — the same position the
+    /// compensation «the shed line is in the panel» was in before it was measured.
+    /// This is the measurement.</para>
+    /// </summary>
+    [Fact]
+    public void The_feedback_line_says_which_body_of_how_many_the_click_reached()
+    {
+        var state = OwnerScene(WaveFourTick);
+        var cell = new GridPoint(15, 7);
+        var bodies = WorldLabels.BodiesAt(state, cell);
+
+        Assert.Equal(6, bodies.Count);
+        for (var index = 0; index < bodies.Count; index++)
+        {
+            Assert.Equal(
+                $"(15,7): {index + 1} of 6 standing here; click the cell again for the next one.",
+                WorldLabels.SelectionHint(state, cell, bodies[index]));
+        }
+
+        // No hint when the cell holds one body: the single click already answered
+        // it whole, and a line saying «1 of 1» is noise.
+        var alone = Enumerable
+            .Range(0, PrototypeTuning.MapWidth)
+            .SelectMany(x => Enumerable.Range(0, PrototypeTuning.MapHeight)
+                .Select(y => new GridPoint(x, y)))
+            .First(spot => WorldLabels.BodiesAt(state, spot).Count == 1);
+        Assert.Null(
+            WorldLabels.SelectionHint(state, alone, WorldLabels.BodiesAt(state, alone)[0]));
+
+        // No hint when nothing is selected — there is no «which of them» to report.
+        Assert.Null(WorldLabels.SelectionHint(state, cell, null));
+
+        // And none when the selected body is not standing on the clicked cell,
+        // because then the number it would print would be about somebody else.
+        var elsewhere = WorldLabels
+            .BodiesAt(state, new GridPoint(16, 7))
+            .First(body => !bodies.Contains(body));
+        Assert.Null(WorldLabels.SelectionHint(state, cell, elsewhere));
+    }
+
+    /// <summary>
     /// Criterion 9's other half: the choice is <em>visible on the map</em> and not
     /// merely recorded. Clicking a raider fills the panel, and until this the map
     /// still said nothing about which body the panel was about.
