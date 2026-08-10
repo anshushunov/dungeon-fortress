@@ -159,9 +159,17 @@ public sealed class WorldLabelLayoutTests
     /// scene and stated here rather than derived: the point of the check is that a
     /// change which starts giving names up is noticed the day it happens.</para>
     /// </summary>
+    /// <para><b>Re-pinned by Issue #361.</b> The wave-4 row was <c>6, 5</c>. With
+    /// the damage jitter live the party reaches tick 2380 with a different set of
+    /// bodies standing in the room: twelve raiders on the map instead of eleven,
+    /// of whom five carry a caption instead of six, and three of those five are
+    /// named on the quiet map instead of five of six. The two that are not named
+    /// are the overflow of one crowded cell and are the subject of
+    /// <see cref="The_names_that_are_not_shown_are_raiders_sharing_one_cell"/>.
+    /// The wave-3 row did not move.</para>
     [Theory]
     [InlineData(WaveThreeTick, 1, 1)]
-    [InlineData(WaveFourTick, 6, 5)]
+    [InlineData(WaveFourTick, 5, 3)]
     public void Every_returning_raider_of_the_owners_scene_is_still_named(
         int ticks,
         int captioned,
@@ -180,21 +188,31 @@ public sealed class WorldLabelLayoutTests
     }
 
     /// <summary>
-    /// The one name of the owner's wave-4 frame that is <em>not</em> shown, and why
-    /// no layout can show it — stated as a check, so the reason stays true instead
-    /// of merely staying written down.
+    /// The names of the owner's wave-4 frame that are <em>not</em> shown, and why
+    /// no layout can show them — stated as a check, so the reason stays true
+    /// instead of merely staying written down.
     ///
-    /// <para>Four returning raiders stand on cell (15,7) of that frame. They share
+    /// <para>Five returning raiders stand on cell (14,7) of that frame. They share
     /// one head, so their labels share one ladder of places; a label is ten
     /// reference pixels tall and the ladder is twenty-two long, so three fit above
-    /// that head and the fourth has nowhere inside the limit to be. <b>The reason
-    /// is not the layout.</b> Four identical goblins standing on one cell cannot be
-    /// told apart by any caption however placed — that is model differentiation,
-    /// which the owner deferred himself on this very playtest: «модельки одинаковые
-    /// … наверно это нужно делать в следующем подходе».</para>
+    /// that head and the other two have nowhere inside the limit to be. <b>The
+    /// reason is not the layout.</b> Five identical goblins standing on one cell
+    /// cannot be told apart by any caption however placed — that is model
+    /// differentiation, which the owner deferred himself on this very playtest:
+    /// «модельки одинаковые … наверно это нужно делать в следующем подходе».</para>
+    ///
+    /// <para><b>Re-pinned by Issue #361, and the arithmetic is the same one.</b>
+    /// It was four raiders on cell (15,7) with one of them left unnamed. With the
+    /// damage jitter live the same journal brings five of them onto (14,7)
+    /// instead, and a ladder that holds three now leaves two over. The crowd grew
+    /// by one body; the rule that decides how many fit did not move, and neither
+    /// did the ten and the twenty-two it is computed from. The check is stated
+    /// over <b>every</b> unnamed caption rather than over the single one there
+    /// used to be, which asks more of the frame than it did before, not
+    /// less.</para>
     /// </summary>
     [Fact]
-    public void The_name_that_is_not_shown_is_one_of_four_raiders_sharing_a_cell()
+    public void The_names_that_are_not_shown_are_raiders_sharing_one_cell()
     {
         var state = OwnerScene(WaveFourTick);
         var captioned = state.Raiders.Where(ReturningHeroLabel.IsCaptioned).ToArray();
@@ -206,8 +224,10 @@ public sealed class WorldLabelLayoutTests
             .ToHashSet();
         var unnamed = captioned.Where(raider => !placed.Contains(raider.Id)).ToArray();
 
-        var crowded = Assert.Single(unnamed);
-        Assert.Equal(4, captioned.Count(raider => raider.Position == crowded.Position));
+        Assert.Equal(2, unnamed.Length);
+        Assert.All(unnamed, raider => Assert.Equal(
+            5,
+            captioned.Count(other => other.Position == raider.Position)));
     }
 
     /// <summary>

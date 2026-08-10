@@ -18,10 +18,17 @@ public sealed class BlowReadoutTests
 {
     /// <summary>
     /// The tick the shipped <c>prepared</c> journal lands two blows and a kill on.
-    /// Snapshot <c>Tick</c> 1318 draws step 1317: Кремень (1) strikes raider 1 for
-    /// 5, Тишина (8) strikes it for 2 and puts it down.
+    /// Snapshot <c>Tick</c> 1313 draws step 1312: Кремень (1) strikes raider 1 for
+    /// 6, Тишина (8) strikes it for 4 and puts it down.
+    ///
+    /// <para>It was tick 1318 with the same two strikers on the same raider, for 5
+    /// and 2, until Issue #361 made the damage jitter live. The party is fought
+    /// differently from the first blow onwards, so the tick the scene falls on
+    /// moved; the scene itself is the same one, found by walking the same journal
+    /// and taking the first tick that carries two blows on one body of which one
+    /// is a kill.</para>
     /// </summary>
-    private const int BlowTick = 1318;
+    private const int BlowTick = 1313;
 
     private static PrototypeSnapshot Battle() =>
         PresentationFixtures.RunFixture("prepared", BlowTick);
@@ -40,12 +47,12 @@ public sealed class BlowReadoutTests
         var hit = Assert.Single(reading.Blows, blow => blow.Outcome == BlowOutcome.Hit);
         Assert.Equal(new BodyRef(BodyKind.Creature, 1), hit.Attacker);
         Assert.Equal(new BodyRef(BodyKind.Raider, 1), hit.Target);
-        Assert.Equal(5, hit.Damage);
+        Assert.Equal(6, hit.Damage);
 
         var kill = Assert.Single(reading.Blows, blow => blow.Outcome == BlowOutcome.Downed);
         Assert.Equal(new BodyRef(BodyKind.Creature, 8), kill.Attacker);
         Assert.Equal(new BodyRef(BodyKind.Raider, 1), kill.Target);
-        Assert.Equal(2, kill.Damage);
+        Assert.Equal(4, kill.Damage);
     }
 
     /// <summary>
@@ -97,11 +104,11 @@ public sealed class BlowReadoutTests
     [Fact]
     public void Only_the_tick_that_has_just_run_is_drawn()
     {
-        Assert.NotEmpty(BlowReadout.Of(PresentationFixtures.RunFixture("prepared", 1318)).Blows);
+        Assert.NotEmpty(BlowReadout.Of(PresentationFixtures.RunFixture("prepared", BlowTick)).Blows);
 
-        // Step 1317 is the one with the kill in it. One tick later the world has
+        // Step 1312 is the one with the kill in it. One tick later the world has
         // moved on and the same entries are stale.
-        var later = BlowReadout.Of(PresentationFixtures.RunFixture("prepared", 1319));
+        var later = BlowReadout.Of(PresentationFixtures.RunFixture("prepared", BlowTick + 1));
         Assert.DoesNotContain(
             later.Blows,
             blow => blow.Outcome == BlowOutcome.Downed &&

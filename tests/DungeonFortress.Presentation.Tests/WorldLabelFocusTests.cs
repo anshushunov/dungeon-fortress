@@ -40,7 +40,9 @@ public sealed class WorldLabelFocusTests
     /// <para>What it would have said before Issue #371: on tick 2025 one raider of
     /// ten answered under the pointer, on tick 2380 six of eleven. The other
     /// fifteen — strangers and downed bodies — had no world label under any
-    /// condition.</para>
+    /// condition. Those counts describe the frame as it stood before Issue #361
+    /// made the damage jitter live; the frame now carries twelve raiders of whom
+    /// five are captioned, and the check itself names no count at all.</para>
     /// </summary>
     [Theory]
     [InlineData(WaveThreeTick)]
@@ -74,10 +76,18 @@ public sealed class WorldLabelFocusTests
     }
 
     /// <summary>
-    /// Criterion 2. «Секира» is the one caption of the owner's wave-4 frame whose
-    /// second line the layout sheds — four returners stand on cell (15,7) and the
-    /// sentence under her name is four and a half tiles wide, so on the quiet map
-    /// she is a bare name. Pointing at her gives the sentence back.
+    /// Criterion 2. «Сиплый» is the one caption of the owner's wave-4 frame whose
+    /// second line the layout sheds — five returners stand on cell (14,7) and the
+    /// sentence under his name is four and a half tiles wide, so on the quiet map
+    /// he is a bare name. Pointing at him gives the sentence back.
+    ///
+    /// <para><b>Re-pinned by Issue #361.</b> It was «Секира» on cell (15,7). With
+    /// the damage jitter live the party arrives at tick 2380 with a different set
+    /// of returners standing in the room, so the caption the crowd trims is
+    /// another one — found the same way, as the single label of the frame whose
+    /// placed lines are fewer than its requested ones. Everything else about the
+    /// check is untouched: it still asserts that exactly one caption is trimmed on
+    /// the quiet map and that pointing gives the sentence back whole.</para>
     ///
     /// <para><b>The shed itself is asserted first, on the same frame and in the
     /// same test.</b> Without it the check would pass on a layout that never shed
@@ -97,7 +107,7 @@ public sealed class WorldLabelFocusTests
                 .Where(placed => placed.Request.Subject.Kind == WorldLabelKind.Raider)
                 .Where(placed => placed.Lines.Count < placed.Request.Lines.Count));
 
-        Assert.Equal("Секира", shed.Lines[0].Text);
+        Assert.Equal("Сиплый", shed.Lines[0].Text);
         Assert.Single(shed.Lines);
         var story = ReturningHeroLabel.Story(
             state.Raiders.Single(raider => raider.Id == shed.Request.Subject.Id));
@@ -114,7 +124,7 @@ public sealed class WorldLabelFocusTests
                     .Of(state, focus, CameraView.DefaultTileSize)
                     .Where(placed => placed.Request.Subject == shed.Request.Subject));
 
-            Assert.Equal(["Секира", story], focused.Lines.Select(line => line.Text));
+            Assert.Equal(["Сиплый", story], focused.Lines.Select(line => line.Text));
         }
     }
 
@@ -185,10 +195,20 @@ public sealed class WorldLabelFocusTests
     /// <see cref="WorldLabelLayoutTests.Every_returning_raider_of_the_owners_scene_is_still_named"/>
     /// gives: a change that starts naming strangers on the quiet map is noticed the
     /// day it happens.</para>
+    ///
+    /// <para><b>Re-pinned by Issue #361.</b> The wave-4 row was <c>11, 5</c>: with
+    /// the jitter live the party reaches tick 2380 with twelve raiders on the map
+    /// instead of eleven, and the quiet map names three of them instead of five —
+    /// five carry a caption and two are crowded off one cell
+    /// (<see cref="WorldLabelLayoutTests.The_names_that_are_not_shown_are_raiders_sharing_one_cell"/>).
+    /// The wave-3 row did not move. What the check states is unchanged, and the
+    /// two assertions under it — that every name on the quiet map belongs to a
+    /// raider, and to one the domain has met — are what stop the numbers from
+    /// being satisfied by naming the wrong bodies.</para>
     /// </summary>
     [Theory]
     [InlineData(WaveThreeTick, 10, 1)]
-    [InlineData(WaveFourTick, 11, 5)]
+    [InlineData(WaveFourTick, 12, 3)]
     public void With_nothing_pointed_at_the_map_names_exactly_who_it_named_before(
         int ticks,
         int onMap,
