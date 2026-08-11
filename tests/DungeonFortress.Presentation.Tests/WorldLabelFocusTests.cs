@@ -97,10 +97,25 @@ public sealed class WorldLabelFocusTests
     /// it to go, and pointing at him leaves a bare name. What answers him instead is
     /// the panel, which since Issue #373 a click can reach on a crowded cell.</para>
     ///
-    /// <para><b>The side that holds, measured on the same scene.</b> Every other
-    /// captioned raider of the frame keeps his sentence under the pointer, and the
-    /// quiet map is untouched by any of it — asserted first, so a layout that simply
-    /// stopped shedding anything could not pass.</para>
+    /// <para><b>The side that holds — and it is measured on the other scene, with
+    /// the pointer off as well as on.</b> The docstring said «on the same scene»
+    /// until Issue #389, and it said it of a loop that runs on wave 3 and not wave 4:
+    /// the body it walks is «Ржавый», the one returner of the thinner frame, and the
+    /// three cases it walks are <c>None</c>, hover and selection. So what the loop
+    /// states is not «the gesture hands the caption over» — it is <b>«the crowd is
+    /// what takes a sentence away, and where there is no crowd there is nothing to
+    /// take»</b>: «Ржавый» carries both his lines already with nothing pointed at,
+    /// and neither gesture changes them. A build where pointing at a body did
+    /// nothing at all would keep this loop green, which is why the promise of Issue
+    /// #371 is not what it holds and why no check in this file can hold it — the
+    /// number of sentences a gesture gives back on a shipped scene is zero
+    /// (<c>evidence/379-criterion4.json</c>). The round of PR #386 named this and
+    /// deliberately did not fix it, because the fix touched a <c>.cs</c> file and
+    /// that round was documents only.</para>
+    ///
+    /// <para>Including <c>None</c> is deliberate rather than sloppy: the quiet map
+    /// has to be asserted somewhere alongside the gestures, so that a layout which
+    /// simply stopped shedding anything at all could not pass the first half.</para>
     /// </summary>
     [Fact]
     public void The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer_where_there_is_room()
@@ -138,9 +153,11 @@ public sealed class WorldLabelFocusTests
             Assert.Equal(["Сиплый"], focused.Lines.Select(line => line.Text));
         }
 
-        // And the other half: where the head is not shared, the pointer does hand
-        // the whole caption over. Wave 3's «Ржавый» is that body, and he carries his
-        // sentence on the quiet map and under both gestures alike.
+        // And the other half, on the other scene: where the head is not shared, a
+        // caption keeps its whole text. Wave 3's «Ржавый» is that body, and the
+        // three cases below say it of the quiet map first and of both gestures
+        // after — so what is measured is that the crowd is what costs a sentence,
+        // not that a gesture returns one.
         var thinner = WorldLabelLayoutTests.OwnerScene(WaveThreeTick);
         var alone = thinner.Raiders.Single(raider =>
             ReturningHeroLabel.IsCaptioned(raider) && ReturningHeroLabel.Story(raider) is not null);
