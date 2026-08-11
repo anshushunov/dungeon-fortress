@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "issue": 389,
+  "what": "Two substitutions, one per half of the change (rule 9). The first half is the guard's sight — a comparison that varies the focus rather than holding it constant; the second half is the layout fix — the crew's caption laying only its name in the first pass. Each mutant is run against a committed state, so putting the mutant back cannot take the change with it.",
+  "howMutantsAreRun": "python rewrites the one named line in the working copy, dotnet test runs the named filter, then `git checkout -- <file>` puts the line back. The was/became texts are verbatim, including leading spaces.",
+  "mutants": [
+    {
+      "id": "criterion4-blindGuard",
+      "checkpoint": 2,
+      "half": "the guard's sight",
+      "runAgainst": "8192d26 — the sighted guard committed, production code still the defective one",
+      "file": "tests/DungeonFortress.Presentation.Tests/WorldLabelFocusTests.cs",
+      "was": "                var reference = WorldLabelFocus.None;",
+      "became": "                var reference = focus;",
+      "meaning": "The guard is given the shape the guard of PR #386 has: the focus is held constant in both of the compared layouts. The comparison then has the gesture on both sides of the equals sign.",
+      "expected": "green — and green is the finding, not a pass. It is what «the guard of #386 is blind by construction» means as a measurement rather than as a claim.",
+      "commands": [
+        {
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~A_gesture_never_takes_a_name_from_a_body_on_another_cell\"",
+          "output": "Пройден!: не пройдено 0, пройдено 2, пропущено 0, всего 2"
+        },
+        {
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj",
+          "output": "Пройден!: не пройдено 0, пройдено 722, пропущено 0, всего 722",
+          "reading": "The whole presentation suite is green while pointing at «Тишина» takes the wave-4 frame from three raider names to one. That is the state PR #386 shipped in, stated as a number."
+        }
+      ],
+      "withoutTheMutant": {
+        "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~A_gesture_never_takes_a_name_from_a_body_on_another_cell\"",
+        "output": "Не пройден!: не пройдено 1, пройдено 1, пропущено 0, всего 2",
+        "verbatim": "pointing at «Тишина» on GridPoint { X = 15, Y = 7 } at tick 2380 costs «Гнилозуб» on GridPoint { X = 14, Y = 7 } his name; the quiet map names 3 bodies and this one names 2."
+      }
+    }
+  ]
+}
