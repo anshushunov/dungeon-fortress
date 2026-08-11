@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "issue": 389,
+  "checkpoint": 3,
+  "what": "The same measurement as evidence/389-before.json, taken after the layout fix. The sweep is every body of both shipped frames under both gestures; only the rows that changed or that a criterion names are written out.",
+  "base": {
+    "commit": "e0c2d04 plus the layout change of this checkpoint",
+    "branch": "fix/389-hover-own"
+  },
+  "howObtained": {
+    "layout": "WorldLabels.Of(WorldLabelLayoutTests.OwnerScene(tick), focus, CameraView.DefaultTileSize) for every body of the frame and both gestures — the same pure path evidence/389-before.json used.",
+    "guard": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj",
+    "guardOutput": "Пройден!: не пройдено 0, пройдено 724, пропущено 0, всего 724"
+  },
+  "theChange": "WorldLabelRequest now carries the shorter form of its first line («Тишина» inside «Тишина DOWN»), WorldLabelLayout.Forms writes the ladder «полная подпись → только имя → ничего» out, and the first pass lays the shortest form. Nothing about the priority order moved: the cursor is still served first, and the second pass still offers the sentence to the focused label first.",
+  "criterion1_hoverOwnCreature": {
+    "gesture": "-HoverCell \"15,7\" — the crew member «Тишина» — at tick 2380",
+    "before": { "raiderNames": ["Сиплый"], "count": 1 },
+    "after": { "raiderNames": ["Гнилозуб", "Долговязый", "Ловчий", "Сиплый"], "count": 4 },
+    "quiet": { "raiderNames": ["Гнилозуб", "Долговязый", "Сиплый"], "count": 3 },
+    "lost": [],
+    "reading": "Not «no longer takes two names away» but «gives one back»: four raider names against the quiet three. The name-only box is 43.2 reference pixels instead of 79.2, so it no longer covers the column of (14,7), and «Ловчий» — one of the two the crowded cell has never had room for — finds a place. The number the Issue asked to disprove, 3 → 1, is now 3 → 4."
+  },
+  "criterion2_selectOwnCreature": {
+    "gesture": "--select-cell \"15,7\" at tick 2380",
+    "before": { "raiderNames": ["Сиплый"], "count": 1 },
+    "after": { "raiderNames": ["Гнилозуб", "Долговязый", "Ловчий", "Сиплый"], "count": 4 },
+    "reading": "Named by number rather than implied: selection behaves exactly as hover does, before and after. The layout reads the rank, and both gestures produce one."
+  },
+  "criterion6_promiseOf379": {
+    "gesture": "-HoverCell \"16,7\" at tick 2380",
+    "whatIsOnThatCell": "the crew member «Дёготь» and no raider — the same thing evidence/379-before.json recorded when Issue #379 quoted this cell. Pointing there is a crew gesture today, not a raider one.",
+    "after": { "raiderNames": ["Гнилозуб", "Долговязый", "Ловчий", "Сиплый"], "count": 4, "lost": [] },
+    "everyRaiderOfBothFrames": "Pointing at, or selecting, any raider of either frame takes no name off a body standing on another cell. The only losses in the whole sweep are «Долговязый» to «Ловчий», «Косой» or «Ловчий Старший» — all four on (14,7) — which is the tile's own arithmetic and is what the guard allows explicitly.",
+    "theGuardOf379": "WorldLabelFocusTests.A_second_line_never_costs_a_neighbour_his_name is green on both rows. It is kept and not replaced: it catches the class where the name lost belongs to a body on the focused body's own cell — #379's «Сиплый» and «Долговязый» both stood on (14,7) — which the new guard deliberately allows."
+  },
+  "wholeSweep": {
+    "tick2025": {
+      "quiet": { "raiderNames": ["Ржавый"], "count": 1 },
+      "bodiesSwept": 19,
+      "gestures": 38,
+      "rowsThatLostAName": 0
+    },
+    "tick2380": {
+      "quiet": { "raiderNames": ["Гнилозуб", "Долговязый", "Сиплый"], "count": 3 },
+      "bodiesSwept": 21,
+      "gestures": 42,
+      "rowsThatLostAName": 6,
+      "everyOneOfTheSix": "«Долговязый» on (14,7), to a gesture pointing at «Ловчий», «Косой» or «Ловчий Старший» — all three on (14,7) — under hover and under selection. Six rows, one cell, no cell crossed.",
+      "before": "the same sweep on the base commit lost a name in eight rows: those six, plus hover and selection of «Тишина» on (15,7), which cost «Гнилозуб» and «Долговязый» on (14,7)."
+    }
+  },
+  "whatThePlayerReadsIsUnchanged": {
+    "claim": "Every crew label the layout places on either shipped frame still says what it said: the state comes back in the second pass.",
+    "measured": "Nine crew members × two gestures × two ticks: «Тишина DOWN», «Дёготь FLED», «Кремень READY», «Обух READY», «Брусок READY», «Мотылёк FLED», «Смола FLED», «Уголёк FLED», «Прель DOWN» — full line in every row that is drawn at all.",
+    "thereforeTheThirdRungIsNotObservableOnAShippedScene": "The bare-name form the fix introduces is never reached on either frame. It is stated on values instead — WorldLabelLayoutTests.A_crew_caption_that_cannot_fit_whole_keeps_its_name_and_loses_its_state — and named as unreachable here rather than left to be discovered, which is the same thing the price of Issue #379 had to have said about itself."
+  },
+  "packingIsNotMonotone": "Pointing at «Кремень» (17,7) or «Дёготь» (16,7) also takes the frame from three raider names to four, before the fix as well as after. One more box on the frame can leave one more name fitting, because the boxes above a shared head are a packing and not a queue. That is why every statement here is «no name is lost» and never «the count does not fall»."
+}

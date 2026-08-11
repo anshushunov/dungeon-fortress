@@ -302,6 +302,115 @@ public sealed class WorldLabelLayoutTests
     }
 
     /// <summary>
+    /// Issue #389, stated on values: <b>the crew's caption bids its name in the
+    /// first pass like everybody else's</b>, and grows into its full line
+    /// afterwards.
+    ///
+    /// <para>The scene is the owner's, reduced to what makes it work: a crew member
+    /// under the cursor on one cell and a crowd of returning raiders sharing the cell
+    /// beside him. «Тишина DOWN» is seventy-nine reference pixels — three and a half
+    /// tiles — so laid whole in the first pass it covers the neighbouring cell's own
+    /// column and the two rungs above it; laid as «Тишина» it is forty-three and
+    /// covers only its own. The first is what the map did before this Issue.</para>
+    ///
+    /// <para>Both halves are asserted, and the second is what stops the first from
+    /// being bought by simply shortening the crew's label for good: the state comes
+    /// back in the second pass, so what the player reads is unchanged wherever there
+    /// is room for it — which is every crew member of both shipped frames
+    /// (<c>evidence/389-after.json</c>).</para>
+    /// </summary>
+    [Fact]
+    public void The_crews_caption_bids_its_name_first_and_grows_into_its_state_after()
+    {
+        var crowd = new GridPoint(20, 7);
+        var mine = new GridPoint(21, 7);
+        var crew = new WorldLabelRequest(
+            new WorldLabelSubject(WorldLabelKind.Creature, 1),
+            WorldLabelLayout.HeadOf(
+                CameraView.CellCenter(mine, CameraView.DefaultTileSize),
+                CameraView.DefaultTileSize),
+            [new WorldLabelLine("Тишина DOWN", WorldLabelLayout.CreatureNameTextRef)],
+            WorldLabelRank.Hovered,
+            0,
+            "Тишина");
+        var raiders = new[] { "Гнилозуб", "Долговязый", "Сиплый" }
+            .Select((name, index) => Request(
+                index + 1,
+                crowd,
+                WorldLabelRank.Returning,
+                [new WorldLabelLine(name, ReturningHeroLabel.NameTextRef)]))
+            .ToArray();
+
+        var placed = WorldLabelLayout.Place([crew, .. raiders], CameraView.DefaultTileSize);
+
+        // Nobody on the neighbouring cell lost a name to the gesture.
+        Assert.Equal(
+            raiders.Length + 1,
+            placed.Count);
+        // And the crew member still says what it was saying: the state is back.
+        Assert.Equal(
+            "Тишина DOWN",
+            placed.Single(label => label.Request.Subject.Kind == WorldLabelKind.Creature)
+                .Lines[0]
+                .Text);
+    }
+
+    /// <summary>
+    /// The rung Issue #389 added, on its own: where there is no room for the whole
+    /// line, the crew's caption is laid as its bare name rather than given up. It is
+    /// the same third step of «полная подпись → только имя → ничего» that
+    /// <see cref="A_caption_that_cannot_fit_whole_keeps_its_name_and_loses_its_sentence"/>
+    /// states for a raider, and until this Issue the crew had no middle step at all:
+    /// its name and its full text were one string, so the ladder went straight from
+    /// «whole» to «nothing».
+    ///
+    /// <para>Stated on values because it is <b>not observable on either shipped
+    /// scene</b>: on both of the owner's frames every crew label the layout places
+    /// grows back into its full line. That is named here rather than left to be
+    /// discovered, for the reason the price of Issue #379 was named — a rung nobody
+    /// can reach is a claim about the future, and this one is only reachable on a
+    /// frame more crowded than the ones we ship.</para>
+    /// </summary>
+    [Fact]
+    public void A_crew_caption_that_cannot_fit_whole_keeps_its_name_and_loses_its_state()
+    {
+        var here = new GridPoint(20, 7);
+        var crew = new WorldLabelRequest(
+            new WorldLabelSubject(WorldLabelKind.Creature, 1),
+            WorldLabelLayout.HeadOf(
+                CameraView.CellCenter(here, CameraView.DefaultTileSize),
+                CameraView.DefaultTileSize),
+            [new WorldLabelLine("Тишина DOWN", WorldLabelLayout.CreatureNameTextRef)],
+            WorldLabelRank.Hovered,
+            0,
+            "Тишина");
+        var crowd = Enumerable
+            .Range(0, 6)
+            .Select(index => Request(
+                index + 2,
+                new GridPoint(here.X + (index < 3 ? -1 : 1), here.Y),
+                WorldLabelRank.Returning,
+                [new WorldLabelLine("Долговязый", ReturningHeroLabel.NameTextRef)]))
+            .ToArray();
+
+        var placed = WorldLabelLayout.Place([crew, .. crowd], CameraView.DefaultTileSize);
+        var laid = Assert.Single(
+            placed.Where(label => label.Request.Subject.Kind == WorldLabelKind.Creature));
+
+        Assert.Equal("Тишина", laid.Lines[0].Text);
+        Assert.Single(laid.Lines);
+        // And it is the crowd that did it, not an empty answer. The frame is full
+        // enough that labels are being given up outright — the upper bound below is
+        // the whole crowd, so at least one neighbour got nothing — and the name
+        // that survived is narrower than the line it came from rather than merely
+        // spelled differently.
+        Assert.InRange(placed.Count, 2, crowd.Length);
+        Assert.True(
+            WorldLabelLayout.WidthRef(laid.Lines) <
+            WorldLabelLayout.WidthRef(crew.Lines));
+    }
+
+    /// <summary>
     /// Whether two rectangles share a pixel, written here rather than called on
     /// <c>WorldLabelLayout.Overlap</c>.
     ///

@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "issue": 389,
+  "checkpoint": 1,
+  "what": "The finding of Issue #389 reproduced on today's origin/main. No production code is touched at this checkpoint: the guard below is added and is red, which is what «reproduced» means here. The numbers the Issue quotes reproduce exactly.",
+  "base": {
+    "commit": "56f408f",
+    "branch": "fix/389-hover-own",
+    "howObtained": "scripts/agent/take-task.ps1 -Issue 389 created C:\\gamedev\\_wt-389 off origin/main (d5662ad); the branch it made was renamed to fix/389-hover-own and rebased onto origin/main after PR #387 merged. The two commits between d5662ad and 56f408f touch docs/engineering/DEVELOPMENT_PACE.md and docs/product/GATE_DECISIONS.md only, so nothing in the partition of this Issue moved."
+  },
+  "scene": {
+    "fixture": "baseline",
+    "seed": 20260729,
+    "ticks": [2025, 2380],
+    "howReproduced": "WorldLabelLayoutTests.OwnerScene(tick), the same pure path evidence/379-before.json used and the same one it checked against three rendered frames («rendered frame equals the pure layout»)."
+  },
+  "theDefect": {
+    "claim": "Pointing at a creature of the domain — or selecting it — puts out the names of raiders standing on another cell.",
+    "subject": "«Тишина», crew member #8, standing alone with the stranger «Бурый» on cell (15,7) of the wave-4 frame. The three raiders the quiet map names stand together on (14,7).",
+    "quiet": {
+      "raiderNames": ["Гнилозуб", "Долговязый", "Сиплый"],
+      "count": 3,
+      "labelsOnTheFrame": 3
+    },
+    "hoverTishina": {
+      "gesture": "-HoverCell \"15,7\", i.e. WorldLabelFocus(Hovered: Creature#8)",
+      "raiderNames": ["Сиплый"],
+      "count": 1,
+      "labelsOnTheFrame": 2,
+      "lost": ["Гнилозуб", "Долговязый"]
+    },
+    "selectTishina": {
+      "gesture": "--select-cell \"15,7\", i.e. WorldLabelFocus(Selected: Creature#8)",
+      "raiderNames": ["Сиплый"],
+      "count": 1,
+      "labelsOnTheFrame": 2,
+      "lost": ["Гнилозуб", "Долговязый"],
+      "reading": "Criterion 2 answered by number rather than implied: selection costs exactly what hover costs, the same two names. The two gestures differ only in which member of WorldLabelFocus carries the body, and the layout reads the rank, not the member."
+    },
+    "threeAgainstOneAndThreeAgainstTwo": "Both numbers are true of the same frame and they count different things. Raider names: 3 → 1, which is the number the Issue's title uses and the one the owner sees, because the crew's own label is not a raider's name. Labels on the frame: 3 → 2, which is the number §8.4 of SLICE_05 and evidence/379-before.json quote, because «Тишина» is herself a label. Neither is wrong; the denominator has to be said out loud, and §8.4 did not say it.",
+    "mechanism": "«Тишина DOWN» is one line 79.2 reference pixels wide — three and a half tiles — and the cursor ranks it first, so it is the first box laid on the frame. Centred over the head on (15,7) it reaches 39.6 reference pixels each way, which is 17.6 past the centre of (14,7): it covers the neighbouring cell's own column outright, and it covers the two rungs above it as well, because a label's box is 12.5 reference pixels tall and the ladder rises in steps of 5.5. What is left inside the 22-pixel ceiling over that shared head holds one name.",
+    "whyTheTwoPassRuleDidNotCatchIt": "The crew's caption was never exempted from the two passes the way Issue #371 exempted the focused label. It escaped them through a narrower door: WorldLabels.CreatureLine glues the name and the state into one string — «Тишина DOWN» — so «its name» and «its full text» are the same line, and the first pass, which is supposed to lay names only, lays the whole of it. Same defect as #379, arriving through a different door."
+  },
+  "theGuardOfPr386IsBlindByConstruction": {
+    "guard": "WorldLabelFocusTests.A_second_line_never_costs_a_neighbour_his_name",
+    "why": "It compares two layouts of the frame that have the same focus — the drawn one against one where no caption has a second line. The gesture is on both sides of the comparison, so nothing that depends on where the cursor is can change the difference. It is green on the base commit while the frame goes from three raider names to one.",
+    "measured": {
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~WorldLabelFocusTests\"",
+      "output": "Не пройден!: не пройдено 1, пройдено 12, пропущено 0, всего 13",
+      "reading": "Twelve green include both rows of A_second_line_never_costs_a_neighbour_his_name. The one red is the guard added below."
+    }
+  },
+  "guardAdded": {
+    "name": "WorldLabelFocusTests.A_gesture_never_takes_a_name_from_a_body_on_another_cell",
+    "state": "red at 56f408f",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~A_gesture_never_takes_a_name_from_a_body_on_another_cell\"",
+    "verbatim": "pointing at «Тишина» on GridPoint { X = 15, Y = 7 } at tick 2380 costs «Гнилозуб» on GridPoint { X = 14, Y = 7 } his name; the quiet map names 3 bodies and this one names 2.",
+    "whatItStates": "For every body of both frames and both gestures, the set of bodies named under the gesture is compared with the set named on the quiet map. A body may lose its name only when it stands on the focused body's own cell — the ladder over one shared head holds three labels and no layout can change that. Losing the name of somebody on another cell is the gesture reaching past its own body, and that is what fails.",
+    "whyItIsNotVacuous": "Each focused body is asserted to be named under its own gesture first. Without that line a build where pointing at a body did nothing at all would satisfy every other line: nothing added, nothing displaced, nothing lost.",
+    "waveThreeRow": "green at 56f408f, and stays green after the fix. Tick 2025 names one raider and the crew stands away from him, so the frame cannot show this defect — the row is there because a check stated on one of two shipped scenes is a check that stopped looking at the other."
+  },
+  "whatIsNotADefect": {
+    "sameCellDisplacement": "Pointing at «Ловчий», «Косой» or «Ловчий Старший» — all on (14,7) — costs «Долговязый», also on (14,7), his name. The count stays three; the crowd swaps one name for another. That is the tile's own arithmetic, named in WorldLabelLayoutTests.The_names_that_are_not_shown_are_raiders_sharing_one_cell, and the guard above allows it explicitly rather than by silence.",
+    "hoveringCrewFurtherAway": "Pointing at «Кремень» (17,7) or «Дёготь» (16,7) takes the frame from three raider names to four: their boxes fall differently on the ladder over (14,7) and one more name fits. Packing is not monotone in the number of labels, which is why the guard is stated as «no name is lost» and not as «the count does not fall»."
+  }
+}

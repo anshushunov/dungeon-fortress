@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "issue": 389,
+  "what": "Two substitutions, one per half of the change (rule 9). The first half is the guard's sight — a comparison that varies the focus rather than holding it constant; the second half is the layout fix — the crew's caption laying only its name in the first pass. Each mutant is run against a committed state, so putting the mutant back cannot take the change with it.",
+  "howMutantsAreRun": "python rewrites the one named line in the working copy, dotnet test runs the named filter, then `git checkout -- <file>` puts the line back. The was/became texts are verbatim, including leading spaces.",
+  "whyTheTwoAreNotOneChangeCutInHalf": "Reverting the whole change would redden the guard and prove only that something was reverted. These two separate the halves: mutant «symptom» keeps the sighted guard and reverts the layout, and the guard fails on the owner's own gesture. Mutant «blindGuard» reverts the layout and *also* blinds the guard, and everything is green. The second is the one this Issue was opened for — it is what «проверка, которая не может увидеть свой дефект» looks like as a number rather than as a claim.",
+  "mutants": [
+    {
+      "id": "criterion5-symptom",
+      "checkpoint": 4,
+      "half": "the layout fix",
+      "runAgainst": "da72b44 — the layout fix and both guards committed",
+      "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+      "was": "                rank,\n                order++,\n                creature.Name));",
+      "became": "                rank,\n                order++));",
+      "meaning": "The crew's request stops carrying the shorter form of its line, so its ladder has no rung below «Тишина DOWN» and the first pass lays the whole caption again — the state the base commit was in.",
+      "expected": "red",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~A_gesture_never_takes_a_name_from_a_body_on_another_cell\"",
+      "output": "Не пройден!: не пройдено 1, пройдено 1, пропущено 0, всего 2",
+      "verbatim": "pointing at «Тишина» on GridPoint { X = 15, Y = 7 } at tick 2380 costs «Гнилозуб» on GridPoint { X = 14, Y = 7 } his name; the quiet map names 3 bodies and this one names 2.",
+      "reading": "Word for word the failure of evidence/389-before.json. The guard is measuring the defect itself and not a side effect of the edit that fixed it."
+    },
+    {
+      "id": "criterion4-blindGuard",
+      "checkpoint": 4,
+      "half": "the guard's sight",
+      "runAgainst": "da72b44 with the mutant above already applied — the defect present, so there is something for a guard to miss",
+      "file": "tests/DungeonFortress.Presentation.Tests/WorldLabelFocusTests.cs",
+      "was": "                var reference = WorldLabelFocus.None;",
+      "became": "                var reference = focus;",
+      "meaning": "The guard is given the shape the guard of PR #386 has: the focus is held constant in both of the compared layouts, so the gesture stands on both sides of the equals sign.",
+      "expected": "green — and green is the finding, not a pass. It is «the guard of #386 is blind by construction» measured instead of asserted.",
+      "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj",
+      "output": "Пройден!: не пройдено 0, пройдено 724, пропущено 0, всего 724",
+      "reading": "The whole presentation suite is green while pointing at «Тишина» takes the wave-4 frame from three raider names to one. That is the state PR #386 shipped in, and the reason the second half of this Issue was worth as much as the first."
+    },
+    {
+      "id": "criterion4-blindGuard-atCheckpoint2",
+      "checkpoint": 2,
+      "half": "the guard's sight",
+      "runAgainst": "8192d26 — the sighted guard committed, production code still the base commit's",
+      "file": "tests/DungeonFortress.Presentation.Tests/WorldLabelFocusTests.cs",
+      "was": "                var reference = WorldLabelFocus.None;",
+      "became": "                var reference = focus;",
+      "meaning": "The same substitution, run before the layout was touched at all — the Issue asks for it at checkpoint 2 and again at checkpoint 4, and the two runs are kept apart here because they are against different commits.",
+      "expected": "green",
+      "commands": [
+        {
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~A_gesture_never_takes_a_name_from_a_body_on_another_cell\"",
+          "output": "Пройден!: не пройдено 0, пройдено 2, пропущено 0, всего 2"
+        },
+        {
+          "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj",
+          "output": "Пройден!: не пройдено 0, пройдено 722, пропущено 0, всего 722"
+        }
+      ],
+      "withoutTheMutant": {
+        "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~A_gesture_never_takes_a_name_from_a_body_on_another_cell\"",
+        "output": "Не пройден!: не пройдено 1, пройдено 1, пропущено 0, всего 2"
+      }
+    }
+  ],
+  "suiteSizes": "722 at 8192d26 and e0c2d04; 724 from da72b44 on, the two added being the value-stated checks of the crew's ladder in WorldLabelLayoutTests."
+}
