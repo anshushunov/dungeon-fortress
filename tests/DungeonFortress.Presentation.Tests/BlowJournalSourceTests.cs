@@ -120,15 +120,27 @@ public sealed class BlowJournalSourceTests
             .Where(@event => @event.ReasonCode == BlowReadout.AttackReason)
             .ToArray();
 
-        // The fold is real: fewer entries than blows, and the worst of them holds
-        // three. If this stopped being true the claim below would be about
-        // nothing.
-        Assert.Equal(53, attackEntries.Length);
-        Assert.Equal(3, attackEntries.Max(@event => @event.Repeats));
+        // The fold is real: fewer entries than blows, and at least one entry
+        // holds more than one. If this stopped being true the claim below would
+        // be about nothing.
+        //
+        // Stated as the property rather than as the two numbers it happened to
+        // have. They were 53 entries over 68 blows when this was written and the
+        // longer fight of Issue #333 moved both; a literal here would have to be
+        // re-recorded every time the party is re-tuned while checking nothing the
+        // property does not already check.
+        Assert.NotEmpty(attackEntries);
+        Assert.True(
+            attackEntries.Length < recoveredCrewBlows,
+            $"{attackEntries.Length} journal entries carried {recoveredCrewBlows} blows, so " +
+            "nothing was folded and the claim below is about nothing.");
+        Assert.True(
+            attackEntries.Max(@event => @event.Repeats) > 1,
+            "no journal entry holds more than one blow, so the fold this test is about does " +
+            "not happen in this party at all.");
 
         // And it costs the picture nothing.
         Assert.Equal(attackEntries.Sum(@event => @event.Repeats), recoveredCrewBlows);
-        Assert.Equal(68, recoveredCrewBlows);
         Assert.Equal(
             final.Events.Count(@event =>
                 @event.ReasonCode == BlowReadout.RaiderDownedReason),
