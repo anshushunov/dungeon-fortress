@@ -192,13 +192,30 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
     /// than about the count: every refusal names the tile the creature is
     /// avoiding, and that tile has to be one of the tiles that creature — and
     /// not some other one — actually remembers.
+    ///
+    /// <para><b>The observability floor is derived and not chosen.</b> It used to
+    /// be «ten refusals over the matrix», and ten was a recording of a party set
+    /// that no longer exists: 51 refusals on <c>prepared</c> at a join threshold
+    /// of 41, exactly 10 at 40, zero at 30 before Issue #76 and eight after it.
+    /// Nothing in the claim above names a ten — and a sum of ten is satisfied by
+    /// 10/0/0, a party with no memory in it at all carried by its neighbour. The
+    /// rule that replaces it is <b>memory of place is observable in every party of
+    /// the matrix</b>. The body of this check runs only on ticks where a refusal
+    /// happened, so the floor is a guard against vacuity; the only number the word
+    /// «observable» puts into it is one, the boundary between observed and not
+    /// observed, and the party is the unit because the matrix is how this suite
+    /// tells a property of the world from a coincidence of one party (13.4). The
+    /// rule, and the alternatives it was chosen over — lowering the sum to the
+    /// eight that was measured, a share of all refusals, «in N parties of M» —
+    /// were written down in <c>evidence/333-memory-floor.json</c> before it was
+    /// run.</para>
     /// </summary>
     [Theory]
     [InlineData("baseline")]
     [InlineData("prepared")]
     public void A_remembered_place_changes_what_the_creature_does_next(string fixtureName)
     {
-        var refusals = 0;
+        var silent = new List<ulong>();
         var report = new StringBuilder();
 
         foreach (var seed in MatrixSeeds)
@@ -243,16 +260,23 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
                 }
             }
 
-            refusals += here;
+            if (here == 0)
+            {
+                silent.Add(seed);
+            }
+
             report.AppendLine(CultureInfo.InvariantCulture,
                 $"{fixtureName}/{seed}: {here} refusals by {who.Count} creature(s)");
         }
 
         output.WriteLine(report.ToString());
         Assert.True(
-            refusals >= 10,
-            $"{fixtureName}: memory refused work {refusals} times over the whole matrix.\n{report}" +
-            "A memory nobody ever acts on is a field in the snapshot, not a slice.");
+            silent.Count == 0,
+            $"{fixtureName}: memory of place changed nothing in " +
+            $"{silent.Count} of {MatrixSeeds.Length} parties of the matrix — " +
+            $"{string.Join(", ", silent)}.\n{report}" +
+            "A memory nobody ever acts on is a field in the snapshot, not a slice, and " +
+            "a party it is never observed in cannot be carried by the party next to it.");
     }
 
     /// <summary>
