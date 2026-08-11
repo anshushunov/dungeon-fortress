@@ -107,6 +107,54 @@ public sealed class PrototypeCombatRandomTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// Two runs of one seed give one canonical document, byte for byte, over a
+    /// <b>whole party</b> — criterion 1 of the merged slice #333+#336, and the
+    /// first thing it asks for.
+    ///
+    /// <para><b>Why it is not the check that already existed.</b>
+    /// <c>PrototypeScenarioTests.Replay_from_loaded_command_log_is_byte_identical</c>
+    /// runs to <c>FirstRaidTick + 1</c>, which is one tick into the first wave's
+    /// arrival: no blow has landed, no jitter has been drawn, and the combat
+    /// stream has never moved. It is a statement about the economy and it has
+    /// never been able to say anything about the fight. Widening the spread of
+    /// damage is exactly the change that would break reproducibility if the draw
+    /// ever came from outside the seed, so the claim has to be made where the
+    /// draws are.</para>
+    ///
+    /// <para>Three seeds and the fixture that fights hardest, compared on
+    /// <see cref="PrototypeRunResult.CanonicalJson"/> rather than on the checksum:
+    /// a checksum equal by accident is a thing that can happen and a document
+    /// equal by accident is not.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("baseline", 20_260_726UL)]
+    [InlineData("prepared", 20_260_727UL)]
+    [InlineData("prepared", 20_260_728UL)]
+    public void A_whole_party_of_one_seed_replays_byte_for_byte(string fixtureName, ulong seed)
+    {
+        var first = PrototypeScenario.Run(
+            LoadFixture(fixtureName) with { Seed = seed }, PrototypeTuning.SessionTicks);
+        var again = PrototypeScenario.Run(
+            LoadFixture(fixtureName) with { Seed = seed }, PrototypeTuning.SessionTicks);
+
+        // The guard against the check going hollow: a party that never reached a
+        // fight would replay identically for reasons that have nothing to do with
+        // the combat stream.
+        Assert.True(
+            first.State.SessionResult.RaidersDowned > 0,
+            $"{fixtureName}/{seed} put down no raider at all, so this replay proves nothing " +
+            "about the combat stream. Point it at a fixture that fights before trusting it.");
+
+        Assert.Equal(first.CanonicalJson, again.CanonicalJson);
+        Assert.Equal(first.Checksum, again.Checksum);
+
+        output.WriteLine(string.Create(
+            CultureInfo.InvariantCulture,
+            $"{fixtureName}/{seed}: {first.CanonicalJson.Length} bytes identical, " +
+            $"checksum {first.Checksum}, raidersDowned={first.State.SessionResult.RaidersDowned}"));
+    }
+
+    /// <summary>
     /// The jitter every raider of the party was rolled with, read back off the
     /// published snapshot rather than off the generator: a raider's might is
     /// <c>wave.RaiderMight + jitter</c>, plus
