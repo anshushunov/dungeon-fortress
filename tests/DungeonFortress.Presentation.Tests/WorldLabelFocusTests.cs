@@ -221,6 +221,80 @@ public sealed class WorldLabelFocusTests
     }
 
     /// <summary>
+    /// <b>The guard of Issue #389: a gesture never takes a name away from a body
+    /// standing somewhere else.</b>
+    ///
+    /// <para><b>Why a second guard and not a wider one.</b> The check above holds the
+    /// focus <em>constant</em> in both of the layouts it compares — same hover, same
+    /// selection, the difference being only whether captions carry a second line. A
+    /// comparison built that way cannot see anything that depends on <em>where the
+    /// cursor is</em>, and that is not a gap in its wording but its construction: the
+    /// gesture is on both sides of the equals sign. So on the base commit of this
+    /// Issue it was green while pointing at the crew member «Тишина» on (15,7) took
+    /// the wave-4 map from three raider names to one. This check varies the focus
+    /// instead — every body of the frame, both gestures, each against the quiet map —
+    /// and is therefore the one that can fail on that class at all.</para>
+    ///
+    /// <para><b>The exception is the tile and not the rule.</b> A body standing on the
+    /// focused body's own cell may still lose its name, and no layout can prevent it:
+    /// five captioned raiders share cell (14,7) of the wave-4 frame, they share one
+    /// head and therefore one ladder of places, three fit, and pointing at a fourth
+    /// means one of the three has to go
+    /// (<see cref="WorldLabelLayoutTests.The_names_that_are_not_shown_are_raiders_sharing_one_cell"/>).
+    /// Calling that a defect would be blaming the rule for the tile. Losing the name
+    /// of somebody on <em>another</em> cell is the other thing entirely — the gesture
+    /// reaching past its own body — and that is what this refuses.</para>
+    ///
+    /// <para><b>And the gesture has to answer.</b> Every focused body is asserted to
+    /// be named under its own gesture, because without it a build where pointing at
+    /// something did nothing at all would satisfy every line above: no label added,
+    /// nothing displaced, no name lost.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(WaveThreeTick)]
+    [InlineData(WaveFourTick)]
+    public void A_gesture_never_takes_a_name_from_a_body_on_another_cell(int ticks)
+    {
+        var state = WorldLabelLayoutTests.OwnerScene(ticks);
+
+        Assert.NotEmpty(BodiesOf(state));
+        foreach (var body in BodiesOf(state))
+        {
+            var here = CellOf(state, body);
+            foreach (var focus in new[]
+                     {
+                         new WorldLabelFocus(body, null),
+                         new WorldLabelFocus(null, body),
+                     })
+            {
+                // The one line that decides whether this guard can see anything:
+                // the layout the gesture is measured against is the *quiet* map.
+                // Written out as a local rather than inlined so that the
+                // substitution which makes a guard of this shape blind — holding
+                // the focus constant in both layouts, as the guard above does — is
+                // one token, and evidence/389-mutants.json runs exactly that one.
+                var reference = WorldLabelFocus.None;
+                var quiet = NamedSubjects(
+                    WorldLabels.Of(state, reference, CameraView.DefaultTileSize));
+                var named = NamedSubjects(
+                    WorldLabels.Of(state, focus, CameraView.DefaultTileSize));
+
+                Assert.NotEmpty(quiet);
+                Assert.Contains(body, named);
+                foreach (var lost in quiet.Where(subject => !named.Contains(subject)))
+                {
+                    Assert.True(
+                        CellOf(state, lost) == here,
+                        $"pointing at «{NameOf(state, body)}» on {here} at tick {ticks} " +
+                        $"costs «{NameOf(state, lost)}» on {CellOf(state, lost)} his name; " +
+                        $"the quiet map names {quiet.Count} bodies and this one names " +
+                        $"{named.Count}.");
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// The other half of the same rule, and the half Issue #371 bought: the body the
     /// player is asking about is the <b>first</b> one offered its sentence back once
     /// every name is down. A neighbour that also carries a sentence and stands
@@ -289,6 +363,25 @@ public sealed class WorldLabelFocusTests
             .Select(label => $"{label.Request.Subject.Kind}#{label.Request.Subject.Id}")
             .OrderBy(text => text, StringComparer.Ordinal),
     ];
+
+    /// <inheritdoc cref="NamedBodies"/>
+    private static IReadOnlyList<WorldLabelSubject> NamedSubjects(
+        IReadOnlyList<PlacedWorldLabel> placed) =>
+    [
+        .. placed.Select(label => label.Request.Subject),
+    ];
+
+    /// <summary>Which cell a body of either population stands on.</summary>
+    private static GridPoint CellOf(PrototypeSnapshot state, WorldLabelSubject body) =>
+        body.Kind == WorldLabelKind.Creature
+            ? state.Creatures.Single(creature => creature.Id == body.Id).Position
+            : state.Raiders.Single(raider => raider.Id == body.Id).Position;
+
+    /// <summary>What a body is called, for a failure message that names names.</summary>
+    private static string NameOf(PrototypeSnapshot state, WorldLabelSubject body) =>
+        body.Kind == WorldLabelKind.Creature
+            ? state.Creatures.Single(creature => creature.Id == body.Id).Name
+            : state.Raiders.Single(raider => raider.Id == body.Id).Name;
 
     /// <summary>A raider nobody reached: one line, and no sentence to grow.</summary>
     private static WorldLabelRequest Name(int id, GridPoint cell, string name, int order) =>
