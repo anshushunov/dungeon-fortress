@@ -4,8 +4,9 @@
   "checkpoint": 3,
   "what": "Criterion 5: one substitution per half of the change, each run against the committed state of the half it attacks, each showing which check goes red. Rule 9 of docs/engineering/DEVELOPMENT_PACE.md.",
   "state": {
-    "commit": "478ba21",
+    "commit": "8e81437bdd01cc5ade53fa5c6b74e9b823ff40c6",
     "why": "Both mutants are applied to the committed fix and reverted with git checkout afterwards, not to the working copy before the commit: a mutant reverted over an uncommitted change takes the change with it (measured on Issue #147).",
+    "oneValueAndWhyThisOne": "This file first named 478ba21, the pre-rebase twin of the same change: the branch was rebased onto d109e1a between checkpoint 4 and the PR, and the rebase renamed every commit. 8e81437 is the name the change has on the branch under review, so that is the name kept — and both runs below were repeated on it rather than re-labelled. That the code under test did not move between the two names is a diff rather than a claim: `git diff --stat 478ba21 8e81437` names only docs/product/GATE_DECISIONS.md, and `git diff --stat 8e81437 HEAD -- src tests` is empty.",
     "greenBaseline": {
       "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj --filter \"FullyQualifiedName~WorldLabelFocusTests|FullyQualifiedName~WorldLabelLayoutTests\"",
       "output": "Пройден!: не пройдено 0, пройдено 25, пропущено 0, всего 25"

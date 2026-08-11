@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "issue": 379,
+  "round": "review PR #386, main finding",
+  "criterion": 4,
+  "verdict": "NOT MET IN SUBSTANCE. After this PR no gesture returns a shed second line on any shipped scene, and the check that was offered as proof of the opposite is blind: it passes with nothing pointed at.",
+  "whatWasClaimed": "evidence/379-after.json → criterion4 said the promise of Issue #371 «is kept where there is room», and named tick 2025 «Ржавый» — 2/2 hovered, 2/2 selected — as the side that holds.",
+  "whyThatWasNotAMeasurementOfTheGesture": "«Ржавый» carries both his lines with nothing pointed at. The loop in WorldLabelFocusTests.The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer_where_there_is_room walks WorldLabelFocus.None first and asserts the same two lines for it, so every iteration of that loop would pass on a build in which focus did nothing at all. A check that cannot fail on the thing it is named after does not measure it.",
+  "howTheBlindnessWasShown": {
+    "command": "A throwaway xunit probe in tests/DungeonFortress.Presentation.Tests, run with dotnet test --filter FullyQualifiedName~Probe379c --logger \"console;verbosity=detailed\", then deleted. For every raider ReturningHeroLabel.IsCaptioned answers true for, on both shipped frames, it prints how many lines WorldLabels.Of places for him with nothing pointed at, while hovered, and while selected.",
+    "output": [
+      "t2380 «Гнилозуб» #17 (14,7) story=False NONE=1/1 HOVER=1/1 SELECT=1/1",
+      "t2380 «Долговязый» #18 (14,7) story=False NONE=1/1 HOVER=1/1 SELECT=1/1",
+      "t2380 «Ловчий» #19 (14,7) story=False NONE=not placed HOVER=1/1 SELECT=1/1",
+      "t2380 «Сиплый» #20 (14,7) story=True NONE=1/2 HOVER=1/2 SELECT=1/2",
+      "t2380 «Косой» #21 (14,7) story=False NONE=not placed HOVER=1/1 SELECT=1/1",
+      "t2025 «Ржавый» #11 (15,7) story=True NONE=2/2 HOVER=2/2 SELECT=2/2"
+    ]
+  },
+  "reading": {
+    "twoBodiesCarryASentenceAtAll": "«Ржавый» on the wave-3 frame and «Сиплый» on the wave-4 one. Every other captioned raider of both frames has no second line to shed — story=False — so no gesture can give one back to him.",
+    "rusty": "NONE=2/2. He has his sentence before anybody points at anything; hovering and selecting change nothing. He is not evidence that a gesture returns a shed line, he is evidence that an uncrowded caption is drawn whole.",
+    "sipliy": "NONE=1/2, HOVER=1/2, SELECT=1/2. He is the one caption of the shipped scenes whose line the crowd takes off, and after this PR no gesture gives it back.",
+    "therefore": "On the two frames the game ships, the count of «shed lines a gesture returns» is zero. Before this PR it was one — «Сиплый» under either gesture — and that one was bought by taking «Долговязый»'s name off the map, which is the defect Issue #379 was opened about.",
+    "theOnlySceneWhereTheGestureIsObservable": "WorldLabelFocusTests.The_body_under_the_cursor_is_offered_its_sentence_first, and it is constructed rather than played: two returners with sentences on neighbouring cells and a bare name beside each. It was written after the change, so it states the rule the change introduces and is worth exactly that — it holds the second half of the fix against mutation (evidence/379-mutants.json, mutant 2) and it is not a measurement of any frame a player has seen."
+  },
+  "whatThisDoesAndDoesNotChange": {
+    "code": "Nothing. Both halves of the change were reproduced independently by review, and the owner chose «имена всех» on 2026-08-10 — this PR's approach — over rolling it back or buying the sentence a place at the cost of another round.",
+    "claims": "The PR body marks criterion 4 as not met in substance; docs/design/SLICE_05_RETURNING_HERO.md §8.4 and the «Подписи над телами в мире» section of docs/product/REFERENCES.md say that the promise of Issue #371 is today unobservable rather than conditional.",
+    "whatWouldMakeItObservableAgain": "A shipped scene in which a captioned raider stands with room beside him and his sentence is shed anyway — that is, a crowd thin enough for the second pass to have something to offer. Today's two frames do not contain one, and manufacturing one would be manufacturing evidence."
+  },
+  "whatIsStillNamedAndNotDone": "The docstring of The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer_where_there_is_room still calls its second loop «the side that holds, measured on the same scene», which the output above shows is measured without any gesture. Correcting that sentence would touch a .cs file, which this round is scoped out of (rule 39: the round stays inside documents so the diff can be read instead of re-verified). It is named here so the next round can take it rather than inherit it silently."
+}
