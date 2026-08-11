@@ -1,0 +1,23 @@
+{
+  "issue": 352,
+  "checkpoint": 4,
+  "checkpointCommit": "335dc6b",
+  "what": "Full scripts/verify.ps1, one run, on the final commit before review — all ten stages.",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
+  "observed": "Verification scope: full (10 of 10 stages: scripts, build, tests, mcp, sim, load, godot, ui, screenshots, token-budget). All ten \"verification_stage\" events report status ok. Final: {\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"full\",\"stagesExecuted\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\",\"token-budget\"],\"stagesNotRun\":[],\"godotExitCode\":0,\"hudGuardRegressionExitCode\":1,\"hudReadabilityRegressionExitCode\":1,\"hudSmallestPhysicalTextPixels\":{\"Authored\":8,\"OwnerMaximized\":16},\"cameraTransformRegressionExitCode\":1,\"godotRaidExitCode\":0,\"momentOfTruthExitCode\":0,\"screenshotRepeatable\":true}",
+  "stageElapsedSeconds": {
+    "scripts": 131.1,
+    "build": 32.1,
+    "tests": 208.6,
+    "mcp": 4.5,
+    "sim": 0.4,
+    "load": 0.7,
+    "godot": 37,
+    "ui": 4.7,
+    "screenshots": 15.1,
+    "token-budget": 91.9
+  },
+  "exitCode": 0,
+  "treeStateAtRun": "Clean working tree on commit 335dc6b, the branch HEAD at the time of this run and at the time the PR was opened.",
+  "note": "scripts/verify.ps1 was not edited at any point in this Issue; every invocation across the four checkpoints (evidence/352-fit.json, 352-checkpoint2.json, this file) ran it as-is, per the non-goal on scripts/**."
+}
