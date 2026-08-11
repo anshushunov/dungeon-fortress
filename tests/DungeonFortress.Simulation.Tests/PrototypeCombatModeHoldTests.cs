@@ -252,6 +252,123 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// How long an exchange lasts and how far a blow scatters, read off the same
+    /// nine parties — the measuring column Issue #336 asks for.
+    ///
+    /// <para><b>A blow on a raider is counted from the journal and a blow on a
+    /// defender from the health it lost</b>, and the asymmetry is the journal's
+    /// rather than this probe's: <c>ActCombatant</c> writes <c>combat_attack</c>
+    /// with the damage in it, while <c>ActRaiders</c> writes nothing at all until
+    /// the defender goes down. So the raider side is an exact count of blows and
+    /// the defender side is a count of <b>ticks in which health fell</b>, which
+    /// undercounts whenever two raiders reach the same defender on one tick. The
+    /// two are therefore reported under different names and never added
+    /// together.</para>
+    ///
+    /// <para><b>The spread is shown by profile.</b> A defender's blow is
+    /// <c>might·W + readiness/D + jitter</c>, and both <c>Might</c> and
+    /// <c>Readiness</c> are published in the snapshot — so two blows that share a
+    /// profile share every term of the sum except the jitter. A profile that
+    /// carries more than one damage value is the whole of criterion 3: the same
+    /// exchange, a different result.</para>
+    /// </summary>
+    private static void ObserveTheExchange(
+        PrototypeSnapshot previous,
+        PrototypeSnapshot current,
+        int acted,
+        Measurement tally)
+    {
+        var raiderHpBefore = previous.Raiders.ToDictionary(raider => raider.Id, raider => raider.Hp);
+        var creatureBefore = previous.Creatures.ToDictionary(creature => creature.Id);
+
+        foreach (var creature in current.Creatures)
+        {
+            var decision = creature.LastDecision;
+            if (decision.Tick != acted)
+            {
+                continue;
+            }
+
+            if (decision.ReasonCode == "combat_attack" &&
+                decision.Details.TryGetValue("raiderId", out var struck) &&
+                decision.Details.TryGetValue("damage", out var damage))
+            {
+                tally.BlowsOnARaider[struck] = tally.BlowsOnARaider.GetValueOrDefault(struck) + 1;
+                tally.RaiderUnderFireSince.TryAdd(struck, acted);
+                var profile = $"m{creature.Might}r{creature.Readiness}";
+                if (!tally.DamageByProfile.TryGetValue(profile, out var seen))
+                {
+                    seen = [];
+                    tally.DamageByProfile[profile] = seen;
+                }
+
+                seen.Add(damage);
+                tally.DefenderBlows++;
+                tally.DefenderDamageTotal += damage;
+                tally.DefenderDamageLowest = Math.Min(tally.DefenderDamageLowest, damage);
+                tally.DefenderDamageHighest = Math.Max(tally.DefenderDamageHighest, damage);
+            }
+
+            if (decision.ReasonCode == "combat_raider_downed" &&
+                decision.Details.TryGetValue("raiderId", out var felled))
+            {
+                // The killing blow is written as `combat_raider_downed` and
+                // overwrites the `combat_attack` of the same tick, so it is added
+                // back by hand rather than lost.
+                var blows = tally.BlowsOnARaider.GetValueOrDefault(felled) + 1;
+                tally.BlowsToFellARaider.Add(blows);
+                if (tally.RaiderUnderFireSince.TryGetValue(felled, out var since))
+                {
+                    tally.TicksARaiderStoodUnderFire.Add(acted - since + 1);
+                    tally.RaiderUnderFireSince.Remove(felled);
+                }
+
+                tally.BlowsOnARaider.Remove(felled);
+            }
+        }
+
+        foreach (var raider in current.Raiders)
+        {
+            if (!raiderHpBefore.TryGetValue(raider.Id, out var was) || raider.Hp >= was)
+            {
+                continue;
+            }
+
+            tally.HealthTakenOffRaiders += was - raider.Hp;
+        }
+
+        foreach (var creature in current.Creatures)
+        {
+            if (!creatureBefore.TryGetValue(creature.Id, out var was) || creature.Hp >= was.Hp)
+            {
+                continue;
+            }
+
+            tally.HitTicksOnADefender[creature.Id] = tally.HitTicksOnADefender.GetValueOrDefault(creature.Id) + 1;
+            tally.DefenderUnderFireSince.TryAdd(creature.Id, acted);
+            tally.HealthTakenOffDefenders += was.Hp - creature.Hp;
+            if (creature.Mode != CreatureMode.Downed || was.Mode == CreatureMode.Downed)
+            {
+                continue;
+            }
+
+            tally.HitTicksToFellADefender.Add(tally.HitTicksOnADefender[creature.Id]);
+            if (tally.DefenderUnderFireSince.TryGetValue(creature.Id, out var since))
+            {
+                tally.TicksADefenderStoodUnderFire.Add(acted - since + 1);
+            }
+
+            tally.HitTicksOnADefender.Remove(creature.Id);
+            tally.DefenderUnderFireSince.Remove(creature.Id);
+        }
+
+        foreach (var wave in current.Waves.Where(wave => wave.EndTick == acted && wave.Outcome is not null))
+        {
+            tally.WaveSpans.Add(acted - wave.ArriveTick);
+        }
+    }
+
+    /// <summary>
     /// Everything that can be read by comparing the snapshot after tick T-1 with
     /// the snapshot after tick T.
     /// </summary>
@@ -261,6 +378,7 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
         int acted,
         Measurement tally)
     {
+        ObserveTheExchange(previous, current, acted, tally);
         var raidersBefore = previous.Raiders.ToDictionary(raider => raider.Id, raider => raider.Mode);
         var standing = current.Raiders.Count(raider => raider.Mode == RaiderMode.Raiding);
         var bodies = current.Raiders.Count(raider => raider.Mode == RaiderMode.Downed);
@@ -501,8 +619,55 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
 
         public List<string> SatietyAtArrival { get; } = [];
 
+        public Dictionary<int, int> BlowsOnARaider { get; } = [];
+
+        public Dictionary<int, int> RaiderUnderFireSince { get; } = [];
+
+        public List<int> BlowsToFellARaider { get; } = [];
+
+        public List<int> TicksARaiderStoodUnderFire { get; } = [];
+
+        public Dictionary<int, int> HitTicksOnADefender { get; } = [];
+
+        public Dictionary<int, int> DefenderUnderFireSince { get; } = [];
+
+        public List<int> HitTicksToFellADefender { get; } = [];
+
+        public List<int> TicksADefenderStoodUnderFire { get; } = [];
+
+        public List<int> WaveSpans { get; } = [];
+
+        public Dictionary<string, SortedSet<int>> DamageByProfile { get; } = [];
+
+        public int DefenderBlows { get; set; }
+
+        public int DefenderDamageTotal { get; set; }
+
+        public int DefenderDamageLowest { get; set; } = int.MaxValue;
+
+        public int DefenderDamageHighest { get; set; }
+
+        public int HealthTakenOffRaiders { get; set; }
+
+        public int HealthTakenOffDefenders { get; set; }
+
+        /// <summary>
+        /// The profiles that saw more than one damage value, most-scattered
+        /// first. Empty means the spread is not observable on this run.
+        /// </summary>
+        public IEnumerable<string> ScatteredProfiles =>
+            DamageByProfile
+                .Where(pair => pair.Value.Count > 1)
+                .OrderByDescending(pair => pair.Value.Max - pair.Value.Min)
+                .ThenBy(pair => pair.Key, StringComparer.Ordinal)
+                .Select(pair => $"{pair.Key}=>{string.Join('/', pair.Value)}");
+
         public override string ToString()
         {
+            // Hundredths, kept as integers so the report cannot pick up a culture.
+            static string Mean(List<int> values) =>
+                values.Count == 0 ? "-" : $"{values.Sum() * 100 / values.Count}/100";
+
             static string Map<T>(Dictionary<T, int> value)
                 where T : notnull =>
                 value.Count == 0
@@ -526,6 +691,16 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
                 $"    windowsOpened=[{(Windows.Count == 0 ? "-" : string.Join(' ', Windows))}] (tick:blowsOnBodies/blowsDrawn on the frame that opens it)",
                 $"  fightingTicksWithNothingToFight={FightingTicksWithNothingToFight} raiderBodyTicks={RaiderBodyTicks} maxRaiderBodiesOnTheMap={MaxRaiderBodiesOnTheMap} yieldsBookedByAFighter={YieldsBookedByAFighter}",
                 $"  longestSpellInTheLine={LongestSpellInTheLine} lowestSatietyInTheLine={LowestSatietyInTheLine}",
+                $"  LENGTH {fixtureName}/{seed} blowsToFellARaider={Mean(BlowsToFellARaider)} (n={BlowsToFellARaider.Count}) " +
+                    $"ticksARaiderStoodUnderFire={Mean(TicksARaiderStoodUnderFire)} " +
+                    $"hitTicksToFellADefender={Mean(HitTicksToFellADefender)} (n={HitTicksToFellADefender.Count}) " +
+                    $"ticksADefenderStoodUnderFire={Mean(TicksADefenderStoodUnderFire)} " +
+                    $"waveSpan={Mean(WaveSpans)} (n={WaveSpans.Count})",
+                $"  SPREAD {fixtureName}/{seed} defenderBlows={DefenderBlows} " +
+                    $"damage={(DefenderBlows == 0 ? "-" : $"{DefenderDamageLowest}..{DefenderDamageHighest} mean={DefenderDamageTotal * 100 / DefenderBlows}/100")} " +
+                    $"profiles={DamageByProfile.Count} scattered={DamageByProfile.Count(pair => pair.Value.Count > 1)} " +
+                    $"hpOffRaiders={HealthTakenOffRaiders} hpOffDefenders={HealthTakenOffDefenders}",
+                $"    widest=[{string.Join(' ', ScatteredProfiles.Take(6))}]",
                 $"  SWEEP {fixtureName}/{seed} joins={JoinsSeen} score={(Score is null ? "none" : Score.ToString())} outcome={Outcome} raidCost={RaidCost} wavesResolved={WavesResolved} raidCostPerWave={(WavesResolved == 0 ? -1 : RaidCost / WavesResolved)}",
                 $"  RATION {fixtureName}/{seed} satietyAtWaveArrival=[{string.Join(' ', SatietyAtArrival)}]");
         }

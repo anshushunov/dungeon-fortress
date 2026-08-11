@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "issue": [333, 336],
+  "when": "2026-08-11, the merged balance slice takes over the branch",
+  "what": "How long an exchange lasts and how far a blow scatters, measured on the nine shipped parties before a single combat number is touched. This is the «до» of criterion 2 of the merged slice, and the baseline every candidate below is compared against.",
+  "tree": {
+    "branch": "fix/333-combat-mode-hold",
+    "baseCommit": "3b627bf",
+    "rebasedOnto": "origin/main at 3b627bf, so every number here is measured against the tree the pull request will be diffed against"
+  },
+  "howItWasMeasured": {
+    "harness": "tests/DungeonFortress.Simulation.Tests/PrototypeCombatModeHoldTests.cs — the probe the predecessor built, with two lines added to its report: LENGTH and SPREAD.",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_combat_mode_hold\" --logger \"console;verbosity=detailed\"",
+    "suite": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release",
+    "whatTheSuiteSaidBefore": "3 failed, 352 passed, 1 skipped of 356, in 2 m 58 s",
+    "theThreeFailures": [
+      {
+        "test": "PrototypeWaveTests.Deliberately_losing_creatures_and_stock_never_scores_better",
+        "message": "giving up half way scored 138, keeping scored 133",
+        "kind": "product promise (ADR 0010): impoverishment must not pay"
+      },
+      {
+        "test": "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders",
+        "message": "prepared put down 7 raiders, baseline 7",
+        "kind": "differentiation corridor between the two shipped plans"
+      },
+      {
+        "test": "PrototypeReturningRaiderTests.A_returning_raider_walks_round_the_place_it_was_hit_hardest",
+        "message": "Крюк Немой neither reached the larder nor left: avoidance must not be able to strand a raider",
+        "kind": "robustness claim of Issue #358 about raider avoidance, on one seed"
+      }
+    ]
+  },
+  "whatTheTwoNewLinesMean": {
+    "blowsToFellARaider": "an exact count. Every `combat_attack` the journal carries is one blow by one defender, and the killing blow is written as `combat_raider_downed` and added back by hand, because it overwrites the `combat_attack` of the same tick.",
+    "ticksARaiderStoodUnderFire": "ticks between the first blow a raider took and the tick it went down. Larger than the blow count whenever the domain loses contact and finds it again.",
+    "hitTicksToFellADefender": "ticks in which a defender's health fell, from the first to the one that put it down. It is deliberately not called a blow count: `ActRaiders` writes nothing in the journal for an ordinary blow, and two raiders reaching one defender on one tick are one hit tick.",
+    "waveSpan": "ticks from a wave's arrival to its own EndTick. It includes the walk from the gate, so it moves less than the two counts above.",
+    "damageProfile": "`m<might>r<readiness>`. A defender's blow is a function of might, readiness and the jitter, and the first two are published in the snapshot — so two blows sharing a profile share every term but the jitter, and a profile carrying more than one damage value is the spread being observable."
+  },
+  "theNumbersBefore": {
+    "settings": {
+      "RaiderHp": 30,
+      "DefenderHpBase": 20,
+      "DefenderHpPerMight": 4,
+      "damageOfADefendersBlow": "Math.Max(DamageFloor, might + readiness/25 + jitter(±1))",
+      "damageOfARaidersBlow": "Math.Max(DamageFloor, raiderMight − readiness/50 + jitter(±1))",
+      "DamageJitter": 1,
+      "DamageFloor": 1,
+      "CombatJoinSatiety": 25,
+      "CombatHoldSatiety": 20
+    },
+    "perRun": [
+      { "run": "baseline/20260726", "blowsToFellARaider": 8.50, "raidersFelled": 6, "ticksARaiderStoodUnderFire": 6.33, "hitTicksToFellADefender": 7.50, "defendersFelled": 6, "waveSpan": 59.25, "defenderBlows": 68, "damage": "1..7", "meanDamage": 3.57, "profiles": 26, "scatteredProfiles": 15 },
+      { "run": "baseline/20260727", "blowsToFellARaider": 6.20, "raidersFelled": 5, "ticksARaiderStoodUnderFire": 4.80, "hitTicksToFellADefender": 5.40, "defendersFelled": 5, "waveSpan": 52.75, "defenderBlows": 40, "damage": "1..8", "meanDamage": 4.17, "profiles": 22, "scatteredProfiles": 8 },
+      { "run": "baseline/20260728", "blowsToFellARaider": 7.20, "raidersFelled": 5, "ticksARaiderStoodUnderFire": 8.20, "hitTicksToFellADefender": 4.00, "defendersFelled": 2, "waveSpan": 52.25, "defenderBlows": 47, "damage": "1..8", "meanDamage": 3.93, "profiles": 27, "scatteredProfiles": 10 },
+      { "run": "prepared/20260726", "blowsToFellARaider": 6.28, "raidersFelled": 7, "ticksARaiderStoodUnderFire": 6.28, "hitTicksToFellADefender": 5.00, "defendersFelled": 2, "waveSpan": 49.50, "defenderBlows": 48, "damage": "1..7", "meanDamage": 4.60, "profiles": 23, "scatteredProfiles": 9 },
+      { "run": "prepared/20260727", "blowsToFellARaider": 6.87, "raidersFelled": 8, "ticksARaiderStoodUnderFire": 9.37, "hitTicksToFellADefender": 5.25, "defendersFelled": 4, "waveSpan": 53.25, "defenderBlows": 50, "damage": "2..7", "meanDamage": 4.54, "profiles": 23, "scatteredProfiles": 10 },
+      { "run": "prepared/20260728", "blowsToFellARaider": 7.58, "raidersFelled": 12, "ticksARaiderStoodUnderFire": 8.16, "hitTicksToFellADefender": 8.33, "defendersFelled": 6, "waveSpan": 47.75, "defenderBlows": 84, "damage": "1..7", "meanDamage": 4.05, "profiles": 31, "scatteredProfiles": 19 },
+      { "run": "neglected/20260726", "note": "falls before a wave ever lands, so it contributes nothing to any of these means and is listed to say so" },
+      { "run": "neglected/20260727", "note": "same" },
+      { "run": "neglected/20260728", "note": "same" }
+    ],
+    "pooled": {
+      "howItIsPooled": "over the 43 raiders and 25 defenders that actually fell in the six runs that reach a wave, not as a mean of six means",
+      "blowsToFellARaider": 7.16,
+      "ticksARaiderStoodUnderFire": 7.44,
+      "hitTicksToFellADefender": 6.44,
+      "waveSpan": 52.46,
+      "meanDamageOfADefendersBlow": 4.13,
+      "observedDamageRange": "1..8"
+    }
+  },
+  "whatTheseNumbersAlreadySay": {
+    "theFightIsShort": "seven blows fell a raider and six hit ticks fell a defender. RaiderHp is 30 and a blow is about four, which is the whole arithmetic of it.",
+    "theSpreadExistsAndIsTooSmallToMatter": "8 to 19 profiles a run already carry more than one damage value, so the mechanism of scope item 2 of #336 is alive — #361 made the roll advance per blow. But the amplitude is ±1 on a mean of 4.13, so a profile spans two or three values and the outcome of an exchange still reads off the first blow. What is left of that item is the amplitude, not the source.",
+    "hungerBarelyReachesTheBlow": "readiness enters a defender's blow as readiness/25, so the whole 0..100 range of readiness is worth 0..4 damage and the whole 0..100 range of satiety — which is half of readiness — is worth 0..2. Integer division then eats most of it: satiety 20 and satiety 40 give the same damage on the same creature. That is the lever this slice has to make load-bearing, because it is the only one hunger has left after the mod guard.",
+    "theHoldThresholdCannotFire": "a wave spans 52 ticks and SatietyDecayPeriod is 5, so a fighter loses about ten points of satiety across a whole wave. CombatJoinSatiety is 25 and CombatHoldSatiety is 20: five points of band against ten points of decay is reachable in principle and was never reached in practice, because nobody stands in the line for the whole span — longestSpellInTheLine is 25..43."
+  }
+}
