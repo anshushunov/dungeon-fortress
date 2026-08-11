@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "issue": 333,
+  "when": "2026-08-11, before the edit",
+  "what": "Both sentences of Issue #333 answered by running the shipped journals rather than by reading the code: is a blow ever landed on a raider that is already out, and does a creature leave the line and come back inside one tick.",
+  "theOwnersWords": "после боя остаются добивать труп — наверно это баг (playtest 2026-08-08)",
+  "theReviewsWords": "F7 of the independent review of PR #328: «существо, ушедшее из строя, может встать обратно в том же тике».",
+  "tree": {
+    "branch": "fix/333-combat-mode-hold",
+    "baseCommit": "1ca313f",
+    "note": "The base commit is on `main` and survives squash; the branch head is not, so it is described in prose instead (Issue #106)."
+  },
+  "howItWasMeasured": {
+    "harness": "tests/DungeonFortress.Simulation.Tests/PrototypeCombatModeHoldTests.cs, added by this branch. It walks each party tick by tick with PrototypeWorld.Step() and reads PrototypeWorld.GetSnapshot() after every step.",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_combat_mode_hold_over_the_seed_matrix\" --logger \"console;verbosity=detailed\"",
+    "matrix": "three shipped fixtures (baseline, prepared, neglected) x three seeds (20260726, 20260727, 20260728), each played to the end of the party",
+    "aStepIsNotAlwaysATick": "PrototypeWorld.Step() runs no phase and does not move CurrentTick while a moment of truth is open (PrototypeWorld.cs:283, Issue #312). The first version of this probe counted such a step as a tick and reported 39 strikes on an already-downed raider on baseline/20260728 and 118 on prepared/20260728. Every one was the probe reading the same decision of the same tick again against a world that had already moved on. The guard `current.Tick == previous.Tick` removes them, and the phantom is kept in this file on purpose: it is the same reading mistake the view makes, and it is what the first sentence of the issue turns out to be.",
+    "definitions": {
+      "strikesOnARaiderAlreadyOut": "creature-ticks whose LastDecision on the tick that just ran is combat_attack or combat_raider_downed against a raider that was already not Raiding in the snapshot of the previous tick",
+      "leftTheLineSilently": "Fighting -> anything other than Fled or Downed, on a tick on which the wave did not get its outcome. Leaving into Fled or Downed is the fight's own decision and is recorded as one; leaving into Waiting on the tick ResolveWave runs is the end of the wave",
+      "backInTheLineAfterASilentLeave": "a creature that left silently and is Fighting again later in the party, with the gap in ticks",
+      "downedGotUpWithoutBeingRaised": "Downed -> anything other than Waiting, i.e. a change of mode that RaiseTheDowned did not make",
+      "fledStoppedFleeing": "Fled -> anything other than Waiting or Downed, i.e. a change of mode that ResolveWave did not make",
+      "joinedAndOutInTheSameTick": "a combat_joined entry that stands alone on one tick (Repeats == 1), whose creature is not Fighting at the end of that same tick",
+      "blowsDrawnWhilePaused": "on every step that moved no tick, the journal entries BlowReadout.Of would call fresh — LastTick == Tick - 1, reason combat_attack or combat_raider_downed. The rule is restated in the probe rather than called, so the measurement cannot disagree with the code it measures",
+      "ofThemOnABody": "of those, the ones whose raiderId is Downed in that same snapshot",
+      "yieldsBookedByAFighter": "creature-ticks where a creature that is Fighting at the end of the tick had chosen_traffic_yield recorded on it — a booking the Fighting branch of ActCreatures would not honour"
+    }
+  },
+  "firstSentence": {
+    "claim": "«после боя остаются добивать труп»",
+    "verdict": "not in the simulation, and it is not a matter of opinion: strikesOnARaiderAlreadyOut is 0 on all nine runs, and fightingTicksWithNothingToFight is 0 on all nine — nobody strikes a body and nobody even stands in the line with no standing raider left.",
+    "whereItActuallyIs": "in the view, and specifically in the moment of truth pause. BlowReadout.Of (src/DungeonFortress.Presentation/BlowReadout.cs:212) reads the blows of the drawn moment as the journal entries stamped `state.Tick - 1`. That rule is exact while the world ticks. While a moment of truth is open the world does not tick: Step() returns before every phase (PrototypeWorld.cs:283) and CurrentTick stands still, so `Tick - 1` keeps naming the tick the wave ended on for the whole window. Main.Session.cs:490 holds that reading in _blows, StopTheClockWhenTheDomainAsks pauses the clock, and BlowEffects fades the flash and the damage number to a floor rather than to nothing precisely so that «the effect is still there when time stops» (BlowEffects.cs, class remark). StrikeChain takes its pose from the same reading, so the strike pose is held too.",
+    "howMuchOfIt": "Over each party the window opens three times and every window is worth 40 steps. On the frame that opens the window after the first wave, every blow the view has to draw is a blow on a body: 2/2 on five of the six runs that reach a fight, 3/3 on prepared/20260728. Held for the whole window that is 80 body-blow drawings per party, and 200 on prepared/20260728, which is the only run whose second window also opens on a killing tick.",
+    "andTheBodiesStay": "A downed raider is never removed from the world, so the bodies the blows are drawn over stay on the map for the rest of the party: 5108 to 9161 raider-body-ticks per party, up to 11 bodies at once.",
+    "whereToHandIt": "Issue #334's layer — src/DungeonFortress.Presentation/** and src/DungeonFortress.Game/**, which this issue's partition names as somebody else's. The question for that issue is what the freshness rule of a drawn blow should be when the clock the rule is written against has stopped by design, and it belongs next to «односторонний размен», which is the other thing #334 owns about how a fight reads.",
+    "commandThatShowsIt": "the same probe command above; the numbers are stepsThatMovedNoTick, blowsDrawnWhilePaused, ofThemOnABody and windowsOpened"
+  },
+  "secondSentence": {
+    "claim": "«существо, ушедшее из строя, может встать обратно в том же тике»",
+    "verdict": "reproduced, and the mechanism is not the one F7 named. The second pass over the people already fighting, which F7 read, was removed in PR #328's own rework round (see the remark on ResentmentOutweighsTheLine). What survived is the structural half of F7: the fact «this creature is in the line» is carried by CreatureState.Mode and by nothing else, and phase 4 of the tick is not the last phase that writes it.",
+    "cause": "DecideNeedsAndMuster (PrototypeWorld.Planning.cs:258) walks every creature with no mode guard at all, and it runs at phase 6, after UpdateCombatParticipation at phase 4. Its two neighbours already carry the guard it lacks — GenerateJobs at Planning.cs:134 and MatchJobs at Matching.cs:14 both skip `Eating or Fighting or Fled or Downed`. So needs overwrite the participation decision made two phases earlier: TryStartEating (Planning.cs:462) assigns Mode = Eating to whoever is hungry, including a creature that is Fighting, Fled or Downed.",
+    "whyItBites": "PrototypeTuning.EatThreshold is 30 and PrototypeTuning.CombatMinSatiety is 20, so the band 20..29 is exactly the set of creatures combat admits and hunger then takes back on the same tick.",
+    "faces": [
+      "joined and out of the line inside one tick, into Eating: 3 on baseline/20260727, 2 on baseline/20260728, 1 on prepared/20260726 (first one t1690 creature#7), 2 on prepared/20260727 (first one t1710 creature#0)",
+      "left the line mid-wave with nothing in the journal saying so, and came back at a later recheck: baseline/20260726 creature#4 at t2355 (satiety 29), back at t2370; prepared/20260726 creature#7 at t1660, back at t1710; prepared/20260728 creature#3 at t1667 (satiety 23), back at t2000",
+      "a broken defender stops fleeing and walks to the larder: 4 times on baseline/20260726, 3 on prepared/20260727, 1 each on prepared/20260726 and prepared/20260728",
+      "a creature that was put down gets up: prepared/20260726 t1720 creature#8, Downed -> Eating with hp=0 and injury=Heavy. It is the literal reading of the issue's title, and it costs more than the picture: RaiseTheDowned only raises creatures whose mode is Downed, so this one is never carried off the floor at all"
+    ],
+    "notTheCause": "joinedAndOutInTheSameTick also counts joins that ended the tick as Fled — 1 on baseline/20260726, 3 on baseline/20260727, 3 on baseline/20260728, 2 on prepared/20260727. Those are ApplyMorale, which runs after the join by design and is the fight's own decision recorded as one. They are counted separately and are not what is being fixed.",
+    "alsoRuledOut": "yieldsBookedByAFighter is 0 on all nine runs. A Fighting creature could in principle be picked as the yielder by PlanTrafficActions and would not honour the booking, because the Fighting branch of ActCreatures never reads TrafficTarget. It does not happen on any shipped journal, so it is named and left alone rather than fixed."
+  },
+  "matrixBefore": [
+    {"fixture": "baseline", "seed": 20260726, "ticks": 2413, "strikesOnARaiderAlreadyOut": 0, "leftTheLineSilently": 2, "backInTheLineAfterASilentLeave": 2, "downedGotUpWithoutBeingRaised": 0, "fledStoppedFleeing": 4, "joinsSeen": 48, "joinedAndOutInTheSameTick": 1, "joinedIntoFled": 1, "joinedIntoEating": 0, "stepsThatMovedNoTick": 120, "blowsDrawnWhilePaused": 80, "ofThemOnABody": 80, "windowsOpened": "t1338:2/2 t1719:0/0 t2067:0/0", "raiderBodyTicks": 5860, "maxRaiderBodiesOnTheMap": 6, "yieldsBookedByAFighter": 0},
+    {"fixture": "baseline", "seed": 20260727, "ticks": 2406, "strikesOnARaiderAlreadyOut": 0, "leftTheLineSilently": 1, "backInTheLineAfterASilentLeave": 0, "downedGotUpWithoutBeingRaised": 0, "fledStoppedFleeing": 0, "joinsSeen": 51, "joinedAndOutInTheSameTick": 6, "joinedIntoFled": 3, "joinedIntoEating": 3, "stepsThatMovedNoTick": 120, "blowsDrawnWhilePaused": 80, "ofThemOnABody": 80, "windowsOpened": "t1325:2/2 t1718:0/0 t2061:0/0", "raiderBodyTicks": 5139, "maxRaiderBodiesOnTheMap": 6, "yieldsBookedByAFighter": 0},
+    {"fixture": "baseline", "seed": 20260728, "ticks": 2410, "strikesOnARaiderAlreadyOut": 0, "leftTheLineSilently": 1, "backInTheLineAfterASilentLeave": 0, "downedGotUpWithoutBeingRaised": 0, "fledStoppedFleeing": 0, "joinsSeen": 47, "joinedAndOutInTheSameTick": 5, "joinedIntoFled": 3, "joinedIntoEating": 2, "stepsThatMovedNoTick": 120, "blowsDrawnWhilePaused": 80, "ofThemOnABody": 80, "windowsOpened": "t1321:2/2 t1720:0/0 t2059:0/0", "raiderBodyTicks": 5108, "maxRaiderBodiesOnTheMap": 5, "yieldsBookedByAFighter": 0},
+    {"fixture": "prepared", "seed": 20260726, "ticks": 2406, "strikesOnARaiderAlreadyOut": 0, "leftTheLineSilently": 1, "backInTheLineAfterASilentLeave": 1, "downedGotUpWithoutBeingRaised": 1, "fledStoppedFleeing": 1, "joinsSeen": 35, "joinedAndOutInTheSameTick": 1, "joinedIntoFled": 0, "joinedIntoEating": 1, "stepsThatMovedNoTick": 120, "blowsDrawnWhilePaused": 80, "ofThemOnABody": 80, "windowsOpened": "t1319:2/2 t1721:0/0 t2062:0/0", "raiderBodyTicks": 6692, "maxRaiderBodiesOnTheMap": 9, "yieldsBookedByAFighter": 0},
+    {"fixture": "prepared", "seed": 20260727, "ticks": 2404, "strikesOnARaiderAlreadyOut": 0, "leftTheLineSilently": 0, "backInTheLineAfterASilentLeave": 0, "downedGotUpWithoutBeingRaised": 0, "fledStoppedFleeing": 3, "joinsSeen": 28, "joinedAndOutInTheSameTick": 4, "joinedIntoFled": 2, "joinedIntoEating": 2, "stepsThatMovedNoTick": 120, "blowsDrawnWhilePaused": 80, "ofThemOnABody": 80, "windowsOpened": "t1326:2/2 t1715:0/0 t2062:0/0", "raiderBodyTicks": 5463, "maxRaiderBodiesOnTheMap": 6, "yieldsBookedByAFighter": 0},
+    {"fixture": "prepared", "seed": 20260728, "ticks": 2406, "strikesOnARaiderAlreadyOut": 0, "leftTheLineSilently": 1, "backInTheLineAfterASilentLeave": 1, "downedGotUpWithoutBeingRaised": 0, "fledStoppedFleeing": 1, "joinsSeen": 31, "joinedAndOutInTheSameTick": 0, "joinedIntoFled": 0, "joinedIntoEating": 0, "stepsThatMovedNoTick": 120, "blowsDrawnWhilePaused": 200, "ofThemOnABody": 200, "windowsOpened": "t1321:3/3 t1698:2/2 t2072:0/0", "raiderBodyTicks": 9161, "maxRaiderBodiesOnTheMap": 11, "yieldsBookedByAFighter": 0},
+    {"fixture": "neglected", "seed": 20260726, "ticks": 615, "strikesOnARaiderAlreadyOut": 0, "leftTheLineSilently": 0, "backInTheLineAfterASilentLeave": 0, "downedGotUpWithoutBeingRaised": 0, "fledStoppedFleeing": 0, "joinsSeen": 0, "joinedAndOutInTheSameTick": 0, "joinedIntoFled": 0, "joinedIntoEating": 0, "stepsThatMovedNoTick": 0, "blowsDrawnWhilePaused": 0, "ofThemOnABody": 0, "windowsOpened": "-", "raiderBodyTicks": 0, "maxRaiderBodiesOnTheMap": 0, "yieldsBookedByAFighter": 0, "note": "the domain falls before the first wave arrives, so this fixture carries no fight at all and is in the matrix as the run that must stay unchanged"},
+    {"fixture": "neglected", "seed": 20260727, "ticks": 595, "strikesOnARaiderAlreadyOut": 0, "leftTheLineSilently": 0, "backInTheLineAfterASilentLeave": 0, "downedGotUpWithoutBeingRaised": 0, "fledStoppedFleeing": 0, "joinsSeen": 0, "joinedAndOutInTheSameTick": 0, "joinedIntoFled": 0, "joinedIntoEating": 0, "stepsThatMovedNoTick": 0, "blowsDrawnWhilePaused": 0, "ofThemOnABody": 0, "windowsOpened": "-", "raiderBodyTicks": 0, "maxRaiderBodiesOnTheMap": 0, "yieldsBookedByAFighter": 0},
+    {"fixture": "neglected", "seed": 20260728, "ticks": 660, "strikesOnARaiderAlreadyOut": 0, "leftTheLineSilently": 0, "backInTheLineAfterASilentLeave": 0, "downedGotUpWithoutBeingRaised": 0, "fledStoppedFleeing": 0, "joinsSeen": 0, "joinedAndOutInTheSameTick": 0, "joinedIntoFled": 0, "joinedIntoEating": 0, "stepsThatMovedNoTick": 0, "blowsDrawnWhilePaused": 0, "ofThemOnABody": 0, "windowsOpened": "-", "raiderBodyTicks": 0, "maxRaiderBodiesOnTheMap": 0, "yieldsBookedByAFighter": 0}
+  ],
+  "checksumsBefore": {
+    "why": "Four numbers, because they see four different things and only two of them can see this change at all — the trap EVIDENCE_WORKFLOW.md documents from Issue #281.",
+    "shippedJournals": {
+      "command": "dotnet run --project ./tests/DungeonFortress.Scenarios -c Release --no-build -- --prototype --commands ./scenarios/prototype1/<fixture>.commands.v2.json --ticks 2700",
+      "baseline": {"ticks": 2413, "checksum": "18e74e7be92b0a9791b4a596955431d24a2480724775e39cfea5936f1fd41626"},
+      "prepared": {"ticks": 2406, "checksum": "c168f8306c02ddadd8832e82cc76e8c70f22a5a3a8bd7bb11d1152fa4a1d738b"},
+      "neglected": {"ticks": 615, "checksum": "da7ddd6c9a067bdbc567c61312d55a4a39d5794e7553e599eca81ec06d6e2c3a"}
+    },
+    "prototypeAtTickOne": {
+      "why": "verify.ps1's viewInvariantChecksum is the Godot adapter's _checksum, which is PrototypeScenario.Capture of a fixture loaded for one tick (EVIDENCE_WORKFLOW.md, and Main.cs:299 loads `screenshotTicks` = 1 for the headless smoke). Tick 1 is 1299 ticks before the first wave, so no combat change can move it. This number is here to be shown unchanged rather than to prove anything.",
+      "command": "dotnet run --project ./tests/DungeonFortress.Scenarios -c Release --no-build -- --prototype --commands ./scenarios/prototype1/baseline.commands.v2.json --ticks 1",
+      "checksum": "54985f1ce778d190d49c79e2c1b6236b05852dbd16168c5b72c7e56e44c35dc9"
+    },
+    "legacySimulationWorld": {
+      "why": "verify.ps1's deterministicChecksum is SimulationScenario.Run without --prototype, i.e. the legacy SimulationWorld. PrototypeWorld is not on that path at all, so it cannot move either.",
+      "command": "dotnet run --project ./tests/DungeonFortress.Scenarios -c Release --no-build -- --seed 424242 --agents 32 --ticks 256",
+      "checksum": "de573ef3d7e0b185c8ca48aa632b643b8e4687a79f64157693c6ab0aeb4daead"
+    }
+  }
+}
