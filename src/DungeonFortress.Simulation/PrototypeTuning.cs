@@ -93,7 +93,34 @@ public static class PrototypeTuning
     public const int StealPeriod = 6;
     public const int DefenderHpBase = 20;
     public const int DefenderHpPerMight = 4;
-    public const int CombatMinSatiety = 20;
+    // Getting into the line is harder than staying in it, and the two numbers say
+    // so separately (Issue #333, owner's decision of 2026-08-11).
+    //
+    // Before them there was one number, 20, and it was only ever asked on the way
+    // in. What took a hungry fighter back out was not a rule of combat at all: it
+    // was the needs phase overwriting CreatureMode two phases later, at
+    // EatThreshold (30), with nothing in the journal saying the line had lost
+    // anybody and nothing in the wave counting it. Removing that overwrite without
+    // replacing it would have meant hunger could no longer end anybody's fight,
+    // and the invariant that impoverishment must never pay broke on exactly that:
+    // a party that stopped feeding at t1400 scored 138 against 133 for one that
+    // kept feeding (evidence/333-variants.json).
+    //
+    // CombatJoinSatiety is 30 and not 20 because 30 is where the departure already
+    // happened in practice; the rule is moved to the door it belongs at rather than
+    // invented. **It is a de facto number and not a measured one** — EatThreshold
+    // was chosen for eating and never for fighting — and choosing it on purpose is
+    // balance work that belongs to Issue #336.
+    //
+    // CombatHoldSatiety stays at 20 so that the two are a band and not one line: a
+    // creature admitted at 30 has ten points of slack before the fight gives it up,
+    // which is what stops anybody walking in and out of the line every recheck.
+    // Ten points is fifty ticks of a wave at SatietyDecayPeriod, and the longest
+    // spell anybody spends in the line over the nine shipped runs is 43 — so **the
+    // hold threshold fires on no shipped journal today**. That is expected rather
+    // than hidden: the fight is short, and making it longer is #336.
+    public const int CombatJoinSatiety = 30;
+    public const int CombatHoldSatiety = 20;
     public const int CombatJoinRecheck = 20;
     public const int EngageRadius = 8;
 

@@ -79,6 +79,11 @@ public sealed partial class PrototypeWorld
             return;
         }
 
+        // Asked first and asked every tick, because being unable to stand is not
+        // a question of canvassing: the recheck period below is about how often
+        // the domain is asked for volunteers.
+        LeaveTheLineWhenTooHungryToStandInIt(wave);
+
         // The first check happens on the wave's own arrival tick; after that the
         // rest of the domain is asked again on the same period as before. Both
         // are relative to this wave, not to a single session-wide raid tick.
@@ -97,10 +102,10 @@ public sealed partial class PrototypeWorld
                 RecordDecision(creature, "combat_refused_injured", failed);
                 continue;
             }
-            if (creature.Satiety < PrototypeTuning.CombatMinSatiety)
+            if (creature.Satiety < PrototypeTuning.CombatJoinSatiety)
             {
                 failed["satiety"] = creature.Satiety;
-                failed["threshold"] = PrototypeTuning.CombatMinSatiety;
+                failed["threshold"] = PrototypeTuning.CombatJoinSatiety;
                 RecordDecision(creature, "combat_refused_starving", failed);
                 continue;
             }
@@ -130,6 +135,68 @@ public sealed partial class PrototypeWorld
             creature.MealReserved = false;
             creature.Mode = CreatureMode.Fighting;
             RecordDecision(creature, "combat_joined", new Dictionary<string, int> { ["readiness"] = ComputeReadiness(creature), ["wave"] = wave.Number });
+        }
+    }
+
+    /// <summary>
+    /// Somebody too hungry to stand in the line leaves it, and leaves it here.
+    ///
+    /// <para><b>Why this method exists at all.</b> The departure already happened
+    /// before Issue #333 — it just happened in the wrong place. A fighter whose
+    /// satiety fell below <see cref="PrototypeTuning.EatThreshold"/> was taken out
+    /// of the line by <c>DecideNeedsAndMuster</c> two phases later, by having its
+    /// mode overwritten: nothing in the journal said the line had lost anybody,
+    /// the wave never heard of it, and the next recheck could hand the creature
+    /// back just as quietly. Removing the overwrite and stopping there was
+    /// measured and rejected: with hunger unable to end anybody's fight, a party
+    /// that stopped feeding at t1400 outscored one that kept feeding, 138 against
+    /// 133, and «обнищание не окупается» is a promise rather than a corridor
+    /// (<c>evidence/333-variants.json</c>). So the departure is kept and moved to
+    /// the one phase that is allowed to decide who is in the line.</para>
+    ///
+    /// <para><b>Entering is harder than staying</b> — owner's decision of
+    /// 2026-08-11. <see cref="PrototypeTuning.CombatJoinSatiety"/> is 30 and
+    /// <see cref="PrototypeTuning.CombatHoldSatiety"/> is 20, and the ten points
+    /// between them are the whole point: one threshold for both would let a
+    /// creature that left be re-admitted at the very satiety it left at, which is
+    /// the walking in and out this issue exists to remove. Both numbers and what
+    /// is known about how well they are chosen are argued in
+    /// <see cref="PrototypeTuning"/>.</para>
+    ///
+    /// <para><b>It does not fire on any shipped journal, and that is stated
+    /// rather than hidden.</b> Ten points of satiety is fifty ticks of a wave, and
+    /// the longest spell anybody spends in the line over the nine shipped runs is
+    /// 43. A rule the fixtures cannot reach is exactly what independent review of
+    /// PR #328 deleted from this same method, so this one is not left to a fixture
+    /// to prove: it is asserted on a party built for it in
+    /// <c>PrototypeCombatModeHoldTests</c>, and there is a mutant against that
+    /// assertion.</para>
+    /// </summary>
+    private void LeaveTheLineWhenTooHungryToStandInIt(WaveState wave)
+    {
+        foreach (var creature in _creatures
+                     .Where(creature =>
+                         creature.Mode == CreatureMode.Fighting &&
+                         creature.Satiety < PrototypeTuning.CombatHoldSatiety)
+                     .OrderBy(creature => creature.Id)
+                     .ToArray())
+        {
+            creature.Mode = CreatureMode.Waiting;
+            // Counted with the wave's other losses, because from the wave's side
+            // this is the same fact as a defender running: the domain has one
+            // fewer body in the line for the rest of the fight. What tells the two
+            // apart is the journal entry, which names the cause — the same split
+            // the codebase already keeps between a tally and a reason.
+            wave.CountDefenderLeftStarving();
+            RecordDecision(
+                creature,
+                "combat_left_starving",
+                new Dictionary<string, int>
+                {
+                    ["satiety"] = creature.Satiety,
+                    ["threshold"] = PrototypeTuning.CombatHoldSatiety,
+                    ["wave"] = wave.Number,
+                });
         }
     }
 
@@ -754,7 +821,7 @@ public sealed partial class PrototypeWorld
     private static bool CanAnswerTheCall(CreatureState creature) =>
         creature.Mode != CreatureMode.Downed &&
         creature.Injury != InjuryKind.Heavy &&
-        creature.Satiety >= PrototypeTuning.CombatMinSatiety;
+        creature.Satiety >= PrototypeTuning.CombatJoinSatiety;
 
     /// <summary>
     /// One creature writes down where it is standing and what happened to it

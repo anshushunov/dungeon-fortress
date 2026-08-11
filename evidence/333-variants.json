@@ -21,11 +21,31 @@
       "defectFaces": "all four go to 0 on all nine runs",
       "suite": "5 failed, 350 passed, 1 skipped of 356",
       "failures": [
-        {"test": "PrototypeScenarioTests.Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party", "message": "Assert.Contains failed on `combat_refused_starving` in preparedEnd.State.Events", "kind": "written contract invariant 5 — `prepared` must carry at least one `combat_refused_starving` over the matrix"},
-        {"test": "PrototypeWaveTests.Deliberately_losing_creatures_and_stock_never_scores_better", "message": "giving up half way scored 138, keeping scored 133", "kind": "score invariant of ADR 0010 — impoverishment must not pay"},
-        {"test": "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders", "message": "prepared put down 7 raiders, baseline 7", "kind": "differentiation corridor between two shipped plans"},
-        {"test": "PrototypeReturningRaiderTests.A_returning_raider_walks_round_the_place_it_was_hit_hardest", "message": "Крюк Немой neither reached the larder nor left: avoidance must not be able to strand a raider", "kind": "robustness claim about raider avoidance on one seed"},
-        {"test": "PrototypeMemoryTests.A_place_is_remembered_by_one_creature_and_not_by_the_group(prepared)", "message": "on tick 2020 Дёготь wrote (24,7) and Уголёк, standing 1 tiles away, came out of the same tick remembering it too", "kind": "blind spot of the test rather than a defect — see `theMemoryTest` below"}
+        {
+          "test": "PrototypeScenarioTests.Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party",
+          "message": "Assert.Contains failed on `combat_refused_starving` in preparedEnd.State.Events",
+          "kind": "written contract invariant 5 — `prepared` must carry at least one `combat_refused_starving` over the matrix"
+        },
+        {
+          "test": "PrototypeWaveTests.Deliberately_losing_creatures_and_stock_never_scores_better",
+          "message": "giving up half way scored 138, keeping scored 133",
+          "kind": "score invariant of ADR 0010 — impoverishment must not pay"
+        },
+        {
+          "test": "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders",
+          "message": "prepared put down 7 raiders, baseline 7",
+          "kind": "differentiation corridor between two shipped plans"
+        },
+        {
+          "test": "PrototypeReturningRaiderTests.A_returning_raider_walks_round_the_place_it_was_hit_hardest",
+          "message": "Крюк Немой neither reached the larder nor left: avoidance must not be able to strand a raider",
+          "kind": "robustness claim about raider avoidance on one seed"
+        },
+        {
+          "test": "PrototypeMemoryTests.A_place_is_remembered_by_one_creature_and_not_by_the_group(prepared)",
+          "message": "on tick 2020 Дёготь wrote (24,7) and Уголёк, standing 1 tiles away, came out of the same tick remembering it too",
+          "kind": "blind spot of the test rather than a defect — see `theMemoryTest` below"
+        }
       ]
     },
     {
@@ -35,8 +55,16 @@
       "defectFaces": "the Downed and Fled faces go to 0; the Fighting face stays, so the issue's own criterion 2 is not met",
       "suite": "2 failed, 353 passed, 1 skipped of 356",
       "failures": [
-        {"test": "PrototypeCombatModeHoldTests.A_creature_leaves_the_line_only_by_a_decision_of_the_fight", "message": "by construction — this variant does not fix that face", "kind": "the issue's own criterion"},
-        {"test": "PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix(seed: 20260727)", "message": "the raid cost prepared 436 over 4 resolved wave(s) and baseline 397 over 4: preparation has stopped making the raid cheaper. Stolen 44/41, defenders lost 27/24.", "kind": "written contract invariant 4 — and note that variant A passes this one"}
+        {
+          "test": "PrototypeCombatModeHoldTests.A_creature_leaves_the_line_only_by_a_decision_of_the_fight",
+          "message": "by construction — this variant does not fix that face",
+          "kind": "the issue's own criterion"
+        },
+        {
+          "test": "PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix(seed: 20260727)",
+          "message": "the raid cost prepared 436 over 4 resolved wave(s) and baseline 397 over 4: preparation has stopped making the raid cheaper. Stolen 44/41, defenders lost 27/24.",
+          "kind": "written contract invariant 4 — and note that variant A passes this one"
+        }
       ],
       "verdict": "rejected: it does not close the issue and it breaks a contract invariant of its own."
     },
@@ -62,5 +90,58 @@
     "whatItAsserts": "that a second creature standing within MemoryAvoidRadius of a tile somebody remembered did not come out of the same tick remembering that tile too, and calls such a case inheritance — the herd of Issue #101 coming back.",
     "whyItIsNotInheritanceHere": "`Remember` writes at `creature.Position` and nowhere else, so a creature can only ever write the tile it is standing on. Two creatures writing the same tile in one tick therefore cannot be one memory copied to two; it is one tile occupied by two different creatures at two different phases of the same tick — ApplyMorale runs at the top of ActCreatures, the runner then vacates the tile, and ActRaiders can put a second creature down on it later in the same tick.",
     "status": "named, not fixed. Making the test tell the two apart is a change to somebody else's check and is offered to the coordinator rather than taken."
+  },
+  "ownersDecision": {
+    "when": "2026-08-11, owner's choice: entering the line is harder than staying in it",
+    "what": "CombatJoinSatiety = 30 (de facto value at which the departure already happened), CombatHoldSatiety = 20 with the departure moved to combat's own door as `combat_left_starving`, counted on the wave as DefendersLeftStarving. The mod guard in DecideNeedsAndMuster stays.",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release",
+    "whatItFixed": "four of the five failures variant A caused go green: contract invariant 5 (`combat_refused_starving` is reachable in prepared again), the ADR 0010 score invariant (`Deliberately_losing_creatures_and_stock_never_scores_better`, 138 vs 133 gone), the stranded raider on `A_returning_raider_walks_round_the_place_it_was_hit_hardest`, and the memory herd check `A_place_is_remembered_by_one_creature_and_not_by_the_group`. The four assertions of this issue stay green: all four faces of the defect are 0.",
+    "suite": "5 failed, 350 passed, 1 skipped of 356 — but a different five",
+    "failures": [
+      {
+        "test": "PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix(20260727)",
+        "message": "the raid cost prepared 436 over 4 resolved wave(s) and baseline 399 over 4: preparation has stopped making the raid cheaper. Stolen 44/43, defenders lost 27/23.",
+        "kind": "written contract invariant 4"
+      },
+      {
+        "test": "PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix(20260728)",
+        "message": "prepared ended the party as fallen and baseline as raided: preparation may cost score on a seed, but it may not end the domain in a worse state than doing nothing.",
+        "kind": "written contract invariant 4"
+      },
+      {
+        "test": "PrototypeScenarioTests.Preparation_outscores_its_absence_over_the_matrix",
+        "message": "over the matrix preparation scored 1366 and its absence 2132. 20260726: prepared 834 / baseline 650; 20260727: prepared 694 / baseline 741; 20260728: prepared -162 (fallen) / baseline 741.",
+        "kind": "product promise about what a plan is for"
+      },
+      {
+        "test": "PrototypeMemoryCostTests.A_party_that_wins_its_fights_does_not_end_it_starving",
+        "message": "prepared/20260728 ended the party as `fallen` at t2386 with a score of -162, having produced 78 meals and finished at an average satiety of 0.",
+        "kind": "promise of Issue #171"
+      },
+      {
+        "test": "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders",
+        "message": "Assert.True failure — the only one of the original five that stayed red",
+        "kind": "differentiation corridor between two shipped plans"
+      }
+    ],
+    "diagnosis": {
+      "what": "30 under-mans the domain, and it under-mans `prepared` far more than `baseline`.",
+      "joinsPerParty": {
+        "howItWasMeasured": "`joinsSeen` of Report_combat_mode_hold_over_the_seed_matrix — `combat_joined` entries that stand alone on one tick",
+        "baseline": {
+          "20260726": "48 -> 40",
+          "20260727": "51 -> 45",
+          "20260728": "47 -> 45"
+        },
+        "prepared": {
+          "20260726": "35 -> 24",
+          "20260727": "28 -> 32",
+          "20260728": "31 -> 15"
+        }
+      },
+      "theExtreme": "prepared/20260728 loses half its line (31 joins to 15), the raiders carry the larder off, and the domain starves to death at t2386 with a score of -162. Baseline on the same seed still ends `raided` at 741, so the plan that prepares is now strictly worse than the plan that does nothing.",
+      "theHoldThresholdStillNeverFires": "lowestSatietyInTheLine over the nine runs is 25..30 against a hold threshold of 20, and longestSpellInTheLine is 25..38. Predicted before the change and unchanged by it: ten points of satiety is fifty ticks of a wave and no wave is that long yet."
+    },
+    "verdict": "returned to the coordinator rather than tuned. The direction is right — it fixes four of five by construction and keeps all four defect faces at zero — but 30 is a de facto number and the measurement says it is too strict. Choosing the number is Issue #336."
   }
 }

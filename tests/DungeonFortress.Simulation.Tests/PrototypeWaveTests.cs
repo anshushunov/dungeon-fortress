@@ -369,7 +369,7 @@ public sealed class PrototypeWaveTests
             .Where(creature => creature.Mode != CreatureMode.Downed)
             .ToArray();
         var turnedAway = standing
-            .Where(creature => creature.Satiety < PrototypeTuning.CombatMinSatiety)
+            .Where(creature => creature.Satiety < PrototypeTuning.CombatJoinSatiety)
             .ToArray();
 
         // The tick has to contain both kinds and the excluded ones have to be

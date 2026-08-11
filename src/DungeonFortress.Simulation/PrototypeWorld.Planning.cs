@@ -272,8 +272,8 @@ public sealed partial class PrototypeWorld
     ///
     /// <para>The band it bites in is arithmetic rather than luck.
     /// <see cref="PrototypeTuning.EatThreshold"/> is 30 and
-    /// <see cref="PrototypeTuning.CombatMinSatiety"/> is 20, so 20..29 is exactly
-    /// the set combat admits and hunger then takes back on the same tick.
+    /// <see cref="PrototypeTuning.CombatJoinSatiety"/> is now 30, so the band the
+    /// overwrite used to bite in was 20..29; the thresholds moved with this issue.
     /// Measured over the nine shipped runs before the guard existed
     /// (<c>evidence/333-before.json</c>): creatures joined the line and were out
     /// of it by the end of that very tick, left it mid-wave with nothing in the

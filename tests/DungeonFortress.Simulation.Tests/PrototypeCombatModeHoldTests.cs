@@ -284,6 +284,19 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
             creature.LastDecision.Tick == acted &&
             creature.LastDecision.ReasonCode == "chosen_traffic_yield");
 
+        foreach (var fighter in current.Creatures.Where(creature => creature.Mode == CreatureMode.Fighting))
+        {
+            tally.SpellInTheLine[fighter.Id] = tally.SpellInTheLine.GetValueOrDefault(fighter.Id) + 1;
+            tally.LongestSpellInTheLine = Math.Max(
+                tally.LongestSpellInTheLine, tally.SpellInTheLine[fighter.Id]);
+            tally.LowestSatietyInTheLine = Math.Min(tally.LowestSatietyInTheLine, fighter.Satiety);
+        }
+
+        foreach (var resting in current.Creatures.Where(creature => creature.Mode != CreatureMode.Fighting))
+        {
+            tally.SpellInTheLine.Remove(resting.Id);
+        }
+
         var before = previous.Creatures.ToDictionary(creature => creature.Id);
         var waveResolvedThisTick = current.Waves.Any(wave =>
             wave.Outcome is not null && wave.EndTick == acted);
@@ -454,6 +467,12 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
 
         public int YieldsBookedByAFighter { get; set; }
 
+        public Dictionary<int, int> SpellInTheLine { get; } = [];
+
+        public int LongestSpellInTheLine { get; set; }
+
+        public int LowestSatietyInTheLine { get; set; } = 100;
+
         public override string ToString()
         {
             static string Map<T>(Dictionary<T, int> value)
@@ -477,7 +496,8 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
                 $"  joinedAndTheFightTookThemBackInTheSameTick={JoinedAndTheFightTookThemBackInTheSameTick} into=[{Map(JoinedIntoTheFight)}] (by design, not asserted on)",
                 $"  stepsThatMovedNoTick={StepsThatMovedNoTick} blowsDrawnWhilePaused={BlowsDrawnWhilePaused} ofThemOnABody={BlowsDrawnOnABodyWhilePaused}",
                 $"    windowsOpened=[{(Windows.Count == 0 ? "-" : string.Join(' ', Windows))}] (tick:blowsOnBodies/blowsDrawn on the frame that opens it)",
-                $"  fightingTicksWithNothingToFight={FightingTicksWithNothingToFight} raiderBodyTicks={RaiderBodyTicks} maxRaiderBodiesOnTheMap={MaxRaiderBodiesOnTheMap} yieldsBookedByAFighter={YieldsBookedByAFighter}");
+                $"  fightingTicksWithNothingToFight={FightingTicksWithNothingToFight} raiderBodyTicks={RaiderBodyTicks} maxRaiderBodiesOnTheMap={MaxRaiderBodiesOnTheMap} yieldsBookedByAFighter={YieldsBookedByAFighter}",
+                $"  longestSpellInTheLine={LongestSpellInTheLine} lowestSatietyInTheLine={LowestSatietyInTheLine}");
         }
     }
 
