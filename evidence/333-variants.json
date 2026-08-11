@@ -302,5 +302,31 @@
     "whatTheRationDoes": "MealSatiety is 62 against a gate of 40, so a creature that gets a ration lands far above any value in the swept range, and it shows: on prepared/20260726 the satieties on the tick wave 1 lands are 57,40,53,47,95,78,55,39,46 - the 95 and the 78 are the rationed ones.",
     "whereTheAsymmetryActuallyIs": "in the late waves rather than in the muster. By wave 3 the whole domain has decayed into the 24..44 band on every fixture, and by wave 4 `prepared` is starving outright - prepared/20260726 arrives at wave 4 with 0,0,0,0,9,0,0,0,0. That is where the join threshold decides the size of the line, and it is why one point of it moves whole parties. `prepared` is hit harder because it spends more food earlier, not because the ration misses the threshold.",
     "status": "a finding about the food economy over a whole party rather than about preparation, so there is no separate defect to open an Issue against. It is named because it is what the threshold actually trades against, and it belongs to the balance work of #336."
+  },
+  "entryNoteForTheMergedSlice": {
+    "why": "Written on the handover of the merged #333+#336 slice, so that what is already known is not paid for twice. Everything below is read off the tree at commit 57941e3, with the command that shows it.",
+    "whatOf336IsAlreadyDone": {
+      "claim": "Scope item 2 of #336 — «ввести разброс урона через DeterministicRandom» — is already in the tree in full. What is left of that item is the amplitude and the shape, not the mechanism.",
+      "command": "rg -n \"DamageJitter|_combatRandom\" src/DungeonFortress.Simulation/*.cs",
+      "theMechanism": [
+        "src/DungeonFortress.Simulation/PrototypeWorld.cs:56,134 — `_combatRandom` is a DeterministicRandom seeded from the party seed (`commandLog.Seed ^ 0x636F6D626174UL`), so the spread is seed-derived and reproducible by construction. No System.Random, no clock, no Guid anywhere near it.",
+        "src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs:921 — `CombatJitter(amplitude)` is uniform on [-amplitude, +amplitude], drawn per blow. Per blow is what #361 fixed: before it the roll was frozen for a whole party, so every blow of every fight used one and the same number (see the remark in PrototypeCombatApproachTests and evidence/361-contract-numbers.json).",
+        "both sides already use it: Combat.cs:259 for a defender's blow and Combat.cs:380 for a raider's."
+      ],
+      "whatIsLeft": "PrototypeTuning.DamageJitter is 1. Base damage is roughly `might + readiness/25`, i.e. about 4..7, so the spread today is plus or minus one point on about five — around 20 per cent, with DamageFloor 1 underneath it. That is why the outcome of an exchange still reads off the first blow. The work of item 2 is therefore choosing the amplitude and the shape and proving the spread observable, not building the source.",
+      "theHealthSide": "PrototypeTuning.RaiderHp is 30; a defender has DefenderHpBase 20 plus DefenderHpPerMight 4 per point of might. Both are item 1 of #336."
+    },
+    "whatThisBranchAlreadyProved": {
+      "theTwoPropertiesRodeOnTheDefect": "«Намеренный проигрыш не даёт больше очков» and the differentiation of the two shipped plans were both held up by hunger silently pulling fighters out of the line. The proof is in joinThresholdSweep: `Preparation_changes_the_deterministic_party_without_direct_orders` is red at all eleven threshold values and does not respond to the threshold at all, so it is the guard that broke it and not the number.",
+      "theSurfaceHasTwoOpposingSlopes": "below 27 the line survives and `prepared` outscores `baseline`, but a starving domain keeps its line; at 29..30 the score invariant goes green by killing `prepared` outright. The two do not overlap anywhere in 20..30.",
+      "theFoodEconomyIsTheRealConstraint": "by wave 3 every fixture has decayed into the 24..44 satiety band and by wave 4 prepared/20260726 arrives at 0,0,0,0,9,0,0,0,0. Any threshold on satiety is therefore a lever on the late waves and on nothing else. A longer fight makes this sharper, not softer, because a longer fight spends more satiety inside the line where nobody can eat.",
+      "theHoldThresholdHasNeverFired": "lowestSatietyInTheLine over the nine runs is 25..30 against a hold threshold of 20, and longestSpellInTheLine is 25..43. Ten points of satiety is fifty ticks of a wave. A longer fight is exactly what would make CombatHoldSatiety reachable — so the synthetic check for it, which #333 still owes, may become an ordinary check on a shipped journal once the fight is longer. Worth testing before building the synthetic party."
+    },
+    "whatIsStillOwedFrom333": [
+      "a check that reddens when CombatHoldSatiety is removed — on a synthetic party if the fight is still too short to reach it, on a shipped journal if it is not",
+      "evidence/333-mutants.json with one mutant per assertion, run after the checked state is committed",
+      "the PR body sections the coordinator named: the outcome of sentence 1 (the corpse-finishing belongs to the view) with its numbers for #334; the partition extension to PrototypeTuning.cs under the three conditions; the blind spot of A_place_is_remembered_by_one_creature_and_not_by_the_group; and which of the two verify.ps1 checksums can see this change at all"
+    ],
+    "theProbeIsReusable": "tests/DungeonFortress.Simulation.Tests/PrototypeCombatModeHoldTests.cs already walks nine parties tick by tick and prints, per run: joins, score, outcome, raid cost per wave, longest spell in the line, lowest satiety in the line, satiety of everybody on the tick each wave lands, and the four defect faces. Measuring the length of a fight and the spread of damage is a column added to it rather than a new harness."
   }
 }
