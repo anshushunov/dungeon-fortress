@@ -441,31 +441,62 @@ public sealed class PrototypeMomentOfTruthTests
     /// it is reached here by playing the story the mechanic is about rather than
     /// by moving a constant.
     ///
-    /// <para>Read at <see cref="ConsequenceSeed"/>: since Issue #361 made the
-    /// damage jitter live, the journal's own seed produces a party in which
-    /// nobody ever gets far enough into a grudge to refuse.</para>
+    /// <para><b>Asked of the shipped matrix, not of one hand-picked party</b>, for
+    /// the same reason as
+    /// <see cref="A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave"/>
+    /// and by the same measurement. Whether any single party contains a creature
+    /// that accumulates a grudge far enough to refuse depends on how that party's
+    /// fights went, so pinning the claim to one seed states something narrower
+    /// than the promise and has to be re-pointed by hand every time the balance
+    /// moves — which had already happened once, after Issue #361. What the promise
+    /// says is that the behaviour is <b>reachable</b>: punish a domain wave after
+    /// wave and somewhere it refuses you. Every refusal that does occur, in any
+    /// party, is still checked in full.</para>
     /// </summary>
     [Fact]
     public void A_domain_that_punishes_without_cause_is_eventually_refused_the_line()
     {
-        var state = PlayPunishingEveryCard("baseline", ConsequenceSeed);
-        var refusals = state.Events
-            .Where(item => item.ReasonCode == "combat_refused_grudge")
-            .ToArray();
+        var partiesThatRefused = 0;
+        var report = new StringBuilder();
+
+        foreach (var fixtureName in new[] { "baseline", "prepared" })
+        {
+            foreach (var seed in MatrixSeeds)
+            {
+                var state = PlayPunishingEveryCard(fixtureName, seed);
+                var refusals = state.Events
+                    .Where(item => item.ReasonCode == "combat_refused_grudge")
+                    .ToArray();
+
+                // A refusal is a refusal by grudge wherever it happens, so this
+                // half is a rule and is asked of every party rather than of the
+                // ones that happen to hold the scene.
+                foreach (var refusal in refusals)
+                {
+                    Assert.True(refusal.Details.ContainsKey("grudge"));
+                    Assert.True(refusal.Details.ContainsKey("holding"));
+                    Assert.True(
+                        refusal.Details["grudge"] > 0,
+                        $"{fixtureName}/{seed}: the refusal names a grudge of zero, so it is " +
+                        "not a refusal by grudge.");
+                }
+
+                if (refusals.Length > 0)
+                {
+                    partiesThatRefused++;
+                }
+
+                report.AppendLine(string.Create(CultureInfo.InvariantCulture,
+                    $"{fixtureName}/{seed}: {refusals.Length} refusal(s) by grudge; best case over the party: {Contest(state)}"));
+            }
+        }
 
         Assert.True(
-            refusals.Length > 0,
-            "nobody ever refused to stand for a domain that punished every creature it was " +
-            "shown, so the only behaviour a grudge has left is unreachable - which is exactly " +
-            "what independent review found about the one that was removed. Best case over the " +
-            $"party: {Contest(state)}.");
-
-        var refusal = refusals[0];
-        Assert.True(refusal.Details.ContainsKey("grudge"));
-        Assert.True(refusal.Details.ContainsKey("holding"));
-        Assert.True(
-            refusal.Details["grudge"] > 0,
-            "the refusal names a grudge of zero, so it is not a refusal by grudge.");
+            partiesThatRefused > 0,
+            "in not one of the six shipped parties did anybody refuse to stand for a domain " +
+            "that punished every creature it was shown, so the only behaviour a grudge has " +
+            "left is unreachable - which is exactly what independent review found about the " +
+            $"one that was removed.\n{report}");
     }
 
     // ------------------------------------------------------------------
