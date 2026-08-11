@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "issue": "#333 + #336 (merged balance slice)",
+  "when": "2026-08-11",
+  "what": "Whether the synthetic party that Issue #333 still owes — a check that reddens when CombatHoldSatiety is removed — can be built honestly from the shipped command vocabulary. Measured answer: no, and the reason is arithmetic rather than a shortage of seeds.",
+  "tree": "5569c99 (fix/333-combat-mode-hold), working copy clean",
+
+  "whatWasOwed": "`CombatHoldSatiety` = 20 is a rule of the contract (§10.2) and has never fired on a shipped journal. The first executor hoped a longer fight would make it reachable; the second measured that it does not (`lowestSatietyInTheLine` 39..43 against a threshold of 20) and left the synthetic party owed. This file is the attempt to build it.",
+
+  "theRuleIsUnreachableByConstruction": {
+    "theFourFactsThatBoundIt": [
+      "There is exactly ONE door into the line. `PrototypeWorld.Combat.cs:105` refuses anybody with `Satiety < CombatJoinSatiety`, and `Mode = CreatureMode.Fighting` is assigned in exactly one place (Combat.cs:136), inside that gate. So a creature is in the line only if it entered at satiety >= JOIN.",
+      "While in the line, satiety only falls, and only at one rate. The single sink reachable in `Fighting` is the global decay at `PrototypeWorld.Stores.cs:121` — one point every `SatietyDecayPeriod` = 5 ticks. The other sink (`Work.cs:610`, a Drill job) needs a job, and a fighting creature has none. There is no source: eating (`Stores.cs:213`) is a job too.",
+      "A spell in the line ends when the wave resolves. `ResolveWave` (Combat.cs:486) puts every `Fighting` creature back to `Waiting`, so the length of a spell is bounded above by the span of a wave.",
+      "Therefore falling from JOIN to below HOLD needs `(JOIN - HOLD + 1) * 5` unbroken ticks in the line: 115 ticks at JOIN 42, 105 at 40, 95 at 38, 55 at 30, 30 at 25."
+    ],
+    "measuredAgainstThat": {
+      "command": "a scratch probe walked all six shipped parties (two fixtures x three matrix seeds) tick by tick at four join thresholds, recording every spell in the line, the satiety it cost, and every wave span",
+      "join42": { "needed": 115, "longestSpell": 53, "largestDropOverASpell": 10, "lowestSatietyInLine": 39, "longestWave": 79 },
+      "join38": { "needed": 95, "longestSpell": 45, "largestDropOverASpell": 9, "lowestSatietyInLine": 32, "longestWave": 84 },
+      "join30": { "needed": 55, "longestSpell": 51, "largestDropOverASpell": 10, "lowestSatietyInLine": 26, "longestWave": 84 },
+      "join25": { "needed": 30, "longestSpell": 51, "largestDropOverASpell": 10, "lowestSatietyInLine": 26, "longestWave": 84 },
+      "reading": "The longest spell in the line is about 34..53 ticks and it barely moves with the threshold, because it is a property of how long a fight lasts and not of who is allowed into it. At JOIN 42 the rule needs more than twice the longest spell that has ever occurred. And the arithmetic is not even the whole of it: at JOIN 25 the sum works out (30 needed against a longest spell of 51) and the rule STILL does not fire, because the creature that joins nearest the threshold is not the creature that stays longest — the measured floor of satiety in the line is 26."
+    }
+  },
+
+  "whyNoCommandCanBuildIt": {
+    "claim": "The only lever that would make the rule fire is a wave that lasts longer than any wave can, and the shipped command vocabulary contains nothing that lengthens a wave.",
+    "theVocabulary": "zone_paint, zone_erase, dig_designate, dig_cancel, build_designate, build_cancel, set_priority, set_rule, verdict (PrototypeCommands.cs). Non-goals of this slice forbid touching it.",
+    "eachLeverAndWhyItDoesNotHelp": [
+      "build_designate places a training post, and a post does NOT block movement: `PrototypeMap.IsPassable` is `IsInside(point) && this[point] != TileKind.Rock`, so only rock blocks. No command creates rock.",
+      "dig_designate removes rock, which can only SHORTEN a raider's path to the larder, never lengthen it.",
+      "zone_paint(Forbidden) steers the domain's own creatures — `_map.Distance(..., _zones[ZoneKind.Forbidden])` at Combat.cs:122 and 348 is asked about creatures. A raider steps by `RaiderStep`, so a forbidden zone cannot pin a raider in place.",
+      "set_priority / set_rule reach `muster_lead_ticks`, `drill_min_satiety` and `ration_reserve`, none of which touches the fight.",
+      "Starving the domain (the construction the previous entry note suggested, `SetPriorityCommand(1400, Harvest|Cook|Rest, 0)`) makes matters worse, not better: a creature below JOIN never enters the line at all, so it cannot leave it by hunger.",
+      "Emptying the larder ends a wave SOONER, not later: a raider that finds `_stockMeals == 0` sets `ReturningToGate` immediately (Combat.cs:409)."
+    ],
+    "whatBoundsAWaveFromAbove": "A raider leaves when it carries `CarryCapacity` = 3 meals at `StealPeriod` = 6 ticks each, or when it is felled. A raider within `RaiderAttackRange` of a defender is pinned and neither steals nor walks (Combat.cs:378-400), which is what makes a wave as long as it is — but a pinned raider is also being hit, and the exchange settles in about thirteen blows. The longest wave observed over 24 party-runs is 84 ticks."
+  },
+
+  "conclusion": "The synthetic party cannot be built honestly, and the executor is not leaving a decorative check in its place. At the committed JOIN of 42 the rule `LeaveTheLineWhenTooHungryToStandInIt` is unreachable code: no party, shipped or constructible from the command vocabulary, can make it fire.",
+
+  "whatThisMeansForTheReturnedFork": {
+    "itAddsAThirdConstraintOnTheSameNumber": "The fork returned in evidence/333-tension.json is about one number, CombatJoinSatiety, pulled two ways. This measurement adds a third pull, and it pulls further down than either: for the hold rule to be reachable by arithmetic at all the gap must satisfy `(JOIN - HOLD + 1) * 5 <= longest spell in the line ~ 53`, i.e. JOIN <= 29 at HOLD 20 — and even there the measured floor of satiety in the line is 26, so it still would not fire.",
+    "theThreeConstraintsTogether": {
+      "A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave": "needs JOIN <= 38",
+      "memory-of-place floor on prepared": "needs JOIN >= 40",
+      "CombatHoldSatiety reachable at all": "needs JOIN <= 29, and not even that suffices"
+    },
+    "thePlainStatement": "Three promises ride on one balance number and no value of it satisfies all three. That is a statement about the contract, not about the sweep."
+  },
+
+  "twoFalseClaimsFoundInTheCodeAndCorrected": [
+    "`PrototypeWorld.Combat.cs` said `CombatJoinSatiety is 30` in two doc comments (Combat.cs:158 and Planning.cs:275) while the constant has been 42 since this branch chose the threshold on the long fight. Corrected to say what the code holds and to point at the sweep.",
+    "The same doc comment claimed the rule `is asserted on a party built for it in PrototypeCombatModeHoldTests, and there is a mutant against that assertion`. No such assertion exists and none was ever committed. The claim is replaced by the measured truth: the rule is unreachable at the committed threshold, this file says by how much, and the decision about what to do with an unreachable rule belongs to the coordinator. Independent review of PR #328 deleted a rule from this very method for exactly this reason, so deleting is a live option — but §10.2 of the contract carries the rule, and removing it is a contract decision."
+  ]
+}

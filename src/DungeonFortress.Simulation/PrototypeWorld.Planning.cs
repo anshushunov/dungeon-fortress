@@ -271,9 +271,14 @@ public sealed partial class PrototypeWorld
     /// people on the floor.</para>
     ///
     /// <para>The band it bites in is arithmetic rather than luck.
-    /// <see cref="PrototypeTuning.EatThreshold"/> is 30 and
-    /// <see cref="PrototypeTuning.CombatJoinSatiety"/> is now 30, so the band the
-    /// overwrite used to bite in was 20..29; the thresholds moved with this issue.
+    /// <see cref="PrototypeTuning.EatThreshold"/> is 30, so before this issue the
+    /// overwrite bit in the band 20..29 — exactly the creatures the fight had
+    /// admitted and hunger took back the same tick. The guard is what removes the
+    /// overwrite, and it does so whatever
+    /// <see cref="PrototypeTuning.CombatJoinSatiety"/> is set to; that number is
+    /// argued in <see cref="PrototypeTuning"/> and swept in
+    /// <c>evidence/333-tension.json</c>, and naming a value here would only go
+    /// stale again.
     /// Measured over the nine shipped runs before the guard existed
     /// (<c>evidence/333-before.json</c>): creatures joined the line and were out
     /// of it by the end of that very tick, left it mid-wave with nothing in the

@@ -98,5 +98,47 @@
       }
     ],
     "whatIsNotOnTheList": "Widening the range beyond 30..42, and inventing a third balance mechanism. Both were excluded by the brief before the sweep was run, and nothing measured here argues for reopening them: the threshold provably does not reach the scene the verdict check reads."
+  },
+
+  "theFiveRedsByClass": {
+    "why": "Each red is either a ЗАМЕР — a number produced by a run, which may legitimately be re-measured — or an ОБЕЩАНИЕ — a product invariant, which may not be moved under a result. The class is read off the assertion and its own doc comment, not off how inconvenient the number is.",
+    "reds": [
+      {
+        "test": "PrototypeScenarioTests.Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party",
+        "measured": "end production baseline=135 against `MealsProduced is >= 95 and <= 130`; prepared=81 and neglected=0 are both inside their corridors",
+        "class": "ЗАМЕР",
+        "grounds": "The assertion is a corridor around an observed quantity rather than a statement about what the domain owes anybody, and the check's own comment records that both corridors have already been moved once — «Both corridors moved down and towards each other, because walls cost the domain logistics». Only the upper bound is broken, and broken from ABOVE: the domain now produces MORE food than the corridor expected, which is a consequence of fewer bodies standing in the line and more of them working. Re-measuring the upper bound is legitimate, and the class must be named in the pull-request body when it is.",
+        "blockedBy": "the join threshold. Production moves with how many creatures the fight takes out of the work rota, so re-measuring this corridor before the threshold is settled would fix a number to a value that is about to move."
+      },
+      {
+        "test": "PrototypeOffDutyTests.A_creature_left_without_work_after_a_fight_does_not_stand_where_it_was_fought(baseline, 20260728)",
+        "measured": "1 creature spent a whole 60-tick window after a wave standing where the fight left it — #6 at (23,6), mode=Moving, last=waiting_blocked_by_other",
+        "class": "ОБЕЩАНИЕ",
+        "grounds": "Issue #201 promises that a creature is not abandoned where the fight left it. The creature is `Moving` and blocked by another body, so the promise is not being met by the clinch clearing, and no number here may be relaxed to make it green.",
+        "blockedBy": "nothing in this slice's gift: measured red at every health scale tried and at joins 25 and 42 alike, so it answers to neither knob. It shares a cause with the next one, and the cause is that a longer fight leaves more bodies in the corridor for longer."
+      },
+      {
+        "test": "PrototypePostCombatDispersalTests.Walking_round_reaches_more_of_the_clinch_than_a_yield_could",
+        "measured": "443 against 296, a ratio of 1,4966, where 1,5 is the floor — short by four thousandths",
+        "class": "ОБЕЩАНИЕ for the floor, ЗАМЕР for 443 and 296",
+        "grounds": "The floor is explicitly a chosen claim and the check says so: «One and a half is a floor that was chosen, not a number that was derived. The measured ratio is 1.86; the floor sits under it with room», and it was placed below every variant of the comparison on purpose. So 1,5 may not be lowered to admit 1,4966 — that would be moving the promise under the result, and the check's own words say what a breach means: «Issue #186 named the pathfinder as the mechanism on the strength of this ratio; below the floor the naming has to be taken again».",
+        "note": "This is the honest cost of the slice made visible. The ratio went 1,86 (when #186 named the mechanism) to 1,06, then 1,33, then 1,4966 as the fight lengthened. It is the closest of the five to green, and it is also the one that says the longer fight has changed which mechanism clears the clinch."
+      },
+      {
+        "test": "PrototypeMomentOfTruthTests.A_domain_that_punishes_without_cause_is_eventually_refused_the_line",
+        "measured": "best case over the party: Дёготь released 1 x3 = 3 against holding 8 (fear 0, grudge 1)",
+        "class": "ОБЕЩАНИЕ",
+        "grounds": "Issue #312 promises that a grudge can still reach the one behaviour it has left. A grudge is credited per moment-of-truth card, and a card is owed to a creature that did something in the wave; a smaller line means fewer creatures with a deed, fewer cards, and a grudge that never accumulates.",
+        "blockedBy": "the join threshold. It is red at 25 and at 42 and the numbers differ (holding 14 against holding 8), so it does respond — and therefore it cannot be judged before the threshold is chosen."
+      },
+      {
+        "test": "PrototypeMomentOfTruthTests.A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave",
+        "measured": "see the sweep above",
+        "class": "ОБЕЩАНИЕ",
+        "grounds": "Criterion 7 of Issue #312. The party it is read at is a fixture choice and not part of the promise, which is why re-pointing it is on the coordinator's list of options rather than excluded outright — but the promise itself, that a verdict has a consequence, may not be weakened to fit.",
+        "blockedBy": "it IS the fork."
+      }
+    ],
+    "summary": "One of the five is a замер (the production corridor) and four are обещания. None of the four may be moved. Of the five, three — the production corridor, the grudge and the verdict — move with the join threshold and cannot honestly be settled before it is chosen; two — the off-duty promise and the clinch ratio — answer to neither knob and are the measured price of a fight twice as long."
   }
 }

@@ -155,22 +155,33 @@ public sealed partial class PrototypeWorld
     /// the one phase that is allowed to decide who is in the line.</para>
     ///
     /// <para><b>Entering is harder than staying</b> — owner's decision of
-    /// 2026-08-11. <see cref="PrototypeTuning.CombatJoinSatiety"/> is 30 and
-    /// <see cref="PrototypeTuning.CombatHoldSatiety"/> is 20, and the ten points
-    /// between them are the whole point: one threshold for both would let a
+    /// 2026-08-11. <see cref="PrototypeTuning.CombatHoldSatiety"/> is 20 and
+    /// <see cref="PrototypeTuning.CombatJoinSatiety"/> is above it, and the gap
+    /// between them is the whole point: one threshold for both would let a
     /// creature that left be re-admitted at the very satiety it left at, which is
     /// the walking in and out this issue exists to remove. Both numbers and what
     /// is known about how well they are chosen are argued in
     /// <see cref="PrototypeTuning"/>.</para>
     ///
-    /// <para><b>It does not fire on any shipped journal, and that is stated
-    /// rather than hidden.</b> Ten points of satiety is fifty ticks of a wave, and
-    /// the longest spell anybody spends in the line over the nine shipped runs is
-    /// 43. A rule the fixtures cannot reach is exactly what independent review of
-    /// PR #328 deleted from this same method, so this one is not left to a fixture
-    /// to prove: it is asserted on a party built for it in
-    /// <c>PrototypeCombatModeHoldTests</c>, and there is a mutant against that
-    /// assertion.</para>
+    /// <para><b>It is unreachable at the join threshold this branch chose, and
+    /// that is stated rather than hidden.</b> A creature is in the line only if it
+    /// entered above the join threshold; while fighting its satiety only falls,
+    /// and only by the global decay of one point per
+    /// <see cref="PrototypeTuning.SatietyDecayPeriod"/> ticks; and a spell in the
+    /// line ends when <c>ResolveWave</c> empties it. So the fall from join to
+    /// below hold costs <c>(join - hold + 1) * 5</c> unbroken ticks in the line —
+    /// 115 at a join of 42 — against a longest spell of 53 ticks measured over
+    /// twenty-four party-runs at four thresholds. Nothing in the command
+    /// vocabulary lengthens a wave: posts are passable, digging only removes rock,
+    /// forbidden zones steer defenders and not raiders, and an empty larder sends
+    /// a raider home sooner. The measurement, the four facts it rests on and the
+    /// arithmetic per threshold are in <c>evidence/333-hold-reachability.json</c>.
+    /// A rule the fixtures cannot reach is exactly what independent review of
+    /// PR #328 deleted from this same method; this one is carried by §10.2 of the
+    /// contract, so whether it is re-based on a reachable gap or removed is a
+    /// decision for the coordinator and not for the executor who measured it.
+    /// Until that is answered there is deliberately <b>no</b> check on it: a
+    /// check that cannot redden would be worse than the gap it hides.</para>
     /// </summary>
     private void LeaveTheLineWhenTooHungryToStandInIt(WaveState wave)
     {
