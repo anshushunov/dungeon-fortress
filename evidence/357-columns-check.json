@@ -1,0 +1,47 @@
+{
+  "issue": 357,
+  "purpose": "Починить строку таблицы «Записи» DEBT_LEDGER.md, ломающую разметку неэкранированным `|`, добавить проверку колонок и показать её на мутанте.",
+  "brokenRow": {
+    "beforeFix": {
+      "absoluteLine": 236,
+      "cellText": "паттерн `решение владельца\\|независимый review\\|PR #[0-9]+` не покрывает слово «переизмерен»",
+      "note": "Обе `|` уже были экранированы GFM-способом (`\\|`), поэтому GitHub рендерит ячейку как литеральный текст без переноса, НО `awk -F'|'` (команда критерия 5 и внутренняя логика check-ledger-table-columns.ps1) экранирование не понимает и считает любой байт `|` разделителем колонок независимо от предшествующего `\\`. Фикс поэтому не «доэкранировать», а убрать байты `|` из ячейки вовсе."
+    },
+    "afterFix": {
+      "cellText": "паттерн из трёх альтернатив `решение владельца`, `независимый review`, `PR #[0-9]+` не покрывает слово «переизмерен»",
+      "note": "Смысл находки не изменён — по-прежнему называет паттерн из трёх альтернатив, которые regex `rg` объединял оператором `\\|`; альтернативы читаются полностью, ни одна не обрезана (критерий 8)."
+    }
+  },
+  "criterion5_command": {
+    "command": "awk '/^## Записи/{s=1} /^## Перечитывание/{s=0} s' docs/engineering/DEBT_LEDGER.md | awk -F'|' '/^\\| 20[0-9][0-9]-/ && NF != 9 {print NR\": \"NF}'",
+    "beforeFix": "17: 11",
+    "afterFix": "(пусто)",
+    "verdict": "Команда из постановки не печатает ни одной строки после фикса."
+  },
+  "criterion6_recordCount": {
+    "command": "awk '/^## Записи/{s=1} /^## Перечитывание/{s=0} s' docs/engineering/DEBT_LEDGER.md | awk -F'|' '/^\\| 20[0-9][0-9]-/ {c++} END {print c}'",
+    "beforeFix357": 23,
+    "afterFix357": 23,
+    "note": "Снято на этой ветке, ДО переноса четырёх записей (тот счёт — отдельная правка, отдельный коммит: 23 → 27)."
+  },
+  "criterion7_checkScript": {
+    "script": "scripts/check-ledger-table-columns.ps1",
+    "testScript": "scripts/test-check-ledger-table-columns.ps1",
+    "wiredInto": "scripts/verify.ps1, стадия `scripts` (обе — сам чек против реального DEBT_LEDGER.md и его собственный unit-тест на фикстурах)",
+    "realFileGreen": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-ledger-table-columns.ps1",
+      "output": "{\"event\":\"check_ledger_table_columns\",\"path\":\"...DEBT_LEDGER.md\",\"rowsChecked\":23,\"expectedFields\":9,\"offenderCount\":0,\"offenders\":[]}",
+      "exitCode": 0
+    },
+    "unitTestMutant": {
+      "description": "test-check-ledger-table-columns.ps1 строит фикстуру с двумя валидными строками таблицы «Записи» + шестиколоночной таблицей «Перечитывание» (доказывает, что вторая таблица не задета — non-goal Issue #357), затем вставляет мутантную третью строку с тем же классом дефекта, что и реальная строка 236 (два необёрнутых `|` внутри code span), запускает check-ledger-table-columns.ps1 и требует offenderCount=1, конкретную строку, fields=11 (красный), затем чинит мутанта тем же способом, что и реальную строку (переформулировка без `|`, а не экранирование), и требует offenderCount=0 (снова зелёный)",
+      "redCase": { "offenderCount": 1, "fields": 11, "exitCode": 1 },
+      "greenAfterFixCase": { "offenderCount": 0, "exitCode": 0 },
+      "secondTableNeverFlagged": true,
+      "runCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-check-ledger-table-columns.ps1",
+      "runOutput": "{\"event\":\"check_ledger_table_columns_test\",\"status\":\"ok\",\"goodFixtureExit0\":true,\"mutantCaughtExit1\":true,\"fixedMutantExit0\":true,\"missingFileExit2\":true}"
+    }
+  },
+  "designNote_naiveByChoice": "check-ledger-table-columns.ps1 намеренно НЕ понимает markdown-экранирование `\\|` (splitting на raw `|`, как `awk -F'|'`) — это делает проверку идентичной приёмочной команде критерия 5 и заставляет любую находку с `|` в тексте писаться так, чтобы байт `|` в ячейке не встречался вовсе, а не полагаться на то, поймёт ли конкретный рендерер экранирование.",
+  "modelId": "claude-sonnet-5:2026-08 (Claude Code CLI)"
+}

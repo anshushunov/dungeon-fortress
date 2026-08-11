@@ -63,6 +63,8 @@ $noWorktreesInRootTestScript = Join-Path $repoRoot "scripts\test-check-no-worktr
 $rootOnMainScript = Join-Path $repoRoot "scripts\check-root-on-main.ps1"
 $rootOnMainTestScript = Join-Path $repoRoot "scripts\test-check-root-on-main.ps1"
 $tokenBudgetReportTestScript = Join-Path $repoRoot "scripts\test-token-budget-report.ps1"
+$ledgerTableColumnsScript = Join-Path $repoRoot "scripts\check-ledger-table-columns.ps1"
+$ledgerTableColumnsTestScript = Join-Path $repoRoot "scripts\test-check-ledger-table-columns.ps1"
 
 $env:DOTNET_CLI_HOME = Join-Path $artifactsRoot "dotnet-home"
 $env:DOTNET_NOLOGO = "1"
@@ -445,6 +447,19 @@ $stageCatalog = [ordered]@{
             # not depend on the solution build, the engine, or network access.
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $takeTaskTestScript
+            )
+            # Issue #357: a "Записи" table row with an unescaped "|" byte gets
+            # more columns than the header and GitHub silently drops the tail
+            # ("Срок с" / "Переформулировок") off the rendered row. Unlike
+            # check-base-stale.ps1 this check is cheap, deterministic and
+            # needs no network, so both the check itself (against the real
+            # DEBT_LEDGER.md, catching a regression) and its own unit test
+            # (against fixtures, catching a bug in the checker) run here.
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ledgerTableColumnsScript
+            )
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ledgerTableColumnsTestScript
             )
         }
     }
