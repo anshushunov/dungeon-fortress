@@ -119,7 +119,7 @@ public static class PrototypeTuning
     // spell anybody spends in the line over the nine shipped runs is 43 — so **the
     // hold threshold fires on no shipped journal today**. That is expected rather
     // than hidden: the fight is short, and making it longer is #336.
-    public const int CombatJoinSatiety = 30;
+    public const int CombatJoinSatiety = 25;
     public const int CombatHoldSatiety = 20;
     public const int CombatJoinRecheck = 20;
     public const int EngageRadius = 8;

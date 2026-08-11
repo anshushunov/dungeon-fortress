@@ -143,5 +143,164 @@
       "theHoldThresholdStillNeverFires": "lowestSatietyInTheLine over the nine runs is 25..30 against a hold threshold of 20, and longestSpellInTheLine is 25..38. Predicted before the change and unchanged by it: ten points of satiety is fifty ticks of a wave and no wave is that long yet."
     },
     "verdict": "returned to the coordinator rather than tuned. The direction is right — it fixes four of five by construction and keeps all four defect faces at zero — but 30 is a de facto number and the measurement says it is too strict. Choosing the number is Issue #336."
+  },
+  "joinThresholdSweep": {
+    "when": "2026-08-11, after the owner chose the rule and the coordinator ruled that the number is tuning by ADR 0010 and stays in #333",
+    "ruleOfChoiceStatedBeforeTheSweep": "the smallest value at which every contract invariant is green and `prepared` still outscores `baseline` over the matrix. Smallest, because every extra point of the threshold takes fighters away from both plans, and this issue repairs a promise rather than builds a new one.",
+    "whatWasSwept": "CombatJoinSatiety over 20..30 inclusive, step 1. CombatHoldSatiety fixed at 20 - chosen by the owner and not part of the sweep.",
+    "command": "for each value: patch `public const int CombatJoinSatiety = <v>;` in src/DungeonFortress.Simulation/PrototypeTuning.cs, then `dotnet build DungeonFortress.sln -c Release`, then `dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_combat_mode_hold\" --logger \"console;verbosity=detailed\"` for the per-run numbers and `dotnet test tests/DungeonFortress.Simulation.Tests -c Release` for the whole suite. Eleven values, about 4.5 minutes each.",
+    "columns": "threshold | failing tests of 356 | joinsSeen baseline 26/27/28 | joinsSeen prepared 26/27/28 | score sum baseline | score sum prepared | score prepared per seed | outcome prepared per seed | which tests fail",
+    "table": [
+      {
+        "threshold": 20,
+        "failing": 5,
+        "joinsBaseline": "41/41/44",
+        "joinsPrepared": "33/29/31",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 2363,
+        "scorePrepared": "797/740/826",
+        "outcomePrepared": "raided/raided/raided",
+        "failures": "ADR0010-losing-pays, contract-5-refused_starving, memory-herd(prepared), prepared-differs, raider-stranded"
+      },
+      {
+        "threshold": 21,
+        "failing": 5,
+        "joinsBaseline": "41/41/44",
+        "joinsPrepared": "33/29/31",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 2363,
+        "scorePrepared": "797/740/826",
+        "outcomePrepared": "raided/raided/raided",
+        "failures": "same as 20"
+      },
+      {
+        "threshold": 22,
+        "failing": 5,
+        "joinsBaseline": "41/41/44",
+        "joinsPrepared": "33/29/31",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 2363,
+        "scorePrepared": "797/740/826",
+        "outcomePrepared": "raided/raided/raided",
+        "failures": "same as 20"
+      },
+      {
+        "threshold": 23,
+        "failing": 5,
+        "joinsBaseline": "41/41/44",
+        "joinsPrepared": "33/29/31",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 2363,
+        "scorePrepared": "797/740/826",
+        "outcomePrepared": "raided/raided/raided",
+        "failures": "same as 20"
+      },
+      {
+        "threshold": 24,
+        "failing": 5,
+        "joinsBaseline": "41/41/44",
+        "joinsPrepared": "33/29/31",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 2363,
+        "scorePrepared": "797/740/826",
+        "outcomePrepared": "raided/raided/raided",
+        "failures": "same as 20"
+      },
+      {
+        "threshold": 25,
+        "failing": 3,
+        "joinsBaseline": "41/41/44",
+        "joinsPrepared": "25/29/31",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 2392,
+        "scorePrepared": "826/740/826",
+        "outcomePrepared": "raided/raided/raided",
+        "failures": "ADR0010-losing-pays, prepared-differs, raider-stranded"
+      },
+      {
+        "threshold": 26,
+        "failing": 3,
+        "joinsBaseline": "40/41/44",
+        "joinsPrepared": "25/29/31",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 2392,
+        "scorePrepared": "826/740/826",
+        "outcomePrepared": "raided/raided/raided",
+        "failures": "ADR0010-losing-pays, prepared-differs, raider-stranded"
+      },
+      {
+        "threshold": 27,
+        "failing": 6,
+        "joinsBaseline": "40/41/44",
+        "joinsPrepared": "25/29/15",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 1404,
+        "scorePrepared": "826/740/-162",
+        "outcomePrepared": "raided/raided/fallen",
+        "failures": "ADR0010-losing-pays, contract-4(20260728), prepared-differs, prepared-outscores, raider-stranded, wins-then-starves"
+      },
+      {
+        "threshold": 28,
+        "failing": 6,
+        "joinsBaseline": "40/41/44",
+        "joinsPrepared": "25/29/15",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 1404,
+        "scorePrepared": "826/740/-162",
+        "outcomePrepared": "raided/raided/fallen",
+        "failures": "same as 27"
+      },
+      {
+        "threshold": 29,
+        "failing": 4,
+        "joinsBaseline": "40/45/45",
+        "joinsPrepared": "24/29/15",
+        "scoreSumBaseline": 2127,
+        "scoreSumPrepared": 1412,
+        "scorePrepared": "834/740/-162",
+        "outcomePrepared": "raided/raided/fallen",
+        "failures": "contract-4(20260728), prepared-differs, prepared-outscores, wins-then-starves"
+      },
+      {
+        "threshold": 30,
+        "failing": 5,
+        "joinsBaseline": "40/45/45",
+        "joinsPrepared": "24/32/15",
+        "scoreSumBaseline": 2132,
+        "scoreSumPrepared": 1366,
+        "scorePrepared": "834/694/-162",
+        "outcomePrepared": "raided/raided/fallen",
+        "failures": "contract-4(20260727), contract-4(20260728), prepared-differs, prepared-outscores, wins-then-starves"
+      }
+    ],
+    "result": "NO VALUE IN 20..30 IS ALL GREEN. The best are 25 and 26, with three failures each.",
+    "theShapeOfIt": "the surface has two opposite slopes and they do not overlap. Below 27 the domain keeps its line, `prepared` outscores `baseline` (2363..2392 against 2070) and every party ends `raided` - but `Deliberately_losing_creatures_and_stock_never_scores_better` stays red at 138 against 133, because a line that hunger cannot thin out is a line a starving domain gets to keep. At 29 and 30 that invariant goes green, and it goes green by killing the plan it exists to protect: `prepared` loses half its line on seed 20260728 (31 joins to 15), the larder is carried off, and the party ends `fallen` at -162 against baseline's 741 - which is `Preparation_outscores_its_absence_over_the_matrix` and `A_party_that_wins_its_fights_does_not_end_it_starving` going red instead.",
+    "whatIsRedEverywhere": "`Preparation_changes_the_deterministic_party_without_direct_orders` (`prepared put down 7 raiders, baseline 7`) is red at all eleven values, so it does not respond to this threshold at all. `A_returning_raider_walks_round_the_place_it_was_hit_hardest` (`Крюк Немой neither reached the larder nor left`) is red at 20..28 and green at 29..30.",
+    "atTheBestValue25": [
+      {
+        "test": "PrototypeWaveTests.Deliberately_losing_creatures_and_stock_never_scores_better",
+        "message": "giving up half way scored 138, keeping scored 133",
+        "kind": "product promise (ADR 0010)"
+      },
+      {
+        "test": "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders",
+        "message": "prepared put down 7 raiders, baseline 7",
+        "kind": "differentiation corridor"
+      },
+      {
+        "test": "PrototypeReturningRaiderTests.A_returning_raider_walks_round_the_place_it_was_hit_hardest",
+        "message": "Крюк Немой neither reached the larder nor left: avoidance must not be able to strand a raider",
+        "kind": "robustness claim about avoidance"
+      }
+    ],
+    "verdict": "returned to the coordinator. The owner's rule with the hold threshold fixed at 20 has no solution on this balance surface within 20..30. The range was not widened and no third threshold was invented."
+  },
+  "theRationHypothesis": {
+    "question": "does the muster's ration fail to bring a defender up to the join threshold, which would explain why `prepared` is hit harder than `baseline`?",
+    "answer": "no - the hypothesis is disconfirmed in the form it was stated. Measured at CombatJoinSatiety = 25.",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_combat_mode_hold\" --logger \"console;verbosity=detailed\", the RATION lines",
+    "whatTheRationDoes": "MealSatiety is 62 against a gate of 40, so a creature that gets a ration lands far above any value in the swept range, and it shows: on prepared/20260726 the satieties on the tick wave 1 lands are 57,40,53,47,95,78,55,39,46 - the 95 and the 78 are the rationed ones.",
+    "whereTheAsymmetryActuallyIs": "in the late waves rather than in the muster. By wave 3 the whole domain has decayed into the 24..44 band on every fixture, and by wave 4 `prepared` is starving outright - prepared/20260726 arrives at wave 4 with 0,0,0,0,9,0,0,0,0. That is where the join threshold decides the size of the line, and it is why one point of it moves whole parties. `prepared` is hit harder because it spends more food earlier, not because the ration misses the threshold.",
+    "status": "a finding about the food economy over a whole party rather than about preparation, so there is no separate defect to open an Issue against. It is named because it is what the threshold actually trades against, and it belongs to the balance work of #336."
   }
 }

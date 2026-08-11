@@ -240,6 +240,13 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
         }
 
         tally.Ticks = previous.Tick;
+        tally.Score = previous.SessionResult.Score;
+        tally.Outcome = previous.SessionResult.Outcome ?? "unfinished";
+        tally.WavesResolved = previous.Domain.WavesResolved;
+        tally.RaidCost =
+            previous.SessionResult.MealsStolen * PrototypeTuning.ScorePerMealStolen +
+            (previous.SessionResult.DefendersDowned + previous.SessionResult.DefendersFled) *
+                PrototypeTuning.ScorePerDefenderLost;
         ScanJoins(previous, modeByTick, tally);
         return tally;
     }
@@ -277,6 +284,17 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
                 tally.StrikesOnARaiderAlreadyOut++;
                 tally.FirstStrikeOnARaiderAlreadyOut ??= $"t{acted} creature#{creature.Id} raider#{raiderId} was {modeBefore}";
             }
+        }
+
+        // The ration hypothesis, measured and not fixed (Issue #333): what the
+        // muster's ration actually leaves a defender at, read on the tick its
+        // wave lands.
+        foreach (var wave in current.Waves.Where(wave => wave.ArriveTick == acted && wave.Arrived))
+        {
+            tally.SatietyAtArrival.Add(
+                $"w{wave.Number}:" + string.Join(',', current.Creatures
+                    .OrderBy(creature => creature.Id)
+                    .Select(creature => creature.Satiety)));
         }
 
         tally.YieldsBookedByAFighter += current.Creatures.Count(creature =>
@@ -473,6 +491,16 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
 
         public int LowestSatietyInTheLine { get; set; } = 100;
 
+        public int? Score { get; set; }
+
+        public string Outcome { get; set; } = "unfinished";
+
+        public int WavesResolved { get; set; }
+
+        public int RaidCost { get; set; }
+
+        public List<string> SatietyAtArrival { get; } = [];
+
         public override string ToString()
         {
             static string Map<T>(Dictionary<T, int> value)
@@ -497,7 +525,9 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
                 $"  stepsThatMovedNoTick={StepsThatMovedNoTick} blowsDrawnWhilePaused={BlowsDrawnWhilePaused} ofThemOnABody={BlowsDrawnOnABodyWhilePaused}",
                 $"    windowsOpened=[{(Windows.Count == 0 ? "-" : string.Join(' ', Windows))}] (tick:blowsOnBodies/blowsDrawn on the frame that opens it)",
                 $"  fightingTicksWithNothingToFight={FightingTicksWithNothingToFight} raiderBodyTicks={RaiderBodyTicks} maxRaiderBodiesOnTheMap={MaxRaiderBodiesOnTheMap} yieldsBookedByAFighter={YieldsBookedByAFighter}",
-                $"  longestSpellInTheLine={LongestSpellInTheLine} lowestSatietyInTheLine={LowestSatietyInTheLine}");
+                $"  longestSpellInTheLine={LongestSpellInTheLine} lowestSatietyInTheLine={LowestSatietyInTheLine}",
+                $"  SWEEP {fixtureName}/{seed} joins={JoinsSeen} score={(Score is null ? "none" : Score.ToString())} outcome={Outcome} raidCost={RaidCost} wavesResolved={WavesResolved} raidCostPerWave={(WavesResolved == 0 ? -1 : RaidCost / WavesResolved)}",
+                $"  RATION {fixtureName}/{seed} satietyAtWaveArrival=[{string.Join(' ', SatietyAtArrival)}]");
         }
     }
 
