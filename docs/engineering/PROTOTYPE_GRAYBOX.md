@@ -1989,7 +1989,8 @@ halves:
 
 | Rule | What it says | Where it bites |
 |---|---|---|
-| physical floor | no HUD text may be drawn smaller than the smallest size the HUD is authored with at the frame it is authored for — 8 px | a piece of HUD text re-authored smaller than the rest |
+| physical floor | no HUD text may be drawn smaller than 12 px, physical — Issue #352, the owner's answer to "the guard is green and the tooltip still cannot be read": the floor no longer promises to equal whatever the HUD happens to be authored at, it is what a player can actually read while deciding something mid-party | a piece of HUD text re-authored smaller than 12 px |
+| legend exception | the map legend's eight rows (`HudReadability.LegendReadabilityExemption`) are the one named exception to the 12 px floor and stay at their own, lower 8 px floor instead (`HudReadability.LegendReadabilityFloor`) — the owner's reasoning: a symbol reference read once at the start of a party, never consulted for an in-party decision, so raising it was not worth the roughly one-and-a-half-times taller legend block it would have cost (measured, not assumed: `evidence/352-fit.json`) | a legend row re-authored smaller than 8 px, or anything other than a legend row added to the exemption (`HudReadabilityTests.The_legend_exemption_refuses_every_other_HUD_surface`) |
 | density ceiling | `logicalDensity` — how many authored 1280x720 rectangles the frame is worth, divided by the UI scale — may not exceed 1.25 while the scale can still rise | a window that grew without the HUD scale following it, which is the defect verbatim: 3044x1722 at scale 1 measures 2.38 |
 
 1.25 is not a taste. It is the largest ratio between two neighbouring automatic
@@ -2035,7 +2036,10 @@ the player is readable. `--frame-size 3044x1722 --ui-scale 1` — the pair the I
 was reported on — therefore exits 0 and says `"readable": false` with the density
 named, instead of exiting 0 and looking fine.
 
-Measured on the frames that matter, with today's 8 px smallest authored text:
+Measured on the frames that matter. The smallest *raw* authored text is still
+8 px after Issue #352 — the map legend, the one named exception to the 12 px
+floor — so the table below is numerically unchanged from before that Issue,
+even though the floor everything else answers to moved from 8 to 12:
 
 | Frame | Automatic UI scale | Logical density | Smallest HUD text |
 |---|---|---|---|
@@ -2050,8 +2054,11 @@ thresholds, the live frame's scale, density, smallest physical text and verdict,
 the size of every measured piece of text, and the same measurement repeated over
 the whole supported matrix. A run on a laptop therefore still states what the
 owner's maximized window would get. The `godot` stage reads three of them and
-refuses a run where 1280x720 stops reporting 8 px at scale 1 or reports itself
-unreadable, or where 3044x1722 leaves the HUD anywhere in the 8–15 px band.
+refuses a run where 1280x720 stops reporting 8 px at scale 1 (the legend's own
+size — see the legend-exception row above; this check would need to change if
+the legend's own size ever did, not if the general floor did) or reports
+itself unreadable, or where 3044x1722 leaves the HUD anywhere in the 8–15 px
+band.
 
 `--smoke-hud-readability-regression` re-authors the first legend row at four
 pixels. Nothing about the text changes, so the overflow guard stays green and

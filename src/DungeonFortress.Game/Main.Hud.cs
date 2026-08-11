@@ -192,10 +192,10 @@ public partial class Main
     }
 
     /// <summary>
-    /// A toolbar button: the icon it is, the hotkey badge in the corner and the
-    /// tooltip that names it. All three together, because a row of unlabelled
-    /// symbols would be <em>less</em> friendly than the text it replaces — which
-    /// is why RimWorld and Prison Architect ship all three too.
+    /// A toolbar button: the icon it is, its hotkey and the tooltip that names
+    /// it. Two shapes for the hotkey, chosen by whether the button already
+    /// draws a label — see <see cref="ShowsHotkeyAsCornerBadge"/> for why one
+    /// shape does not fit every button.
     /// </summary>
     private HudButton CreateControlButton(UiControl control, int index)
     {
@@ -222,32 +222,89 @@ public partial class Main
         button.AddThemeStyleboxOverride("disabled", ControlButtonStyle("#151f2b", "#1f2c3a"));
         button.Pressed += () => HandleControlPressed(index);
 
-        // Full-rect anchors rather than a corner offset: the badge then sits in the
-        // corner of whatever size the layout gives the button, instead of the size
-        // it was authored against.
-        var badge = new Label
+        if (ShowsHotkeyAsCornerBadge(control))
         {
-            Text = control.Hotkey,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Bottom,
-        };
-        badge.AddThemeFontSizeOverride("font_size", HudFontSizes.HotkeyBadgeFontSize);
-        badge.AddThemeColorOverride("font_color", new Color("#e0f2fe"));
-        // The badge sits on top of the icon, so it needs to be legible against
-        // whatever the icon happens to put in that corner rather than against the
-        // button background.
-        badge.AddThemeColorOverride("font_outline_color", new Color("#0b1622"));
-        badge.AddThemeConstantOverride("outline_size", 3);
-        button.AddChild(badge);
-        badge.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        badge.OffsetRight = -2;
-        // Kept, because the badge carries the smallest font in the toolbar and
-        // the readability policy measures what is smallest rather than what is
-        // easy to reach.
-        _hotkeyBadges.Add(badge);
+            // Full-rect anchors rather than a corner offset: the badge then sits
+            // in the corner of whatever size the layout gives the button,
+            // instead of the size it was authored against.
+            var badge = new Label
+            {
+                Text = control.Hotkey,
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Bottom,
+            };
+            badge.AddThemeFontSizeOverride("font_size", HudFontSizes.HotkeyBadgeFontSize);
+            badge.AddThemeColorOverride("font_color", new Color("#e0f2fe"));
+            // The badge sits on top of the icon, so it needs to be legible
+            // against whatever the icon happens to put in that corner rather
+            // than against the button background.
+            badge.AddThemeColorOverride("font_outline_color", new Color("#0b1622"));
+            badge.AddThemeConstantOverride("outline_size", 3);
+            button.AddChild(badge);
+            badge.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+            badge.OffsetRight = -2;
+            // Kept, because the badge carries the smallest font in the toolbar
+            // and the readability policy measures what is smallest rather than
+            // what is easy to reach.
+            _hotkeyBadges.Add(badge);
+        }
+
         return button;
     }
+
+    /// <summary>
+    /// Whether a control's hotkey is drawn as the corner badge, as opposed to
+    /// folded into the button's own label — the toolbar-overlap fix from
+    /// Issue #352's review round.
+    ///
+    /// <para>
+    /// <b>The defect.</b> The badge is a <c>FullRect</c> label anchored to the
+    /// button's bottom-right corner (<see cref="CreateControlButton"/>). At
+    /// <see cref="HudFontSizes.ButtonLabelFontSize"/> = 12 the badge is drawn
+    /// in the same font size as the button's own text and at
+    /// <see cref="ControlButtonSize"/> = 28 px the button is barely taller
+    /// than one line of it, so a button that also shows a label has that
+    /// label's own last character sitting almost exactly where the badge sits.
+    /// Review reproduced it on ten of the twenty toolbar buttons — every one
+    /// with a non-empty <see cref="UiControl.Label"/> — and on two of those
+    /// ten the badge sat directly on the digit that carries the value:
+    /// <c>Harvest 3</c> and <c>ration 0</c> lost the <c>3</c> and the <c>0</c>
+    /// entirely, not just a stray pixel of overlap.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Rejected: reserve a corner in the button's own layout for the
+    /// badge.</b> <see cref="ControlButtonSize"/> already lists the button as
+    /// 28 px, and <c>ClipText = false</c> on <c>HudButton</c> exists because
+    /// several labels — <c>NEGLECT</c>, <c>Harvest 3</c> — are already wider
+    /// than that at 12 px and are let to overflow rather than clip. A button
+    /// that size has no spare corner to reserve: the button already sizes
+    /// itself to its text with effectively no slack, so carving out, say, a
+    /// fixed 10 px strip on the right for the badge would either still
+    /// collide on the widest labels or force them to wrap — trading one
+    /// overlap defect for a clipping one, on the same ten buttons, measured
+    /// by nothing (Godot's own auto-sizing, not this file, decides how close
+    /// text sits to a button's edge, and there is no theme constant that
+    /// reserves space from only one corner rather than one whole side).
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Chosen: fold the hotkey into the label for a button that already
+    /// has one, keep the corner badge only where there is no label to
+    /// collide with.</b> This is not a new idiom invented for this fix — it
+    /// is the one <c>MomentOfTruthPanel</c>'s own <c>REWARD [G]</c> /
+    /// <c>PUNISH [H]</c> buttons already use, with no corner badge and no
+    /// overlap, because Godot auto-sizes a button to whatever text it is
+    /// given rather than to a fixed square. Ten buttons keep the corner badge
+    /// — the ones with <see cref="UiControl.Label"/> empty, where the badge
+    /// sits over the icon rather than over text and nothing is lost — and the
+    /// other ten stop drawing one, because their hotkey is now part of the
+    /// text <see cref="RefreshControls"/> already sets.
+    /// </para>
+    /// </summary>
+    private static bool ShowsHotkeyAsCornerBadge(UiControl control) =>
+        string.IsNullOrEmpty(control.Label);
 
     private static StyleBoxFlat ControlButtonStyle(string fill, string border)
     {
@@ -288,7 +345,15 @@ public partial class Main
         {
             var control = controls[index];
             var button = _controlButtons[index];
-            button.Text = control.Label;
+            // The hotkey rides along in the button's own text for exactly the
+            // buttons ShowsHotkeyAsCornerBadge decided against a corner badge
+            // for — see that method for why. control.Label itself stays the
+            // bare state text (UiControlTests and the ui.controls JSON
+            // contract read it), so the suffix is display-only, added here
+            // rather than in UiControls.Build.
+            button.Text = ShowsHotkeyAsCornerBadge(control)
+                ? control.Label
+                : $"{control.Label} [{control.Hotkey}]";
             button.TooltipText = control.Tooltip;
             button.Icon = control.Icon is null ? null : IconTexture(control.Icon);
             button.Disabled = !control.Enabled;
@@ -510,6 +575,75 @@ public partial class Main
                 string.Join("; ", failures) +
                 ". A strip that overhangs the map puts controls where the player is " +
                 "not looking and breaks the column the HUD is laid out in.");
+        }
+
+        AssertToolbarHotkeysDoNotOverlapLabels();
+    }
+
+    /// <summary>
+    /// The standing proof for the toolbar-overlap defect Issue #352's review
+    /// round found by eye: a hotkey badge is never drawn over a button that
+    /// also carries its own non-empty label.
+    ///
+    /// <para>
+    /// It does not measure pixels. <see cref="ShowsHotkeyAsCornerBadge"/>
+    /// already makes badge and label mutually exclusive by construction — the
+    /// two are never created for the same button — so a badge sharing a
+    /// button with a non-empty label cannot happen without that method or
+    /// <see cref="CreateControlButton"/> changing. What this proves instead is
+    /// that the two stay wired together the way <see cref="RefreshControls"/>
+    /// assumes: a labelled button's own <c>Text</c> actually carries the
+    /// hotkey in brackets, so a player who cannot see a corner badge is not
+    /// left unable to see the key at all.
+    /// </para>
+    ///
+    /// <para>
+    /// Reverting <see cref="CreateControlButton"/> and
+    /// <see cref="RefreshControls"/> to their pre-round-2 form — every
+    /// control gets a corner badge, <c>button.Text = control.Label</c> with
+    /// no suffix — reddens this on the very first control it checks
+    /// (<c>run</c> has no label, so the first failure is actually
+    /// <c>speed_0_5</c>): <c>evidence/352-overlap.json</c>.
+    /// </para>
+    /// </summary>
+    private void AssertToolbarHotkeysDoNotOverlapLabels()
+    {
+        var controls = UiControls.Build(CurrentControlsView());
+        var failures = new List<string>();
+        for (var index = 0; index < _controlButtons.Count && index < controls.Count; index++)
+        {
+            var control = controls[index];
+            var button = _controlButtons[index];
+            if (string.IsNullOrEmpty(control.Label))
+            {
+                continue;
+            }
+
+            var drawsCornerBadge = button.GetChildren()
+                .OfType<Label>()
+                .Any(child => _hotkeyBadges.Contains(child));
+            if (drawsCornerBadge)
+            {
+                failures.Add(
+                    $"'{control.Id}' has label '{control.Label}' and still draws a corner hotkey " +
+                    "badge — the badge sits on top of the label's own text (Issue #352 review round)");
+            }
+
+            var hotkeySuffix = $"[{control.Hotkey}]";
+            if (!button.Text.Contains(hotkeySuffix, StringComparison.Ordinal))
+            {
+                failures.Add(
+                    $"'{control.Id}' has label '{control.Label}' but its button text '{button.Text}' " +
+                    $"does not carry the hotkey suffix '{hotkeySuffix}' — without the corner badge " +
+                    "and without the suffix the hotkey is not shown anywhere");
+            }
+        }
+
+        if (failures.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"A toolbar hotkey is unreadable or overlaps its own label in {failures.Count} " +
+                $"place(s): {string.Join("; ", failures)}.");
         }
     }
 
