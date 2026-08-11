@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "issue": 333,
+  "when": "2026-08-11, deciding how the participation flag should be held",
+  "what": "Three ways of stopping the needs phase from overwriting the fight's decision about who is in the line, each run against the whole simulation suite, so that the fork the fix opens is presented with numbers rather than as an opinion.",
+  "tree": {
+    "branch": "fix/333-combat-mode-hold",
+    "baseCommit": "1ca313f",
+    "note": "Variants B and E were measured and then removed from the tree; only variant A is committed. The base commit is on `main` and survives squash."
+  },
+  "howItWasMeasured": {
+    "suite": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release",
+    "baseline": "all 356 tests pass on the unmodified base, checked by stashing the edit and re-running the five tests named below: 6 passed, 0 failed. So every failure listed here is caused by the edit and by nothing else.",
+    "probe": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_combat_mode_hold_over_the_seed_matrix\" --logger \"console;verbosity=detailed\""
+  },
+  "variants": [
+    {
+      "id": "A",
+      "what": "One guard at the top of the DecideNeedsAndMuster loop: skip Fighting, Fled and Downed. The guard both neighbouring phases already carry.",
+      "substitution": "if (creature.Mode is CreatureMode.Fighting or CreatureMode.Fled or CreatureMode.Downed)\n{\n    continue;\n}",
+      "defectFaces": "all four go to 0 on all nine runs",
+      "suite": "5 failed, 350 passed, 1 skipped of 356",
+      "failures": [
+        {"test": "PrototypeScenarioTests.Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party", "message": "Assert.Contains failed on `combat_refused_starving` in preparedEnd.State.Events", "kind": "written contract invariant 5 — `prepared` must carry at least one `combat_refused_starving` over the matrix"},
+        {"test": "PrototypeWaveTests.Deliberately_losing_creatures_and_stock_never_scores_better", "message": "giving up half way scored 138, keeping scored 133", "kind": "score invariant of ADR 0010 — impoverishment must not pay"},
+        {"test": "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders", "message": "prepared put down 7 raiders, baseline 7", "kind": "differentiation corridor between two shipped plans"},
+        {"test": "PrototypeReturningRaiderTests.A_returning_raider_walks_round_the_place_it_was_hit_hardest", "message": "Крюк Немой neither reached the larder nor left: avoidance must not be able to strand a raider", "kind": "robustness claim about raider avoidance on one seed"},
+        {"test": "PrototypeMemoryTests.A_place_is_remembered_by_one_creature_and_not_by_the_group(prepared)", "message": "on tick 2020 Дёготь wrote (24,7) and Уголёк, standing 1 tiles away, came out of the same tick remembering it too", "kind": "blind spot of the test rather than a defect — see `theMemoryTest` below"}
+      ]
+    },
+    {
+      "id": "B",
+      "what": "The same guard narrowed to Fled and Downed, leaving the hungry fighter alone. Tried because the two undisputed faces — a body that gets up and a runner that goes to dinner — carry no gameplay content at all.",
+      "substitution": "if (creature.Mode is CreatureMode.Fled or CreatureMode.Downed)\n{\n    continue;\n}",
+      "defectFaces": "the Downed and Fled faces go to 0; the Fighting face stays, so the issue's own criterion 2 is not met",
+      "suite": "2 failed, 353 passed, 1 skipped of 356",
+      "failures": [
+        {"test": "PrototypeCombatModeHoldTests.A_creature_leaves_the_line_only_by_a_decision_of_the_fight", "message": "by construction — this variant does not fix that face", "kind": "the issue's own criterion"},
+        {"test": "PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix(seed: 20260727)", "message": "the raid cost prepared 436 over 4 resolved wave(s) and baseline 397 over 4: preparation has stopped making the raid cheaper. Stolen 44/41, defenders lost 27/24.", "kind": "written contract invariant 4 — and note that variant A passes this one"}
+      ],
+      "verdict": "rejected: it does not close the issue and it breaks a contract invariant of its own."
+    },
+    {
+      "id": "E",
+      "what": "Variant A plus combat's own door: a new pass in UpdateCombatParticipation, run every tick of an active wave, that takes a fighter out of the line when its satiety falls below the admission threshold and writes `combat_left_starving`. Tried because it would keep the departure and make it a recorded decision of the fight instead of a silent overwrite.",
+      "substitution": "private void LeaveTheLineWhenTooHungryToStandInIt(WaveState wave)\n{\n    foreach (var creature in _creatures\n                 .Where(creature =>\n                     creature.Mode == CreatureMode.Fighting &&\n                     creature.Satiety < PrototypeTuning.CombatMinSatiety)\n                 .OrderBy(creature => creature.Id)\n                 .ToArray())\n    {\n        creature.Mode = CreatureMode.Waiting;\n        RecordDecision(creature, \"combat_left_starving\", new Dictionary<string, int>\n        {\n            [\"satiety\"] = creature.Satiety,\n            [\"threshold\"] = PrototypeTuning.CombatMinSatiety,\n            [\"wave\"] = wave.Number,\n        });\n    }\n}",
+      "suite": "5 failed — the same five as variant A, with the same numbers (138/133, 7/7, the same stranded raider)",
+      "whyItChangedNothing": "the new pass never fires. `leftThroughCombatsOwnDoor` is 0 on all nine runs: no fighter's satiety ever falls below CombatMinSatiety (20) while a wave is on. It is exactly the unreachable branch the independent review of PR #328 removed from this same method — «a term the mechanic cannot reach is a promise the contract does not keep» — so it was removed rather than argued for.",
+      "verdict": "rejected, and the reason is the finding: the departure that happens today happens at satiety below EatThreshold (30), not below the admission threshold (20). Making it official at 20 is dead code; making it official at 30 splits the threshold for entering the line from the threshold for standing in it, which is a change to the rules of combat and a creature that joins and leaves on the same tick by design."
+    }
+  ],
+  "whatTheForkActuallyIs": {
+    "question": "Может ли голод выводить существо из строя — и если да, то по какому правилу?",
+    "whatTheContractSays": "Section 10.2 of docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md states admission only: «существо вступает в бой, если одновременно верно: … satiety >= T.combat_min_satiety (20)». It says nothing at all about a creature already in the line being taken out of it by hunger.",
+    "whatHappensToday": "it is taken out — but by accident, at satiety below 30, by DecideNeedsAndMuster overwriting CreatureMode two phases after combat decided participation, with nothing in the journal saying the line lost anybody and nothing in the wave's tally counting it.",
+    "whatTheFixDoes": "removes the overwrite, so hunger no longer takes anybody out of the line.",
+    "theMeasuredConsequence": "starving the domain stops weakening its line. `Deliberately_losing_creatures_and_stock_never_scores_better` is where that shows: the run that zeroes Harvest, Cook and Rest at t1400 now scores 138 against 133 for the run that keeps feeding and mending. The invariant that impoverishment must never pay is what breaks, and it breaks for a reason that is about the design and not about the arithmetic.",
+    "whyItIsNotThisTasksToDecide": "the issue's non-goals forbid changing the rules of combat beyond the two sentences, and choosing whether hunger may end a fighter's participation — and at which threshold — is a rule of combat and a gameplay decision."
+  },
+  "theMemoryTest": {
+    "test": "PrototypeMemoryTests.A_place_is_remembered_by_one_creature_and_not_by_the_group",
+    "whatItAsserts": "that a second creature standing within MemoryAvoidRadius of a tile somebody remembered did not come out of the same tick remembering that tile too, and calls such a case inheritance — the herd of Issue #101 coming back.",
+    "whyItIsNotInheritanceHere": "`Remember` writes at `creature.Position` and nowhere else, so a creature can only ever write the tile it is standing on. Two creatures writing the same tile in one tick therefore cannot be one memory copied to two; it is one tile occupied by two different creatures at two different phases of the same tick — ApplyMorale runs at the top of ActCreatures, the runner then vacates the tile, and ActRaiders can put a second creature down on it later in the same tick.",
+    "status": "named, not fixed. Making the test tell the two apart is a change to somebody else's check and is offered to the coordinator rather than taken."
+  }
+}
