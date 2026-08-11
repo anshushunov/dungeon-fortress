@@ -255,11 +255,54 @@ public sealed partial class PrototypeWorld
         });
     }
 
+    /// <summary>
+    /// What each creature needs of the domain this tick — the muster before a
+    /// wave, a meal, a bed — decided before any work is generated or matched.
+    ///
+    /// <para><b>It is asked of the people the domain still has the right to send
+    /// somewhere</b>, and that qualification is the whole of Issue #333. Whether
+    /// a creature is in the line is decided one phase earlier, by
+    /// <see cref="UpdateCombatParticipation"/>, and it is carried by
+    /// <see cref="CreatureState.Mode"/> and by nothing else. This loop used to
+    /// walk every creature with no guard at all, so a need decided here
+    /// overwrote a participation decided two phases before it: <see
+    /// cref="TryStartEating"/> assigns <see cref="CreatureMode.Eating"/> to
+    /// whoever is hungry, and hungry included the fighting, the fleeing and the
+    /// people on the floor.</para>
+    ///
+    /// <para>The band it bites in is arithmetic rather than luck.
+    /// <see cref="PrototypeTuning.EatThreshold"/> is 30 and
+    /// <see cref="PrototypeTuning.CombatMinSatiety"/> is 20, so 20..29 is exactly
+    /// the set combat admits and hunger then takes back on the same tick.
+    /// Measured over the nine shipped runs before the guard existed
+    /// (<c>evidence/333-before.json</c>): creatures joined the line and were out
+    /// of it by the end of that very tick, left it mid-wave with nothing in the
+    /// journal saying so and came back 15, 50 and 333 ticks later, stopped
+    /// fleeing to walk to the larder, and — once, on <c>prepared/20260726</c> at
+    /// t1720 — got up off the floor with one wound and no health at all. That
+    /// last one costs more than a picture: <see cref="RaiseTheDowned"/> only
+    /// raises creatures whose mode is <see cref="CreatureMode.Downed"/>, so a
+    /// body that walked away is never carried off it.</para>
+    ///
+    /// <para><b>Why the guard and not a rule that ejects the starving from the
+    /// line.</b> Ejecting would be a new rule of combat, and the two sentences
+    /// this issue is about do not ask for one; a fighter that grows hungry stays
+    /// in the line until the wave ends, and eats afterwards. The guard is also
+    /// not invented here — it is the one <see cref="GenerateJobs"/> and
+    /// <see cref="MatchJobs"/> already carry, minus <see
+    /// cref="CreatureMode.Eating"/>, which this method must keep seeing because
+    /// finishing a meal is one of the needs it decides.</para>
+    /// </summary>
     private void DecideNeedsAndMuster()
     {
         var musterActive = IsMusterActive();
         foreach (var creature in _creatures.OrderBy(creature => creature.Id))
         {
+            if (creature.Mode is CreatureMode.Fighting or CreatureMode.Fled or CreatureMode.Downed)
+            {
+                continue;
+            }
+
             if (musterActive)
             {
                 if (!creature.IsMustering)
