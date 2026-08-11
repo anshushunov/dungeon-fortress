@@ -512,20 +512,11 @@ public sealed partial class PrototypeWorld
         public int DefendersDowned { get; private set; }
         public int DefendersFled { get; private set; }
 
-        /// <summary>
-        /// Defenders this wave took out of the line by hunger rather than by
-        /// panic or by a blow (Issue #333). Kept apart from
-        /// <see cref="DefendersFled"/> on purpose: the codebase already refuses to
-        /// let one number carry two meanings, and «ушёл голодным» is not «сломался».
-        /// </summary>
-        public int DefendersLeftStarving { get; private set; }
         public int MealsStolen { get; set; }
 
         public void CountDefenderDowned() => DefendersDowned++;
 
         public void CountDefenderFled() => DefendersFled++;
-
-        public void CountDefenderLeftStarving() => DefendersLeftStarving++;
     }
 
     private sealed class RaiderState(

@@ -136,26 +136,55 @@ public static class PrototypeTuning
     // a party that stopped feeding at t1400 scored 138 against 133 for one that
     // kept feeding (evidence/333-variants.json).
     //
-    // CombatJoinSatiety is 42, chosen on the balance surface the longer fight of
+    // CombatJoinSatiety is 41, chosen on the balance surface the longer fight of
     // Issue #336 creates and not on the one the sweep of 20..30 was taken on. That
     // sweep is not merely superseded, it is inapplicable: it was measured with an
     // exchange half as long, and its own verdict was that no value in it satisfied
-    // every invariant. 42 sits on a plateau — 42 and 45 give the same nine parties
-    // to the byte on every number the probe prints — which is why it is preferred
-    // to the edge values 40 and 38 that give the same green in one place and none
-    // to spare in another. What moves with it is measured in
+    // every invariant.
+    //
+    // 41 rather than 42, and the difference is one measured defect deep. The value
+    // was 42 while the check `A_verdict_makes_the_named_creature_behave_differently
+    // _in_the_next_wave` could only ever look at `baseline`: it built its arms by
+    // REPLACING the fixture's command log rather than adding to it, so a fixture
+    // that carries commands could not be asked at all. With that repaired the
+    // check sees the whole shipped matrix, and the matrix says the scene it looks
+    // for leaves `baseline` and arrives in `prepared` as the fight lengthens — so
+    // what read as a balance conflict was in part an instrument that could not
+    // turn its head. Repaired, the sweep of 40..42 has both of the opposed checks
+    // green at 40 and at 41, and neither at 42.
+    //
+    // 40 is excluded and 41 taken: at 40 the whole suite gives seven red, among
+    // them `The_contract_invariants_hold_on_every_seed_of_the_matrix` and
+    // `Preparation_changes_the_deterministic_party_without_direct_orders` — one of
+    // the two properties this slice exists to restore — while at 41 it gives
+    // three. 41 also carries the observability floor of memory of place with room
+    // (51 refusals on `prepared` against a floor of 10) where 40 meets it exactly.
+    // The sweep and the rule of choice stated before it are in
+    // evidence/333-tension.json; what moves with the threshold is in
     // evidence/333-after-merged.json, section `joinThresholdOnTheLongFight`.
     //
-    // CombatHoldSatiety stays at 20, and the twenty-two points between the two are
-    // a band rather than a line: a creature admitted at 42 has that much slack
-    // before the fight gives it up, which is what stops anybody walking in and out
-    // of the line every recheck. Twenty-two points is a hundred and ten ticks of a
-    // wave at SatietyDecayPeriod against a wave span of about sixty, so **the hold
-    // threshold still fires on no shipped journal**; it is asserted on a party
-    // built for it in PrototypeCombatModeHoldTests instead, with a mutant against
-    // that assertion.
-    public const int CombatJoinSatiety = 42;
-    public const int CombatHoldSatiety = 20;
+    // There is ONE threshold and it is asked on the way in only. A second one,
+    // CombatHoldSatiety = 20, was introduced by the owner's decision of
+    // 2026-08-11 to let hunger take a fighter out of the line through combat's
+    // own door, and it was REMOVED by the owner's decision of the same day once
+    // it was measured: no party can reach it. A creature is in the line only if
+    // it entered above the join threshold; while fighting its satiety only falls,
+    // and only by the global decay of one point per SatietyDecayPeriod ticks; and
+    // a spell in the line ends when the wave resolves. So the fall from join to
+    // below hold cost (join - hold + 1) * 5 unbroken ticks in the line — 110 at a
+    // join of 41 — against a longest spell of 53 ticks measured over twenty-four
+    // party-runs at four thresholds, and nothing in the command vocabulary
+    // lengthens a wave. The measurement is evidence/333-hold-reachability.json.
+    // The precedent for deleting rather than annotating is this same method:
+    // independent review of PR #328 removed an unreachable branch from it, on the
+    // grounds that a clause the mechanics cannot reach is a promise the contract
+    // does not keep.
+    //
+    // What this leaves standing: a fighter is never taken out of the line by
+    // hunger at all. It falls, or it breaks, or the wave ends. The promise that a
+    // hungry domain fights worse therefore rests ENTIRELY on
+    // DamageReadinessDivisor below — see the note there before touching it.
+    public const int CombatJoinSatiety = 41;
     public const int CombatJoinRecheck = 20;
     public const int EngageRadius = 8;
 
@@ -173,6 +202,23 @@ public static class PrototypeTuning
     // in the armour that meets a raider's. Both were divided by 25 and 50 and are
     // now divided by 6 and 12 — the same ratio between them, four times the
     // resolution, because the numbers they divide into are four times larger.
+    //
+    // **DamageReadinessDivisor is load-bearing, and it is the only thing bearing
+    // that load.** Readiness is half satiety, so this divisor is the whole of the
+    // rule «a hungry domain fights worse». It used to share the job with a second
+    // satiety threshold that pulled a starving fighter out of the line; that rule
+    // was removed on 2026-08-11 as unreachable (see CombatJoinSatiety above), so
+    // hunger now has exactly one way to reach a fight: through this number. At 25
+    // the whole range of readiness was worth four integers of damage and a
+    // fighter at satiety 20 hit exactly as hard as one at 40 — which is how the
+    // property came to be riding on a defect in the first place. At 6 every four
+    // points of satiety are visible in a blow, and a fight of about thirteen
+    // blows is long enough for the difference to decide whether a raider falls.
+    // Anyone raising this divisor is spending that property; the checks that
+    // would go red are `Deliberately_losing_creatures_and_stock_never_scores_
+    // better` and `Preparation_changes_the_deterministic_party_without_direct_
+    // orders`, and both are named here so that a change to the number meets the
+    // consequence rather than discovering it.
     public const int DamageMightWeight = 4;
     public const int DamageReadinessDivisor = 6;
     public const int RaiderMightWeight = 5;

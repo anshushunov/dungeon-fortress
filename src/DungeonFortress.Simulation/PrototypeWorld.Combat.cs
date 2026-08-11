@@ -79,11 +79,6 @@ public sealed partial class PrototypeWorld
             return;
         }
 
-        // Asked first and asked every tick, because being unable to stand is not
-        // a question of canvassing: the recheck period below is about how often
-        // the domain is asked for volunteers.
-        LeaveTheLineWhenTooHungryToStandInIt(wave);
-
         // The first check happens on the wave's own arrival tick; after that the
         // rest of the domain is asked again on the same period as before. Both
         // are relative to this wave, not to a single session-wide raid tick.
@@ -135,79 +130,6 @@ public sealed partial class PrototypeWorld
             creature.MealReserved = false;
             creature.Mode = CreatureMode.Fighting;
             RecordDecision(creature, "combat_joined", new Dictionary<string, int> { ["readiness"] = ComputeReadiness(creature), ["wave"] = wave.Number });
-        }
-    }
-
-    /// <summary>
-    /// Somebody too hungry to stand in the line leaves it, and leaves it here.
-    ///
-    /// <para><b>Why this method exists at all.</b> The departure already happened
-    /// before Issue #333 — it just happened in the wrong place. A fighter whose
-    /// satiety fell below <see cref="PrototypeTuning.EatThreshold"/> was taken out
-    /// of the line by <c>DecideNeedsAndMuster</c> two phases later, by having its
-    /// mode overwritten: nothing in the journal said the line had lost anybody,
-    /// the wave never heard of it, and the next recheck could hand the creature
-    /// back just as quietly. Removing the overwrite and stopping there was
-    /// measured and rejected: with hunger unable to end anybody's fight, a party
-    /// that stopped feeding at t1400 outscored one that kept feeding, 138 against
-    /// 133, and «обнищание не окупается» is a promise rather than a corridor
-    /// (<c>evidence/333-variants.json</c>). So the departure is kept and moved to
-    /// the one phase that is allowed to decide who is in the line.</para>
-    ///
-    /// <para><b>Entering is harder than staying</b> — owner's decision of
-    /// 2026-08-11. <see cref="PrototypeTuning.CombatHoldSatiety"/> is 20 and
-    /// <see cref="PrototypeTuning.CombatJoinSatiety"/> is above it, and the gap
-    /// between them is the whole point: one threshold for both would let a
-    /// creature that left be re-admitted at the very satiety it left at, which is
-    /// the walking in and out this issue exists to remove. Both numbers and what
-    /// is known about how well they are chosen are argued in
-    /// <see cref="PrototypeTuning"/>.</para>
-    ///
-    /// <para><b>It is unreachable at the join threshold this branch chose, and
-    /// that is stated rather than hidden.</b> A creature is in the line only if it
-    /// entered above the join threshold; while fighting its satiety only falls,
-    /// and only by the global decay of one point per
-    /// <see cref="PrototypeTuning.SatietyDecayPeriod"/> ticks; and a spell in the
-    /// line ends when <c>ResolveWave</c> empties it. So the fall from join to
-    /// below hold costs <c>(join - hold + 1) * 5</c> unbroken ticks in the line —
-    /// 115 at a join of 42 — against a longest spell of 53 ticks measured over
-    /// twenty-four party-runs at four thresholds. Nothing in the command
-    /// vocabulary lengthens a wave: posts are passable, digging only removes rock,
-    /// forbidden zones steer defenders and not raiders, and an empty larder sends
-    /// a raider home sooner. The measurement, the four facts it rests on and the
-    /// arithmetic per threshold are in <c>evidence/333-hold-reachability.json</c>.
-    /// A rule the fixtures cannot reach is exactly what independent review of
-    /// PR #328 deleted from this same method; this one is carried by §10.2 of the
-    /// contract, so whether it is re-based on a reachable gap or removed is a
-    /// decision for the coordinator and not for the executor who measured it.
-    /// Until that is answered there is deliberately <b>no</b> check on it: a
-    /// check that cannot redden would be worse than the gap it hides.</para>
-    /// </summary>
-    private void LeaveTheLineWhenTooHungryToStandInIt(WaveState wave)
-    {
-        foreach (var creature in _creatures
-                     .Where(creature =>
-                         creature.Mode == CreatureMode.Fighting &&
-                         creature.Satiety < PrototypeTuning.CombatHoldSatiety)
-                     .OrderBy(creature => creature.Id)
-                     .ToArray())
-        {
-            creature.Mode = CreatureMode.Waiting;
-            // Counted with the wave's other losses, because from the wave's side
-            // this is the same fact as a defender running: the domain has one
-            // fewer body in the line for the rest of the fight. What tells the two
-            // apart is the journal entry, which names the cause — the same split
-            // the codebase already keeps between a tally and a reason.
-            wave.CountDefenderLeftStarving();
-            RecordDecision(
-                creature,
-                "combat_left_starving",
-                new Dictionary<string, int>
-                {
-                    ["satiety"] = creature.Satiety,
-                    ["threshold"] = PrototypeTuning.CombatHoldSatiety,
-                    ["wave"] = wave.Number,
-                });
         }
     }
 

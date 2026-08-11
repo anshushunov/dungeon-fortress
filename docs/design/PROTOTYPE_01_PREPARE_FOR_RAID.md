@@ -1650,7 +1650,7 @@ readiness = clamp(readiness, 0, 100)
 
 | Канал | Механизм | Наблюдаемый эффект |
 |---|---|---|
-| A. Допуск к бою | `satiety < T.combat_min_satiety` (20) → существо не участвует | число участвующих защитников |
+| A. Допуск к бою | `satiety < T.combat_join_satiety` (41) → существо не участвует | число участвующих защитников |
 | B. Сила в бою | `martialForm` и `satiety` входят в `readiness` → урон и стойкость | длительность боя и потери |
 | C. Предбоевой паёк | резерв снимается при сборе, существа с `satiety < 40` едят по дороге | `readinessAtRaid` против `readiness` на тике начала сбора |
 
@@ -1699,7 +1699,7 @@ raiderMight = T.raider_might_base + renown / T.renown_per_raider_might
 не убывает, а сам факт прихода волны добавляет к ней `T.renown_per_wave_arrived`,
 что равно цене одного лишнего налётчика.
 
-**Правило.** Каждый налётчик: `hp` = `T.raider_hp` = 30,
+**Правило.** Каждый налётчик: `hp` = `T.raider_hp` = 240,
 `might` = `raiderMight` волны + jitter из потока `combat` в диапазоне
 `[-T.raider_might_jitter, +T.raider_might_jitter]`, где
 `T.raider_might_jitter` = 1. Налётчики входят через `(27,13)` по одному с
@@ -1754,6 +1754,18 @@ raiderMight = T.raider_might_base + renown / T.renown_per_raider_might
 выбывания, бегства или конца волны. Каждая такая запись в журнале называет номер
 волны в `details.wave`.
 
+**Правило (порог один и он спрашивается только на входе).** Сытость проверяется
+при вступлении в бой и больше нигде: голод **не** выводит бойца из строя. Второй
+порог, удержания, был введён решением владельца 2026-08-11 и снят решением того
+же владельца в тот же день, когда его недостижимость была измерена — существо
+попадает в строй только выше порога входа, в бою сытость падает лишь глобальным
+распадом в 1 за `T.satiety_decay_period`, а пребывание в строю кончается вместе с
+волной, поэтому падение до порога удержания требовало 110 непрерывных тиков в
+строю против измеренных 53 самых длинных. Замер —
+`evidence/333-hold-reachability.json`. Голод действует на бой единственным
+способом: через `readiness` в формуле урона (10.3), где сытость — половина
+готовности.
+
 Проверка выполняется в подфазе 4 порядка тика из 3.2: после входа налётчика и
 снимка `readinessAtRaid`, но до обработки потребностей, сопоставления работ и
 любого действия существа. Вступивший защитник в этом тике уже не выполняет шаг
@@ -1762,7 +1774,7 @@ raiderMight = T.raider_might_base + renown / T.renown_per_raider_might
 **Правило.** Существо вступает в бой, если одновременно верно:
 
 - `injury != heavy`;
-- `satiety >= T.combat_min_satiety` (20);
+- `satiety >= T.combat_join_satiety` (41);
 - расстояние **от самого существа** до ближайшего налётчика **или** до
   ближайшего тайла кладовой не превышает `T.engage_radius` = 8 тиков хода, и
   путь существует.
@@ -1803,7 +1815,7 @@ combat_absent_unreachable`. Остальные нарушенные услови
 собрать всех.
 
 **Правило.** Запас здоровья защитника:
-`hp = T.defender_hp_base (20) + might * T.defender_hp_per_might (4)` → 24..40.
+`hp = T.defender_hp_base (160) + might * T.defender_hp_per_might (32)` → 192..320.
 
 **Правило.** Защитники сами выбирают ближайшего достижимого налётчика; при равном
 расстоянии — налётчика с наименьшим `id`. Налётчик, у которого несколько
@@ -1826,12 +1838,14 @@ tuning-слоя: защитник бьёт с расстояния не боль
 - если противник в пределах дальности атаки — удар, иначе шаг по пути к цели с
   учётом правила занятости тайлов (4.1);
 - урон защитника: `max(T.damage_floor,
-  might + readiness / T.damage_readiness_divisor (25) + jitter)`;
+  might * T.damage_might_weight (4) + readiness / T.damage_readiness_divisor (6)
+  + jitter)`;
 - урон налётчика: `max(T.damage_floor,
-  might - readiness / T.armour_readiness_divisor (50) + jitter)`;
+  might * T.raider_might_weight (5) - readiness / T.armour_readiness_divisor (12)
+  + jitter)`;
   где `T.damage_floor` = 1;
 - `jitter` в обоих случаях — из потока `combat`, диапазон
-  `[-T.damage_jitter, +T.damage_jitter]`, где `T.damage_jitter` = 1.
+  `[-T.damage_jitter, +T.damage_jitter]`, где `T.damage_jitter` = 6.
 
 В формуле удара налётчика `readiness` принадлежит атакуемому защитнику.
 
@@ -2084,7 +2098,8 @@ dread = T.morale_base (50)
 **Правило (заживление).** Существо с травмой накапливает `recoveryTicks` в тике,
 в котором оно отдыхает (`mode = resting`) и сыто не ниже
 `T.recovery_min_satiety`. Каждые `T.hp_recovery_period` таких тиков `hp` растёт
-на 1. Ступень травмы читается из той же доли здоровья, что её и назначила:
+на `T.hp_recovery_step` = 8. Ступень деноминирована вместе со здоровьем: при
+шаге 1 рана закрывалась бы в восемь раз дольше, чего никто не решал. Ступень травмы читается из той же доли здоровья, что её и назначила:
 
 - `heavy` → `light`, когда `hp * 100 / maxHp > T.light_injury_share`
   (reason code `injury_mending`);
@@ -2636,7 +2651,7 @@ reason code не отрисовывается «как похожий»: ада�
 | Код | Когда |
 |---|---|
 | `combat_joined` | существо вступило в бой; `details.wave` называет волну |
-| `combat_refused_starving` | сытость ниже 20; `details.wave` называет волну |
+| `combat_refused_starving` | сытость ниже `T.combat_join_satiety`; `details.satiety` и `details.threshold` называют обе стороны сравнения, `details.wave` — волну |
 | `combat_refused_injured` | тяжёлая травма до боя; `details.wave` называет волну |
 | `combat_absent_unreachable` | налётчик недостижим или слишком далеко; `details.wave` называет волну |
 | `combat_attack` | удар по налётчику; `details` несут `raiderId` и урон |
@@ -3206,14 +3221,16 @@ python -c "import json,io; d=json.load(io.open(r'docs/playtests/data/prototype-0
 | `T.readiness_rest_den` | 10 | вклад отдыха |
 | `T.injury_light_penalty` | 15 | штраф лёгкой травмы |
 | `T.injury_heavy_penalty` | 40 | штраф тяжёлой травмы |
-| `T.combat_min_satiety` | 20 | допуск к бою |
+| `T.combat_join_satiety` | 41 | допуск к бою |
 | `T.engage_radius` | 8 | радиус вступления в бой |
 | `T.combat_join_recheck` | 20 | период перепроверки участия |
-| `T.defender_hp_base` | 20 | база здоровья защитника |
-| `T.defender_hp_per_might` | 4 | здоровье за единицу `might` |
-| `T.damage_readiness_divisor` | 25 | делитель вклада готовности в урон |
-| `T.armour_readiness_divisor` | 50 | делитель вклада готовности в защиту |
-| `T.damage_jitter` | 1 | разброс урона |
+| `T.defender_hp_base` | 160 | база здоровья защитника |
+| `T.defender_hp_per_might` | 32 | здоровье за единицу `might` |
+| `T.damage_might_weight` | 4 | вес силы в ударе защитника |
+| `T.raider_might_weight` | 5 | вес силы в ударе налётчика |
+| `T.damage_readiness_divisor` | 6 | делитель вклада готовности в урон |
+| `T.armour_readiness_divisor` | 12 | делитель вклада готовности в защиту |
+| `T.damage_jitter` | 6 | разброс урона |
 | `T.light_injury_share` | 40 | процент здоровья, ниже которого травма `light` |
 | `T.morale_grit_weight` | 12 | вес стойкости в стойкости духа |
 | `T.morale_readiness_divisor` | 2 | делитель готовности в стойкости духа |
@@ -3225,14 +3242,15 @@ python -c "import json,io; d=json.load(io.open(r'docs/playtests/data/prototype-0
 | `T.morale_press_radius` | 2 | манхэттенский радиус, в котором налётчик считается наседающим |
 | `T.melee_attack_range` | 1 | дальность удара защитника в тайлах |
 | `T.raider_attack_range` | 1 | дальность удара налётчика в тайлах |
-| `T.raider_hp` | 30 | запас здоровья налётчика |
+| `T.raider_hp` | 240 | запас здоровья налётчика |
 | `T.raider_might_base` | 3 | базовая сила налётчика |
 | `T.raider_might_jitter` | 1 | разброс силы налётчика |
 | `T.raider_entry_interval` | 2 | интервал входа налётчиков |
 | `T.flee_tile` | столбец `x = 1`, ближайший свободный | куда **идёт** сломленный защитник (10.3) |
 | `T.steal_period` | 6 | тиков на кражу порции |
 | `T.recovery_min_satiety` | 30 | сытость, ниже которой рана не заживает |
-| `T.hp_recovery_period` | 6 | тиков отдыха на +1 здоровья |
+| `T.hp_recovery_period` | 6 | тиков отдыха на одну ступень заживления |
+| `T.hp_recovery_step` | 8 | здоровья за одну ступень заживления |
 
 Три веса морали переизмерены под личную потиковую проверку (#101) — таблица «было / стало» и что показало измерение каждого — в [`PROTOTYPE_01_CONTRACT_HISTORY.md`](PROTOTYPE_01_CONTRACT_HISTORY.md).
 
