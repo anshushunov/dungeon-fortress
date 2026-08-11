@@ -1,0 +1,25 @@
+{
+  "issue": 352,
+  "checkpoint": "4, re-run for the independent-review round on PR #388",
+  "checkpointCommit": "040fce6",
+  "what": "Full scripts/verify.ps1, one run, on the final commit of the review round (rule 39: a round that changes code and adds a check gets a confirming full run) — all ten stages.",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
+  "shaNote": "review found the previous version of this file recorded checkpointCommit 335dc6b while the PR body cited c9d7a0d for the same run — both wrong in the same way: the run executes against the tree at HEAD *before* the commit that adds this evidence file exists, so the commit containing the run's own record is necessarily one commit ahead of the commit actually measured. This file now names the commit the run executed against (040fce6) rather than the commit that records it; the PR body cites the same value.",
+  "observed": "Verification scope: full (10 of 10 stages: scripts, build, tests, mcp, sim, load, godot, ui, screenshots, token-budget). All ten \"verification_stage\" events report status ok. Final: {\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"full\",\"stagesExecuted\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\",\"token-budget\"],\"stagesNotRun\":[],\"godotExitCode\":0,\"hudGuardRegressionExitCode\":1,\"hudReadabilityRegressionExitCode\":1,\"hudSmallestPhysicalTextPixels\":{\"Authored\":8,\"OwnerMaximized\":16},\"cameraTransformRegressionExitCode\":1,\"godotRaidExitCode\":0,\"momentOfTruthExitCode\":0,\"screenshotRepeatable\":true,\"goldenUiFrames\":[\"stone-t190-loose-no-stockpile\",\"stone-t336-in-transit\",\"stone-t950-stockpile-full\"]}",
+  "stageElapsedSeconds": {
+    "scripts": 133,
+    "build": 24.3,
+    "tests": 196.7,
+    "mcp": 4.4,
+    "sim": 0.4,
+    "load": 0.6,
+    "godot": 40.1,
+    "ui": 4.7,
+    "screenshots": 11.9,
+    "token-budget": 111.1
+  },
+  "exitCode": 0,
+  "treeStateAtRun": "Clean working tree on commit 040fce6.",
+  "note": "scripts/verify.ps1 was not edited at any point in this Issue, including this review round; every invocation ran it as-is, per the non-goal on scripts/**.",
+  "supersedes": "The pre-review-round full run recorded here previously (checkpointCommit 335dc6b, before the toolbar-overlap fix) — superseded because this round changed src/DungeonFortress.Game/Main.Hud.cs after that run, so it no longer describes the code under review."
+}

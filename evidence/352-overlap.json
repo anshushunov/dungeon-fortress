@@ -1,0 +1,33 @@
+{
+  "issue": 352,
+  "round": "independent review, PR #388",
+  "what": "Toolbar hotkey-badge-over-label overlap review found by eye (reproduced on 10 of 20 toolbar buttons, obscuring the value on 'Harvest 3' and 'ration 0'). Fix: fold the hotkey into the button's own label text for buttons that already show one (ShowsHotkeyAsCornerBadge), keep the corner badge only for the ten icon-only buttons. New standing check: AssertToolbarHotkeysDoNotOverlapLabels (src/DungeonFortress.Game/Main.Hud.cs), called from AssertControlStripsFit, which already runs from every existing entry point in Main.cs.",
+  "checkpointCommit": "b64ad50",
+  "method": "Mutant applied to the tracked file with sed after the checked state was committed (b64ad50), godot stage run, output captured, then `git checkout -- src/DungeonFortress.Game/Main.Hud.cs` to revert.",
+  "beforeFixScreenshot": {
+    "path": "evidence/352-toolbar-before.png",
+    "capturedFrom": "commit 335dc6b (the branch tip review examined), frame 1600x900 — the resolution review reproduced the defect on",
+    "command": "powershell -File scripts/run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 40 -CameraZoom 0.75 -CameraPosition '560,320' -UiScale 1 -FrameSize 1600x900 -ScreenshotPath evidence/352-toolbar-before.png",
+    "visibleDefect": "0.5x/1x/4x/16x show the speed suffix with the hotkey digit overlapping the trailing 'x'; BASE/NEGLECT/REPLAY show the trailing letter overlapping; Farm/Harvest 3/ration 0 show the hotkey letter overlapping the trailing character — for Harvest 3 and ration 0 that trailing character is the value digit itself (3, 0), fully obscured."
+  },
+  "afterFixScreenshot": {
+    "path": "evidence/352-toolbar-after.png",
+    "note": "Same frame and camera as evidence/352-toolbar-before.png.",
+    "command": "powershell -File scripts/run-game.ps1 -Fixture baseline -ScreenshotTicks 1 -TileSize 40 -CameraZoom 0.75 -CameraPosition '560,320' -UiScale 1 -FrameSize 1600x900 -ScreenshotPath evidence/352-toolbar-after.png",
+    "visibleFix": "Every previously-overlapping button now reads its label followed by its hotkey in brackets — '0.5x [1]', 'BASE [R]', 'Farm [Z]', 'Harvest 3 [J]', 'ration 0 [K]' — with no overlap and both digits fully readable."
+  },
+  "mutant": {
+    "id": "a",
+    "name": "showshotkeyascornerbadge_reverted_to_always_true",
+    "target": "src/DungeonFortress.Game/Main.Hud.cs",
+    "was": "private static bool ShowsHotkeyAsCornerBadge(UiControl control) =>\n        string.IsNullOrEmpty(control.Label);",
+    "became": "private static bool ShowsHotkeyAsCornerBadge(UiControl control) =>\n        true; // MUTANT: was string.IsNullOrEmpty(control.Label);",
+    "rationale": "A single predicate flip reproduces the exact pre-fix behavior on both call sites at once: CreateControlButton creates a corner badge for every control again, and RefreshControls's ternary collapses to the old 'button.Text = control.Label' with no hotkey suffix, because both already read this one predicate.",
+    "commandAfterFix": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage godot",
+    "observedAfterFix": "{\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"partial\",\"stagesExecuted\":[\"godot\"], ...} — AssertToolbarHotkeysDoNotOverlapLabels raised nothing.",
+    "commandWithMutant": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage godot",
+    "observedWithMutant": "Exit code 1. \"A toolbar hotkey is unreadable or overlaps its own label in 20 place(s): 'speed_0_5' has label '0.5x' and still draws a corner hotkey badge — the badge sits on top of the label's own text (Issue #352 review round); 'speed_0_5' has label '0.5x' but its button text '0.5x' does not carry the hotkey suffix '[1]' — without the corner badge and without the suffix the hotkey is not shown anywhere; ...\" (20 failures total — 2 per each of the 10 labelled controls: speed_0_5, speed_1, speed_4, speed_16, fixture_baseline, fixture_neglected, replay, zone, priority, rule). verification_result: {\"status\":\"error\",\"failedStage\":\"godot\",\"reason\":\"Godot emitted 1 unexpected ERROR line(s).\"}",
+    "result": "red as required"
+  },
+  "note": "This mutant demonstrates the check catches the exact state committed at the branch tip review examined (335dc6b) and every earlier commit back to 944fa3b, where the badge was first raised to 12px: ShowsHotkeyAsCornerBadge did not exist before this fix, so the mutant's 'was' line is this fix's own code, and its 'became' line reconstructs the pre-fix behavior precisely."
+}

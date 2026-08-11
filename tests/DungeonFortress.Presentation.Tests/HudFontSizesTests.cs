@@ -31,15 +31,16 @@ public sealed class HudFontSizesTests
     }
 
     [Theory]
-    [InlineData(1.0, 10)]
-    [InlineData(1.5, 15)]
-    [InlineData(2.0, 20)]
+    [InlineData(1.0, 12)]
+    [InlineData(1.5, 18)]
+    [InlineData(2.0, 24)]
     public void Scaled_size_grows_exactly_with_UI_scale(double uiScale, int expected)
     {
         // 1.0, 1.5 and 2.0 are three of the five steps CameraView.AutomaticUiScales
         // exposes ([1.0, 1.25, 1.5, 1.75, 2.0]) and the pair Issue #127 named
         // explicitly (the owner's window reaches 1.5 and 2.0 automatically; see
-        // evidence/127-tooltip-scale.json).
+        // evidence/127-tooltip-scale.json). Expected values follow
+        // TooltipBodyFontSize, raised from 10 to 12 by Issue #352.
         Assert.Equal(expected, HudFontSizes.ScaledSize(HudFontSizes.TooltipBodyFontSize, uiScale));
     }
 

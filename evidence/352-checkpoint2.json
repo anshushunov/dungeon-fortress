@@ -1,0 +1,22 @@
+{
+  "issue": 352,
+  "checkpoint": 2,
+  "what": "The legend's named readability exception (owner decision 2026-08-10, see comment thread on Issue #352). Legend rows keep HudFontSizes.LegendFontSize = 8, exempt from HudReadability.MinimumPhysicalTextPixels (12) but held to their own HudReadability.LegendReadabilityFloor (8, read from the same constant). Everything else stays at the floor from the previous commit (511687f). Both checks below are green.",
+  "readabilityGuard": {
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj -v minimal",
+    "observed": "Пройден!   : не пройдено     0, пройдено   720, пропущено     0, всего   720, длительность 43 s."
+  },
+  "overflowGuard": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage godot",
+    "note_on_command": "scripts/verify.ps1 invoked as-is (read-only usage), same as evidence/352-fit.json.",
+    "observed_summary": "{\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"partial\",\"stagesExecuted\":[\"godot\"],\"godotExitCode\":0,\"hudGuardRegressionExitCode\":1,\"hudReadabilityRegressionExitCode\":1,\"hudSmallestPhysicalTextPixels\":{\"Authored\":8,\"OwnerMaximized\":16},\"cameraTransformRegressionExitCode\":1}",
+    "interpretation": "The whole 'godot' stage now exits ok, meaning the AssertLabelsFit overflow check that failed in evidence/352-fit.json ('feedback' short by 1-2 lines on 1024x768@1 and 2048x1440@2) now passes on all eight checked resolutions, because the legend's column footprint returned to its pre-#352 height while roster/inspector still grew (10->12, 11->12) — a smaller net column growth than the all-raised state evidence/352-fit.json measured."
+  },
+  "regressionProofsStillFire": {
+    "hudGuardRegressionExitCode": "1 (expected) — the 80-line-inspector overflow injector (Issue #26/#106) still fails the engine as required.",
+    "hudReadabilityRegressionExitCode": "1 (expected) — InjectHudReadabilityRegression (Issue #86, Main.Session.cs:599, shrinks legend[0] to 4px) still fails the engine.",
+    "note": "This is the negative proof that HudReadability.LegendReadabilityFloor works as a real floor rather than a full exemption. A first implementation attempt exempted legend rows from every floor check, which silently defeated this exact proof (hudReadabilityRegressionExitCode became 0 — 'Godot failure exited with code 0; expected exactly 1' — before this fix). Caught by running this same command before committing, not by review; recorded so the mistake is visible rather than only its correction.",
+    "tooltipRegression": "InjectHudTooltipReadabilityRegression (Issue #127, Main.Session.cs:608-613) also still required to fail — verified by the same 'godot' stage run exiting 0 overall under $ErrorActionPreference = 'Stop', which would have halted on any unexpected success."
+  },
+  "hudSmallestPhysicalTextPixelsUnchangedFromPre352": "Authored=8 at the design frame (UI scale 1) matches the value scripts/verify.ps1:838 has always hardcoded ($baseReadability.smallestPhysicalTextPixels -ne 8), because the legend — the true smallest raw text — was kept at 8 by the owner's exception rather than raised. scripts/** was not edited; this is why it did not need to be."
+}

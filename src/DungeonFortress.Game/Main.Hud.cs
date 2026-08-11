@@ -39,13 +39,13 @@ public partial class Main
         header.AddThemeConstantOverride("separation", 2);
         column.AddChild(header);
 
-        _title = MakeHudLabel(15, new Color("#dbeafe"));
+        _title = MakeHudLabel(HudFontSizes.TitleFontSize, new Color("#dbeafe"));
         _title.AutowrapMode = TextServer.AutowrapMode.Off;
         _title.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         _title.Text = "DUNGEON FORTRESS  //  PROTOTYPE 1 GRAYBOX";
         header.AddChild(_title);
 
-        _summary = MakeHudLabel(12, new Color("#bfdbfe"));
+        _summary = MakeHudLabel(HudFontSizes.SummaryFontSize, new Color("#bfdbfe"));
         header.AddChild(_summary);
         // The summary is always exactly two lines, and it is the one panel that
         // must never be squeezed: the line under it is the time toolbar.
@@ -77,7 +77,7 @@ public partial class Main
         // waits.
         column.AddChild(CreateMomentOfTruthBand());
 
-        _roster = MakeHudLabel(10, new Color("#cbd5e1"));
+        _roster = MakeHudLabel(HudFontSizes.RosterFontSize, new Color("#cbd5e1"));
         _roster.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         _roster.SizeFlagsStretchRatio = 1f;
         column.AddChild(_roster);
@@ -192,10 +192,10 @@ public partial class Main
     }
 
     /// <summary>
-    /// A toolbar button: the icon it is, the hotkey badge in the corner and the
-    /// tooltip that names it. All three together, because a row of unlabelled
-    /// symbols would be <em>less</em> friendly than the text it replaces — which
-    /// is why RimWorld and Prison Architect ship all three too.
+    /// A toolbar button: the icon it is, its hotkey and the tooltip that names
+    /// it. Two shapes for the hotkey, chosen by whether the button already
+    /// draws a label — see <see cref="ShowsHotkeyAsCornerBadge"/> for why one
+    /// shape does not fit every button.
     /// </summary>
     private HudButton CreateControlButton(UiControl control, int index)
     {
@@ -222,32 +222,89 @@ public partial class Main
         button.AddThemeStyleboxOverride("disabled", ControlButtonStyle("#151f2b", "#1f2c3a"));
         button.Pressed += () => HandleControlPressed(index);
 
-        // Full-rect anchors rather than a corner offset: the badge then sits in the
-        // corner of whatever size the layout gives the button, instead of the size
-        // it was authored against.
-        var badge = new Label
+        if (ShowsHotkeyAsCornerBadge(control))
         {
-            Text = control.Hotkey,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Bottom,
-        };
-        badge.AddThemeFontSizeOverride("font_size", 8);
-        badge.AddThemeColorOverride("font_color", new Color("#e0f2fe"));
-        // The badge sits on top of the icon, so it needs to be legible against
-        // whatever the icon happens to put in that corner rather than against the
-        // button background.
-        badge.AddThemeColorOverride("font_outline_color", new Color("#0b1622"));
-        badge.AddThemeConstantOverride("outline_size", 3);
-        button.AddChild(badge);
-        badge.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        badge.OffsetRight = -2;
-        // Kept, because the badge carries the smallest font in the toolbar and
-        // the readability policy measures what is smallest rather than what is
-        // easy to reach.
-        _hotkeyBadges.Add(badge);
+            // Full-rect anchors rather than a corner offset: the badge then sits
+            // in the corner of whatever size the layout gives the button,
+            // instead of the size it was authored against.
+            var badge = new Label
+            {
+                Text = control.Hotkey,
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Bottom,
+            };
+            badge.AddThemeFontSizeOverride("font_size", HudFontSizes.HotkeyBadgeFontSize);
+            badge.AddThemeColorOverride("font_color", new Color("#e0f2fe"));
+            // The badge sits on top of the icon, so it needs to be legible
+            // against whatever the icon happens to put in that corner rather
+            // than against the button background.
+            badge.AddThemeColorOverride("font_outline_color", new Color("#0b1622"));
+            badge.AddThemeConstantOverride("outline_size", 3);
+            button.AddChild(badge);
+            badge.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+            badge.OffsetRight = -2;
+            // Kept, because the badge carries the smallest font in the toolbar
+            // and the readability policy measures what is smallest rather than
+            // what is easy to reach.
+            _hotkeyBadges.Add(badge);
+        }
+
         return button;
     }
+
+    /// <summary>
+    /// Whether a control's hotkey is drawn as the corner badge, as opposed to
+    /// folded into the button's own label — the toolbar-overlap fix from
+    /// Issue #352's review round.
+    ///
+    /// <para>
+    /// <b>The defect.</b> The badge is a <c>FullRect</c> label anchored to the
+    /// button's bottom-right corner (<see cref="CreateControlButton"/>). At
+    /// <see cref="HudFontSizes.ButtonLabelFontSize"/> = 12 the badge is drawn
+    /// in the same font size as the button's own text and at
+    /// <see cref="ControlButtonSize"/> = 28 px the button is barely taller
+    /// than one line of it, so a button that also shows a label has that
+    /// label's own last character sitting almost exactly where the badge sits.
+    /// Review reproduced it on ten of the twenty toolbar buttons — every one
+    /// with a non-empty <see cref="UiControl.Label"/> — and on two of those
+    /// ten the badge sat directly on the digit that carries the value:
+    /// <c>Harvest 3</c> and <c>ration 0</c> lost the <c>3</c> and the <c>0</c>
+    /// entirely, not just a stray pixel of overlap.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Rejected: reserve a corner in the button's own layout for the
+    /// badge.</b> <see cref="ControlButtonSize"/> already lists the button as
+    /// 28 px, and <c>ClipText = false</c> on <c>HudButton</c> exists because
+    /// several labels — <c>NEGLECT</c>, <c>Harvest 3</c> — are already wider
+    /// than that at 12 px and are let to overflow rather than clip. A button
+    /// that size has no spare corner to reserve: the button already sizes
+    /// itself to its text with effectively no slack, so carving out, say, a
+    /// fixed 10 px strip on the right for the badge would either still
+    /// collide on the widest labels or force them to wrap — trading one
+    /// overlap defect for a clipping one, on the same ten buttons, measured
+    /// by nothing (Godot's own auto-sizing, not this file, decides how close
+    /// text sits to a button's edge, and there is no theme constant that
+    /// reserves space from only one corner rather than one whole side).
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Chosen: fold the hotkey into the label for a button that already
+    /// has one, keep the corner badge only where there is no label to
+    /// collide with.</b> This is not a new idiom invented for this fix — it
+    /// is the one <c>MomentOfTruthPanel</c>'s own <c>REWARD [G]</c> /
+    /// <c>PUNISH [H]</c> buttons already use, with no corner badge and no
+    /// overlap, because Godot auto-sizes a button to whatever text it is
+    /// given rather than to a fixed square. Ten buttons keep the corner badge
+    /// — the ones with <see cref="UiControl.Label"/> empty, where the badge
+    /// sits over the icon rather than over text and nothing is lost — and the
+    /// other ten stop drawing one, because their hotkey is now part of the
+    /// text <see cref="RefreshControls"/> already sets.
+    /// </para>
+    /// </summary>
+    private static bool ShowsHotkeyAsCornerBadge(UiControl control) =>
+        string.IsNullOrEmpty(control.Label);
 
     private static StyleBoxFlat ControlButtonStyle(string fill, string border)
     {
@@ -288,7 +345,15 @@ public partial class Main
         {
             var control = controls[index];
             var button = _controlButtons[index];
-            button.Text = control.Label;
+            // The hotkey rides along in the button's own text for exactly the
+            // buttons ShowsHotkeyAsCornerBadge decided against a corner badge
+            // for — see that method for why. control.Label itself stays the
+            // bare state text (UiControlTests and the ui.controls JSON
+            // contract read it), so the suffix is display-only, added here
+            // rather than in UiControls.Build.
+            button.Text = ShowsHotkeyAsCornerBadge(control)
+                ? control.Label
+                : $"{control.Label} [{control.Hotkey}]";
             button.TooltipText = control.Tooltip;
             button.Icon = control.Icon is null ? null : IconTexture(control.Icon);
             button.Disabled = !control.Enabled;
@@ -510,6 +575,75 @@ public partial class Main
                 string.Join("; ", failures) +
                 ". A strip that overhangs the map puts controls where the player is " +
                 "not looking and breaks the column the HUD is laid out in.");
+        }
+
+        AssertToolbarHotkeysDoNotOverlapLabels();
+    }
+
+    /// <summary>
+    /// The standing proof for the toolbar-overlap defect Issue #352's review
+    /// round found by eye: a hotkey badge is never drawn over a button that
+    /// also carries its own non-empty label.
+    ///
+    /// <para>
+    /// It does not measure pixels. <see cref="ShowsHotkeyAsCornerBadge"/>
+    /// already makes badge and label mutually exclusive by construction — the
+    /// two are never created for the same button — so a badge sharing a
+    /// button with a non-empty label cannot happen without that method or
+    /// <see cref="CreateControlButton"/> changing. What this proves instead is
+    /// that the two stay wired together the way <see cref="RefreshControls"/>
+    /// assumes: a labelled button's own <c>Text</c> actually carries the
+    /// hotkey in brackets, so a player who cannot see a corner badge is not
+    /// left unable to see the key at all.
+    /// </para>
+    ///
+    /// <para>
+    /// Reverting <see cref="CreateControlButton"/> and
+    /// <see cref="RefreshControls"/> to their pre-round-2 form — every
+    /// control gets a corner badge, <c>button.Text = control.Label</c> with
+    /// no suffix — reddens this on the very first control it checks
+    /// (<c>run</c> has no label, so the first failure is actually
+    /// <c>speed_0_5</c>): <c>evidence/352-overlap.json</c>.
+    /// </para>
+    /// </summary>
+    private void AssertToolbarHotkeysDoNotOverlapLabels()
+    {
+        var controls = UiControls.Build(CurrentControlsView());
+        var failures = new List<string>();
+        for (var index = 0; index < _controlButtons.Count && index < controls.Count; index++)
+        {
+            var control = controls[index];
+            var button = _controlButtons[index];
+            if (string.IsNullOrEmpty(control.Label))
+            {
+                continue;
+            }
+
+            var drawsCornerBadge = button.GetChildren()
+                .OfType<Label>()
+                .Any(child => _hotkeyBadges.Contains(child));
+            if (drawsCornerBadge)
+            {
+                failures.Add(
+                    $"'{control.Id}' has label '{control.Label}' and still draws a corner hotkey " +
+                    "badge — the badge sits on top of the label's own text (Issue #352 review round)");
+            }
+
+            var hotkeySuffix = $"[{control.Hotkey}]";
+            if (!button.Text.Contains(hotkeySuffix, StringComparison.Ordinal))
+            {
+                failures.Add(
+                    $"'{control.Id}' has label '{control.Label}' but its button text '{button.Text}' " +
+                    $"does not carry the hotkey suffix '{hotkeySuffix}' — without the corner badge " +
+                    "and without the suffix the hotkey is not shown anywhere");
+            }
+        }
+
+        if (failures.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"A toolbar hotkey is unreadable or overlaps its own label in {failures.Count} " +
+                $"place(s): {string.Join("; ", failures)}.");
         }
     }
 
@@ -1039,7 +1173,7 @@ public partial class Main
         column.AddThemeConstantOverride("separation", HudPanelSeparation);
         panel.AddChild(column);
 
-        var heading = MakeHudLabel(13, new Color("#93c5fd"));
+        var heading = MakeHudLabel(HudFontSizes.InspectorHeadingFontSize, new Color("#93c5fd"));
         // Named because nothing holds a reference to it: the readability walk
         // finds it in the tree and reports it by path, and a path with a default
         // engine name in it is not a sentence anyone can act on.
@@ -1049,7 +1183,7 @@ public partial class Main
         column.AddChild(heading);
         heading.CustomMinimumSize = new Vector2(0, HudTextHeight(heading, 1));
 
-        _inspector = MakeHudLabel(11, new Color("#e2e8f0"));
+        _inspector = MakeHudLabel(HudFontSizes.InspectorFontSize, new Color("#e2e8f0"));
         _inspector.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         _inspector.SizeFlagsStretchRatio = 3;
         column.AddChild(_inspector);
@@ -1059,7 +1193,7 @@ public partial class Main
         // static map key from the live event feed above and below it.
         column.AddChild(new HSeparator { MouseFilter = Control.MouseFilterEnum.Ignore });
 
-        _feedback = MakeHudLabel(12, new Color("#94a3b8"));
+        _feedback = MakeHudLabel(HudFontSizes.FeedbackFontSize, new Color("#94a3b8"));
         _feedback.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         _feedback.SizeFlagsStretchRatio = 2;
         column.AddChild(_feedback);
@@ -1096,25 +1230,25 @@ public partial class Main
                      // "LEGEND" heading (previously its own 9pt row) is folded into
                      // the shortest content row below instead of dropped, keeping
                      // every word this legend already had at eight rows total.
-                     ("LEGEND — amber X = dig mark / yellow bar = dig progress", 8, "#cbd5e1"),
-                     ("teal outline = crew / red outline = raider / bar = HP / white X = downed", 8, "#cbd5e1"),
+                     ("LEGEND — amber X = dig mark / yellow bar = dig progress", HudFontSizes.LegendFontSize, "#cbd5e1"),
+                     ("teal outline = crew / red outline = raider / bar = HP / white X = downed", HudFontSizes.LegendFontSize, "#cbd5e1"),
                      // Issue #222. The state dot is the small circle at the upper-
                      // right corner of each own body. It disappears behind the
                      // legend row "bar = HP" on the line above, so this row is
                      // the one that keeps the copy honest when the test walks the
                      // live subtree (see HudReadabilityTests.AuthoredHud).
-                     ("dot: blue=idle amber=fighting pink=fled green=working gray=downed", 8, "#bfdbfe"),
+                     ("dot: blue=idle amber=fighting pink=fled green=working gray=downed", HudFontSizes.LegendFontSize, "#bfdbfe"),
                      // Issue #52. It replaces the quarters' rest rule rather than
                      // joining it: the panel column is under the same overflow
                      // guard as everything else, and the rest rule now sits on the
                      // room line of the inspector, where clicking the quarters
                      // puts it. What could not move anywhere is the amber ring —
                      // it is the one mark on the map with no words next to it.
-                     ("room = own floor + outline + caption; amber ring = object with no room", 8, "#fcd34d"),
-                     ("light warm block = diggable rock / dark = map edge", 8, "#d6d3d1"),
-                     ("red X = unreachable / pale tile = new floor / gray dot = loose stone", 8, "#fca5a5"),
-                     ("[M] stockpile: cornered square = material cell / grey box on a crew = carried stone", 8, "#e2e8f0"),
-                     ("filled pip = stored / hollow blue pip = booked by a carrier on the way", 8, "#7dd3fc"),
+                     ("room = own floor + outline + caption; amber ring = object with no room", HudFontSizes.LegendFontSize, "#fcd34d"),
+                     ("light warm block = diggable rock / dark = map edge", HudFontSizes.LegendFontSize, "#d6d3d1"),
+                     ("red X = unreachable / pale tile = new floor / gray dot = loose stone", HudFontSizes.LegendFontSize, "#fca5a5"),
+                     ("[M] stockpile: cornered square = material cell / grey box on a crew = carried stone", HudFontSizes.LegendFontSize, "#e2e8f0"),
+                     ("filled pip = stored / hollow blue pip = booked by a carrier on the way", HudFontSizes.LegendFontSize, "#7dd3fc"),
                  })
         {
             var line = MakeHudLabel(size, new Color(color));
