@@ -243,11 +243,23 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
         tally.Score = previous.SessionResult.Score;
         tally.Outcome = previous.SessionResult.Outcome ?? "unfinished";
         tally.WavesResolved = previous.Domain.WavesResolved;
+        tally.MealsStolen = previous.SessionResult.MealsStolen;
+        tally.DefendersDowned = previous.SessionResult.DefendersDowned;
+        tally.DefendersFled = previous.SessionResult.DefendersFled;
+        tally.MealsProduced = previous.Stocks.MealsProduced;
         tally.RaidCost =
             previous.SessionResult.MealsStolen * PrototypeTuning.ScorePerMealStolen +
             (previous.SessionResult.DefendersDowned + previous.SessionResult.DefendersFled) *
                 PrototypeTuning.ScorePerDefenderLost;
         ScanJoins(previous, modeByTick, tally);
+        foreach (var creature in previous.Creatures.OrderBy(creature => creature.Id))
+        {
+            foreach (var place in creature.RememberedPlaces.OrderBy(place => place.Tick))
+            {
+                tally.MemoriesHeldAtTheEnd.Add($"#{creature.Id}@t{place.Tick}({place.Place.X},{place.Place.Y}){place.Cause[0]}");
+            }
+        }
+
         return tally;
     }
 
@@ -365,6 +377,37 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
         foreach (var wave in current.Waves.Where(wave => wave.EndTick == acted && wave.Outcome is not null))
         {
             tally.WaveSpans.Add(acted - wave.ArriveTick);
+        }
+
+        // The price of memory of place, watched from the side hunger switches it
+        // off from (Issue #171, PrototypeTuning.MemoryYieldsSatiety). A creature
+        // that holds a memory the avoidance still reaches is only able to refuse
+        // work while it is fed enough to be choosy, so these two counts say
+        // whether a fixture that stops refusing has stopped remembering or has
+        // simply gone hungry.
+        foreach (var creature in current.Creatures)
+        {
+            var live = creature.RememberedPlaces.Count(place =>
+                acted - place.Tick <= PrototypeTuning.MemoryAvoidTicks);
+            if (live == 0)
+            {
+                continue;
+            }
+
+            tally.CreatureTicksHoldingALiveMemory++;
+            if (creature.Satiety < PrototypeTuning.MemoryYieldsSatiety)
+            {
+                tally.CreatureTicksAMemoryWasSwitchedOffByHunger++;
+            }
+        }
+
+        foreach (var entry in current.Events)
+        {
+            if (entry.LastTick == acted &&
+                entry.ReasonCode is "refused_place_of_panic" or "refused_place_of_wound")
+            {
+                tally.RefusalsByMemory++;
+            }
         }
     }
 
@@ -505,6 +548,17 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
         Dictionary<int, Dictionary<int, CreatureMode>> modeByTick,
         Measurement tally)
     {
+        // The tick a wave is given its outcome stands the whole line down, and
+        // that is the fight's own decision — the same one `Observe` already steps
+        // over on the across-a-tick side. Somebody who joined on that very tick
+        // is counted here as a join and never as a silent departure: the line was
+        // dissolved under them by ResolveWave, which writes the wave's outcome
+        // while doing it.
+        var standDownTicks = final.Waves
+            .Where(wave => wave.Outcome is not null && wave.EndTick is not null)
+            .Select(wave => wave.EndTick!.Value)
+            .ToHashSet();
+
         foreach (var entry in final.Events.Where(e => e.ReasonCode == "combat_joined" && e.Repeats == 1))
         {
             if (!modeByTick.TryGetValue(entry.FirstTick, out var modes) ||
@@ -516,6 +570,12 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
             tally.JoinsSeen++;
             if (mode == CreatureMode.Fighting)
             {
+                continue;
+            }
+
+            if (mode == CreatureMode.Waiting && standDownTicks.Contains(entry.FirstTick))
+            {
+                tally.JoinedAndTheWaveEndedUnderThem++;
                 continue;
             }
 
@@ -579,6 +639,8 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
 
         public int JoinedAndTheFightTookThemBackInTheSameTick { get; set; }
 
+        public int JoinedAndTheWaveEndedUnderThem { get; set; }
+
         public Dictionary<CreatureMode, int> JoinedIntoTheFight { get; } = [];
 
         public Dictionary<CreatureMode, int> JoinedIntoNothing { get; } = [];
@@ -617,6 +679,14 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
 
         public int RaidCost { get; set; }
 
+        public int MealsStolen { get; set; }
+
+        public int DefendersDowned { get; set; }
+
+        public int DefendersFled { get; set; }
+
+        public int MealsProduced { get; set; }
+
         public List<string> SatietyAtArrival { get; } = [];
 
         public Dictionary<int, int> BlowsOnARaider { get; } = [];
@@ -650,6 +720,14 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
         public int HealthTakenOffRaiders { get; set; }
 
         public int HealthTakenOffDefenders { get; set; }
+
+        public int CreatureTicksHoldingALiveMemory { get; set; }
+
+        public int CreatureTicksAMemoryWasSwitchedOffByHunger { get; set; }
+
+        public int RefusalsByMemory { get; set; }
+
+        public List<string> MemoriesHeldAtTheEnd { get; } = [];
 
         /// <summary>
         /// The profiles that saw more than one damage value, most-scattered
@@ -687,6 +765,7 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
                 $"  joinsSeen={JoinsSeen} joinedAndLeftTheLineInTheSameTick={JoinedAndLeftTheLineInTheSameTick} into=[{Map(JoinedIntoNothing)}]",
                 $"    first={FirstJoinedAndOut ?? "-"}",
                 $"  joinedAndTheFightTookThemBackInTheSameTick={JoinedAndTheFightTookThemBackInTheSameTick} into=[{Map(JoinedIntoTheFight)}] (by design, not asserted on)",
+                $"  joinedAndTheWaveEndedUnderThem={JoinedAndTheWaveEndedUnderThem} (ResolveWave stood the line down on the join tick; by design, not asserted on)",
                 $"  stepsThatMovedNoTick={StepsThatMovedNoTick} blowsDrawnWhilePaused={BlowsDrawnWhilePaused} ofThemOnABody={BlowsDrawnOnABodyWhilePaused}",
                 $"    windowsOpened=[{(Windows.Count == 0 ? "-" : string.Join(' ', Windows))}] (tick:blowsOnBodies/blowsDrawn on the frame that opens it)",
                 $"  fightingTicksWithNothingToFight={FightingTicksWithNothingToFight} raiderBodyTicks={RaiderBodyTicks} maxRaiderBodiesOnTheMap={MaxRaiderBodiesOnTheMap} yieldsBookedByAFighter={YieldsBookedByAFighter}",
@@ -701,7 +780,12 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
                     $"profiles={DamageByProfile.Count} scattered={DamageByProfile.Count(pair => pair.Value.Count > 1)} " +
                     $"hpOffRaiders={HealthTakenOffRaiders} hpOffDefenders={HealthTakenOffDefenders}",
                 $"    widest=[{string.Join(' ', ScatteredProfiles.Take(6))}]",
-                $"  SWEEP {fixtureName}/{seed} joins={JoinsSeen} score={(Score is null ? "none" : Score.ToString())} outcome={Outcome} raidCost={RaidCost} wavesResolved={WavesResolved} raidCostPerWave={(WavesResolved == 0 ? -1 : RaidCost / WavesResolved)}",
+                $"  MEMORY {fixtureName}/{seed} refusalsByMemory={RefusalsByMemory} " +
+                    $"creatureTicksHoldingALiveMemory={CreatureTicksHoldingALiveMemory} " +
+                    $"ofThemTooHungryToRefuse={CreatureTicksAMemoryWasSwitchedOffByHunger}",
+                $"    memoriesHeldAtTheEnd=[{string.Join(' ', MemoriesHeldAtTheEnd)}]",
+                $"  SWEEP {fixtureName}/{seed} joins={JoinsSeen} score={(Score is null ? "none" : Score.ToString())} outcome={Outcome} raidCost={RaidCost} wavesResolved={WavesResolved} raidCostPerWave={(WavesResolved == 0 ? -1 : RaidCost / WavesResolved)} " +
+                    $"mealsStolen={MealsStolen} mealsProduced={MealsProduced} defendersDowned={DefendersDowned} defendersFled={DefendersFled}",
                 $"  RATION {fixtureName}/{seed} satietyAtWaveArrival=[{string.Join(' ', SatietyAtArrival)}]");
         }
     }

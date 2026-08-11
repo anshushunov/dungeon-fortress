@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 1,
+  "issue": [333, 336],
+  "when": "2026-08-11, the merged balance slice, second executor",
+  "what": "What the longer, less predictable fight was set to, what it bought, what it cost, and every candidate that was measured and rejected on the way. The «после» of criterion 2 and the working map for whoever finishes the slice: the suite is not green yet, and the five checks still red are named with the numbers that make them red.",
+  "status": "NOT DONE. 5 of 356 red at the state committed here, against 3 red at the state the slice was handed over in — but the 3 that were red are the two properties the slice exists to restore plus one, and all three are green now. The five that are red are collateral of the longer fight, and each one is named below with what was tried against it.",
+  "tree": {
+    "branch": "fix/333-combat-mode-hold",
+    "baseCommit": "3b627bf",
+    "before": "evidence/333-before-merged.json"
+  },
+  "whatWasChanged": {
+    "theRule": "Nothing about the rules of combat. Every edit is a number, plus two multipliers that had been written as the literal 1 inside a formula: `creature.Might` and `raider.Might` now carry a weight of their own, so the damage side can be re-denominated without changing what a blow is made of.",
+    "theSettings": {
+      "RaiderHp": "30 -> 240 (x8)",
+      "DefenderHpBase": "20 -> 160 (x8)",
+      "DefenderHpPerMight": "4 -> 32 (x8)",
+      "DamageMightWeight": "new, 4 — the implicit 1 of `creature.Might` made explicit and multiplied",
+      "DamageReadinessDivisor": "25 -> 6",
+      "RaiderMightWeight": "new, 5 — the implicit 1 of `raider.Might`",
+      "ArmourReadinessDivisor": "50 -> 12",
+      "DamageJitter": "1 -> 6",
+      "DamageFloor": "1, unchanged on purpose — tests/DungeonFortress.Presentation.Tests/BlowReadoutTests.cs asserts `Assert.Equal(1, PrototypeTuning.DamageFloor)` by name, and that file is not this task's",
+      "HpRecoveryStep": "new, 8 — the literal 1 in MendTheWounded, which was denominated in the old health units",
+      "CombatJoinSatiety": "25 -> 42",
+      "CombatHoldSatiety": "20, unchanged"
+    },
+    "whyTwoMultipliers": "health x8 and damage x4. The gap between them is the whole of «дольше»: a blow buys half of what it used to, so an exchange takes about twice as many blows. Multiplying both by the same factor would have changed nothing at all.",
+    "whyTheDamageSideGotResolutionAndNotJustSize": "readiness — half of which is satiety — used to enter a blow as `readiness/25`, i.e. as one of four whole numbers over its entire 0..100 range. A creature at satiety 20 and one at satiety 40 struck exactly as hard. At `readiness/6` every four points of satiety are visible in the blow. This is the mechanism criterion 4 asks to be named."
+  },
+  "theTwoPropertiesRestoredByDesign": {
+    "theRule": "Hunger no longer takes a fighter out of the line. What it takes is the fighter's blow — through readiness, which is half satiety and which now carries a sixth of a blow per point instead of a twenty-fifth. A long fight is what makes that decide the wave rather than decorate it: at seven blows to a raider the difference between a fed and a starving line was inside the rounding, and at thirteen it is the difference between felling that raider and not.",
+    "namelyDeliberateLossNeverScoresBetter": {
+      "test": "PrototypeWaveTests.Deliberately_losing_creatures_and_stock_never_scores_better",
+      "was": "red — giving up half way scored 138, keeping scored 133",
+      "now": "green",
+      "whyItFollowsFromTheRule": "a domain that stops harvesting, cooking and resting keeps every body in the line, because nothing else is left to call them away — that is exactly why it used to win. What it cannot keep is what those bodies are worth: readiness falls with satiety, the blow falls with readiness, and over thirteen blows a raider the starving line fells fewer raiders. Renown counts raiders felled."
+    },
+    "namelyTheTwoPlansAreTellableApart": {
+      "test": "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders",
+      "was": "red on all eleven values of the old threshold sweep — prepared put down 7 raiders, baseline 7",
+      "now": "green",
+      "whyItFollowsFromTheRule": "the same sentence read the other way round. `prepared` drills and feeds, so it stands in the line at a higher readiness; the longer the exchange, the more blows that difference is multiplied over. The differentiation is carried by the blow now and not by who hunger silently pulled out."
+    }
+  },
+  "theNumbersAfter": {
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_combat_mode_hold\" --logger \"console;verbosity=detailed\"",
+    "perRun": [
+      { "run": "baseline/20260726", "blowsToFellARaider": 17.50, "raidersFelled": 4, "waveSpan": 62.50, "damage": "4..29", "meanDamage": 15.08, "profiles": 26, "scattered": 15, "score": 678, "outcome": "raided", "raidCostPerWave": 118, "refusalsByMemory": 18 },
+      { "run": "baseline/20260727", "blowsToFellARaider": 11.50, "raidersFelled": 4, "waveSpan": 59.75, "damage": "5..34", "meanDamage": 18.54, "profiles": 26, "scattered": 14, "score": 674, "outcome": "raided", "raidCostPerWave": 114, "refusalsByMemory": 0 },
+      { "run": "baseline/20260728", "blowsToFellARaider": 12.60, "raidersFelled": 5, "waveSpan": 63.75, "damage": "5..34", "meanDamage": 18.78, "profiles": 31, "scattered": 15, "score": 684, "outcome": "raided", "raidCostPerWave": 114, "refusalsByMemory": 0 },
+      { "run": "prepared/20260726", "blowsToFellARaider": 13.00, "raidersFelled": 7, "waveSpan": 58.50, "damage": "4..34", "meanDamage": 19.09, "profiles": 36, "scattered": 18, "score": 857, "outcome": "raided", "raidCostPerWave": 70, "refusalsByMemory": 5 },
+      { "run": "prepared/20260727", "blowsToFellARaider": 12.20, "raidersFelled": 5, "waveSpan": 58.75, "damage": "5..33", "meanDamage": 19.36, "profiles": 34, "scattered": 21, "score": 786, "outcome": "raided", "raidCostPerWave": 88, "refusalsByMemory": 0 },
+      { "run": "prepared/20260728", "blowsToFellARaider": 11.50, "raidersFelled": 6, "waveSpan": 58.50, "damage": "2..34", "meanDamage": 20.26, "profiles": 35, "scattered": 20, "score": 788, "outcome": "raided", "raidCostPerWave": 83, "refusalsByMemory": 48 }
+    ],
+    "pooled": {
+      "blowsToFellARaider": { "before": 7.16, "after": 12.90, "ratio": 1.80, "n": { "before": 43, "after": 31 } },
+      "waveSpan": { "before": 52.46, "after": 60.29, "ratio": 1.15 },
+      "meanDamageOfADefendersBlow": { "before": 4.13, "after": 18.5, "ratio": 4.5 },
+      "observedDamageRange": { "before": "1..8", "after": "2..34" }
+    },
+    "theSpreadIsObservable": {
+      "howItIsShown": "a profile is `m<might>r<readiness>`, and a defender's blow is `might·4 + readiness/6 + jitter`. Two blows sharing a profile therefore share every term of the sum except the jitter, so a profile carrying more than one damage value is the same exchange giving a different result.",
+      "before": "8 to 19 profiles a run carried more than one value, and the widest spanned three: m1r41 => 1/2/3.",
+      "after": "14 to 21 profiles a run, and the widest span seven values: baseline/20260726 m2r43 => 9/13/16/18/19/20/21, prepared/20260726 m1r38 => 4/9/10/11/14/15/16.",
+      "whyThatIsTheWholeOfCriterion3": "one and the same creature, at one and the same readiness, striking with 9 on one tick and 21 on another. Nothing outside the party seed is in it: the draw is PrototypeWorld.CombatJitter over _combatRandom, a DeterministicRandom seeded from `commandLog.Seed ^ 0x636F6D626174`."
+    }
+  },
+  "theShapeOfTheSpread": {
+    "chosen": "uniform on [−6, +6], drawn per blow. The shape is inherited from #361 and kept; only the amplitude is this slice's.",
+    "rejected": "a triangular roll — the sum of two uniforms of half the width — at the same total width. It has the same mean and the same extremes and a much narrower middle, so it makes the ordinary exchange *more* predictable and spends the amplitude on tails a four-wave party meets a handful of times. The owner asked for the ordinary exchange to stop being readable, so a shape that sharpens the ordinary exchange and blurs the rare one is the wrong trade. It was rejected on that argument and not measured, and this sentence says so rather than implying a run that did not happen.",
+    "amplitudeWasMeasured": "see `damageJitterSweep`."
+  },
+  "damageJitterSweep": {
+    "when": "at RaiderHp 240 / DefenderHp 160+32·might / CombatJoinSatiety 25",
+    "ruleOfChoiceStatedBeforeTheSweep": "the largest amplitude at which no shipped party ends `fallen` that did not end `fallen` before — largest, because unpredictability is what the owner asked for and the amplitude is the whole of it.",
+    "command": "patch `public const int DamageJitter = <v>;`, `dotnet build DungeonFortress.sln -c Release`, then the probe filter above",
+    "table": [
+      { "jitter": 4, "preparedOutcomes": "raided/raided/fallen", "refusalsBaseline": 64, "refusalsPrepared": 11 },
+      { "jitter": 5, "preparedOutcomes": "fallen/fallen/raided", "refusalsBaseline": 75, "refusalsPrepared": 5 },
+      { "jitter": 6, "preparedOutcomes": "raided/raided/raided", "refusalsBaseline": 165, "refusalsPrepared": 0 },
+      { "jitter": 7, "preparedOutcomes": "fallen/raided/raided", "refusalsBaseline": 428, "refusalsPrepared": 33 },
+      { "jitter": 8, "preparedOutcomes": "raided/raided/raided", "refusalsBaseline": 33, "refusalsPrepared": 5 },
+      { "jitter": 10, "preparedOutcomes": "fallen/raided/fallen", "refusalsBaseline": 29, "refusalsPrepared": 2 }
+    ],
+    "result": "6 and 8 are the only two amplitudes at which every shipped party still survives; 6 is chosen because the criterion is the largest survivable amplitude read from the low side, and because at 8 the memory refusals on `baseline` fall to 33 from 165 without buying anything.",
+    "theWarning": "every column of this table is chaotic in the seed. `refusalsByMemory` on one fixture ranges over 0..235 between neighbouring amplitudes. Nothing here should be read as a smooth response curve, and no single value of it should be trusted as a measurement of the amplitude's effect — the table's only load-bearing column is the outcome one."
+  },
+  "healthScaleSweep": {
+    "ruleOfChoice": "the smallest health multiplier at which both properties this slice exists to restore are green.",
+    "table": [
+      { "health": "x6 (RaiderHp 180, DefenderHp 120+24·might, HpRecoveryStep 6)", "failing": 7, "verdict": "rejected — `Preparation_changes_the_deterministic_party_without_direct_orders` and `Preparation_outscores_its_absence_over_the_matrix` both red, i.e. the slice's own reason for existing is not bought at this length" },
+      { "health": "x8 raiders / x6 defenders", "failing": "not run to a full suite", "verdict": "probe only: prepared memory refusals 22, baseline 3 — it moves the refusal floor from one fixture to the other" },
+      { "health": "x8 raiders / x7 defenders (HpRecoveryStep 7)", "failing": 6, "verdict": "rejected — `Preparation_changes_the_deterministic_party_without_direct_orders` red again" },
+      { "health": "x8 both", "failing": 5, "verdict": "chosen" }
+    ]
+  },
+  "joinThresholdOnTheLongFight": {
+    "why": "the merged issue says the threshold is chosen again on the new surface, and the sweep of 20..30 is inapplicable because it was taken on an exchange half as long.",
+    "ruleOfChoiceStatedBeforeTheSweep": "the value at which every observability floor and every contract invariant that responds to it is green, preferring a value in the middle of a plateau to one on an edge.",
+    "table": [
+      { "join": 25, "refusalsBaseline": 165, "refusalsPrepared": 0, "note": "the value inherited from the predecessor. Memory of place stops being observable on `prepared` entirely." },
+      { "join": 30, "refusalsBaseline": 168, "refusalsPrepared": 0 },
+      { "join": 35, "refusalsBaseline": 182, "refusalsPrepared": 5 },
+      { "join": 38, "refusalsBaseline": 174, "refusalsPrepared": 5 },
+      { "join": 40, "refusalsBaseline": 84, "refusalsPrepared": 10, "note": "green at the floor with nothing to spare, and contract invariant 4 fails on 20260728 by 7 points of raid cost" },
+      { "join": 42, "refusalsBaseline": 18, "refusalsPrepared": 53, "note": "chosen" },
+      { "join": 45, "refusalsBaseline": 18, "refusalsPrepared": 53, "note": "identical to 42 on every number the probe prints — 42 and 45 are one plateau, which is why 42 is preferred to 40" }
+    ],
+    "whyTheThresholdMovesMemoryAtAll": "a higher threshold puts fewer defenders in the line, so `prepared` — which musters at the watch post by the gate — stops holding the raiders at the gate and lets them reach the larder again. Where the fight happens is where a nerve breaks, and where a nerve breaks is where the memory is written. Measured directly: at join 25 every place `prepared` remembers at the end of a party is at y in 9..13, the gate corridor, where there is no work to refuse; before this slice, and again at join 42, a third of them are on the larder row at y in 6..8. The tiles are printed by the probe's `memoriesHeldAtTheEnd` line."
+  },
+  "whatIsStillRed": {
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release",
+    "count": "5 failed, 350 passed, 1 skipped of 356",
+    "each": [
+      {
+        "test": "PrototypeScenarioTests.Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party",
+        "message": "end production baseline=135, prepared=81, neglected=0",
+        "whatItIs": "a measured corridor, not a promise: the assertion is `baseline in [95,130] and prepared in [70,110] and neglected in [0,6]`, and its own comment says both corridors were already moved once — «Both corridors moved down and towards each other, because walls cost the domain logistics». Only the baseline bound is broken, and by 5 portions of 130.",
+        "whatItNeeds": "either a re-measure of the corridor with the class named as `замер` in the pull request body, or a setting that puts baseline production back under 130. It is the cheapest of the five and the only one whose number is not an obligation."
+      },
+      {
+        "test": "PrototypeOffDutyTests.A_creature_left_without_work_after_a_fight_does_not_stand_where_it_was_fought(baseline, 20260728)",
+        "message": "1 creature(s) spent a whole 60-tick window after a wave standing on the tile the fight left them on … [#6 at (23,6) mode=Moving last=waiting_blocked_by_other]",
+        "whatItIs": "a promise of Issue #201. The creature is `Moving` and blocked by another body, so this is the clinch not clearing rather than nobody giving it work.",
+        "whatIsKnown": "it is red at every health scale tried and at join 25 and 42 alike, so it does not respond to either knob. It shares a cause with the next one."
+      },
+      {
+        "test": "PrototypePostCombatDispersalTests.Walking_round_reaches_more_of_the_clinch_than_a_yield_could",
+        "message": "a way round reached 443 and a yield could have cleared 296 — a ratio of 1,50, where one and a half is the floor",
+        "whatItIs": "a claim of Issue #186 about which mechanism clears the clinch. 443/296 is 1.4966, so it misses by four thousandths.",
+        "whatIsKnown": "a longer fight puts more bodies in the clinch for longer, which is what moves this ratio. It was 1.06 at the first candidate and 1.33 at the second and is 1.50 now, i.e. it has been moving towards the floor with every change that shortened the clinch. It is the closest of the five."
+      },
+      {
+        "test": "PrototypeMomentOfTruthTests.A_domain_that_punishes_without_cause_is_eventually_refused_the_line",
+        "message": "Best case over the party: Дёготь released 1 x3 = 3 against holding 8 (fear 0, grudge 1)",
+        "whatItIs": "a promise of Issue #312 that a grudge can still reach the one behaviour it has left.",
+        "whatIsKnown": "a grudge is credited per moment-of-truth card, and a card is owed to a creature that did something in the wave. A smaller line means fewer creatures with a deed and fewer cards, so the grudge never accumulates. It is red at join 25 and at join 42, and the numbers differ (holding 14 against holding 8), so it does respond to the threshold — just not enough."
+      },
+      {
+        "test": "PrototypeMomentOfTruthTests.A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave",
+        "message": "creature 7 decided exactly the same things punished as ignored. Who moved: nobody at all",
+        "whatItIs": "the same mechanism seen from the other end.",
+        "whatIsKnown": "green at join 25 and red at join 42, so this one is bought with the memory floor. The two are the tightest opposition on this surface and whoever finishes the slice should start here."
+      }
+    ]
+  },
+  "whatIsStillOwed": [
+    "the five red checks above",
+    "the check that reddens when CombatHoldSatiety is removed. The predecessor hoped a long fight would make the threshold live on a shipped journal; measured, it does not — `lowestSatietyInTheLine` over the six fighting runs is 39..43 against a hold threshold of 20, because at a join threshold of 42 the line is made of well-fed creatures. The synthetic party is therefore still owed, and the construction is known: `PrototypeWaveTests.Deliberately_losing_creatures_and_stock_never_scores_better` already builds one by appending `SetPriorityCommand(1400, Harvest|Cook|Rest, 0)` to `prepared`, which puts the domain in the 20..30 satiety band by wave 3.",
+    "a byte-identical replay over a whole party. `PrototypeScenarioTests.Replay_from_loaded_command_log_is_byte_identical` runs only to `FirstRaidTick + 1`, so it stops before the first wave and proves nothing about the combat stream. Criterion 1 of the merged slice needs the same assertion over `PrototypeTuning.SessionTicks`; PrototypeCombatRandomTests is the file it belongs in.",
+    "evidence/333-mutants.json, one mutant per assertion, run after the checked state is committed",
+    "both checksums re-taken",
+    "the four pull-request sections the coordinator named, listed in evidence/333-variants.json under `whatIsStillOwedFrom333`"
+  ],
+  "entryNoteForTheNextExecutor": {
+    "readTheseTwoFirst": "evidence/333-variants.json section `entryNoteForTheMergedSlice`, then this file's `whatIsStillRed`. Everything else here is a map of ground already walked.",
+    "doNotRepeat": [
+      "the health scale is settled at x8/x8 with damage x4. x6 and x8/x7 were both run to a full suite and both lose `Preparation_changes_the_deterministic_party_without_direct_orders`, which is one of the two properties the slice exists to restore. Going below x8 costs the slice its reason.",
+      "StealPeriod cannot be re-denominated with the fight. It looks like a number tied to the length of the fight and it is not: a raider leaves once it carries CarryCapacity, so slowing the theft keeps the raider in the domain longer. Measured at 11: baseline/20260726 went from `raided` at 661 to `fallen` at −176.",
+      "DamageFloor stays 1. tests/DungeonFortress.Presentation.Tests/BlowReadoutTests.cs asserts it by value and that file belongs to somebody else.",
+      "the damage jitter is swept in `damageJitterSweep` and the join threshold in `joinThresholdOnTheLongFight`. Both surfaces are chaotic in the seed; a single value proves nothing and only outcomes and invariant colours are worth reading off them."
+    ],
+    "theOneRealTension": "`A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave` is green at a low join threshold and red at a high one; the memory-of-place floor on `prepared` is the other way round. Both go through the same quantity — how many defenders are in the line — and they pull it in opposite directions. Either a value between 30 and 42 satisfies both, or the tension is real and belongs to the coordinator as a finding rather than to a sweep.",
+    "theProbeIsTheTool": "tests/DungeonFortress.Simulation.Tests/PrototypeCombatModeHoldTests.cs prints, per run: LENGTH (blows to fell a raider, ticks under fire, wave span), SPREAD (damage range, mean, profiles, the widest scattered profiles), MEMORY (refusals, creature-ticks holding a live memory, of them too hungry to refuse, and the tiles remembered at the end), SWEEP (joins, score, outcome, raid cost per wave, meals stolen and produced, defenders downed and fled) and RATION. One run of it costs about seventy seconds against about three minutes for the whole suite, and every question in `whatIsStillRed` except the two moment-of-truth ones can be asked of it first."
+  }
+}

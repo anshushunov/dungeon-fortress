@@ -85,14 +85,44 @@ public static class PrototypeTuning
     // gap between two waves a decision instead of dead time.
     public const int RecoveryMinSatiety = 30;
     public const int HpRecoveryPeriod = 6;
+    // How much health one period of mending returns. It used to be the literal
+    // 1 in MendTheWounded, and that 1 was denominated in the old health units:
+    // with health eight times larger it would have made a wound take eight times
+    // as long to close, which is a change nobody decided. Eight per six ticks on
+    // a scale eight times larger is the same fraction of a creature per tick as
+    // one per six ticks was — so the window between two waves buys exactly what
+    // it bought before, and the price of a lost wave is still measured in labour
+    // rather than in a longer wait.
+    public const int HpRecoveryStep = 8;
 
-    public const int RaiderHp = 30;
+    // The combat economy is denominated in units eight times the old ones on the
+    // health side and four times the old ones on the damage side (Issue #336,
+    // owner's decision of 2026-08-08: «по дефолту хп всех добавить и сделать
+    // дамаг рандом какой-то, чтобы чуть дольше было и менее детерминированно»).
+    //
+    // Two different multipliers on purpose, and the difference between them is
+    // the whole of «дольше»: a blow buys half of what it used to buy, so an
+    // exchange takes about twice as many of them. Measured on the nine shipped
+    // parties, pooled over every body that actually fell — seven blows to fell a
+    // raider before, fourteen after (evidence/333-before-merged.json and
+    // evidence/333-after-merged.json).
+    //
+    // The damage side is not merely multiplied, it is given resolution, and that
+    // is the second half of the change rather than a side effect. A blow used to
+    // be `might + readiness/25`, and readiness — half of which is satiety —
+    // therefore entered it as one of four whole numbers: a creature at satiety 20
+    // and a creature at satiety 40 struck exactly as hard. In the new
+    // denomination readiness enters as `readiness/6`, so it is worth up to 16
+    // points of a blow of about 20 and every four points of satiety are visible
+    // in it. That is what carries the two properties this slice had to restore by
+    // design instead of by accident — see PrototypeWorld.Combat.cs, ActCombatant.
+    public const int RaiderHp = 240;
     public const int RaiderMightBase = 3;
     public const int RaiderMightJitter = 1;
     public const int RaiderEntryInterval = 2;
     public const int StealPeriod = 6;
-    public const int DefenderHpBase = 20;
-    public const int DefenderHpPerMight = 4;
+    public const int DefenderHpBase = 160;
+    public const int DefenderHpPerMight = 32;
     // Getting into the line is harder than staying in it, and the two numbers say
     // so separately (Issue #333, owner's decision of 2026-08-11).
     //
@@ -106,20 +136,25 @@ public static class PrototypeTuning
     // a party that stopped feeding at t1400 scored 138 against 133 for one that
     // kept feeding (evidence/333-variants.json).
     //
-    // CombatJoinSatiety is 30 and not 20 because 30 is where the departure already
-    // happened in practice; the rule is moved to the door it belongs at rather than
-    // invented. **It is a de facto number and not a measured one** — EatThreshold
-    // was chosen for eating and never for fighting — and choosing it on purpose is
-    // balance work that belongs to Issue #336.
+    // CombatJoinSatiety is 42, chosen on the balance surface the longer fight of
+    // Issue #336 creates and not on the one the sweep of 20..30 was taken on. That
+    // sweep is not merely superseded, it is inapplicable: it was measured with an
+    // exchange half as long, and its own verdict was that no value in it satisfied
+    // every invariant. 42 sits on a plateau — 42 and 45 give the same nine parties
+    // to the byte on every number the probe prints — which is why it is preferred
+    // to the edge values 40 and 38 that give the same green in one place and none
+    // to spare in another. What moves with it is measured in
+    // evidence/333-after-merged.json, section `joinThresholdOnTheLongFight`.
     //
-    // CombatHoldSatiety stays at 20 so that the two are a band and not one line: a
-    // creature admitted at 30 has ten points of slack before the fight gives it up,
-    // which is what stops anybody walking in and out of the line every recheck.
-    // Ten points is fifty ticks of a wave at SatietyDecayPeriod, and the longest
-    // spell anybody spends in the line over the nine shipped runs is 43 — so **the
-    // hold threshold fires on no shipped journal today**. That is expected rather
-    // than hidden: the fight is short, and making it longer is #336.
-    public const int CombatJoinSatiety = 25;
+    // CombatHoldSatiety stays at 20, and the twenty-two points between the two are
+    // a band rather than a line: a creature admitted at 42 has that much slack
+    // before the fight gives it up, which is what stops anybody walking in and out
+    // of the line every recheck. Twenty-two points is a hundred and ten ticks of a
+    // wave at SatietyDecayPeriod against a wave span of about sixty, so **the hold
+    // threshold still fires on no shipped journal**; it is asserted on a party
+    // built for it in PrototypeCombatModeHoldTests instead, with a mutant against
+    // that assertion.
+    public const int CombatJoinSatiety = 42;
     public const int CombatHoldSatiety = 20;
     public const int CombatJoinRecheck = 20;
     public const int EngageRadius = 8;
@@ -129,10 +164,32 @@ public static class PrototypeTuning
     // edit a bow would need on this side of the seam.
     public const int MeleeAttackRange = 1;
     public const int RaiderAttackRange = 1;
+    // Floored at one and not at the new denomination's four. It is the reading
+    // «an attack in reach always lands», which BlowReadoutTests holds by name,
+    // and raising it would quietly turn the armour term into a number that can
+    // never win.
     public const int DamageFloor = 1;
-    public const int DamageReadinessDivisor = 25;
-    public const int ArmourReadinessDivisor = 50;
-    public const int DamageJitter = 1;
+    // What a defender's own condition is worth in its blow, and what it is worth
+    // in the armour that meets a raider's. Both were divided by 25 and 50 and are
+    // now divided by 6 and 12 — the same ratio between them, four times the
+    // resolution, because the numbers they divide into are four times larger.
+    public const int DamageMightWeight = 4;
+    public const int DamageReadinessDivisor = 6;
+    public const int RaiderMightWeight = 5;
+    public const int ArmourReadinessDivisor = 12;
+    // How far a blow scatters, plus or minus, drawn per blow from the party's own
+    // DeterministicRandom stream (PrototypeWorld.CombatJitter). Six on a blow of
+    // about twenty is a third either way, against the ±1 on about 4 — a quarter —
+    // that the old denomination had.
+    //
+    // The shape stays uniform on [−a, +a] and the alternative was measured rather
+    // than dismissed: a triangular roll, the sum of two half-width uniforms, was
+    // tried at the same total width and rejected. It is the same mean and a
+    // narrower middle, so it makes the common exchange *more* predictable and
+    // spends the amplitude on tails a party of four waves sees a handful of
+    // times — the opposite of what the owner asked for. The numbers are in
+    // evidence/333-after-merged.json, section `theShapeOfTheSpread`.
+    public const int DamageJitter = 6;
     public const int LightInjuryShare = 40;
     // Nerve is measured per creature and dread is measured from where that
     // creature is standing. The two new terms are what keep the moment of

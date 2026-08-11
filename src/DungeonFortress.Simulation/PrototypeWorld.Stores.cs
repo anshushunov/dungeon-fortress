@@ -140,6 +140,15 @@ public sealed partial class PrototypeWorld
     /// place, so there is one rule and not two: above the light-injury share the
     /// wound stops being heavy, and at full health it is gone. Nothing here
     /// mends a creature that is not lying down and fed.
+    ///
+    /// <para>How much one period returns is <see cref="PrototypeTuning.HpRecoveryStep"/>
+    /// and not the literal 1 it used to be. That 1 was a number denominated in
+    /// the health units of before Issue #336, and leaving it alone while health
+    /// grew eight times would have made every wound take eight times as long to
+    /// close — a change to what the window between two waves is worth, decided by
+    /// nobody. This is scope item 4 of #336, «пересмотреть числа, привязанные к
+    /// длине боя», in the one place where the number is not about the fight at
+    /// all but about what the fight leaves behind.</para>
     /// </summary>
     private void MendTheWounded()
     {
@@ -158,7 +167,8 @@ public sealed partial class PrototypeWorld
                 continue;
             }
 
-            creature.Hp = Math.Min(creature.MaxHp, creature.Hp + 1);
+            creature.Hp = Math.Min(
+                creature.MaxHp, creature.Hp + PrototypeTuning.HpRecoveryStep);
             var mended = creature.Injury switch
             {
                 InjuryKind.Heavy when creature.Hp * 100 >
