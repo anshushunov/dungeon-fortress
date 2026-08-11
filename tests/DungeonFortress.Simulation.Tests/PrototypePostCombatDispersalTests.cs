@@ -56,14 +56,23 @@ namespace DungeonFortress.Simulation.Tests;
 ///
 /// <para><b>Why a detour is counted.</b> Three mechanisms could produce the
 /// clinch, and only one of them can be told from the others by a number that the
-/// snapshot already publishes. <c>PrototypeMap.NextStep</c> is a BFS that does
-/// not see bodies, so a creature whose next tile is taken waits instead of
-/// walking around. For every refused step this file therefore asks whether a
+/// snapshot already publishes. For every refused step this file asks whether a
 /// route to the same destination existed with every other creature treated as a
-/// wall. If it did, the tick was spent because the pathfinder is blind, which is
-/// <see href="https://github.com/anshushunov/dungeon-fortress/issues/76">Issue #76</see>;
-/// if it did not, the creature was walled in by bodies and only the yield
-/// arbitration could have freed it.</para>
+/// wall. If it did, the creature was not enclosed; if it did not, it was walled
+/// in by bodies and only the yield arbitration could have freed it.</para>
+///
+/// <para><b>What that answer used to mean and what it means now.</b> When this
+/// file was written <c>PrototypeMap.NextStep</c> was called with the forbidden
+/// zone alone, so a creature whose next tile was taken walked into it, was
+/// refused, and walked into it again — and «a way round existed» meant «the tick
+/// was spent because the pathfinder is blind», which is what Issue #186 named as
+/// the mechanism and what
+/// <see href="https://github.com/anshushunov/dungeon-fortress/issues/76">Issue #76</see>
+/// was raised to fix. It has been fixed, on this branch: the call sites now pass
+/// the bodies in the blocked set, so the route the simulation walks is the
+/// body-aware one. «A way round existed» therefore no longer diagnoses the
+/// pathfinder — it says the creature was not enclosed, and what is left of the
+/// refusals is the contest for a tile inside one tick.</para>
 /// </summary>
 public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
 {
@@ -202,6 +211,37 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     /// named as the pathfinder. If this share ever falls below a half the naming
     /// stops being true and the reader has to be told, which is what the failure
     /// message says.
+    ///
+    /// <para><b>Issue #76 changed what the second half of this check could
+    /// measure, and it is restated rather than recomputed.</b> The guard used to
+    /// be «at least a fifth of the ways round are strictly longer than the route
+    /// the simulation walks with its eyes shut». Its whole force came from the
+    /// simulation being blind: a search that left bodies out would re-derive the
+    /// route the simulation had already taken, every detour would be exactly as
+    /// long as the blind one, and the count would be zero. Since the pathfinder
+    /// sees bodies the two are no longer opposites — a step is refused now mostly
+    /// where the body-aware route was already being walked and the tile was lost
+    /// to the arbitration on the tick — so the fifth stopped being a property of
+    /// the search and became a property of the balance. Measured on the final
+    /// party: 16 of 104, where the same guard read 261 of 782 before.</para>
+    ///
+    /// <para><b>What replaces it says the same thing about the search and does
+    /// not name a share.</b> Two counts, each of them zero if bodies are left out
+    /// of the second search, and neither of them a number anybody chose: there
+    /// has to be at least one refused step from which no route to the destination
+    /// exists at all with bodies as walls (on a connected map the blind search
+    /// always finds one, so this class cannot exist without the bodies), and at
+    /// least one way round that is strictly longer than the blind route (with
+    /// bodies left out the two searches return the same length by construction).
+    /// <c>evidence/333-mutants.json</c> runs exactly that substitution.</para>
+    ///
+    /// <para><b>And what the check no longer claims.</b> The sentence in its name
+    /// is unchanged and still true — a refused step after a fight usually had a
+    /// way round it, so the group is not walled in. What Issue #186 drew from it,
+    /// «therefore the mechanism is a pathfinder that cannot see bodies», is spent:
+    /// #76 gave it eyes. The way round this check finds is now the route the
+    /// simulation itself takes, which is why the refusals that remain are the
+    /// contest for a tile rather than a route nobody could find.</para>
     /// </summary>
     [Fact]
     public void A_refused_step_after_a_fight_usually_had_a_way_round_it()
@@ -210,6 +250,7 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
         var detoured = Matrix.Sum(party => party.Measured.Sum(wave => wave.BlockedWithAShortDetour));
         var longer = Matrix.Sum(
             party => party.Measured.Sum(wave => wave.BlockedWithAStrictlyLongerWayRound));
+        var walledIn = Matrix.Sum(party => party.Measured.Sum(wave => wave.BlockedWithNoRouteAtAll));
         var share = (double)detoured / blocked;
 
         Assert.True(
@@ -217,20 +258,24 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
             $"On {detoured} of {blocked} refused steps after a fight ({share:P1}) a route to the " +
             $"same destination existed with at most {DetourSlack} extra steps once every other " +
             "creature was treated as a wall. Below a half the clinch is bodies enclosing bodies " +
-            "rather than a pathfinder that cannot see them, and the mechanism named in Issue #186 " +
-            $"is the wrong one.{Environment.NewLine}{Detail()}");
+            $"rather than a contest for one tile.{Environment.NewLine}{Detail()}");
 
-        // The second half of the same claim, and the one that keeps the first
-        // from passing by accident. If the search for a way round did not treat
-        // bodies as walls it would re-derive the route the simulation already
-        // took: every "detour" would be exactly as long as the blind one and this
-        // count would be zero — a hundred per cent detour share measuring nothing.
+        // The two guards that keep the share above from passing by accident. Both
+        // are statements about the second search rather than about the balance,
+        // and both are zero the moment that search stops treating bodies as walls.
         Assert.True(
-            longer * 5 >= blocked,
-            $"Only {longer} of {blocked} ways round were strictly longer than the route the " +
-            "simulation walks with its eyes shut, where a fifth is the floor. Below it the second " +
-            "search is not seeing the bodies it is supposed to see, and the detour share above is " +
-            $"measuring nothing.{Environment.NewLine}{Detail()}");
+            walledIn > 0,
+            $"Not one of the {blocked} refused steps after a fight was one from which no route to " +
+            "the destination existed at all with bodies as walls. On a connected map the search " +
+            "that ignores bodies always finds a route, so a sample with no walled-in step in it " +
+            "is a sample the bodies were left out of — and the detour share above is then a " +
+            $"hundred per cent of nothing.{Environment.NewLine}{Detail()}");
+        Assert.True(
+            longer > 0,
+            $"Not one of the {blocked} ways round was strictly longer than the route the same " +
+            "search finds with bodies ignored. Two searches that always return the same length " +
+            "are one search, and the detour share above is then measuring the map rather than " +
+            $"the crowd.{Environment.NewLine}{Detail()}");
     }
 
     /// <summary>
