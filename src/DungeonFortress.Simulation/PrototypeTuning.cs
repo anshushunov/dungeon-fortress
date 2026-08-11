@@ -136,11 +136,17 @@ public static class PrototypeTuning
     // a party that stopped feeding at t1400 scored 138 against 133 for one that
     // kept feeding (evidence/333-variants.json).
     //
-    // CombatJoinSatiety is 41, chosen on the balance surface the longer fight of
-    // Issue #336 creates and not on the one the sweep of 20..30 was taken on. That
-    // sweep is not merely superseded, it is inapplicable: it was measured with an
-    // exchange half as long, and its own verdict was that no value in it satisfied
-    // every invariant.
+    // CombatJoinSatiety is 30. It was 41 for one round, chosen on the balance
+    // surface the longer fight of Issue #336 creates, and the paragraphs below
+    // are the record of that choice; the value moved to 30 on the owner's
+    // constraint «not above EatThreshold», because above the eat threshold the
+    // domain cannot sustain fitness for a fight at all and the HUD reads
+    // `strength 0` for nine healthy creatures. The sweep and the rule of choice
+    // are evidence/333-tension.json, section
+    // theLowThresholdSweepUnderTheEatThresholdConstraint; 30 is the largest of
+    // the admissible values and the only one on which the label invariant of
+    // Issue #389 holds. Read the paragraphs below as history of the 41, not as a
+    // description of the constant.
     //
     // 41 rather than 42, and the difference is one measured defect deep. The value
     // was 42 while the check `A_verdict_makes_the_named_creature_behave_differently
@@ -179,6 +185,20 @@ public static class PrototypeTuning
     // independent review of PR #328 removed an unreachable branch from it, on the
     // grounds that a clause the mechanics cannot reach is a promise the contract
     // does not keep.
+    //
+    // AND THAT ARITHMETIC WAS TAKEN AT A JOIN OF 41. At 30 it gives a different
+    // answer, so it is restated here rather than left to be rediscovered: the
+    // fall from 30 to 19 is eleven points at five ticks each, which is 55 unbroken
+    // ticks and not 110; the longest unbroken spell in the line measured on the
+    // final party is 69 ticks (prepared/20260726); and the lowest satiety observed
+    // on a creature while it was fighting is 21, one point above the hold
+    // threshold that was removed. So the ground on which the rule was retired as
+    // unreachable does not reproduce at this threshold. The rule is NOT brought
+    // back by this slice — it was removed by the owner's decision and combat
+    // mechanics are his call, not an executor's — and the fact is recorded so that
+    // the next decision is taken on the numbers of the party that exists.
+    // Measurement: evidence/333-starving-reachability.json,
+    // theHoldRuleArithmeticAtThirty.
     //
     // What this leaves standing: a fighter is never taken out of the line by
     // hunger at all. It falls, or it breaks, or the wave ends. The promise that a
