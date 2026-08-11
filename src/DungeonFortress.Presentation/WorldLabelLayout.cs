@@ -66,12 +66,31 @@ public sealed record WorldLabelLine(string Text, double TextSizeRef);
 /// Scene order inside one rank, so the layout is a function of the snapshot and
 /// not of the order the bodies happened to be listed in.
 /// </param>
+/// <param name="Name">
+/// The part of the first line that answers «кто это», when the first line says
+/// more than that; <c>null</c> when the first line already <em>is</em> the name
+/// and nothing else.
+///
+/// <para><b>It exists because of Issue #389, and because one caption of the two
+/// had no name of its own to give.</b> A raider's caption is a name on one line
+/// and a sentence on the next, so «lay the names first and grow them afterwards»
+/// (<see cref="WorldLabelLayout.Place"/>) had something to lay: the first line. A
+/// creature's caption is a name and a state glued into one string — «Тишина
+/// DOWN» — so its name and its full text were the same line, and the first pass,
+/// which exists to lay names only, laid the whole of it. Seventy-nine reference
+/// pixels of it, three and a half tiles, ranked first because the cursor was on
+/// it: on the owner's wave-4 frame that took the map from three raider names to
+/// one (<c>evidence/389-before.json</c>). This is where the shorter form is
+/// stated, so the caption that has one is laid by the same two passes as the
+/// caption that always had one.</para>
+/// </param>
 public sealed record WorldLabelRequest(
     WorldLabelSubject Subject,
     ViewPoint Head,
     IReadOnlyList<WorldLabelLine> Lines,
     WorldLabelRank Rank,
-    int Order);
+    int Order,
+    string? Name = null);
 
 /// <summary>
 /// Where one label ended up.
@@ -421,6 +440,18 @@ public static class WorldLabelLayout
     /// among the names and offered its sentence first among the second lines
     /// (<see cref="GrowingOrder"/>). What it no longer has is the right to spend a
     /// neighbour's name on its own sentence.</para>
+    ///
+    /// <para><b>Nothing is exempt, and the crew's own name least of all</b> (Issue
+    /// #389). Between Issue #364 and that one the crew was not exempted from the two
+    /// passes — it escaped them through a narrower door. Its caption is a name and a
+    /// state in one string, «Тишина DOWN», so the first line the first pass laid was
+    /// the whole caption: seventy-nine reference pixels, three and a half tiles, laid
+    /// first because the cursor ranks first. Pointing at a crew member on (15,7) of
+    /// the owner's wave-4 frame therefore put out the names of two raiders standing
+    /// on (14,7) — three raider names down to one, the same gesture-costs-a-name
+    /// shape Issue #379 was opened about. The ladder below is stated over
+    /// <see cref="Forms"/> rather than over line counts for that reason: a label's
+    /// shortest form is «its name», which is not always «its first line».</para>
     /// </summary>
     public static IReadOnlyList<PlacedWorldLabel> Place(
         IEnumerable<WorldLabelRequest> requests,
@@ -429,38 +460,84 @@ public static class WorldLabelLayout
         ArgumentNullException.ThrowIfNull(requests);
         var scale = CameraView.WorldVisualScale(tileSize);
         var placed = new List<PlacedWorldLabel>();
+        var laidAs = new List<int>();
         foreach (var request in requests
                      .OrderBy(request => request.Rank)
                      .ThenBy(request => request.Order)
                      .ThenBy(request => request.Subject.Kind)
                      .ThenBy(request => request.Subject.Id))
         {
-            for (var count = FirstAttempt(request); count >= 1; count--)
+            var forms = Forms(request);
+            if (forms.Count == 0)
             {
-                if (Fit(request, request.Lines.Take(count).ToArray(), placed, null, scale)
-                    is { } named)
-                {
-                    placed.Add(named);
-                    break;
-                }
+                continue;
+            }
+
+            if (Fit(request, FirstAttempt(request), placed, null, scale) is { } named)
+            {
+                placed.Add(named);
+                laidAs.Add(forms.Count - 1);
             }
         }
 
         foreach (var index in GrowingOrder(placed))
         {
             var request = placed[index].Request;
-            for (var count = request.Lines.Count; count > placed[index].Lines.Count; count--)
+            var forms = Forms(request);
+            for (var form = 0; form < laidAs[index]; form++)
             {
-                if (Fit(request, request.Lines.Take(count).ToArray(), placed, index, scale)
-                    is { } grown)
+                if (Fit(request, forms[form], placed, index, scale) is { } grown)
                 {
                     placed[index] = grown;
+                    laidAs[index] = form;
                     break;
                 }
             }
         }
 
         return placed;
+    }
+
+    /// <summary>
+    /// The forms one label may be laid in, fullest first and shortest last — the
+    /// ladder «полная подпись → только имя → ничего» of
+    /// <c>docs/product/REFERENCES.md</c>, written out.
+    ///
+    /// <para>For a caption whose first line is already its name — every raider's —
+    /// the ladder is what it has always been: every line, then one line fewer, down
+    /// to the name alone. For a caption whose first line says more than a name, one
+    /// rung is added below that: the first line cut back to
+    /// <see cref="WorldLabelRequest.Name"/>. That last rung is the crew's, and it is
+    /// the whole of Issue #389 — see the same property for why it had none.</para>
+    ///
+    /// <para><b>Shorter is always easier to place, so the ladder never has to be
+    /// climbed downwards twice.</b> Every candidate box is anchored to the head the
+    /// same way at every rung, so a narrower or shorter box at one candidate is
+    /// contained in the wider one at that same candidate: if the fuller form fits
+    /// there, the shorter one does too. That is why the first pass makes one attempt
+    /// at the shortest form rather than walking down.</para>
+    /// </summary>
+    internal static IReadOnlyList<IReadOnlyList<WorldLabelLine>> Forms(
+        WorldLabelRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Lines.Count == 0)
+        {
+            return [];
+        }
+
+        var forms = new List<IReadOnlyList<WorldLabelLine>>();
+        for (var count = request.Lines.Count; count >= 1; count--)
+        {
+            forms.Add([.. request.Lines.Take(count)]);
+        }
+
+        if (request.Name is { } name && name != request.Lines[0].Text)
+        {
+            forms.Add([request.Lines[0] with { Text = name }]);
+        }
+
+        return forms;
     }
 
     /// <summary>
@@ -489,8 +566,18 @@ public static class WorldLabelLayout
     ];
 
     /// <summary>
-    /// How many lines a label puts on the table in the first pass: <b>one, whoever
-    /// it belongs to</b> — its name, and never a word more.
+    /// What a label puts on the table in the first pass: <b>its name, whoever it
+    /// belongs to</b>, and never a word more — the last rung of
+    /// <see cref="Forms"/>.
+    ///
+    /// <para><b>«Its name» and «its first line» are not the same thing, and Issue
+    /// #389 is the difference.</b> This used to answer «one line», which is a name
+    /// for a raider and a name plus a state for a creature of the domain: «Тишина
+    /// DOWN», seventy-nine reference pixels against the forty-three of the name
+    /// inside it. So the crew laid a caption where everybody else laid a name, and
+    /// on the owner's wave-4 frame the gesture that names one crew member put out
+    /// two raiders on the cell beside it. The shorter form is now stated by the
+    /// caller (<see cref="WorldLabelRequest.Name"/>) and this method asks for it.</para>
     ///
     /// <para><b>The one line is the whole of Issue #379.</b> Between Issue #371 and
     /// that one this method answered <c>Lines.Count</c> for a hovered or a selected
@@ -516,8 +603,8 @@ public static class WorldLabelLayout
     /// defect this Issue was opened about, and it costs a neighbour's name every
     /// time the corridor is full.</para>
     /// </summary>
-    private static int FirstAttempt(WorldLabelRequest request) =>
-        Math.Min(1, request.Lines.Count);
+    private static IReadOnlyList<WorldLabelLine> FirstAttempt(WorldLabelRequest request) =>
+        Forms(request)[^1];
 
     /// <summary>
     /// The nearest free place for these lines, or <c>null</c> when every candidate
@@ -830,7 +917,8 @@ public static class WorldLabels
                 HeadIn(subject, creature.Position, tileSize, centreOf),
                 [CreatureLine(creature)],
                 rank,
-                order++));
+                order++,
+                creature.Name));
         }
 
         foreach (var raider in state.Raiders
@@ -952,6 +1040,11 @@ public static class WorldLabels
     /// stranger's name besides. Measuring the narrower one would leave the lines
     /// the pointer newly draws outside the only report that says whether the width
     /// estimate still bounds them.</para>
+    ///
+    /// <para>The crew is asked for both of its forms since Issue #389, because both
+    /// are drawn: the full line where there is room beside it and the bare name where
+    /// there is not. A report that measured only the full one would leave the string
+    /// the crowded frame actually draws outside it.</para>
     /// </summary>
     public static IReadOnlyList<WorldLabelLine> AllLines(PrototypeSnapshot state)
     {
@@ -959,17 +1052,39 @@ public static class WorldLabels
         return
         [
             .. state.Creatures.Select(CreatureLine),
+            .. state.Creatures.Select(CreatureNameLine),
             .. state.Raiders.SelectMany(FocusedCaptionOf),
         ];
     }
 
-    /// <summary>What a creature's own label says: who it is and what it is doing.</summary>
+    /// <summary>
+    /// What a creature's own label says whole: who it is and what it is doing.
+    ///
+    /// <para><b>Two facts on one line, and that is why Issue #389 exists.</b> A
+    /// raider's caption puts its name on a line of its own and its sentence on the
+    /// next, so the two passes of <see cref="WorldLabelLayout.Place"/> had something
+    /// to lay first. This line has no such seam, so until Issue #389 the crew laid a
+    /// caption where everybody else laid a name. The seam is stated instead by
+    /// <see cref="CreatureNameLine"/>, handed to the layout as
+    /// <see cref="WorldLabelRequest.Name"/>; the wording here has not
+    /// changed.</para>
+    /// </summary>
     public static WorldLabelLine CreatureLine(PrototypeCreatureSnapshot creature)
     {
         ArgumentNullException.ThrowIfNull(creature);
         return new WorldLabelLine(
             $"{creature.Name} {HudText.CreatureStateShort(creature)}",
             WorldLabelLayout.CreatureNameTextRef);
+    }
+
+    /// <summary>
+    /// The shortest honest form of a creature's label: its name, drawn at the size
+    /// the full line is drawn at, and the rung the crowded frame falls back to.
+    /// </summary>
+    public static WorldLabelLine CreatureNameLine(PrototypeCreatureSnapshot creature)
+    {
+        ArgumentNullException.ThrowIfNull(creature);
+        return new WorldLabelLine(creature.Name, WorldLabelLayout.CreatureNameTextRef);
     }
 
     /// <inheritdoc cref="Requests"/>
