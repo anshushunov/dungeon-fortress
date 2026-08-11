@@ -718,10 +718,7 @@ public sealed partial class PrototypeWorld
             return false;
         }
 
-        var next = _map.NextStep(
-            creature.Position,
-            target,
-            _zones[ZoneKind.Forbidden]);
+        var next = StepAroundBodies(creature, target);
         if (next is null)
         {
             RecordDecision(
@@ -763,6 +760,56 @@ public sealed partial class PrototypeWorld
         creature.LastMoveTick = CurrentTick;
         creature.BlockedTicks = 0;
         return true;
+    }
+
+    /// <summary>
+    /// One step towards <paramref name="target"/>, round the bodies in the way
+    /// where there is a way round and straight at them where there is not.
+    ///
+    /// <para><b>Issue #76, the half of it this slice raised.</b> Occupancy already
+    /// existed at the moment of stepping — <see cref="Move"/> has always refused
+    /// to put a creature on a tile another one stands on — but the pathfinder knew
+    /// nothing about it, so a creature walked into a body, was refused, and walked
+    /// into it again next tick. Measured on this branch: one creature spent a whole
+    /// sixty-tick window after a wave doing exactly that
+    /// (<c>baseline/20260728</c>, <c>#6 at (23,6) mode=Moving
+    /// last=waiting_blocked_by_other</c>), which is the jam the longer fight of
+    /// Issue #336 created and the reason #76 was raised out of slice 6.</para>
+    ///
+    /// <para><b>A body takes away a road and never the objective</b>, which is the
+    /// same bound <see cref="RaiderBlockedTiles"/> puts on a raider's memory and
+    /// the same fallback: if there is no way round the bodies, the crowded path is
+    /// used and <see cref="Move"/>'s own check does the waiting. So occupancy can
+    /// make a corridor a throat; it cannot make a destination unreachable.</para>
+    ///
+    /// <para>The target tile itself is never treated as occupied. A creature is
+    /// routinely sent to a tile somebody is standing on — a work tile, a bunk, the
+    /// larder — and blocking it would refuse the journey rather than the last
+    /// step.</para>
+    /// </summary>
+    private GridPoint? StepAroundBodies(CreatureState creature, GridPoint target)
+    {
+        var forbidden = _zones[ZoneKind.Forbidden];
+        var blocked = new HashSet<GridPoint>(forbidden);
+        foreach (var other in _creatures)
+        {
+            if (other != creature && other.Position != target)
+            {
+                blocked.Add(other.Position);
+            }
+        }
+
+        foreach (var raider in _raiders)
+        {
+            if (raider.Mode == RaiderMode.Raiding && raider.Position != target)
+            {
+                blocked.Add(raider.Position);
+            }
+        }
+
+        blocked.Remove(creature.Position);
+        return _map.NextStep(creature.Position, target, blocked)
+            ?? _map.NextStep(creature.Position, target, forbidden);
     }
 
     private void RecordMovementBlocked(CreatureState creature, GridPoint target)

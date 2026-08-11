@@ -534,6 +534,14 @@ public sealed partial class PrototypeWorld
         public GridPoint Position { get; set; } = position;
         public int CarryingMeals { get; set; }
         public int StealTicks { get; set; }
+
+        /// <summary>
+        /// How many consecutive ticks this raider has been unable to step because
+        /// another raider stood where it was going. Criterion 2 of Issue #76 asks
+        /// that a body with its way blocked not stall silently, so the wait has a
+        /// limit and the limit is a tuning number rather than a literal.
+        /// </summary>
+        public int BlockedTicks { get; set; }
         public bool ReturningToGate { get; set; }
         public RaiderMode Mode { get; set; } = RaiderMode.Raiding;
 

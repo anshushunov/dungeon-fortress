@@ -184,7 +184,7 @@ public static class PrototypeTuning
     // hunger at all. It falls, or it breaks, or the wave ends. The promise that a
     // hungry domain fights worse therefore rests ENTIRELY on
     // DamageReadinessDivisor below — see the note there before touching it.
-    public const int CombatJoinSatiety = 41;
+    public const int CombatJoinSatiety = 30;
     public const int CombatJoinRecheck = 20;
     public const int EngageRadius = 8;
 
@@ -592,6 +592,20 @@ public static class PrototypeTuning
     // WaveIntervalTicks: this is a rule about a creature's own idleness, not about
     // the rhythm of waves.
     public const int OffDutyDelayTicks = 8;
+
+    // How long a raider waits for an occupied tile to clear before it takes the
+    // crowded one anyway (Issue #76, criterion 2: a blocked body must not stall
+    // silently, so the wait has a limit).
+    //
+    // The limit is not a nicety, it is what keeps the party finishing. A wave
+    // resolves only when every raider that entered has stopped raiding, and a
+    // raider only stops by filling CarryCapacity or by being felled. Measured
+    // without a limit: raiders queued behind one another never reached the larder,
+    // no wave after the first resolved, and the party ran to SessionTicks with a
+    // null outcome - `The party did not end (outcome null)`. Four ticks is long
+    // enough for an occupant that is walking through to clear the tile, since a
+    // raider moves every tick, and far short of the eighteen a full theft takes.
+    public const int RaiderBlockedPatience = 4;
 
     // Ticks of extra delay per creature id before it leaves the ground a fight
     // was fought on. A group that stands up all on the same tick walks off as a

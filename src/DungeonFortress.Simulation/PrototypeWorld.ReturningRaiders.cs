@@ -192,33 +192,88 @@ public sealed partial class PrototypeWorld
     /// are the raider side of the bound Issue #171 put on a creature's memory,
     /// which may take away a place and may not take away the party.</para>
     /// </summary>
+    /// <para><b>And the bodies of the other raiders, since Issue #76</b>, which is
+    /// criterion 1 of it: a raider does not walk onto a tile another raider is
+    /// already standing on, so a corridor one tile wide limits how many of them
+    /// reach the defenders at once. It is the same mechanism as the memory above
+    /// and it carries the same bound — a body takes away a road, never the
+    /// objective, so the destination itself is never treated as occupied and a
+    /// raider with no way round takes the crowded one.</para>
     private IReadOnlySet<GridPoint> RaiderBlockedTiles(RaiderState raider, GridPoint target)
     {
         var forbidden = _zones[ZoneKind.Forbidden];
-        if (raider.RememberedPlace is not { } place ||
-            place.Place == target ||
-            place.Place == raider.Position ||
-            forbidden.Contains(place.Place))
+        var blocked = new HashSet<GridPoint>(forbidden);
+
+        foreach (var other in _raiders)
         {
-            return forbidden;
+            if (other != raider &&
+                other.Mode == RaiderMode.Raiding &&
+                other.Position != target)
+            {
+                blocked.Add(other.Position);
+            }
         }
 
-        var blocked = new HashSet<GridPoint>(forbidden) { place.Place };
+        if (raider.RememberedPlace is { } place &&
+            place.Place != target &&
+            place.Place != raider.Position)
+        {
+            blocked.Add(place.Place);
+        }
+
+        blocked.Remove(raider.Position);
         return blocked;
     }
 
     /// <summary>
     /// One step of a raider towards <paramref name="target"/>, round its
-    /// remembered place when there is a way round and straight through when there
-    /// is not.
+    /// remembered place and round the other raiders when there is a way round,
+    /// and straight through when there is not.
+    ///
+    /// <para>The step onto an occupied tile is refused outright even when the
+    /// fallback path leads to one, because criterion 1 of Issue #76 is about where
+    /// a raider may stand and not only about how it prefers to walk. A raider with
+    /// nowhere to go waits, which is what makes the corridor a throat.</para>
+    ///
+    /// <para><b>The destination is not exempt from this last check, and that is
+    /// deliberate.</b> Exempting it would have been the safe-looking choice and it
+    /// would have defeated the whole rule: every raider of a wave walks to the same
+    /// larder tile, so an exemption for the destination is an exemption for exactly
+    /// the tile the owner watched them pile onto. It does not deadlock, because an
+    /// occupant always leaves on its own — it fills <c>CarryCapacity</c> and turns
+    /// for the gate, or the larder runs out, or it is felled — so the queue behind
+    /// it drains. The occupied destination is the bottleneck the rule exists to
+    /// create.</para>
     /// </summary>
     private GridPoint? RaiderStep(RaiderState raider, GridPoint target)
     {
         var blocked = RaiderBlockedTiles(raider, target);
-        return _map.NextStep(raider.Position, target, blocked)
-            ?? (ReferenceEquals(blocked, _zones[ZoneKind.Forbidden])
-                ? null
-                : _map.NextStep(raider.Position, target, _zones[ZoneKind.Forbidden]));
+        var step = _map.NextStep(raider.Position, target, blocked)
+            ?? _map.NextStep(raider.Position, target, _zones[ZoneKind.Forbidden]);
+        if (step is not { } next || next == raider.Position)
+        {
+            return step;
+        }
+
+        var occupied = _raiders.Any(other =>
+            other != raider && other.Mode == RaiderMode.Raiding && other.Position == next);
+        if (!occupied)
+        {
+            raider.BlockedTicks = 0;
+            return step;
+        }
+
+        // Waited long enough: take the crowded tile rather than stand for ever.
+        // Without this the queue behind an occupied larder never drains, no wave
+        // resolves and the party never ends - measured, see RaiderBlockedPatience.
+        raider.BlockedTicks++;
+        if (raider.BlockedTicks > PrototypeTuning.RaiderBlockedPatience)
+        {
+            raider.BlockedTicks = 0;
+            return step;
+        }
+
+        return null;
     }
 
     private IEnumerable<PrototypeSurvivorSnapshot> SurvivorSnapshots() =>
