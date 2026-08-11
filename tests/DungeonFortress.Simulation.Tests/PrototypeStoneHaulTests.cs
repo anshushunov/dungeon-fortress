@@ -512,11 +512,29 @@ public sealed class PrototypeStoneHaulTests
     [Fact]
     public void Bookings_survive_zone_churn_without_oversubscribing_a_cell()
     {
+        // A third cell, and it is what makes the replan below reachable at all
+        // rather than reachable by timing.
+        //
+        // Two cells hold four slots and the pocket digs four stones, so once the
+        // chain is running there is a booking for every slot there is: take a
+        // booked destination away and `RevalidateStoneHauls` finds nowhere to move
+        // it to, puts the load down as a loose pile and records nothing — no
+        // `stone_target_replanned`, and «the churn never forced a haul to replan
+        // its destination» is what the check says. It used to pass because the old
+        // timing happened to catch a tick where one slot was still free; the party
+        // of this slice moved that tick and the check went red without anything
+        // about replanning changing. A stockpile with room in it states the
+        // precondition instead of relying on when a carrier happens to be walking.
+        var spare = new GridPoint(21, 1);
+        var cells = new[] { spare, StockLeft, StockRight };
+
         // Erasing a filled cell spills a pile bigger than any single dig produces,
         // which is the only way a job's quantity can exceed one cell's capacity.
         var fullTick = -1;
         var filled = default(GridPoint);
-        var fillScout = new PrototypeWorld(FullChain());
+        var fillScout = new PrototypeWorld(Log(
+            new DigDesignateCommand(0, Pocket),
+            new ZonePaintCommand(0, ZoneKind.MaterialStockpile, cells)));
         while (!fillScout.IsComplete && fullTick < 0)
         {
             fillScout.Step();
@@ -532,12 +550,22 @@ public sealed class PrototypeStoneHaulTests
         Assert.True(fullTick > 0, "No stockpile cell ever filled up.");
         var churn = Log(
             new DigDesignateCommand(0, Pocket),
-            new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [StockLeft, StockRight]),
+            new ZonePaintCommand(0, ZoneKind.MaterialStockpile, cells),
             new ZoneEraseCommand(fullTick, ZoneKind.MaterialStockpile, [filled]),
             new ZonePaintCommand(fullTick + 8, ZoneKind.MaterialStockpile, [filled]));
 
         // Scouted rather than guessed: taking the destination away at a tick where
         // nothing is booked would leave the replan path untested.
+        //
+        // The scene is «a booked destination under a live carrier», which is what
+        // this check's own docstring says it takes away, and the scout now asks
+        // for both halves of it. It used to ask only for a booking. That was
+        // enough while the timing happened to put a carrier on the job anyway, and
+        // it stopped being enough with the party of this slice: `RevalidateStoneHauls`
+        // writes `stone_target_replanned` only when a creature is on the job — a
+        // booking with nobody carrying it is silently re-planned — so a scene
+        // without a carrier reaches the replan and records nothing, and the check
+        // fails saying the churn never forced one.
         var bookedTick = -1;
         var doomed = default(GridPoint);
         var scout = new PrototypeWorld(churn);
@@ -550,7 +578,8 @@ public sealed class PrototypeStoneHaulTests
                 continue;
             }
 
-            var booking = StoneJobs(state).FirstOrDefault(job => job.StoreCell is not null);
+            var booking = StoneJobs(state).FirstOrDefault(job =>
+                job.StoreCell is not null && job.ReservedBy is not null);
             if (booking is not null)
             {
                 bookedTick = state.Tick;
@@ -558,16 +587,30 @@ public sealed class PrototypeStoneHaulTests
             }
         }
 
-        Assert.True(bookedTick > 0, "No stone haul ever booked a cell after the churn.");
+        Assert.True(
+            bookedTick > 0,
+            "No stone haul ever held a booked cell with a carrier on it after the churn.");
 
+        // The destination is taken away on the tick AFTER the one the booking was
+        // seen on, and the difference is the whole of what this check measures.
+        // `ApplyCommands` is the first phase of a tick (PrototypeWorld.Step) and
+        // the scout above reads its snapshot once the tick has run, so a command
+        // scheduled at `bookedTick` forbids the cell before anybody has booked it:
+        // the haul then books another one and no replan is ever forced. It reached
+        // the path anyway on the timing of a shorter fight; with the party of this
+        // slice it stopped, and «the churn never forced a haul to replan its
+        // destination» is what the check said. One tick later states the intent
+        // rather than the timing — take away a destination that IS booked, not one
+        // that is about to be.
+        var doomedTick = bookedTick + 1;
         var world = new PrototypeWorld(
             Log(
                 new DigDesignateCommand(0, Pocket),
-                new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [StockLeft, StockRight]),
+                new ZonePaintCommand(0, ZoneKind.MaterialStockpile, cells),
                 new ZoneEraseCommand(fullTick, ZoneKind.MaterialStockpile, [filled]),
                 new ZonePaintCommand(fullTick + 8, ZoneKind.MaterialStockpile, [filled]),
-                new ZonePaintCommand(bookedTick, ZoneKind.Forbidden, [doomed]),
-                new ZoneEraseCommand(bookedTick + 40, ZoneKind.Forbidden, [doomed])));
+                new ZonePaintCommand(doomedTick, ZoneKind.Forbidden, [doomed]),
+                new ZoneEraseCommand(doomedTick + 40, ZoneKind.Forbidden, [doomed])));
         var sawReplan = false;
         var sawBooking = false;
 

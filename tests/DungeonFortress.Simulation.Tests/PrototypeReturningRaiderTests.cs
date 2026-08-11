@@ -32,13 +32,52 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
     private const ulong RouteSeed = 20_260_729UL;
 
     /// <summary>
+    /// The seeds a scene may be looked for in when the shipped journal's own does
+    /// not contain it. The range is the one the scan of Issue #361 used and it is
+    /// stated here rather than in a docstring, so that a search over it is a
+    /// reproducible procedure rather than a number somebody once wrote down.
+    /// </summary>
+    private static readonly ulong[] SearchSeeds =
+        [.. Enumerable.Range(0, 30).Select(offset => 20_260_726UL + (ulong)offset)];
+
+    /// <summary>
     /// A party on which a returning raider's memory of place <b>is</b> the
     /// objective — the tile he is walking to — so the rule has to let him walk
-    /// onto it. A seed for the same reason <see cref="RouteSeed"/> is one: the
-    /// shipped journal's own seed does not reach the case (see
+    /// onto it. The shipped journal's own seed does not reach the case (see
     /// <see cref="A_memory_takes_away_a_road_and_never_the_objective"/>).
+    ///
+    /// <para><b>Found by its shape and not written down.</b> It was the literal
+    /// 20260747, obtained by scanning <see cref="SearchSeeds"/> once, by hand,
+    /// during Issue #361 — and a literal obtained that way is a scene pinned to a
+    /// party. The party has since changed twice (the health scale of Issue #336
+    /// and cell occupancy of Issue #76) and 20260747 stopped containing the
+    /// scene, which is how a check that states a rule came to fail for want of a
+    /// subject. The scan is therefore the code, run over the same range, taking
+    /// the first seed that holds the scene; if none does, the failure says so
+    /// instead of asserting over an empty set.</para>
     /// </summary>
-    private const ulong ObjectiveSeed = 20_260_747UL;
+    private static ulong ObjectiveSeed => ObjectiveSeedSearch.Value;
+
+    private static readonly Lazy<ulong> ObjectiveSeedSearch = new(() =>
+    {
+        foreach (var seed in SearchSeeds)
+        {
+            var state = FullParty(ShippedFixture, seed).State;
+            if (state.Raiders.Any(raider =>
+                    raider.ReturnedFromWave is not null &&
+                    raider.RememberedPlace?.Place == FirstLarderTile))
+            {
+                return seed;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"No seed of {SearchSeeds[0]}..{SearchSeeds[^1]} brings a returning raider back " +
+            $"remembering the larder tile {FirstLarderTile}, so the bound «a memory takes away a " +
+            "road and never the objective» has no scene to be read on. That is a finding about " +
+            "the world rather than a broken test: either the objective stopped being the tile " +
+            "raiders are hit on, or returning raiders stopped carrying a memory at all.");
+    });
 
     /// <summary>
     /// Where every raider is walking to. It is read out of the authored layout

@@ -285,7 +285,25 @@ public sealed class PrototypeBuildTests
     /// <summary>
     /// Without a stockpile in the way the same chain still runs: a loose pile is
     /// a legal source for a construction site, and the crew prefers the site over
-    /// putting the stone away, so material is never carried twice.
+    /// putting the stone away.
+    ///
+    /// <para><b>The ranking is now asserted on the ranking and not on a cumulative
+    /// counter.</b> It used to be «<c>economy.stoneStored</c> never exceeds what is
+    /// dug minus what the post eats», with the reasoning that a higher count could
+    /// only mean a block stored and then fetched back out. That inference is not
+    /// sound and this slice is where it failed: a haul that had already booked a
+    /// cell <em>before</em> the blueprint existed keeps its booking, delivers, and
+    /// the block is then taken out again for the post — one extra store, no
+    /// preference broken, because there was no preference to exercise when the job
+    /// was planned. Measured on this branch: the blueprint is marked on tick 48,
+    /// one block is already on a carrier's back bound for a cell, it lands on tick
+    /// 50, and it leaves again on 51. Four dug, two eaten, three stores.</para>
+    ///
+    /// <para>So what is asserted is the sentence in the name: <b>every stone haul
+    /// planned while the site still wants stone is planned to the site</b>. That
+    /// is the ranking itself, it cannot be confused by a job already in flight,
+    /// and it fails the moment a blueprint stops outranking a stockpile — which
+    /// the counter could only ever suggest.</para>
     /// </summary>
     [Fact]
     public void A_blueprint_outranks_a_stockpile_as_a_destination_for_loose_stone()
@@ -301,27 +319,56 @@ public sealed class PrototypeBuildTests
         var digTick = FindTick(
             Log(new DigDesignateCommand(0, FarPocket)),
             state => state.Map.ExcavatedTiles.Contains(FarSite));
-        var state = PrototypeScenario.Run(
+        var world = new PrototypeWorld(
             Log(
                 new DigDesignateCommand(0, FarPocket),
                 new ZonePaintCommand(0, ZoneKind.MaterialStockpile, [FarStockLeft, FarStockRight]),
-                new BuildDesignateCommand(digTick, [FarSite])),
-            1_250).State;
+                new BuildDesignateCommand(digTick, [FarSite])));
 
+        var seen = new HashSet<long>();
+        var plannedToTheSite = 0;
+        while (!world.IsComplete && world.CurrentTick < 1_250)
+        {
+            world.Step();
+            var now = world.GetSnapshot();
+            var site = now.BuildSites.FirstOrDefault(item => item.Tile == FarSite);
+            foreach (var job in now.Jobs.Where(job =>
+                         job.Kind == JobKind.Haul &&
+                         job.Resource == ResourceKind.Stone &&
+                         seen.Add(job.JobId)))
+            {
+                // Only jobs planned while the site could still take a block: once
+                // its whole requirement is delivered or booked, a stockpile is the
+                // right destination and preferring the site would be the defect.
+                if (site is null || site.Delivered + site.IncomingReserved >= site.Required)
+                {
+                    continue;
+                }
+
+                Assert.True(
+                    job.StoreCell == FarSite,
+                    $"t{now.Tick}: stone haul #{job.JobId} was planned to " +
+                    $"{job.StoreCell?.ToString() ?? "nowhere"} while the site at {FarSite} still " +
+                    $"wanted {site.Required - site.Delivered - site.IncomingReserved} block(s). " +
+                    "A blueprint has to outrank a stockpile as a destination for loose stone.");
+                plannedToTheSite++;
+            }
+        }
+
+        var state = world.GetSnapshot();
         Assert.Equal(1, state.Economy.BuildsCompleted);
         Assert.Contains(FarSite, state.Map.BuiltPostTiles);
         Assert.Equal(PrototypeTuning.BuildStoneCost, state.Economy.StoneConsumed);
-        // The two blocks the post ate never entered the stockpile. Stated as a
-        // bound rather than as an equality: how many of the remaining blocks have
-        // been put away by this tick is a question about walking, and on the
-        // dungeon one of them is still in transit here. What the test is about is
-        // that no block was stored and then fetched back out — that is what a
-        // count above this bound would mean.
+        // And the rule was exercised rather than merely never contradicted: a haul
+        // really was planned while the site still wanted stone, and it went there.
+        // Counted in jobs and not in blocks — one carrier holds
+        // PrototypeTuning.StoneCarryCapacity of them, so the post's two blocks are
+        // one journey — which is why this is a floor and not the cost.
         Assert.True(
-            state.Economy.StoneStored <= FarPocket.Length - PrototypeTuning.BuildStoneCost,
-            $"stoneStored={state.Economy.StoneStored} of {FarPocket.Length} dug, with " +
-            $"{PrototypeTuning.BuildStoneCost} eaten by the post: the blueprint stopped " +
-            "outranking the stockpile as a destination.");
+            plannedToTheSite > 0,
+            "No stone haul at all was planned while the site still wanted a block, so the " +
+            "ranking above was never asked. Either the blueprint was marked too late or the " +
+            "quarry stopped producing loose stone under it.");
     }
 
     // ------------------------------------------------------- 3. conservation
