@@ -266,10 +266,22 @@ public sealed class BlowReadoutTests
     [Fact]
     public void A_hit_a_body_left_alone_and_a_body_put_down_read_differently()
     {
-        var reading = BlowReadout.Of(Battle());
+        var state = Battle();
+        var reading = BlowReadout.Of(state);
         var hit = Assert.Single(reading.Blows, blow => blow.Outcome == BlowOutcome.Hit);
         var downed = Assert.Single(reading.Blows, blow => blow.Outcome == BlowOutcome.Downed);
-        var untouched = new BodyRef(BodyKind.Raider, 3);
+        // A body of the found scene that nobody struck, read off the scene for the
+        // reason the scene itself is: `Raider 3` was the cast of a tick this class
+        // was pinned to, and a literal beside a scene that moves is the trap the
+        // pinning was taken out for. Its sibling
+        // `Several_blows_on_one_body_keep_the_worse_outcome` was red on exactly
+        // that; this one was green by luck.
+        var untouched = new BodyRef(
+            BodyKind.Raider,
+            state.Raiders
+                .First(raider => reading.Blows.All(blow =>
+                    blow.Target != new BodyRef(BodyKind.Raider, raider.Id)))
+                .Id);
 
         Assert.NotEqual(BlowEffects.DamageColor(hit), BlowEffects.DamageColor(downed));
         Assert.NotEqual(
@@ -287,12 +299,20 @@ public sealed class BlowReadoutTests
     /// Two blows on one body at once: both are kept, and the flash carries the
     /// harder outcome. Losing the kill to a scratch that arrived in the same tick
     /// would say the raider is still up.
+    ///
+    /// <para><b>The body is read off the scene and no longer written down.</b> It
+    /// was <c>Raider 1</c> — the cast of the tick this class used to be pinned to.
+    /// The repair that took the class off a tick number left this one literal
+    /// behind, so the check went on asking about a raider the found scene does not
+    /// strike, and it went red the moment the party moved. Same trap, one layer
+    /// down: the scene is located by its shape and the identity beside it is
+    /// still a number.</para>
     /// </summary>
     [Fact]
     public void Several_blows_on_one_body_keep_the_worse_outcome()
     {
-        var target = new BodyRef(BodyKind.Raider, 1);
         var reading = BlowReadout.Of(Battle());
+        var target = reading.Blows[0].Target;
 
         Assert.Equal(2, reading.Struck(target).Count);
         Assert.Equal(BlowOutcome.Downed, reading.OutcomeOf(target));

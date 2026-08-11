@@ -73,6 +73,25 @@ public sealed class GoldenUiTextTests
     /// <summary>
     /// The frames must stay different from each other, otherwise three passing
     /// comparisons could be one comparison repeated.
+    ///
+    /// <para><b>The middle frame has stopped showing stone in transit, and that is
+    /// named rather than absorbed.</b> The three moments the frame set exists for
+    /// are «stone with nowhere to go», «stone in transit» and «a full stockpile».
+    /// On this branch tick 336 holds four blocks already stored: the pathfinder of
+    /// Issue #76 stopped the haulers walking into each other, the four-block chain
+    /// finishes earlier, and by 336 nothing is on anybody's back. The moment still
+    /// exists in the party — it is now somewhere between ticks 200 and 336 — but
+    /// <b>which ticks the frames are taken at is not this slice's to choose</b>:
+    /// they live in <c>scripts/HudVerification.ps1</c> and
+    /// <c>docs/engineering/PROTOTYPE_GRAYBOX.md</c>, both foreign to it. So the
+    /// second frame is compared for what it now is, the loss of the third stone
+    /// state is stated, and moving the tick is left as a decision about the frame
+    /// set rather than smuggled in as a change to a check.</para>
+    ///
+    /// <para>The assertions are the stories themselves and no longer the summary
+    /// lines they used to be spelled as: a literal like <c>stone 0L 1C 3/4S</c> is
+    /// a recording of a party, and this file already keeps three of those in
+    /// <c>tests/golden/ui</c>.</para>
     /// </summary>
     [Fact]
     public void The_three_frames_tell_three_different_stories()
@@ -86,15 +105,25 @@ public sealed class GoldenUiTextTests
         Assert.Contains("No material stockpile yet", inspectors[0], StringComparison.Ordinal);
         Assert.Contains("Full. Loose 0 waits", inspectors[2], StringComparison.Ordinal);
 
-        // The middle frame is read off the summary rather than the inspector.
-        // Its cell used to hold the pile a carrier was still walking to; on the
-        // dungeon of Issue #117 the walk is longer and by this tick the pile has
-        // been lifted, so the tile is bare and the panel about it says nothing
-        // about the haul. What "in transit" means is unchanged and is on the
-        // summary line: one block on somebody's back, three already put away.
-        Assert.Contains("stone 0L 1C 3/4S", HudText.Summary(views[1]), StringComparison.Ordinal);
-        Assert.Contains("stone 4L 0C 0/0S", HudText.Summary(views[0]), StringComparison.Ordinal);
-        Assert.Contains("stone 0L 0C 4/4S", HudText.Summary(views[2]), StringComparison.Ordinal);
+        // Frame one: dug, and nowhere to put it. The stockpile is not painted
+        // until DemoStoneZoneTick, so the capacity is zero and every block is on
+        // the floor.
+        Assert.Equal(0, views[0].Snapshot.Stocks.StockpileCapacity);
+        Assert.True(views[0].Snapshot.Stocks.LooseStone > 0);
+        Assert.Equal(0, views[0].Snapshot.Stocks.StoredStone);
+
+        // Frame three: the stockpile is full and nothing waits outside it.
+        Assert.Equal(
+            views[2].Snapshot.Stocks.StockpileCapacity,
+            views[2].Snapshot.Stocks.StoredStone);
+        Assert.Equal(0, views[2].Snapshot.Stocks.LooseStone);
+        Assert.Equal(0, views[2].Snapshot.Stocks.CarriedStone);
+
+        // Frame two: the chain has finished by this tick, so what separates it
+        // from frame three is the party around it and not the stone. Asserted so
+        // that the set cannot quietly become two frames and a copy of one.
+        Assert.Equal(0, views[1].Snapshot.Stocks.CarriedStone);
+        Assert.NotEqual(HudText.Summary(views[1]), HudText.Summary(views[2]));
     }
 
     private static HudViewState RebuildFrame(int tick, string selectCell)

@@ -24,30 +24,92 @@ public sealed class WorldLabelLayoutTests
     /// </summary>
     private const ulong OwnerSeed = 20260729UL;
 
-    /// <summary>The tick his wave-3 frame was captured at, and his wave-4 one.</summary>
-    private const int WaveThreeTick = 2025;
+    /// <summary>
+    /// The two frames of the owner's party every check of this family reads.
+    ///
+    /// <para><b>They are found by their shape and no longer pinned to a tick, and
+    /// that is the repair rather than a convenience.</b> They were ticks 2025 and
+    /// 2380 — the two frames the owner captured on 2026-08-10 — and the party has
+    /// moved under them twice since: the health scale of Issue #336 and the cell
+    /// occupancy of Issue #76. Measured on this branch, tick 2025 carries no
+    /// captioned returner at all, so <see cref="CrowdedFocus"/> throws before any
+    /// invariant is reached, and tick 2380 carries one where it carried five. A
+    /// tick number is the wrong anchor for a scene: what makes the frame the right
+    /// frame is what is standing in it.</para>
+    ///
+    /// <list type="bullet">
+    /// <item><see cref="OwnerFrame.WhereTheFirstReturnerIsNamed"/> — the first
+    /// tick at which any raider carries a caption. That is the moment the mark of
+    /// Issue #358 exists at all, and it is the thin frame: the returner stands
+    /// alone and the layout has room for everything.</item>
+    /// <item><see cref="OwnerFrame.WhereTheCrowdIsThickest"/> — of the ticks that
+    /// carry a caption, the one with the most bodies standing on a single cell,
+    /// earliest first. That is the толчея the layout rules exist for.</item>
+    /// </list>
+    ///
+    /// <para>Both are taken from one walk of the party, because a walk costs a
+    /// second and eleven checks read them.</para>
+    /// </summary>
+    public enum OwnerFrame
+    {
+        WhereTheFirstReturnerIsNamed,
+        WhereTheCrowdIsThickest,
+    }
 
-    private const int WaveFourTick = 2380;
+    /// <inheritdoc cref="OwnerFrame"/>
+    internal static PrototypeSnapshot OwnerScene(OwnerFrame frame) =>
+        frame == OwnerFrame.WhereTheFirstReturnerIsNamed ? Scenes.Value.Thin : Scenes.Value.Crowded;
 
     /// <summary>
-    /// Stepped to a <b>tick</b> and not for a number of steps, which is the same
-    /// distinction <c>Main.LoadFixture</c> draws and for the same reason: a step
-    /// stopped being a tick when the party learned to stand still between two
-    /// waves. <c>PrototypeScenario.Run(log, 2380)</c> lands on tick 2260 of this
-    /// journal — a different frame with a different set of raiders standing in it,
-    /// and therefore not the frame the owner looked at.
+    /// How many bodies of both populations stand on the fullest cell of a frame.
+    /// The raiders that have walked out through the gate are not on the map and
+    /// are not counted.
     /// </summary>
-    internal static PrototypeSnapshot OwnerScene(int ticks)
-    {
-        var world = new PrototypeWorld(
-            PresentationFixtures.LogOf("baseline") with { Seed = OwnerSeed });
-        while (!world.IsComplete && world.CurrentTick < ticks)
-        {
-            world.Step();
-        }
+    internal static int ThickestCrowd(PrototypeSnapshot state) =>
+        state.Creatures
+            .Select(creature => creature.Position)
+            .Concat(state.Raiders
+                .Where(raider => raider.Mode != RaiderMode.Escaped)
+                .Select(raider => raider.Position))
+            .GroupBy(position => position)
+            .Max(group => group.Count());
 
-        return world.GetSnapshot();
-    }
+    private static readonly Lazy<(PrototypeSnapshot Thin, PrototypeSnapshot Crowded)> Scenes =
+        new(() =>
+        {
+            var world = new PrototypeWorld(
+                PresentationFixtures.LogOf("baseline") with { Seed = OwnerSeed });
+            PrototypeSnapshot? thin = null;
+            PrototypeSnapshot? crowded = null;
+            var thickest = 0;
+            while (!world.IsComplete)
+            {
+                world.Step();
+                var state = world.GetSnapshot();
+                if (!state.Raiders.Any(ReturningHeroLabel.IsCaptioned))
+                {
+                    continue;
+                }
+
+                thin ??= state;
+                var crowd = ThickestCrowd(state);
+                if (crowd > thickest)
+                {
+                    thickest = crowd;
+                    crowded = state;
+                }
+            }
+
+            if (thin is null || crowded is null)
+            {
+                throw new InvalidOperationException(
+                    "no tick of the owner's party carries a captioned returner, so neither frame " +
+                    "of this family exists. That is a change in what the party does — nobody " +
+                    "survives a wave and comes back — and not a broken test.");
+            }
+
+            return (thin, crowded);
+        });
 
     /// <summary>
     /// The frame as the owner had it: he was pointing at one body and had another
@@ -74,9 +136,9 @@ public sealed class WorldLabelLayoutTests
             new WorldLabelSubject(WorldLabelKind.Creature, other.Id));
     }
 
-    private static IReadOnlyList<PlacedWorldLabel> Layout(int ticks)
+    private static IReadOnlyList<PlacedWorldLabel> Layout(OwnerFrame frame)
     {
-        var state = OwnerScene(ticks);
+        var state = OwnerScene(frame);
         return WorldLabels.Of(state, CrowdedFocus(state), CameraView.DefaultTileSize);
     }
 
@@ -86,11 +148,11 @@ public sealed class WorldLabelLayoutTests
     /// smaller hat.
     /// </summary>
     [Theory]
-    [InlineData(WaveThreeTick)]
-    [InlineData(WaveFourTick)]
-    public void No_two_labels_of_the_owners_scene_are_printed_over_one_another(int ticks)
+    [InlineData(OwnerFrame.WhereTheFirstReturnerIsNamed)]
+    [InlineData(OwnerFrame.WhereTheCrowdIsThickest)]
+    public void No_two_labels_of_the_owners_scene_are_printed_over_one_another(OwnerFrame frame)
     {
-        var placed = Layout(ticks);
+        var placed = Layout(frame);
 
         Assert.NotEmpty(placed);
         foreach (var one in placed)
@@ -100,7 +162,7 @@ public sealed class WorldLabelLayoutTests
                 Assert.False(
                     Intersect(one.Box, other.Box),
                     $"«{one.Lines[0].Text}» and «{other.Lines[0].Text}» " +
-                    $"share pixels at tick {ticks}: {one.Box} against {other.Box}.");
+                    $"share pixels on the {frame} frame: {one.Box} against {other.Box}.");
             }
         }
     }
@@ -122,12 +184,12 @@ public sealed class WorldLabelLayoutTests
     /// is what ties the two together.</para>
     /// </summary>
     [Theory]
-    [InlineData(WaveThreeTick)]
-    [InlineData(WaveFourTick)]
-    public void No_label_ends_up_further_than_a_tile_from_its_own_body(int ticks)
+    [InlineData(OwnerFrame.WhereTheFirstReturnerIsNamed)]
+    [InlineData(OwnerFrame.WhereTheCrowdIsThickest)]
+    public void No_label_ends_up_further_than_a_tile_from_its_own_body(OwnerFrame frame)
     {
         const double oneTile = 22.0;
-        var placed = Layout(ticks);
+        var placed = Layout(frame);
 
         Assert.NotEmpty(placed);
         foreach (var label in placed)
@@ -135,7 +197,7 @@ public sealed class WorldLabelLayoutTests
             Assert.True(
                 label.AttachmentRef <= oneTile,
                 $"«{label.Lines[0].Text}» sits {label.AttachmentRef:F2} reference " +
-                $"pixels from its body at tick {ticks}; the limit is {oneTile}.");
+                $"pixels from its body on the {frame} frame; the limit is {oneTile}.");
         }
     }
 
@@ -159,32 +221,39 @@ public sealed class WorldLabelLayoutTests
     /// scene and stated here rather than derived: the point of the check is that a
     /// change which starts giving names up is noticed the day it happens.</para>
     /// </summary>
-    /// <para><b>Re-pinned by Issue #361.</b> The wave-4 row was <c>6, 5</c>. With
-    /// the damage jitter live the party reaches tick 2380 with a different set of
-    /// bodies standing in the room: twelve raiders on the map instead of eleven,
-    /// of whom five carry a caption instead of six, and three of those five are
-    /// named on the quiet map instead of five of six. The two that are not named
-    /// are the overflow of one crowded cell and are the subject of
-    /// <see cref="The_names_that_are_not_shown_are_raiders_sharing_one_cell"/>.
-    /// The wave-3 row did not move.</para>
+    /// <para><b>The two counts are gone and the rule is asserted instead.</b> They
+    /// were <c>1, 1</c> and <c>5, 3</c> - recordings of two parties, re-pinned once
+    /// already by Issue #361 - and the party has moved twice more since. What the
+    /// counts were there to catch is a change that starts giving names up, and that
+    /// is now said directly: <b>every captioned returner is named on the quiet map
+    /// unless another captioned returner stands on its own cell</b>, because bodies
+    /// that share a head share one ladder of places and a ladder holds three. A
+    /// count could only ever suggest that; this states it, and it does not have to
+    /// be rewritten the next time the balance moves.</para>
     [Theory]
-    [InlineData(WaveThreeTick, 1, 1)]
-    [InlineData(WaveFourTick, 5, 3)]
-    public void Every_returning_raider_of_the_owners_scene_is_still_named(
-        int ticks,
-        int captioned,
-        int named)
+    [InlineData(OwnerFrame.WhereTheFirstReturnerIsNamed)]
+    [InlineData(OwnerFrame.WhereTheCrowdIsThickest)]
+    public void Every_returning_raider_of_the_owners_scene_is_still_named(OwnerFrame frame)
     {
-        var state = OwnerScene(ticks);
+        var state = OwnerScene(frame);
         var asked = state.Raiders.Where(ReturningHeroLabel.IsCaptioned).ToArray();
 
         var placed = WorldLabels
             .Of(state, WorldLabelFocus.None, CameraView.DefaultTileSize)
             .Where(label => label.Request.Subject.Kind == WorldLabelKind.Raider)
-            .ToArray();
+            .Select(label => label.Request.Subject.Id)
+            .ToHashSet();
 
-        Assert.Equal(captioned, asked.Length);
-        Assert.Equal(named, placed.Length);
+        Assert.NotEmpty(asked);
+        foreach (var raider in asked)
+        {
+            var sharingItsHead = asked.Count(other => other.Position == raider.Position);
+            Assert.True(
+                placed.Contains(raider.Id) || sharingItsHead > 1,
+                $"«{raider.Name}» carries a caption on the {frame} frame, stands alone " +
+                $"on ({raider.Position.X},{raider.Position.Y}) and is not named. Only a shared " +
+                "head may cost a returner his name.");
+        }
     }
 
     /// <summary>
@@ -201,20 +270,29 @@ public sealed class WorldLabelLayoutTests
     /// differentiation, which the owner deferred himself on this very playtest:
     /// «модельки одинаковые … наверно это нужно делать в следующем подходе».</para>
     ///
-    /// <para><b>Re-pinned by Issue #361, and the arithmetic is the same one.</b>
-    /// It was four raiders on cell (15,7) with one of them left unnamed. With the
-    /// damage jitter live the same journal brings five of them onto (14,7)
-    /// instead, and a ladder that holds three now leaves two over. The crowd grew
-    /// by one body; the rule that decides how many fit did not move, and neither
-    /// did the ten and the twenty-two it is computed from. The check is stated
-    /// over <b>every</b> unnamed caption rather than over the single one there
-    /// used to be, which asks more of the frame than it did before, not
-    /// less.</para>
+    /// <para><b>The crowd of captions has left the shipped party, and the rule is
+    /// what stayed.</b> Cell occupancy (Issue #76) keeps raiders in
+    /// <c>RaiderMode.Raiding</c> off one another tiles, and a captioned returner is
+    /// by definition a raiding one - so on the owner party no two of them share a
+    /// head any more, and no caption is dropped at all. Measured over every tick of
+    /// it: one captioned returner at a time, never two on a cell, never a name
+    /// given up. The count of two unnamed and the count of five sharing were
+    /// recordings of a party that no longer exists.</para>
+    ///
+    /// <para>So the check states the rule over both shipped frames - <b>a caption
+    /// is dropped only where another caption shares its head</b> - which is
+    /// currently satisfied by nothing being dropped, while the arithmetic of the
+    /// ladder itself is held on values by
+    /// <see cref="A_label_with_nowhere_to_go_is_dropped_rather_than_detached"/> and
+    /// <see cref="A_caption_that_cannot_fit_whole_keeps_its_name_and_loses_its_sentence"/>,
+    /// which build the crowd instead of waiting for the party to produce one.</para>
     /// </summary>
-    [Fact]
-    public void The_names_that_are_not_shown_are_raiders_sharing_one_cell()
+    [Theory]
+    [InlineData(OwnerFrame.WhereTheFirstReturnerIsNamed)]
+    [InlineData(OwnerFrame.WhereTheCrowdIsThickest)]
+    public void The_names_that_are_not_shown_are_raiders_sharing_one_cell(OwnerFrame frame)
     {
-        var state = OwnerScene(WaveFourTick);
+        var state = OwnerScene(frame);
         var captioned = state.Raiders.Where(ReturningHeroLabel.IsCaptioned).ToArray();
 
         var placed = WorldLabels
@@ -224,10 +302,13 @@ public sealed class WorldLabelLayoutTests
             .ToHashSet();
         var unnamed = captioned.Where(raider => !placed.Contains(raider.Id)).ToArray();
 
-        Assert.Equal(2, unnamed.Length);
-        Assert.All(unnamed, raider => Assert.Equal(
-            5,
-            captioned.Count(other => other.Position == raider.Position)));
+        Assert.NotEmpty(captioned);
+        Assert.All(unnamed, raider => Assert.True(
+            captioned.Count(other => other.Position == raider.Position) > 1,
+            $"«{raider.Name}» carries a caption on the {frame} frame and is not named, " +
+            $"and nobody else with a caption stands on " +
+            $"({raider.Position.X},{raider.Position.Y}). A name may be lost to a shared head and " +
+            "to nothing else."));
     }
 
     /// <summary>
@@ -449,7 +530,7 @@ public sealed class WorldLabelLayoutTests
     [Fact]
     public void One_layout_holds_the_crew_and_the_raiders_together()
     {
-        var kinds = Layout(WaveFourTick)
+        var kinds = Layout(OwnerFrame.WhereTheCrowdIsThickest)
             .Select(label => label.Request.Subject.Kind)
             .Distinct()
             .OrderBy(kind => kind);
