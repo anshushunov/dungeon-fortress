@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "issue": 379,
+  "checkpoint": 2,
+  "what": "Criteria 1-4 of Issue #379 after the change, on the same scene and with the same instruments as evidence/379-before.json.",
+  "change": {
+    "half1": "WorldLabelLayout.FirstAttempt no longer exempts a focused label: every label, whoever it belongs to, bids exactly its name in the first pass.",
+    "half2": "WorldLabelLayout.GrowingOrder states the order the second pass offers the sentences back in — rank first, scene order inside a rank — instead of leaning on the order the first pass happened to build the list in. It changes no frame today and is the only thing the focus keeps in exchange for the exemption; the mutant of evidence/379-mutants.json is what makes it load-bearing rather than decorative."
+  },
+  "criterion1": {
+    "claim": "A gesture that adds a sentence about one body no longer subtracts a name from another.",
+    "subject": "«Сиплый», raider #20 on (14,7), tick 2380",
+    "before": "hovered: total 2 against the quiet 3, lost [Долговязый], focusedLines 2/2",
+    "after": "hovered: total 3 against the quiet 3, lost [], focusedLines 1/2",
+    "heldBy": "WorldLabelFocusTests.A_second_line_never_costs_a_neighbour_his_name, both frames, every body, both gestures, with nothing pointed at as well. It compares the drawn frame with the frame the same focus would give if no caption had a second line at all, so what it measures is exactly what the sentences cost."
+  },
+  "criterion2": {
+    "claim": "The same for selection, measured separately rather than assumed.",
+    "measured": "SELECT «Сиплый»: total 3, lost [], focusedLines 1/2 — the same row as HOVER, on every body of both frames. The guard above walks both gestures for every body; the probe printed both columns for all 21 bodies of tick 2380 and all 19 of tick 2025.",
+    "andWhereItDiffers": "It differs outside the layout, and that is written up in evidence/379-before.json → twoFindingsWiderThanThePostingItself: in the running game a selected raider gets no world label, no ring and no panel, so criterion 2 is measured through WorldLabels.Of and not through a captured frame."
+  },
+  "criterion3": {
+    "claim": "The spacing and attachment guards of Issue #364 stay green with a body hovered and a body selected.",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests/DungeonFortress.Presentation.Tests.csproj",
+    "output": "Пройден!: не пройдено 0, пройдено 720, пропущено 0, всего 720",
+    "which": "WorldLabelLayoutTests.No_two_labels_of_the_owners_scene_are_printed_over_one_another, No_label_ends_up_further_than_a_tile_from_its_own_body (both frames, both with a crowded focus) and WorldLabelFocusTests.Pointing_at_any_body_of_the_frame_breaks_neither_spacing_nor_attachment (both frames, every body of the frame pointed at in turn)."
+  },
+  "criterion4": {
+    "claim": "The promise of Issue #371 is kept where there is room, and where there is not the number says so.",
+    "whereThereIsRoom": "Tick 2025, «Ржавый» — hovered 2/2, selected 2/2, and 2/2 on the quiet map too. Tick 2380, the constructed scene of WorldLabelFocusTests.The_body_under_the_cursor_is_offered_its_sentence_first: two sentences ask for the one place that fits and the focused label takes it, ahead of a neighbour that stands earlier in scene order.",
+    "whereThereIsNot": "Tick 2380, «Сиплый» — hovered 1 line of 2, where before this change he had 2 of 2. Six bodies stand on his cell (14,7); they share one head, therefore one ladder, and a two-line box is 17.5 reference pixels tall against the 10 of a name and the 22 of the ceiling. Being served first puts his name on the lowest rung with two names above it, so the second pass has nothing to offer him.",
+    "whatItCosts": "This is Issue #371's promise made conditional, and it is the price of criterion 1: on that cell the sentence and the neighbour's name are the same place, and Issue #364 already decided which of the two wins («имя не проигрывает чужому предложению»). The shed sentence is in the panel, which Issue #373 made reachable on a crowded cell by clicking it again.",
+    "heldBy": "WorldLabelFocusTests.The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer_where_there_is_room — it asserts the shed on the quiet map, the six bodies that explain it, the bare name under both gestures, and the whole caption on the frame where the head is not shared."
+  },
+  "thePermanentMapDidNotMove": {
+    "claim": "Three captured frames are byte-identical before and after the change.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture baseline -Seed 20260729 -ScreenshotTicks 2380 -ScreenshotPath \"probe/379-<name>.png\" -FrameSize 1280x720 -UiScale 1.0 -CameraZoom 1.0 [-HoverCell \"<cell>\"]",
+    "sha256": {
+      "quiet": "d47d8a18098f8e30788cf0d35dfce21af4b703458010c2cea36eec35adad4331 (before and after)",
+      "hover16x7": "e21e728af98b127e3d92ce78b8246f0ee73cdeedeb0d06048d4b61711948e2a5 (before and after)",
+      "hover15x7": "505d2bf9d4536ed18d6b3cd36e3f56cd1411247a81847a7d06e33303d92cd192 (before and after)"
+    },
+    "reading": "The change bites only where a focused caption carrying a sentence competes with a neighbour's name, and no cell -HoverCell can reach on this frame is such a case: the flag answers a crowded cell with its first body, and the first body of (14,7) is «Гнилозуб», who has no sentence. That is why the criterion-1 measurement is a layout measurement and the frames are here as the statement that nothing else moved."
+  },
+  "whatIsStillLost": {
+    "sameCellSwap": "Pointing at «Ловчий», «Косой» or «Ловчий Старший» — the fourth, fifth and sixth bodies of (14,7) — still costs «Долговязый» his name, and the frame still shows three. Six labels want a ladder that holds three; promoting a fourth means dropping one, which is WorldLabelLayoutTests.The_names_that_are_not_shown_are_raiders_sharing_one_cell and not this defect.",
+    "hoveringACrewMember": "Pointing at «Тишина» on (15,7) still takes the frame from three names to two. Her label bids one line, so the two-pass rule is not broken; what she wins is the rank order the owner chose. Named in evidence/379-before.json and left alone on purpose — see the PR body."
+  }
+}
