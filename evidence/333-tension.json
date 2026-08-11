@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "issue": "#333 + #336 (merged balance slice)",
+  "when": "2026-08-11",
+  "what": "The narrow sweep of PrototypeTuning.CombatJoinSatiety over 30..42 against the two checks the predecessor named as the one real tension, and the measurement of why they oppose each other.",
+  "tree": "1356036 (fix/333-combat-mode-hold), working copy clean, origin/main = 3b627bf, behind 0",
+
+  "ruleOfChoiceStatedBeforeTheSweep": "The smallest value in 30..42 at which BOTH checks are green. Stated before the first run and not changed after it, by the pattern of the previous sweep. If no such value exists the range is not widened and no third mechanism is invented: the sweep is brought whole and the tension is returned to the coordinator as a finding about the contract.",
+
+  "theTwoChecks": {
+    "verdict": {
+      "name": "PrototypeMomentOfTruthTests.A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave",
+      "whatItAsserts": "three things at once, at the hand-picked ConsequenceSeed = 20260728 of the `baseline` fixture: (1) punish and reward produce different decision streams for the creature on card 0; (2) punish differs from not answering at all; (3) at least one of the three carded creatures moves when rewarded.",
+      "promiseOrMeasure": "обещание — criterion 7 of Issue #312, that a verdict has a consequence. The number it is read at is not part of the promise; the promise is that the consequence exists."
+    },
+    "memoryFloor": {
+      "name": "PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next(prepared)",
+      "whatItAsserts": "memory of place refused work at least 10 times over the three-seed matrix of the fixture. `A memory nobody ever acts on is a field in the snapshot, not a slice.`",
+      "promiseOrMeasure": "обещание — criterion 2 of Issue #117, the observability floor of memory of place. The floor of 10 is the smallest number that can mean `ever`, not a corridor fitted to a measurement."
+    }
+  },
+
+  "command": "for each value: PrototypeTuning.CombatJoinSatiety rewritten, then `dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave|FullyQualifiedName~A_remembered_place_changes_what_the_creature_does_next\" --logger \"console;verbosity=detailed\"`. Thirteen values, about thirteen seconds each. The constant was restored to its committed value by the harness in a `finally`, and the tree is clean at the commit named above.",
+
+  "sweep": [
+    { "join": 30, "verdict": "green", "memoryPrepared": "red", "refusalsPrepared": 0, "refusalsBaseline": 168, "refusalsPreparedBySeed": { "20260726": 0, "20260727": 0, "20260728": 0 } },
+    { "join": 31, "verdict": "green", "memoryPrepared": "red", "refusalsPrepared": 0, "refusalsBaseline": 168, "refusalsPreparedBySeed": { "20260726": 0, "20260727": 0, "20260728": 0 } },
+    { "join": 32, "verdict": "green", "memoryPrepared": "red", "refusalsPrepared": 5, "refusalsBaseline": 168, "refusalsPreparedBySeed": { "20260726": 5, "20260727": 0, "20260728": 0 } },
+    { "join": 33, "verdict": "green", "memoryPrepared": "red", "refusalsPrepared": 1, "refusalsBaseline": 200, "refusalsPreparedBySeed": { "20260726": 1, "20260727": 0, "20260728": 0 } },
+    { "join": 34, "verdict": "green", "memoryPrepared": "red", "refusalsPrepared": 1, "refusalsBaseline": 199, "refusalsPreparedBySeed": { "20260726": 1, "20260727": 0, "20260728": 0 } },
+    { "join": 35, "verdict": "green", "memoryPrepared": "red", "refusalsPrepared": 5, "refusalsBaseline": 182, "refusalsPreparedBySeed": { "20260726": 1, "20260727": 0, "20260728": 4 } },
+    { "join": 36, "verdict": "green", "memoryPrepared": "red", "refusalsPrepared": 5, "refusalsBaseline": 182, "refusalsPreparedBySeed": { "20260726": 1, "20260727": 0, "20260728": 4 } },
+    { "join": 37, "verdict": "green", "memoryPrepared": "red", "refusalsPrepared": 5, "refusalsBaseline": 184, "refusalsPreparedBySeed": { "20260726": 1, "20260727": 0, "20260728": 4 } },
+    { "join": 38, "verdict": "green", "memoryPrepared": "red", "refusalsPrepared": 5, "refusalsBaseline": 174, "refusalsPreparedBySeed": { "20260726": 1, "20260727": 0, "20260728": 4 } },
+    { "join": 39, "verdict": "red", "memoryPrepared": "red", "refusalsPrepared": 5, "refusalsBaseline": 124, "refusalsPreparedBySeed": { "20260726": 1, "20260727": 0, "20260728": 4 }, "verdictMessage": "creature 7 decided exactly the same things whether the player rewarded it or punished it, so the sign of the verdict is not a decision about anything. Who moved between the two: nobody at all." },
+    { "join": 40, "verdict": "red", "memoryPrepared": "green", "refusalsPrepared": 10, "refusalsBaseline": 84, "refusalsPreparedBySeed": { "20260726": 6, "20260727": 0, "20260728": 4 }, "note": "the memory floor is met exactly, with nothing to spare, and the predecessor measured contract invariant 4 failing here on 20260728 by 7 points of raid cost" },
+    { "join": 41, "verdict": "red", "memoryPrepared": "green", "refusalsPrepared": 51, "refusalsBaseline": 84, "refusalsPreparedBySeed": { "20260726": 3, "20260727": 0, "20260728": 48 } },
+    { "join": 42, "verdict": "red", "memoryPrepared": "green", "refusalsPrepared": 53, "refusalsBaseline": 18, "refusalsPreparedBySeed": { "20260726": 5, "20260727": 0, "20260728": 48 }, "note": "the value committed on the branch; 42 and 45 are one plateau" }
+  ],
+
+  "result": "There is no such value. The verdict check is green on 30..38 and red on 39..42; the memory floor on `prepared` is red on 30..39 and green on 40..42. The two green intervals are disjoint and adjacent: 38 is the last value where the verdict holds, 40 the first where the memory floor does, and 39 satisfies neither. The rule of choice therefore selects nothing, and by the rule stated before the sweep the range was not widened and no third mechanism was tried.",
+
+  "theCrossoverConfirmedWithMessages": {
+    "join38": "verdict GREEN; memory prepared RED — `prepared: memory refused work 5 times over the whole matrix`",
+    "join39": "verdict RED — `creature 7 decided exactly the same things whether the player rewarded it or punished it`; memory prepared RED — 5 refusals",
+    "join40": "verdict RED — same message; memory prepared GREEN"
+  },
+
+  "whyTheyOppose": {
+    "claim": "The join threshold is not the instrument for the verdict check, and the two checks are not in fact pulling on one designed quantity. The memory floor responds to the threshold through a mechanism (a smaller line lets raiders reach the larder, so nerves break where there is work to refuse). The verdict check does not: it is an existence claim about one creature in one party, and the threshold reaches it only by accident.",
+    "measuredDirectly": "A scratch probe walked the moment of truth of `baseline`/20260728 at joins 30, 38, 39 and 42. At every one of the four the moment of truth is IDENTICAL: it opens on tick 1346, the three cards are [7,8,0], the subject is creature 7, and the satiety vector of the whole domain is the same nine numbers [51,47,53,46,51,53,62,57,45]. The threshold does not touch the scene the check reads at all. Its entire influence is on the waves AFTER the verdict, where it decides who stands in the line and therefore who is free to be matched to work.",
+    "andThereItIsNotAConsequenceOfSize": "At join 39 the three arms — punish, reward and no answer — produce byte-identical parties: 788 decisions each for the subject, 5940 events each, 2212 blocked each. The verdict changed nothing whatsoever. At join 42 punish equals silence while reward differs; at 38 and 30 all three differ. `job_taken_by_other` is 0 in every arm at every threshold, so this is not competition for work being won or lost — it is whether a weight nudge to one creature happens to change any single matching outcome in a party of five thousand events."
+  },
+
+  "doesAnyShippedPartyStillContainTheScene": {
+    "why": "If the check is an existence claim, the question that decides whether it can be held at all is not which threshold, but whether any shipped party still contains the scene. Measured over all six shipped parties — two fixtures by three matrix seeds — by evaluating the check's own three assertions against each.",
+    "harnessDefectFoundWhileMeasuring": "The check builds its arms as `log with { Commands = [new VerdictCommand(...)] }`, which REPLACES the fixture's command list instead of appending to it. `baseline` carries 0 commands so this is harmless today, but it means the check structurally cannot be asked of any fixture that carries commands: pointed at `prepared` (6 commands) it throws `A verdict is only accepted while the moment of truth is open`, because the party it then plays is not the party the tick was measured on. The probe below appends.",
+    "matrix": {
+      "join42": {
+        "baseline/20260726": "RED — harshVsKind differ, harshVsQuiet SAME, rewardWitnesses 2",
+        "baseline/20260727": "RED — harshVsKind SAME, harshVsQuiet SAME, rewardWitnesses 2",
+        "baseline/20260728": "RED — harshVsKind differ, harshVsQuiet SAME, rewardWitnesses 1",
+        "prepared/20260726": "RED — harshVsKind differ, harshVsQuiet SAME, rewardWitnesses 2",
+        "prepared/20260727": "RED — harshVsKind differ, harshVsQuiet SAME, rewardWitnesses 3",
+        "prepared/20260728": "RED — harshVsKind differ, harshVsQuiet SAME, rewardWitnesses 2"
+      },
+      "join40": {
+        "baseline/20260726": "RED", "baseline/20260727": "RED", "baseline/20260728": "RED",
+        "prepared/20260726": "RED",
+        "prepared/20260727": "GREEN — tick 1338, subject 5, cards [5,8,2], all three assertions hold",
+        "prepared/20260728": "GREEN — tick 1335, subject 5, cards [5,1,8], all three assertions hold"
+      },
+      "join38": {
+        "baseline/20260726": "RED — and note harshVsKind SAME with rewardWitnesses 0, i.e. this party has no scene at all",
+        "baseline/20260727": "RED",
+        "baseline/20260728": "GREEN — the one party the check is pointed at, and the only baseline party that holds",
+        "prepared/20260726": "RED",
+        "prepared/20260727": "GREEN", "prepared/20260728": "GREEN"
+      }
+    },
+    "whatThisMeans": "At the committed threshold of 42 NOT ONE of the six shipped parties contains the scene. At 40 two do, and both are `prepared` — which the check cannot currently read because of the harness defect above. At 38 the check is green solely because it is pointed at `baseline`/20260728, the single baseline party that still holds; the other two baseline parties are red there too. The check was already re-pointed once for exactly this reason: its own doc comment records that after Issue #361 made the damage jitter live, `the creature on the first card of the journal's own seed decides the same things whichever way it is answered, so that party no longer contains the scene`, and ConsequenceSeed was introduced then."
+  },
+
+  "whatIsReturnedToTheCoordinator": {
+    "theFork": "Which of two promises gives way, and by what means. This is a decision about the contract, not a number a sweep can find, and the executor does not take it.",
+    "optionsWithTheirPrice": [
+      {
+        "option": "Keep join 42. The memory floor holds with 53 refusals on a plateau (42 and 45 agree on every number the probe prints), and `A_verdict_makes...` has no shipped party left to stand on anywhere.",
+        "price": "Criterion 7 of Issue #312 loses its executable form on shipped journals. It would have to be re-founded on a synthetic party built to contain the scene, or the promise re-stated as something a long fight can still deliver. Re-founding it is not balance work and is not in this slice's scope."
+      },
+      {
+        "option": "Join 40, and re-point the verdict check at `prepared`/20260727 or `prepared`/20260728, fixing the harness to append commands rather than replace them.",
+        "price": "40 meets the memory floor exactly (10 against a floor of 10) with nothing to spare, and the predecessor measured contract invariant 4 failing at 40 on 20260728 by 7 points of raid cost. Two of the three assertions would then rest on a fixture chosen after the fact, which is the second time this check has been re-pointed to keep it green."
+      },
+      {
+        "option": "Keep join 42 and treat `A_verdict_makes...` as owing its own synthetic scene, the same way `CombatHoldSatiety` owes one.",
+        "price": "Honest and the most durable, but it is a second synthetic party inside a balance slice, and it says the shipped journals no longer demonstrate criterion 7 by themselves."
+      }
+    ],
+    "whatIsNotOnTheList": "Widening the range beyond 30..42, and inventing a third balance mechanism. Both were excluded by the brief before the sweep was run, and nothing measured here argues for reopening them: the threshold provably does not reach the scene the verdict check reads."
+  }
+}
