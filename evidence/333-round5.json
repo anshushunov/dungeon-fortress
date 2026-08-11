@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "issue": "#333 + #336 + #76",
+  "when": "2026-08-12",
+  "what": "Owner's decision executed: join threshold 30, and Issue #76 raised out of slice 6 and taken narrowly. Stopped at the handover point the coordinator named — after item 3, with the party final.",
+  "tree": "2b69117 on fix/333-combat-mode-hold, working copy clean",
+
+  "orderWasChangedOnPurposeAndItPaidOff": {
+    "whatTheCoordinatorAsked": "1) threshold 30, 2) retire two unreachable promises, 3) raise #76, 4) rebase the checks.",
+    "whatWasDone": "1, then 3, then STOP before 2.",
+    "why": "The coordinator's own principle for this round was «first everything that moves the party, then the rebasing», and retiring a promise does not move the party while #76 does. Retiring a promise as unreachable BEFORE the change that might make it reachable would have been the same mistake as re-pinning a check under a moving target.",
+    "andItWasNotHypothetical": "The memory-of-place observability floor on `prepared` — one of the two promises queued for retirement — was 0 refusals over the matrix at threshold 30 without #76. With #76 it is 8, against a floor of 10. It went from «unreachable, retire it» to «two short». That promise must NOT be retired on the old measurement, and the decision has to be taken again on the party as it now is."
+  },
+
+  "whatWasImplementedForIssue76": {
+    "scopeTaken": "Cell occupancy in pathfinding, and nothing else.",
+    "theFindingThatMadeItSmall": "Occupancy already existed at the moment of stepping: `Move` has always refused to put a creature on a tile another one occupies. What did not exist was the pathfinder knowing it. So a creature walked into a body, was refused, and walked into it again the next tick — which is exactly the jam this slice created. The fix is that bodies now join the same blocked set the forbidden zone already uses, so `NextStep` routes around them.",
+    "theBoundKept": "«A body takes away a road and never the objective» — the same bound the issue's own recommendation and the existing raider-memory code already carry. No way round means the crowded path is used and the step-time check does the waiting. The destination tile is never treated as occupied for a creature, because creatures are routinely sent to a tile somebody stands on.",
+    "raiders": "Criterion 1 of #76 — raiders no longer share a cell. Same blocked-set mechanism plus a hard step-time check. Here the destination IS blocked, deliberately: every raider of a wave walks to the same larder tile, so exempting the destination would have exempted precisely the tile the owner watched them pile onto.",
+    "criterion2WasNotAFormality": {
+      "claim": "The wait limit that criterion 2 asks for is what keeps the party finishing, not a nicety.",
+      "measured": "Implemented without it first. Result: the queue behind an occupied larder never drained, no wave after the first resolved, parties ran to SessionTicks with a null outcome («The party did not end (outcome null, unresolved False)»), and the simulation suite went to about fifteen red including the byte-for-byte replay check. `RaiderBlockedPatience` = 4 removes it and the suite returns to six.",
+      "whereTheReasonLives": "beside the constant in PrototypeTuning, with the measurement."
+    },
+    "whatWasLeftOfIssue76": "The choice between its variants A/B/C as a general rule for all bodies; the corridor-as-throat gameplay consequences; criterion 5 (a headless scenario showing a narrow corridor changes a wave outcome); line of sight; and the contract section on resolution order. Taken: occupancy in pathfinding, criterion 1, criterion 2. This split is owed a section in the pull-request body."
+  },
+
+  "partitionNote": {
+    "what": "The coordinator's line added `src/DungeonFortress.Simulation/PrototypeMap.cs` («or wherever NextStep lives»). NextStep does live there, but it did not need changing — it already refuses to route through a blocked set. What needed changing were the two CALL SITES: `PrototypeWorld.Work.cs` (creature movement) and `PrototypeWorld.ReturningRaiders.cs` (raider movement), plus `PrototypeWorld.State.cs` and `PrototypeTuning.cs` which were already owned.",
+    "status": "Neither call-site file is named foreign in any claimed Issue (the claimed set is #333, #336, #76 — all mine). Named here and owed a line in the pull-request body. `PrototypeMap.cs` itself was NOT touched."
+  },
+
+  "theStateOfTheSuites": {
+    "simulation": "6 red of 359",
+    "presentation": "19 red of 728",
+    "presentationWentUpAndThatIsExpected": "It was 11 at threshold 41 and 12 at threshold 30 without #76. Every one of those checks reads the party at a named tick or with a recorded count, and the party has just changed twice. Rebasing them is item 4, which the coordinator explicitly ordered AFTER the party is final. It now is.",
+    "theSixInSimulation": [
+      {
+        "test": "PrototypeScenarioTests.Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party",
+        "cause": "no `combat_refused_starving` anywhere in `prepared`",
+        "status": "this is promise number one queued for retirement. #76 did not change it and cannot: at a threshold the domain sustains, hunger refuses nobody. Retiring it is still the right call and it is item 2."
+      },
+      {
+        "test": "PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next(prepared)",
+        "cause": "8 refusals over the matrix against a floor of 10",
+        "status": "this is promise number two queued for retirement, and #76 moved it from 0 to 8. DO NOT retire it on the old measurement. Two short of a floor is a different situation from unreachable, and the coordinator should decide again with this number in front of him. Note that the other two memory checks that were red at 30 without #76 are now GREEN."
+      },
+      {
+        "test": "PrototypePostCombatDispersalTests.A_refused_step_after_a_fight_usually_had_a_way_round_it",
+        "cause": "16 of 104 ways round strictly longer, where a fifth (about 21) is the floor",
+        "status": "NEW, and it is a direct consequence of #76 rather than a coincidence. The check compares the route the simulation walks «with its eyes shut» against a search that sees bodies — and the simulation's own route now sees bodies too, so the two have converged. Its own message says as much. It needs re-thinking against the new pathfinder, not rebasing: the quantity it was built to measure has changed meaning."
+      },
+      {
+        "test": "PrototypeReturningRaiderTests.A_memory_takes_away_a_road_and_never_the_objective",
+        "cause": "Assert.NotEmpty failed — the scene is empty",
+        "status": "NEW. Likely the same pinned-scene class as the ones already repaired three times, since the raider's route changed. Check before assuming."
+      },
+      {
+        "test": "PrototypeStoneHaulTests.Bookings_survive_zone_churn_without_oversubscribing_a_cell",
+        "cause": "«The churn never forced a haul to replan its destination»",
+        "status": "NEW, vacuity guard. The haul routes differently now."
+      },
+      {
+        "test": "PrototypeBuildTests.A_blueprint_outranks_a_stockpile_as_a_destination_for_loose_stone",
+        "cause": "stoneStored=3 of 4 dug, with 2 eaten by the post",
+        "status": "NEW. Needs a real look — it is a claim about ranking destinations, not obviously a scene pin, and it may be a genuine consequence of stone haulers now routing around each other."
+      }
+    ]
+  },
+
+  "entryNoteForTheNextExecutor": {
+    "whyTheHandoverIsHere": "The coordinator named this point: «Лучшая точка передачи здесь — после пункта 3», because the party is final from here and the twenty-odd pinned checks can be rebased once instead of twice. That is now true.",
+    "doFirst": [
+      "Re-decide item 2 with the NEW numbers. The memory floor is 8 of 10, not 0. `combat_refused_starving` is still structurally unreachable and is still the right retirement. Both need the coordinator, and the second one may no longer need retiring at all.",
+      "Then item 4: the pinned checks, once. Nineteen in presentation and at least three of the six in simulation. The repair that worked four times is in this branch already — locate the scene by its SHAPE, not by a tick number or a recorded count, and assert the promise against whatever scene is found. Examples to copy: `BlowReadoutTests.BattleScene`, `A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave`, `A_wound_closes_in_a_creature_that_rests_and_eats`.",
+      "`OwnerScene` — the coordinator has ACCEPTED replacing the real-playtest anchor with a search by shape. That unblocks the ten label checks.",
+      "`CreatureStoryTests` observability floor is a PROMISE: if it fails on the final party, return it to the coordinator separately, not bundled with the measurements.",
+      "`A_refused_step_after_a_fight_usually_had_a_way_round_it` is not a rebase. Read it: #76 changed what it measures."
+    ],
+    "thenTheRest": "mutants in evidence/333-mutants.json after committing the checked state; both checksums re-taken and explained (they WILL have moved — the threshold and the pathfinder both changed the party); the full verify.ps1 once; the pull request closing #333, #336 and now #76.",
+    "pullRequestBodySectionsOwed": [
+      "the five already listed in evidence/333-round3.json",
+      "6. the partition extension made by the COORDINATOR to tests/DungeonFortress.Presentation.Tests/** and ratified for tests/golden/ui/*.json — not a self-extension",
+      "7. the two call-site files taken for #76 (Work.cs, ReturningRaiders.cs) and why PrototypeMap.cs was not touched",
+      "8. what of #76 was taken and what was left",
+      "9. the retirement of each promise, in the same form the hold rule was retired: when it was introduced, what measured it unreachable, what was removed, and what still guards the thing it was introduced for — and if nothing does, say so plainly",
+      "a line noting the typo in commit a3ac724 («1356034» for 1356036); evidence has it right and no force-push was made for it"
+    ]
+  }
+}
