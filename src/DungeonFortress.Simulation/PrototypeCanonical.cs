@@ -246,6 +246,29 @@ public static class PrototypeCanonical
             WriteLoyaltyTerms(writer, "benefitTerms", creature.Loyalty.BenefitTerms);
             WriteLoyaltyTerms(writer, "grudgeTerms", creature.Loyalty.GrudgeTerms);
             writer.WriteEndObject();
+
+            // Localised injury (Issue #409). Additive, like `rememberedPlaces`
+            // and `loyalty` before it: a new array on an existing section, no
+            // field renamed, removed or re-pointed, so the schema version does
+            // not move — see docs/engineering/PROTOTYPE_HEADLESS.md,
+            // "Версионирование канонического снапшота". Every frame's checksum
+            // does move, because the array is present on every creature from
+            // tick 0, and that is what a golden regeneration is for here.
+            //
+            // `injury` above stays and is not made redundant by this: it is the
+            // worst entry here, it is what the fifteen call sites of the
+            // simulation read, and writing both is how the document says that
+            // the summary and the localisation agree.
+            writer.WriteStartArray("injuries");
+            foreach (var injury in creature.Injuries.OrderBy(injury => injury.Part))
+            {
+                writer.WriteStartObject();
+                writer.WriteString("part", ToJson(injury.Part));
+                writer.WriteString("severity", ToJson(injury.Severity));
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
             writer.WriteEndObject();
         }
 

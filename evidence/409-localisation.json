@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "issue": 409,
+  "when": "2026-08-12",
+  "checkpoint": "1 — модель локализации в симуляции, до всяких следствий",
+  "what": "Скаляр InjuryKind заменён четырьмя частями тела. Это рубеж 1 из семи: части существуют, травма присваивается и локализуется, снапшот её сериализует — и поведение боя не сдвинуто ни на тик. Следствия частей идут рубежом 2.",
+  "tree": {
+    "branch": "feature/409-localised-injury",
+    "worktree": "../_wt-409-injury",
+    "base": "origin/main = 0998b18 на момент постановки; на момент замера origin/main ушёл на 9c39b0b (PR #411, docs-only — src/ и tests/ не тронуты, поэтому «до» снималось на 9c39b0b и это тот же код)"
+  },
+
+  "theClaimOfThisCheckpoint": {
+    "claim": "Локализация — замена того, ЧТО записано, и ещё не замена того, ЧТО происходит. Канонический документ конца партии совпадает с документом на origin/main побайтово, если убрать из него новый массив `injuries` и новые записи журнала `injury_localised`.",
+    "whyItMatters": "Без этого свойства ни один замер рубежей 2–4 нельзя сравнить с тем, что было: каждое следствие пришлось бы мерить против дерева, которое уже сдвинулось по другой причине. Свойство держится на одном решении — часть тела тянется из своего потока PrototypeWorld._injuryRandom, а не из _combatRandom, поэтому джиттер ни одного удара не сдвинут.",
+    "command": "dotnet run --project tests/DungeonFortress.Scenarios -c Release -- --prototype --commands scenarios/prototype1/<fixture>.commands.v2.json --ticks 2400 --snapshot .snap/<tree>-<fixture>.json  # на обоих деревьях, затем сравнение JSON с удалённым ключом `injuries` и отфильтрованным reasonCode `injury_localised`",
+    "measured": {
+      "baseline": "tick 2280 — идентично",
+      "prepared": "tick 2280 — идентично",
+      "neglected": "tick 595 — идентично",
+      "lastDecisionDiffers": "ни у одного существа ни на одной фикстуре"
+    }
+  },
+
+  "theSameClaimFromTwoOtherDirections": {
+    "musterReport": {
+      "why": "Инструмент замера участия PR #408 читает журнал и раскладывает неучастие по reason code. Если бы бой сдвинулся, сдвинулся бы и он.",
+      "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_muster_participation\" --logger \"console;verbosity=detailed\"",
+      "result": "45 строк отчёта (MUSTER/RUNSHARE/POOLED) совпали с замером на origin/main строка в строку: diff пуст",
+      "pooled": "waves=32 onFeet=288 joined=261 share=90% absent=27 absentBy=[combat_refused_injured=18,combat_refused_starving=9] thresholdSeen=30"
+    },
+    "goldenHudFrames": {
+      "why": "Три золотых кадра HUD снимаются Godot и сравниваются с tests/golden/ui. Всё, что в них видно, — числа кадра.",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update-golden-ui.ps1 -GodotPath <godot 4.7.1 console>",
+      "result": "в каждом из трёх файлов изменился ровно один токен — восьмизначный префикс канонической контрольной суммы. renown, strength, jobs, food, raw, stone, dug, состав экипажа и весь инспектор — без изменений",
+      "diffStat": "3 files changed, 3 insertions(+), 3 deletions(-)"
+    }
+  },
+
+  "canonicalChecksums": {
+    "why": "Массив `injuries` присутствует у каждого существа с тика 0, поэтому контрольная сумма каждого кадра обязана сдвинуться. Это тот же класс сдвига, что дали rememberedPlaces (#117) и loyalty (#312): аддитивно, версия схемы не двигается.",
+    "command": "dotnet run --project tests/DungeonFortress.Scenarios -c Release -- --prototype --commands scenarios/prototype1/<fixture>.commands.v2.json --ticks 2400",
+    "fixtureFilesThemselves": "scenarios/prototype1/*.json НЕ изменены — это журналы команд, а не снапшоты; git status по каталогу пуст",
+    "before": {
+      "baseline": "6e2c3abbc2403efc60bda256a84c6060a7417f849d1844acbbccef955e3b4102",
+      "prepared": "8807e4f3662122e29127315c1b34872aa2b279b1d74b0c7f7bc81deaf5f29253",
+      "neglected": "3c57a5187a0df9b4c56f3ac614b6a77abfade88842d0f7d529a1cc30b938f406"
+    },
+    "after": {
+      "baseline": "dd919c3c1701a20ae278fe96b4be154ab8306aed45f8e50837b1f1f1ba20e374",
+      "prepared": "d42c921c51de9587732e88af62ae377679a511cbc23876ca4d6661bd0f0acda8",
+      "neglected": "a0330ba24b1969e292c435d9ec2c34d7e87a35fce320dc06c047a12cc9dbf600"
+    }
+  },
+
+  "criterion1_fourPartsExistAndAreDistinguishable": {
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~LocalisedInjury\" --logger \"console;verbosity=detailed\"",
+    "pooledOverTheMatrix": {
+      "note": "три поставляемых журнала × четыре seed (20260726..20260729)",
+      "wounds": 139,
+      "byPart": { "head": 20, "torso": 44, "arm": 27, "leg": 48 },
+      "light": 107,
+      "heavy": 32
+    },
+    "perParty": [
+      "baseline/20260726 wounds=15 byPart=[head=3,torso=8,arm=0,leg=4] light=12 heavy=3 carrying=3",
+      "baseline/20260727 wounds=16 byPart=[head=3,torso=1,arm=6,leg=6] light=12 heavy=4 carrying=6",
+      "baseline/20260728 wounds=20 byPart=[head=2,torso=6,arm=3,leg=9] light=14 heavy=6 carrying=5",
+      "prepared/20260726 wounds=19 byPart=[head=3,torso=9,arm=1,leg=6] light=15 heavy=4 carrying=11",
+      "prepared/20260727 wounds=19 byPart=[head=3,torso=4,arm=6,leg=6] light=15 heavy=4 carrying=8",
+      "prepared/20260728 wounds=16 byPart=[head=2,torso=3,arm=3,leg=8] light=13 heavy=3 carrying=15",
+      "baseline/20260729 wounds=19 byPart=[head=2,torso=7,arm=5,leg=5] light=16 heavy=3 carrying=7",
+      "prepared/20260729 wounds=15 byPart=[head=2,torso=6,arm=3,leg=4] light=10 heavy=5 carrying=14",
+      "neglected/* wounds=0 — владение падает до первой волны, боя нет вовсе"
+    ],
+    "whyLegOutnumbersTorsoDespiteAHigherTorsoWeight": "Вес рисует силуэт, но выпавшая часть, уже несущая не меньшую травму, уступает следующей по порядку перечисления: голова→торс→рука→нога. Торс — самая частая первая травма, поэтому он же чаще всех уступает, и ход приходит на руку и ногу. Это не перекос, а цена правила «травма не теряется»; альтернатива — молча ронять попадание в уже раненую часть, и тогда существо вставало бы с пола без единой новой отметины."
+  },
+
+  "criterion3_theWoundOutlivesTheWave": {
+    "howAsked": "На тике прибытия волны N>1 — сколько существ на ногах входят в неё с непустым списком частей. Читается из GetSnapshot(), а не из внутренностей.",
+    "measured": { "entriesIntoALaterWave": 216, "carrying": 69, "share": "31%" },
+    "note": "Критерий назван выполненным на этом рубеже условно: сегодня травма переживает волну по тому же правилу, что и до задачи (заживление привязано к доле здоровья). Рубеж 3 меняет заживление на потиковое по частям, и число здесь придётся переснять."
+  },
+
+  "invariantsHeldByTheModelItself": {
+    "The_summary_injury_is_always_the_worst_of_the_localised_ones": "зелено на каждом существе каждого опубликованного тика всех 12 партий",
+    "No_creature_carries_the_same_part_twice": "зелено там же",
+    "The_canonical_document_publishes_the_localisation_in_part_order": "зелено"
+  },
+
+  "suites": {
+    "simulation": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release → пройдено 370, пропущено 1, не пройдено 0",
+    "presentation": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release → пройдено 734, не пройдено 0 (после регенерации золотых кадров)"
+  },
+
+  "whatTheGuardsCaughtAndWhatItCost": {
+    "EventNarrationTests_and_CreatureStoryTests": "новый reason code injury_localised без предложения в ленте и без ранга в HudText.StoryWeight — оба гарда красные до того, как код попал куда-либо. Предложение добавлено, ранг — 2, рядом с остальными травмами.",
+    "A_decision_that_held_for_several_ticks_prints_its_span_and_its_count": "красная как следствие ранга 2: панель существа держит ограниченное число записей, и одна новая запись того же ранга вытеснила свёрнутую запись ранга 1 с той единственной партии, на которой проверка её читала. Свёртка не сломана — проверка расширена с одной партии на шесть (Fixtures × MatrixSeeds, обе величины файл уже объявлял). Собственное сообщение проверки называло ровно эту развилку: «this fixture stopped being the one to read it on»."
+  },
+
+  "whatIsNotDoneYet": [
+    "следствия по частям (рубеж 2) — сегодня раненая часть не меняет ничего, кроме записи",
+    "заживление по частям (рубеж 3) — RecoveryTicks по-прежнему один счётчик, и все части заживают по одной доле здоровья",
+    "переизмерение двух продуктовых инвариантов (рубеж 4)",
+    "представление и панель существа (рубеж 5)",
+    "контракт (рубеж 6)"
+  ]
+}

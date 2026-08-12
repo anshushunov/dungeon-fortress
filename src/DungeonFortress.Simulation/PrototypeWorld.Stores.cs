@@ -169,19 +169,30 @@ public sealed partial class PrototypeWorld
 
             creature.Hp = Math.Min(
                 creature.MaxHp, creature.Hp + PrototypeTuning.HpRecoveryStep);
-            var mended = creature.Injury switch
+            var before = creature.Injury;
+            // The one rule, applied to each part rather than to one scalar. The
+            // health share that set a wound is still the health share that
+            // closes it, so the worst part after this loop is exactly the value
+            // the scalar would have taken — which is what makes localisation a
+            // change of what is recorded and not yet a change of what happens.
+            foreach (var part in BodyParts.All)
             {
-                InjuryKind.Heavy when creature.Hp * 100 >
-                    creature.MaxHp * PrototypeTuning.LightInjuryShare => InjuryKind.Light,
-                InjuryKind.Light when creature.Hp >= creature.MaxHp => InjuryKind.None,
-                _ => creature.Injury,
-            };
-            if (mended == creature.Injury)
+                var mendedPart = creature.PartInjury(part) switch
+                {
+                    InjuryKind.Heavy when creature.Hp * 100 >
+                        creature.MaxHp * PrototypeTuning.LightInjuryShare => InjuryKind.Light,
+                    InjuryKind.Light when creature.Hp >= creature.MaxHp => InjuryKind.None,
+                    var unchanged => unchanged,
+                };
+                creature.SetPartInjury(part, mendedPart);
+            }
+
+            var mended = creature.Injury;
+            if (mended == before)
             {
                 continue;
             }
 
-            creature.Injury = mended;
             creature.RecoveryTicks = 0;
             RecordDecision(
                 creature,

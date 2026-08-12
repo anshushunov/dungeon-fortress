@@ -344,7 +344,14 @@ public static class HudText
             or "verdict_punished_without_fault" or "verdict_ignored"
             or "combat_refused_grudge" => 3,
 
-        "combat_fled_morale" or "combat_downed" or "injury_tended" or "injury_mending"
+        // `injury_localised` sits with the other wounds and not above them
+        // (Issue #409). It is the sentence that gives a creature the thing the
+        // player will remember it by, but a blow to an arm is not a bigger fact
+        // about a party than being carried off the floor, and ranking it higher
+        // would push `combat_downed` off the story of the creature it happened
+        // to.
+        "combat_fled_morale" or "combat_downed" or "injury_localised"
+            or "injury_tended" or "injury_mending"
             or "injury_healed" => 2,
 
         "combat_joined" or "combat_returned" or "combat_raider_downed"

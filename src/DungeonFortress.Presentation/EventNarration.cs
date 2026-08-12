@@ -159,7 +159,14 @@ public static class EventNarration
                 $"was left unanswered after wave {Number(details, "wave", "?")}; " +
                 $"the grudge stands at {Number(details, "grudge", "?")}.",
 
-            // Wounds.
+            // Wounds. The localised one names the part, because naming it is the
+            // whole of Issue #409: «конкретный Кремень без глаза» is a sentence
+            // the player has to be able to read, and a feed that said only "was
+            // hurt" would leave the localisation inside the snapshot.
+            "injury_localised" => details.TryGetValue("severity", out var severity) &&
+                severity >= (int)InjuryKind.Heavy
+                    ? $"took a crippling blow to the {InjuredPartName(details)}."
+                    : $"took a blow to the {InjuredPartName(details)}.",
             "injury_tended" => "was carried off the floor, badly hurt.",
             "injury_mending" => "is mending: the wound is no longer bad.",
             "injury_healed" => "is whole again.",
@@ -222,6 +229,24 @@ public static class EventNarration
                 CultureInfo.InvariantCulture,
                 $"at ({x},{y}) t{(details.TryGetValue("sinceTick", out var tick) ? tick : 0)}")
             : "there";
+
+    /// <summary>
+    /// The part a journal entry names, in the player's words. It is read out of
+    /// <see cref="BodyParts.All"/> rather than out of a list of its own, so a
+    /// fifth part cannot exist in the simulation and be missing from the feed.
+    /// An index outside the four is reported as such and not guessed at.
+    /// </summary>
+    private static string InjuredPartName(IReadOnlyDictionary<string, int> details) =>
+        details.TryGetValue("part", out var part) && part >= 0 && part < BodyParts.Count
+            ? BodyParts.All[part] switch
+            {
+                BodyPart.Head => "head",
+                BodyPart.Torso => "body",
+                BodyPart.Arm => "arm",
+                BodyPart.Leg => "leg",
+                _ => "body",
+            }
+            : "body";
 
     private static string Number(IReadOnlyDictionary<string, int> details, string key, string fallback) =>
         details.TryGetValue(key, out var value)

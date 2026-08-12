@@ -41,7 +41,9 @@ public sealed partial class PrototypeWorld
             creature.ReadinessAtRaid,
             creature.RecoveryTicks,
             [.. creature.RememberedPlaces.Values],
-            ToSnapshot(creature.Loyalty, ReleasedGrudge(creature) > 0));
+            ToSnapshot(creature.Loyalty, ReleasedGrudge(creature) > 0),
+            [.. creature.InjuredParts().Select(
+                part => new PrototypeInjurySnapshot(part.Part, part.Severity))]);
     }
 
     private PrototypeDigDesignationSnapshot ToSnapshot(GridPoint tile)
@@ -338,7 +340,66 @@ public sealed partial class PrototypeWorld
             definition.Might * PrototypeTuning.DefenderHpPerMight;
         public int Hp { get; set; } = PrototypeTuning.DefenderHpBase +
             definition.Might * PrototypeTuning.DefenderHpPerMight;
-        public InjuryKind Injury { get; set; }
+        /// <summary>
+        /// What each of the four parts carries, indexed by <see cref="BodyPart"/>.
+        /// This is the wound: <see cref="Injury"/> below is read off it and is
+        /// stored nowhere.
+        ///
+        /// <para><b>Why the scalar became a function.</b> Before Issue #409 a
+        /// creature carried one <see cref="InjuryKind"/> and nothing else, so
+        /// «его достали» was a number subtracted from readiness and there was
+        /// no answer to «where». Fifteen call sites read that scalar — combat
+        /// admission, readiness, mending, matching, planning, the loyalty
+        /// ledger — and every one of them asks the same question, «how badly is
+        /// this one hurt overall». Keeping that question answerable in one
+        /// place, from the parts, is what let the localisation be added without
+        /// re-deciding any of the fifteen.</para>
+        /// </summary>
+        private readonly InjuryKind[] _parts = new InjuryKind[BodyParts.Count];
+
+        /// <summary>
+        /// How badly this creature is hurt, whole: the worst of its parts. It
+        /// is exactly the value the field it replaced held — a creature with a
+        /// light arm and a heavy leg is a heavily wounded creature — so nothing
+        /// that read the scalar had to change its meaning.
+        /// </summary>
+        public InjuryKind Injury
+        {
+            get
+            {
+                var worst = InjuryKind.None;
+                foreach (var severity in _parts)
+                {
+                    if (severity > worst)
+                    {
+                        worst = severity;
+                    }
+                }
+
+                return worst;
+            }
+        }
+
+        public InjuryKind PartInjury(BodyPart part) => _parts[(int)part];
+
+        public void SetPartInjury(BodyPart part, InjuryKind severity) =>
+            _parts[(int)part] = severity;
+
+        /// <summary>
+        /// The injured parts in <see cref="BodyPart"/> order. Empty when this
+        /// creature is whole.
+        /// </summary>
+        public IEnumerable<(BodyPart Part, InjuryKind Severity)> InjuredParts()
+        {
+            for (var index = 0; index < BodyParts.Count; index++)
+            {
+                if (_parts[index] != InjuryKind.None)
+                {
+                    yield return ((BodyPart)index, _parts[index]);
+                }
+            }
+        }
+
         public int RecoveryTicks { get; set; }
         public CreatureMode Mode { get; set; }
         public JobState? CurrentJob { get; set; }

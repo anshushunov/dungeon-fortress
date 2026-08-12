@@ -387,13 +387,13 @@ public sealed partial class PrototypeWorld
                 defender.Hp -= damage;
                 if (defender.Hp * 100 <= defender.MaxHp * PrototypeTuning.LightInjuryShare && defender.Injury == InjuryKind.None)
                 {
-                    defender.Injury = InjuryKind.Light;
+                    Wound(defender, InjuryKind.Light, raider.Id);
                     defender.RecoveryTicks = 0;
                 }
                 if (defender.Hp <= 0)
                 {
                     defender.Hp = 0;
-                    defender.Injury = InjuryKind.Heavy;
+                    Wound(defender, InjuryKind.Heavy, raider.Id);
                     defender.Mode = CreatureMode.Downed;
                     CurrentWave()?.CountDefenderDowned();
                     Remember(defender, "wound");
@@ -925,6 +925,79 @@ public sealed partial class PrototypeWorld
         place.Cause == "wound" ? "refused_place_of_wound" : "refused_place_of_panic";
 
     private int CombatJitter(int amplitude) => _combatRandom.NextInt32(amplitude * 2 + 1) - amplitude;
+
+    /// <summary>
+    /// A blow finds a part of a body and leaves something on it.
+    ///
+    /// <para>This method is the whole of «следствие вместо вычитания числа»
+    /// (pitch 6.13) on the receiving side. Before Issue #409 the two call sites
+    /// above assigned one scalar; now they name a severity and this decides
+    /// <b>where</b>. Nothing else in the simulation writes a part, so the answer
+    /// to «how did this creature end up with a bad leg» is always one draw from
+    /// <see cref="_injuryRandom"/> and one sentence in the journal.</para>
+    ///
+    /// <para><b>A wound is never lost.</b> The draw picks a part by
+    /// <see cref="PrototypeTuning.InjuryPartWeights"/>; if that part already
+    /// carries at least this much, the walk continues through the parts in enum
+    /// order, wrapping, until one is found that carries less. Without that walk
+    /// a creature that had already been hurt in the torso would silently take a
+    /// second torso wound and the player would see a body get up unchanged from
+    /// a blow that put it on the floor. If every part already carries at least
+    /// this severity there is genuinely nothing to add, and the method says so
+    /// by writing nothing.</para>
+    /// </summary>
+    private void Wound(CreatureState creature, InjuryKind severity, int raiderId)
+    {
+        var drawn = DrawBodyPart();
+        for (var step = 0; step < BodyParts.Count; step++)
+        {
+            var part = (BodyPart)((drawn + step) % BodyParts.Count);
+            if (creature.PartInjury(part) >= severity)
+            {
+                continue;
+            }
+
+            creature.SetPartInjury(part, severity);
+            RecordDecision(
+                creature,
+                "injury_localised",
+                new Dictionary<string, int>
+                {
+                    ["part"] = (int)part,
+                    ["severity"] = (int)severity,
+                    ["raiderId"] = raiderId,
+                });
+            return;
+        }
+    }
+
+    /// <summary>
+    /// Which part this blow found, by the silhouette weights of
+    /// <see cref="PrototypeTuning.InjuryPartWeights"/>. Returns the index into
+    /// <see cref="BodyParts.All"/> rather than the enum value, because the
+    /// caller walks on from it.
+    /// </summary>
+    private int DrawBodyPart()
+    {
+        var weights = PrototypeTuning.InjuryPartWeights;
+        var total = 0;
+        foreach (var weight in weights)
+        {
+            total += weight;
+        }
+
+        var roll = _injuryRandom.NextInt32(total);
+        for (var index = 0; index < weights.Length; index++)
+        {
+            roll -= weights[index];
+            if (roll < 0)
+            {
+                return index;
+            }
+        }
+
+        return weights.Length - 1;
+    }
 
     private void DropRaiderMeals(RaiderState raider)
     {

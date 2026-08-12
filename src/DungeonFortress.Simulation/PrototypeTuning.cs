@@ -289,6 +289,25 @@ public static class PrototypeTuning
     // evidence/333-after-merged.json, section `theShapeOfTheSpread`.
     public const int DamageJitter = 6;
     public const int LightInjuryShare = 40;
+
+    // Where a blow lands, as relative weights over the four parts of
+    // BodyParts.All in enum order — head, torso, arm, leg. Drawn from
+    // PrototypeWorld._injuryRandom, which is salted apart from the blow's own
+    // jitter on purpose.
+    //
+    // The shape is a silhouette and not an anatomy: a torso is the widest thing
+    // on a body and a head the narrowest, so the torso is the likeliest place
+    // to be hit and the head the least likely. Weights and not probabilities so
+    // that the arithmetic stays integer and the draw stays reproducible on any
+    // machine.
+    //
+    // The head's share is the number that had to be measured rather than
+    // guessed: criterion 1 of Issue #409 asks that each of the four parts be
+    // reached at least once over the shipped journals, and a head at weight 1
+    // of 13 is a part the player would meet about twice in a whole session.
+    // Two is enough to observe and few enough that a head wound stays the thing
+    // worth telling somebody about.
+    public static readonly int[] InjuryPartWeights = [2, 5, 3, 3];
     // Nerve is measured per creature and dread is measured from where that
     // creature is standing. The two new terms are what keep the moment of
     // breaking personal: `MoraleGritWeight` and `MoraleReadinessDivisor` barely
