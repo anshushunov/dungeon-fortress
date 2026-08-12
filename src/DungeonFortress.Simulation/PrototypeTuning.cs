@@ -215,6 +215,7 @@ public static class PrototypeTuning
     // hungry domain fights worse therefore rests ENTIRELY on
     // DamageReadinessDivisor below — see the note there before touching it.
     public const int CombatJoinSatiety = 30;
+
     public const int CombatJoinRecheck = 20;
     public const int EngageRadius = 8;
 
@@ -360,30 +361,39 @@ public static class PrototypeTuning
     // telling somebody about, which needs it to be both rare and remembered.
     //
     // <b>The size was measured against the party rather than chosen for effect,
-    // and the measurement is worth keeping because it is not monotone.</b> Three
-    // pairs were run over the whole package:
+    // and it was measured twice — the second time on purpose.</b> The first sweep
+    // ran on a tree where the heavy period could not fire at all: a heavy wound is
+    // written only when health reaches zero, and the roll call of the day refused
+    // anybody whose worst part was heavy, so a creature with a ruined head never
+    // stood in a fight to be stunned in one. The torso decision of 2026-08-12 is
+    // what brings it to life, and a number that half of only starts working after
+    // another change has to be re-chosen once that change is in. Both sweeps are
+    // kept because the difference between them is the point.
     //
-    // - 4/2 — `prepared/20260728` ended the party `fallen` at −167 where it had
-    //   been `raided` at 761, and three checks reddened on that one cell, among
-    //   them `Preparation_outscores_its_absence_over_the_matrix`. Rejected: a
-    //   consequence that decides a party by itself is a rebalance of the fight,
-    //   and rebalancing the fight is not this slice's to do;
-    // - 6/3 — every party held, and `baseline/20260728` stopped producing
-    //   refusals by memory of place at all, which reddens
-    //   `A_remembered_place_changes_what_the_creature_does_next`;
-    // - 5/3 — both green. The head reads 0.13 actions lost per fighting tick
-    //   against exactly 0 for a whole head, over the shipped journals.
+    // On the finished tree, over the whole package:
     //
-    // <b>What the ordering says, and it is a finding rather than a number.</b>
-    // That memory cell holds 117 refusals at a period of 5, none at 6 and 2 at 8,
-    // and it held 2 on the tree this branch started from. What moves it is not
-    // the size of a consequence but which creature happens to be hurt where, so
-    // the number above is chosen for the fight and the cell is a coincidence of
-    // one party. Both are said in the pull request body.
+    // - 4/2 — `The_contract_invariants_hold_on_every_seed_of_the_matrix` reddens
+    //   on seed 20260727. Rejected, and for the same reason it was rejected on the
+    //   first sweep, where it ended `prepared/20260728` as `fallen` at −167
+    //   against `raided` at 761: a consequence that decides a party by itself is a
+    //   rebalance of the fight, and rebalancing the fight is not this slice's to
+    //   do;
+    // - 6/3 — the whole package green. The head reads 0.11 actions lost per
+    //   fighting tick against exactly 0 for a whole head;
+    // - 5/3 — what the first sweep chose, before the torso. Green then, and on the
+    //   finished tree it silences memory of place on `baseline/20260728`.
+    //
+    // <b>One cell of that memory check is a coincidence, and it is worth saying
+    // so.</b> `baseline/20260728` holds 214 refusals at a period of 4, none at 5,
+    // 2 at 6, 1 at 7 and 121 at 8, and held 2 on the tree this branch started
+    // from. What moves it is not the size of any consequence but which creature
+    // happens to be hurt where. `baseline/20260729` is the opposite and the
+    // serious one: zero at all five periods, so no tuning of this slice restores
+    // it — see the note beside `ObservabilitySeeds` in PrototypeMemoryTests.
     //
     // A mutant disables the consequence by setting both to 0, which means
     // "never", exactly as it does for the limp.
-    public const int HeadLightStunPeriod = 5;
+    public const int HeadLightStunPeriod = 6;
     public const int HeadHeavyStunPeriod = 3;
 
     // Nerve is measured per creature and dread is measured from where that
@@ -814,8 +824,24 @@ public static class PrototypeTuning
     public const int ReadinessMartialNumerator = 3;
     public const int ReadinessMartialDenominator = 10;
     public const int ReadinessRestDenominator = 10;
-    public const int InjuryLightPenalty = 15;
-    public const int InjuryHeavyPenalty = 40;
+    // What a hurt <b>body</b> takes off readiness — the torso's consequence, and
+    // the whole of it (Issue #409, coordinator's decision of 2026-08-12, record 1
+    // of #415). The two numbers are the ones the old `InjuryLightPenalty` and
+    // `InjuryHeavyPenalty` held and are deliberately unchanged: what moved is
+    // which wound they answer to, from "the worst of the four parts" to "the
+    // torso", and moving the size at the same time would make the two changes
+    // impossible to tell apart in any measurement.
+    //
+    // The rename is not cosmetic. Under the old name the penalty was charged to a
+    // creature with a ruined arm and an untouched body, on top of the weight that
+    // arm had already lost off its blow; the name said «травма», the code meant
+    // «любая травма», and there was no place left to put the torso's own
+    // consequence. Renamed, the tuning table of contract 15.6 can be read as a
+    // list of what each part does.
+    //
+    // A mutant disables the consequence by setting both to 0.
+    public const int TorsoLightPenalty = 15;
+    public const int TorsoHeavyPenalty = 40;
 
     public const int PriorityMinimum = 0;
     public const int PriorityMaximum = 4;

@@ -91,12 +91,33 @@ public sealed partial class PrototypeWorld
         foreach (var creature in _creatures.Where(c => c.Mode is not (CreatureMode.Fighting or CreatureMode.Fled or CreatureMode.Downed)).OrderBy(c => c.Id))
         {
             var failed = new Dictionary<string, int> { ["wave"] = wave.Number };
-            if (creature.Injury == InjuryKind.Heavy)
+
+            // <b>A ruined body keeps a creature out of the fight; a ruined limb no
+            // longer does</b> (Issue #409, coordinator's decision of 2026-08-12,
+            // record 1 of #415). The gate used to read the summary `Injury`, the
+            // worst of the four parts, so a heavy arm, leg or head excluded a
+            // creature as surely as a heavy torso.
+            //
+            // The reason it had to change is not that the old rule was harsh but
+            // that it made the pitch's own sentence unreachable. 6.13 names the
+            // consequences of a wound inside a fight — «по руке — роняет оружие,
+            // по ноге — хромает и не убегает, по голове — оглушён» — and a
+            // creature the arm keeps out of the fight never drops a weapon in one.
+            // The three consequences this slice adds would have been written for a
+            // creature that is never there to have them.
+            //
+            // Measured before the change and quoted here because it is what the
+            // owner noticed on 2026-08-12: a heavy wound was the largest single
+            // cause of absence, 18 of 27 over the seed matrix (PR #408). What
+            // replaces it is not "nobody is excluded" — a heavy torso still is,
+            // and it is now the only thing that is.
+            if (creature.PartInjury(BodyPart.Torso) == InjuryKind.Heavy)
             {
                 failed["injured"] = 1;
                 RecordDecision(creature, "combat_refused_injured", failed);
                 continue;
             }
+
             if (creature.Satiety < PrototypeTuning.CombatJoinSatiety)
             {
                 failed["satiety"] = creature.Satiety;
@@ -849,7 +870,7 @@ public sealed partial class PrototypeWorld
     /// </summary>
     private static bool CanAnswerTheCall(CreatureState creature) =>
         creature.Mode != CreatureMode.Downed &&
-        creature.Injury != InjuryKind.Heavy &&
+        creature.PartInjury(BodyPart.Torso) != InjuryKind.Heavy &&
         creature.Satiety >= PrototypeTuning.CombatJoinSatiety;
 
     /// <summary>

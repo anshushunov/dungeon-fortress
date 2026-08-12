@@ -120,52 +120,81 @@ public sealed class WorldLabelLayoutTests
             .GroupBy(position => position)
             .Max(group => group.Count());
 
+    /// <summary>
+    /// The parties this family looks for its frames in, the owner's own first.
+    ///
+    /// <para><b>Why there is a list at all now.</b> The frames stopped being tick
+    /// numbers when the party moved under them twice (see <see cref="OwnerFrame"/>);
+    /// they are now found by shape, and Issue #409 is where the shape itself left
+    /// the owner's party. After the torso decision of 2026-08-12 creatures who used
+    /// to sit a wave out on a heavy limb take the field instead, more raiders are
+    /// put down and fewer walk out of the gate carrying supper, and on
+    /// <c>baseline</c> at the owner's seed no raider comes back with a caption at
+    /// all — so <b>every one of the eleven checks in this family threw before
+    /// reaching an invariant</b>, thirty-four in the suite.
+    ///
+    /// <para>What these checks promise is about a layout — that no two labels are
+    /// printed over one another, that every captioned returner is named and can be
+    /// clicked — and none of it is about which party the crowd came from. The
+    /// owner's party is still asked first and is still the scene whenever it has
+    /// one; the shipped matrix behind it is what keeps the promise checkable when a
+    /// balance change takes the crowd out of one party. Not one invariant below is
+    /// relaxed: what widened is the input.</para>
+    /// </summary>
+    private static readonly ulong[] SceneSeeds =
+        [OwnerSeed, 20_260_726UL, 20_260_727UL, 20_260_728UL];
+
     private static readonly Lazy<(PrototypeSnapshot Thin, PrototypeSnapshot Crowded, PrototypeSnapshot? Mixed)> Scenes =
         new(() =>
         {
-            var world = new PrototypeWorld(
-                PresentationFixtures.LogOf("baseline") with { Seed = OwnerSeed });
-            PrototypeSnapshot? thin = null;
-            PrototypeSnapshot? crowded = null;
-            PrototypeSnapshot? mixed = null;
-            var thickest = 0;
-            while (!world.IsComplete)
+            PrototypeSnapshot? mixedAnywhere = null;
+            foreach (var seed in SceneSeeds)
             {
-                world.Step();
-                var state = world.GetSnapshot();
-
-                // The mixed frame is looked for over the whole party and not only
-                // over the ticks that carry a caption: the click-through rule is
-                // about two bodies on one cell and has nothing to do with whether
-                // anybody has been here before.
-                if (mixed is null && CrewInFrontOfARaider(state) is not null)
+                var world = new PrototypeWorld(
+                    PresentationFixtures.LogOf("baseline") with { Seed = seed });
+                PrototypeSnapshot? thin = null;
+                PrototypeSnapshot? crowded = null;
+                PrototypeSnapshot? mixed = null;
+                var thickest = 0;
+                while (!world.IsComplete)
                 {
-                    mixed = state;
+                    world.Step();
+                    var state = world.GetSnapshot();
+
+                    // The mixed frame is looked for over the whole party and not
+                    // only over the ticks that carry a caption: the click-through
+                    // rule is about two bodies on one cell and has nothing to do
+                    // with whether anybody has been here before.
+                    if (mixed is null && CrewInFrontOfARaider(state) is not null)
+                    {
+                        mixed = state;
+                        mixedAnywhere ??= state;
+                    }
+
+                    if (!state.Raiders.Any(ReturningHeroLabel.IsCaptioned))
+                    {
+                        continue;
+                    }
+
+                    thin ??= state;
+                    var crowd = ThickestCrowd(state);
+                    if (crowd > thickest)
+                    {
+                        thickest = crowd;
+                        crowded = state;
+                    }
                 }
 
-                if (!state.Raiders.Any(ReturningHeroLabel.IsCaptioned))
+                if (thin is not null && crowded is not null)
                 {
-                    continue;
-                }
-
-                thin ??= state;
-                var crowd = ThickestCrowd(state);
-                if (crowd > thickest)
-                {
-                    thickest = crowd;
-                    crowded = state;
+                    return (thin, crowded, mixed ?? mixedAnywhere);
                 }
             }
 
-            if (thin is null || crowded is null)
-            {
-                throw new InvalidOperationException(
-                    "no tick of the owner's party carries a captioned returner, so neither frame " +
-                    "of this family exists. That is a change in what the party does — nobody " +
-                    "survives a wave and comes back — and not a broken test.");
-            }
-
-            return (thin, crowded, mixed);
+            throw new InvalidOperationException(
+                "no tick of any shipped party carries a captioned returner, so neither frame " +
+                "of this family exists. That is a change in what the party does — nobody " +
+                "survives a wave and comes back — and not a broken test.");
         });
 
     /// <summary>

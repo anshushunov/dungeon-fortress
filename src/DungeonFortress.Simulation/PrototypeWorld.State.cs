@@ -300,13 +300,35 @@ public sealed partial class PrototypeWorld
             @event.Target);
     }
 
+    /// <summary>
+    /// How fit this creature is to do anything at all.
+    ///
+    /// <para><b>The wound term is the torso's and no longer every wound's</b>
+    /// (Issue #409, coordinator's decision of 2026-08-12, record 1 of
+    /// <see href="https://github.com/anshushunov/dungeon-fortress/issues/415">#415</see>).
+    /// Until this slice the penalty was read off the summary <c>Injury</c>, which
+    /// is the worst of the four parts, so a creature with a ruined arm and a whole
+    /// body was as unfit as one that had been opened up. That is «вычитание
+    /// числа» — the exact thing section 6.13 of the pitch replaces with
+    /// consequences — applied to all four parts at once, and it double-charged
+    /// three of them: the arm already loses weight off the blow, the leg already
+    /// loses steps, the head already loses actions, and each of them was paying a
+    /// second time through a term that belongs to the body.</para>
+    ///
+    /// <para>The torso is where it belongs because the torso is the part with no
+    /// consequence of its own to name. The pitch gives the other three a sentence
+    /// each — «роняет оружие», «хромает и не убегает», «оглушён» — and calls the
+    /// torso the fourth part of the readability budget without saying what it
+    /// does. This is what it does: a hurt body is a body that brings less of
+    /// itself to everything, which is what readiness already meant.</para>
+    /// </summary>
     private static int ComputeReadiness(CreatureState creature)
     {
-        var injuryPenalty = creature.Injury switch
+        var injuryPenalty = creature.PartInjury(BodyPart.Torso) switch
         {
             InjuryKind.None => 0,
-            InjuryKind.Light => PrototypeTuning.InjuryLightPenalty,
-            InjuryKind.Heavy => PrototypeTuning.InjuryHeavyPenalty,
+            InjuryKind.Light => PrototypeTuning.TorsoLightPenalty,
+            InjuryKind.Heavy => PrototypeTuning.TorsoHeavyPenalty,
             _ => 0,
         };
         var readiness = PrototypeTuning.ReadinessBase +

@@ -257,6 +257,83 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// Criterion 2 for the torso. The torso is the one part the pitch gives no
+    /// sentence of its own, and what it does is what readiness always meant: a
+    /// hurt body brings less of itself to everything. A creature with a hurt torso
+    /// therefore reads a measurably lower readiness than one whose torso is whole.
+    ///
+    /// <para><b>Why this quantity is the torso's only after this slice and was
+    /// nobody's before it.</b> Until Issue #409 readiness was charged off the
+    /// summary <c>Injury</c> — the worst of the four parts — so this same split
+    /// showed a gap for a creature whose torso was untouched and whose arm was
+    /// gone. That is the trap the arm's own check fell into and had to be
+    /// rewritten out of: a quantity that every wound moves cannot say which wound
+    /// moved it. One line in <c>ComputeReadiness</c> is what makes it the torso's,
+    /// and the mutant of <c>evidence/409-mutants.json</c> is what holds it
+    /// there.</para>
+    ///
+    /// <para><b>The bar is measured on both sides rather than chosen.</b> A
+    /// residual gap is expected with the consequence switched off, because a
+    /// creature that has been opened up has usually also been running, fighting
+    /// and going without supper — readiness carries satiety and rest as well. The
+    /// numbers behind the bar are in the evidence file.</para>
+    /// </summary>
+    [Fact]
+    public void A_hurt_torso_brings_less_of_itself_to_everything()
+    {
+        var pooled = new Ratio();
+        foreach (var run in Matrix)
+        {
+            pooled.Add(true, run.Torso.HurtMean * run.Torso.HurtCount / 100, run.Torso.HurtCount);
+            pooled.Add(false, run.Torso.WholeMean * run.Torso.WholeCount / 100, run.Torso.WholeCount);
+        }
+
+        output.WriteLine(
+            $"TORSO readiness hurt={pooled.Hurt / 100.0} whole={pooled.Whole / 100.0} " +
+            $"hurtTicks={pooled.HurtSamples} wholeTicks={pooled.WholeSamples} " +
+            $"(T.torso_heavy_penalty = {PrototypeTuning.TorsoHeavyPenalty})");
+
+        Assert.True(pooled.HurtSamples > 0, "No creature of any shipped party spent a tick with a hurt torso.");
+        Assert.True(
+            pooled.Hurt * 4 < pooled.Whole * 3,
+            $"a hurt torso read {pooled.Hurt / 100.0} readiness against {pooled.Whole / 100.0} whole — " +
+            "not the gap a wounded body makes." + Environment.NewLine + Detail());
+    }
+
+    /// <summary>
+    /// The other half of the torso, and the half the owner will notice: <b>a
+    /// ruined body keeps a creature out of the fight and a ruined limb does
+    /// not</b> (coordinator's decision of 2026-08-12, record 1 of
+    /// <see href="https://github.com/anshushunov/dungeon-fortress/issues/415">#415</see>).
+    ///
+    /// <para>Stated so it cannot pass by accident: every refusal on the ground of
+    /// a wound names a creature whose torso is ruined, and there is at least one
+    /// creature over the matrix who took the field carrying a heavy wound
+    /// somewhere else. Without the second clause the check would be satisfied by a
+    /// world where nobody is ever hurt badly enough to be asked.</para>
+    /// </summary>
+    [Fact]
+    public void Only_a_ruined_body_is_kept_out_of_the_fight()
+    {
+        var wrongRefusals = Matrix.SelectMany(run => run.RefusedWithAWholeTorso).ToArray();
+        var foughtHurt = Matrix.Sum(run => run.FoughtWithAHeavyLimb);
+
+        output.WriteLine(
+            $"MUSTER refusedByWound={Matrix.Sum(run => run.RefusedByWound)} " +
+            $"ofWhichWithAWholeTorso={wrongRefusals.Length} " +
+            $"foughtCarryingAHeavyLimb={foughtHurt}");
+
+        Assert.True(
+            wrongRefusals.Length == 0,
+            "Refused the line on the ground of a wound while the body was whole: " +
+            string.Join(", ", wrongRefusals.Take(10)));
+        Assert.True(
+            foughtHurt > 0,
+            "Nobody over the whole matrix ever took the field carrying a heavy arm, leg or head, so " +
+            "the rule that lets them is unobserved." + Environment.NewLine + Detail());
+    }
+
+    /// <summary>
     /// The derivation invariant, checked on every creature of every published tick
     /// of every party: <c>injury</c> is the worst entry of <c>injuries</c>, and a
     /// creature with an empty list is whole.
@@ -486,6 +563,21 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
                     creature.Might * entry.Repeats);
             }
 
+            // Who the roll call turned away for a wound, and whose body it was.
+            // Read off the journal for the reason the file's own summary gives:
+            // the refusal is decided before the creature acts again, so the
+            // snapshot's LastDecision no longer holds it by the end of the tick.
+            if (entry.ReasonCode == "combat_refused_injured")
+            {
+                tally.RefusedByWound += entry.Repeats;
+                if (!Hurt(creature, BodyPart.Torso, InjuryKind.Heavy))
+                {
+                    tally.RefusedWithAWholeTorso.Add(
+                        $"{tally.Name} t{acted} #{creature.Id}: refused for a wound carrying " +
+                        $"[{string.Join(',', creature.Injuries.Select(item => $"{item.Part}:{item.Severity}"))}]");
+                }
+            }
+
             // The head speaks in the journal too, and this is the count of the
             // entries rather than of the actions behind them: folding merges two
             // stuns a tick apart into one, so this is a floor on how often the
@@ -499,6 +591,18 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
         foreach (var creature in state.Creatures)
         {
             tally.Torso.Add(Hurt(creature, BodyPart.Torso), creature.Readiness, 1);
+
+            // Somebody standing in the line with a ruined arm, leg or head — the
+            // thing the old gate on the summary `Injury` made impossible. Counted
+            // per creature-tick rather than per creature, because what the rule
+            // buys is fighting ticks the domain used not to have.
+            if (creature.Mode == CreatureMode.Fighting &&
+                !Hurt(creature, BodyPart.Torso, InjuryKind.Heavy) &&
+                creature.Injuries.Any(injury =>
+                    injury.Part != BodyPart.Torso && injury.Severity == InjuryKind.Heavy))
+            {
+                tally.FoughtWithAHeavyLimb++;
+            }
 
             // The limp, per creature-tick during which the leg was hurt. Both
             // halves are needed: a count of lost steps alone would rise simply
@@ -558,6 +662,9 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
 
     private static bool Hurt(PrototypeCreatureSnapshot creature, BodyPart part) =>
         creature.Injuries.Any(injury => injury.Part == part);
+
+    private static bool Hurt(PrototypeCreatureSnapshot creature, BodyPart part, InjuryKind atLeast) =>
+        creature.Injuries.Any(injury => injury.Part == part && injury.Severity >= atLeast);
 
     /// <summary>
     /// One quantity measured twice: over the creature-ticks where the part in
@@ -658,8 +765,21 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
         /// </summary>
         public Ratio WeaponPerMight { get; } = new();
 
-        /// <summary>Readiness, split by whether the torso is hurt.</summary>
+        /// <summary>Readiness, split by whether the torso is hurt. The torso's own quantity.</summary>
         public Split Torso { get; } = new();
+
+        /// <summary>Roll calls that turned somebody away on the ground of a wound.</summary>
+        public int RefusedByWound { get; set; }
+
+        /// <summary>Of those, the ones whose body was not ruined. Must stay empty.</summary>
+        public List<string> RefusedWithAWholeTorso { get; } = [];
+
+        /// <summary>
+        /// Fighting creature-ticks spent by somebody carrying a heavy arm, leg or
+        /// head and a torso that is not ruined — the ticks the old gate on the
+        /// summary <c>Injury</c> made impossible.
+        /// </summary>
+        public int FoughtWithAHeavyLimb { get; set; }
 
         /// <summary>
         /// Steps the limp took away per creature-tick, split by whether the leg is
@@ -706,7 +826,8 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
                 Environment.NewLine +
                 $"    CONSEQUENCE {Name} weaponPerMight[{WeaponPerMight}] armBlow[{ArmBlow}] " +
                 $"stepsLostPerTick[{Limp}] actionsLostPerTick[{Stun}] " +
-                $"torsoReadiness[{Torso}] stunEntries={StunEntries}";
+                $"torsoReadiness[{Torso}] stunEntries={StunEntries} " +
+                $"refusedByWound={RefusedByWound} foughtWithAHeavyLimb={FoughtWithAHeavyLimb}";
         }
     }
 
