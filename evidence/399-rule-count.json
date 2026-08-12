@@ -1,0 +1,6 @@
+{
+  "command": "rg -c '^\*\*[0-9]+\. ' docs/engineering/DEVELOPMENT_PACE.md",
+  "when": "before rule 36 edit, worktree docs/399-seventeen-journal-records",
+  "base_commit": "3083e9c",
+  "count": 40
+}
