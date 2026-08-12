@@ -1,0 +1,23 @@
+{
+  "issue": 407,
+  "checkpoint": "ages-before",
+  "note": "счёт возраста по всем 27 записям реестра ДО правки; база критерия 1",
+  "taken_at": "2026-08-12",
+  "base_commit": "3083e9c61886571a63790def7fc96f4ff15824cb",
+  "ledger_records_total": 27,
+  "records_total_command": "awk '/^## Записи/,/^## Перечитывание/' docs/engineering/DEBT_LEDGER.md | rg -c '^| 20'",
+  "age_command_template": "awk '/<ANCHOR_PATTERN>/,0' docs/product/GATE_DECISIONS.md | rg -o '**`(CONTINUE|ADJUST|PROMOTE|DEFER|STOP)`**|^| 2026-08-06 | **Потолок боя**|^| 2026-08-08 | **Больше здоровья и разброс урона**'",
+  "anchor_is_first_test": "первая строка вывода awk (строка-якорь журнала) сама матчится тем же rg-шаблоном",
+  "age_rule": "возраст = gates_in_output - 1, если anchor_is_first; иначе формула минус один неприменима и возраст командой не считается",
+  "anchors": [
+    {"anchor": "`CONTINUE` («Проба [ADR 0020]…»), 2026-08-04", "journal_row_found": true, "records": 1, "gates_in_output": 7, "anchor_is_first": true, "age": 6, "overdue": true},
+    {"anchor": "«Потолок боя», 2026-08-06", "journal_row_found": true, "records": 1, "gates_in_output": 6, "anchor_is_first": true, "age": 5, "overdue": true},
+    {"anchor": "«Координатор дважды заложил новое процессное правило», 2026-08-07", "journal_row_found": true, "records": 6, "gates_in_output": 5, "anchor_is_first": false, "age": null, "overdue": null},
+    {"anchor": "«Объём сессии 2026-08-07», 2026-08-07", "journal_row_found": true, "records": 9, "gates_in_output": 5, "anchor_is_first": false, "age": null, "overdue": null},
+    {"anchor": "«Мораторий правила 11 снят для правила 35», 2026-08-07", "journal_row_found": true, "records": 3, "gates_in_output": 5, "anchor_is_first": false, "age": null, "overdue": null},
+    {"anchor": "«Больше здоровья и разброс урона», 2026-08-08", "journal_row_found": true, "records": 1, "gates_in_output": 5, "anchor_is_first": true, "age": 4, "overdue": true},
+    {"anchor": "«Срез 5 — первый заход владельца», 2026-08-10", "journal_row_found": false, "records": 3, "gates_in_output": 0, "anchor_is_first": false, "age": null, "overdue": null},
+    {"anchor": "«Срез 5 — второй заход владельца», 2026-08-10", "journal_row_found": true, "records": 1, "gates_in_output": 2, "anchor_is_first": true, "age": 1, "overdue": false},
+    {"anchor": "«Срез 5 — третий заход владельца», 2026-08-11", "journal_row_found": false, "records": 2, "gates_in_output": 0, "anchor_is_first": false, "age": null, "overdue": null}
+  ]
+}
