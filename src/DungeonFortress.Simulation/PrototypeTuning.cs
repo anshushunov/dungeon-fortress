@@ -93,6 +93,16 @@ public static class PrototypeTuning
     // one per six ticks was — so the window between two waves buys exactly what
     // it bought before, and the price of a lost wave is still measured in labour
     // rather than in a longer wait.
+    //
+    // **It is load-bearing, and it bears more than the mending ladder.** Renown
+    // counts raiders put down, and whether a domain puts them down is decided by
+    // whether it entered the wave mended. Dropping this number back to the old
+    // literal 1 reddens sixteen checks of the package, and among them is
+    // `Deliberately_losing_creatures_and_stock_never_scores_better` — the promise
+    // that impoverishment must not pay — at 148 for giving up half way against
+    // 113 for keeping. That check is held by THIS number and not by
+    // DamageReadinessDivisor, which was measured and does not hold it. Mutant M13
+    // and the search for it are in evidence/333-mutants.json.
     public const int HpRecoveryStep = 8;
 
     // The combat economy is denominated in units eight times the old ones on the
@@ -244,11 +254,23 @@ public static class PrototypeTuning
     // a promise the party does not keep. Measured by the mutants of this slice
     // (evidence/333-mutants.json, M3): at a divisor of 25 it stays green, and it
     // stays green at 1000 too — that is, with readiness contributing nothing to a
-    // blow at all. Whatever holds it, this number is not it. The name was removed
-    // rather than left standing, for the same reason round 3 of this slice
-    // removed a false promise from the neighbouring constant: a note that names a
-    // check which cannot fail is worse than a note that names none, because it is
-    // read as coverage.
+    // blow at all. The name was removed rather than left standing, for the same
+    // reason round 3 of this slice removed a false promise from the neighbouring
+    // constant: a note that names a check which cannot fail is worse than a note
+    // that names none, because it is read as coverage.
+    //
+    // What DOES hold that check is HpRecoveryStep, and it was found by putting a
+    // mutant on each candidate rather than by picking one
+    // (evidence/333-mutants.json, theSearchForWhatHoldsDeliberatelyLosing).
+    // Renown counts raiders put down, the whole gap between the two runs of that
+    // check sits in that single term — 16 against 10 — and what decides it is
+    // whether the domain enters the third wave mended. Of the seven substitutions
+    // tried, six leave the check green, this divisor at 1000 and the join
+    // threshold at 0 among them; the one that reddens it is
+    // `HpRecoveryStep = 8 -> 1`, at which giving up half way scores 148 against
+    // 113 for keeping (M13). So the two properties of the slice rest on two
+    // different numbers, and this constant bears exactly one of them:
+    // `Preparation_changes_the_deterministic_party_without_direct_orders`.
     public const int DamageMightWeight = 4;
     public const int DamageReadinessDivisor = 6;
     public const int RaiderMightWeight = 5;

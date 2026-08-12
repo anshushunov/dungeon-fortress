@@ -65,10 +65,11 @@
         "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders — «prepared put down 7 raiders, baseline 9»"
       ],
       "greenAndItIsAFinding": {
-        "check": "PrototypeScenarioTests.Deliberately_losing_creatures_and_stock_never_scores_better",
+        "check": "PrototypeWaveTests.Deliberately_losing_creatures_and_stock_never_scores_better",
         "measuredAt25": "green",
-        "measuredAt1000": "green — that is, with readiness contributing nothing to a blow at all",
-        "consequence": "The note beside the constant promised that both checks go red when the divisor is raised. One of them does. The name of the other was removed from the note in this same commit rather than left standing: a note naming a check that cannot fail is read as coverage. Round 3 of this slice removed exactly this kind of false promise from the neighbouring constant and wrote down that it must not be reintroduced; it was, one constant over, and the mutant is what found it."
+        "measuredAt1000": "green — that is, with readiness contributing nothing to a blow at all. Renown 113 for the kept run against 93 for the abandoned one; the inequality the check asserts is unharmed.",
+        "consequence": "The note beside the constant promised that both checks go red when the divisor is raised. One of them does. The name of the other was removed from the note in this same commit rather than left standing: a note naming a check that cannot fail is read as coverage. Round 3 of this slice removed exactly this kind of false promise from the neighbouring constant and wrote down that it must not be reintroduced; it was, one constant over, and the mutant is what found it.",
+        "andWhatDoesHoldItWasThenFound": "Round 6 answered the question this mutant opened rather than leaving it at «whatever holds it, this number is not it». The check is held by HpRecoveryStep — see M13 and theSearchForWhatHoldsDeliberatelyLosing below. The class of the finding is unchanged: the divisor holds one of the two properties of the slice, not both, and the second is held by a different number of the same slice."
       }
     },
     {
@@ -223,10 +224,11 @@
       "substitutionFrom": "public const int HpRecoveryStep = 8;",
       "substitutionTo": "public const int HpRecoveryStep = 1;",
       "whatItBites": "the literal the constant replaced. At 1 on health eight times larger a wound takes eight times as long to close, which is the change nobody decided.",
-      "result": "RED",
+      "result": "RED. One check was named here when it was first recorded; run over the whole package the same substitution reddens 16 of 360, and the full list is under M13.",
       "red": [
         "PrototypeWaveTests.A_wound_closes_in_a_creature_that_rests_and_eats — the `light → none` rung is climbed by nobody in the whole shipped matrix"
       ],
+      "correctionOfRound6": "This entry named exactly one red check. Re-run on the whole simulation package at the same tree it reddens sixteen, and one of the fifteen that were not named is `Deliberately_losing_creatures_and_stock_never_scores_better` — the very check the round was told nothing held. A mutant recorded from a filtered run is a mutant whose blast radius is unknown; the number that matters here is the full-package one, and it is under M13.",
       "aSecondFindingFromTheSameRun": {
         "check": "PrototypeMomentOfTruthTests.The_tuning_table_of_the_contract_carries_the_numbers_the_code_holds",
         "measured": "GREEN with HpRecoveryStep = 1 while the contract's table says 8",

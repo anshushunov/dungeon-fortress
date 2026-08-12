@@ -101,6 +101,33 @@ public sealed class PrototypeWaveTests
     /// The comparison is on renown, because renown is the score. Domain strength
     /// is deliberately not compared: it is the mirror, and a domain that never
     /// fights keeps a higher one precisely because it did nothing.
+    ///
+    /// <para><b>The rule the score rests on, named rather than left to the
+    /// total.</b> Renown is a sum of monotone counters, and on this party the
+    /// whole gap between the two runs sits in one of them: raiders put down, 16
+    /// against 10, which is 80 renown against 50. The other terms are equal —
+    /// four waves arrive in both runs, and the high-water mark of the larder is
+    /// 36 in both, because it is reached before the plan is abandoned. So
+    /// «impoverishment must not pay» is carried entirely by <i>why a neglected
+    /// domain puts down fewer raiders</i>, and the answer is mending: a wound
+    /// closes only in a bunk, and it closes at
+    /// <see cref="PrototypeTuning.HpRecoveryStep"/> per period. The run that
+    /// stops resting at t1400 enters the third wave carrying the wounds the
+    /// second one gave it, its heavily wounded are refused the line by
+    /// <c>combat_refused_injured</c>, that wave ends <c>overrun</c> with nobody
+    /// put down, and the party ends <c>fallen</c>.</para>
+    ///
+    /// <para>That is a rule and not a reading, because it is the one
+    /// substitution of this slice that reddens this check.
+    /// <c>HpRecoveryStep = 8 → 1</c> — the literal this constant replaced, on
+    /// health eight times larger — makes rest stop paying for the run that keeps
+    /// resting as well, and giving up half way then scores 148 against 113
+    /// (mutant M13 of <c>evidence/333-mutants.json</c>).
+    /// <see cref="PrototypeTuning.DamageReadinessDivisor"/> does <b>not</b> hold
+    /// this check: it stays green at a divisor of 25 and at 1000, that is with
+    /// readiness contributing nothing to a blow at all (mutant M3). Which is why
+    /// the claim about raiders put down is asserted below and not merely
+    /// described here.</para>
     /// </summary>
     [Fact]
     public void Deliberately_losing_creatures_and_stock_never_scores_better()
@@ -145,6 +172,14 @@ public sealed class PrototypeWaveTests
             abandonedHalfWay.Domain.Renown <= kept.Domain.Renown,
             $"giving up half way scored {abandonedHalfWay.Domain.Renown}, " +
             $"keeping scored {kept.Domain.Renown}");
+
+        // The term of renown the gap actually sits in, asked separately, so that
+        // the check says which mechanism keeps the promise instead of leaving it
+        // to be inferred from a total. See the second paragraph above.
+        Assert.True(
+            abandonedHalfWay.SessionResult.RaidersDowned <= kept.SessionResult.RaidersDowned,
+            $"giving up half way put down {abandonedHalfWay.SessionResult.RaidersDowned} raiders, " +
+            $"keeping put down {kept.SessionResult.RaidersDowned}");
 
         Assert.Equal("fallen", abandonedAtOnce.SessionResult.Outcome);
         Assert.Equal(0, abandonedAtOnce.Stocks.MealsProduced);
