@@ -178,6 +178,51 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
             $"wave being resolved.{Environment.NewLine}{Detail()}");
     }
 
+    /// <summary>
+    /// The same exchange gives a different result — criterion 3 of Issue #336,
+    /// held as a rule instead of as a column of the report above.
+    ///
+    /// <para>A defender's blow is <c>might·W + readiness/D + jitter</c>, so two
+    /// blows that share a profile <c>m{Might}r{Readiness}</c> share every term of
+    /// that sum except the draw. A profile carrying more than one damage value is
+    /// therefore the whole of «одинаковые размены дают разный урон», and it is the
+    /// only part of the sum <see cref="PrototypeTuning.DamageJitter"/> can
+    /// reach — which is why zeroing that amplitude is the mutant this check owes
+    /// (<c>evidence/333-mutants.json</c>, M2).</para>
+    ///
+    /// <para><b>The floor is one and the unit is the party</b>, for the same
+    /// reason the memory floor of <c>PrototypeMemoryTests</c> is: «observable» has
+    /// exactly one number in it, the boundary between observed and not observed,
+    /// and the matrix is how this suite tells a property of the world from a
+    /// coincidence of one party (13.4). A party in which nobody ever struck a
+    /// raider is excluded rather than failed — <c>neglected</c> falls before the
+    /// first wave arrives and carries no exchange at all — and the guard against
+    /// excluding everything is asserted separately. Measured on the shipped
+    /// matrix: 25..35 scattered profiles in each of the six parties that fight.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_same_exchange_gives_a_different_result()
+    {
+        var fought = Matrix.Where(run => run.DefenderBlows > 0).ToArray();
+
+        Assert.True(
+            fought.Length > 0,
+            $"Not one party of the matrix landed a single blow, so nothing below was asked at " +
+            $"all.{Environment.NewLine}{Detail()}");
+
+        var flat = fought
+            .Where(run => !run.DamageByProfile.Any(profile => profile.Value.Count > 1))
+            .ToArray();
+
+        Assert.True(
+            flat.Length == 0,
+            $"In {flat.Length} of {fought.Length} parties that fought, every profile " +
+            $"m{{might}}r{{readiness}} carried exactly one damage value: the same fighter striking " +
+            $"in the same condition always did the same damage. Damage has no spread in those " +
+            $"parties, which is the state Issue #336 was raised out of.{Environment.NewLine}{Detail()}");
+    }
+
     private static string Detail() =>
         string.Join(Environment.NewLine, Matrix.Select(measurement => measurement.ToString()));
 
