@@ -12,6 +12,9 @@ namespace DungeonFortress.Simulation.Tests;
 /// </summary>
 public sealed class PrototypeWaveTests
 {
+    /// <summary>The three seeds of the Issue #12 matrix.</summary>
+    private static readonly ulong[] MatrixSeeds = [20_260_726UL, 20_260_727UL, 20_260_728UL];
+
     [Theory]
     [InlineData("baseline")]
     [InlineData("prepared")]
@@ -98,6 +101,33 @@ public sealed class PrototypeWaveTests
     /// The comparison is on renown, because renown is the score. Domain strength
     /// is deliberately not compared: it is the mirror, and a domain that never
     /// fights keeps a higher one precisely because it did nothing.
+    ///
+    /// <para><b>The rule the score rests on, named rather than left to the
+    /// total.</b> Renown is a sum of monotone counters, and on this party the
+    /// whole gap between the two runs sits in one of them: raiders put down, 16
+    /// against 10, which is 80 renown against 50. The other terms are equal —
+    /// four waves arrive in both runs, and the high-water mark of the larder is
+    /// 36 in both, because it is reached before the plan is abandoned. So
+    /// «impoverishment must not pay» is carried entirely by <i>why a neglected
+    /// domain puts down fewer raiders</i>, and the answer is mending: a wound
+    /// closes only in a bunk, and it closes at
+    /// <see cref="PrototypeTuning.HpRecoveryStep"/> per period. The run that
+    /// stops resting at t1400 enters the third wave carrying the wounds the
+    /// second one gave it, its heavily wounded are refused the line by
+    /// <c>combat_refused_injured</c>, that wave ends <c>overrun</c> with nobody
+    /// put down, and the party ends <c>fallen</c>.</para>
+    ///
+    /// <para>That is a rule and not a reading, because it is the one
+    /// substitution of this slice that reddens this check.
+    /// <c>HpRecoveryStep = 8 → 1</c> — the literal this constant replaced, on
+    /// health eight times larger — makes rest stop paying for the run that keeps
+    /// resting as well, and giving up half way then scores 148 against 113
+    /// (mutant M13 of <c>evidence/333-mutants.json</c>).
+    /// <see cref="PrototypeTuning.DamageReadinessDivisor"/> does <b>not</b> hold
+    /// this check: it stays green at a divisor of 25 and at 1000, that is with
+    /// readiness contributing nothing to a blow at all (mutant M3). Which is why
+    /// the claim about raiders put down is asserted below and not merely
+    /// described here.</para>
     /// </summary>
     [Fact]
     public void Deliberately_losing_creatures_and_stock_never_scores_better()
@@ -143,6 +173,14 @@ public sealed class PrototypeWaveTests
             $"giving up half way scored {abandonedHalfWay.Domain.Renown}, " +
             $"keeping scored {kept.Domain.Renown}");
 
+        // The term of renown the gap actually sits in, asked separately, so that
+        // the check says which mechanism keeps the promise instead of leaving it
+        // to be inferred from a total. See the second paragraph above.
+        Assert.True(
+            abandonedHalfWay.SessionResult.RaidersDowned <= kept.SessionResult.RaidersDowned,
+            $"giving up half way put down {abandonedHalfWay.SessionResult.RaidersDowned} raiders, " +
+            $"keeping put down {kept.SessionResult.RaidersDowned}");
+
         Assert.Equal("fallen", abandonedAtOnce.SessionResult.Outcome);
         Assert.Equal(0, abandonedAtOnce.Stocks.MealsProduced);
         Assert.True(
@@ -151,34 +189,89 @@ public sealed class PrototypeWaveTests
             $"keeping scored {kept.Domain.Renown}");
     }
 
+    /// <summary>
+    /// The mending ladder of §10.5: a creature that rests and eats climbs
+    /// <c>heavy → light</c> (<c>injury_mending</c>) and <c>light → none</c>
+    /// (<c>injury_healed</c>), and a wound only ever closes in a bunk.
+    ///
+    /// <para><b>The two rungs are asked differently, and on purpose.</b> Every
+    /// closure that happens, in any of the six shipped parties, must be a
+    /// <see cref="JobKind.Rest"/> job that took the creature to full health —
+    /// that is a rule, and it is now checked over six parties where it used to be
+    /// checked over one. The middle rung is an <b>existence</b> claim: somebody,
+    /// somewhere in the shipped matrix, comes back up from <c>heavy</c>. It has to
+    /// be, because whether a party contains a creature that is put down AND then
+    /// rests long enough to climb out is a fact about how that party's fights went.
+    /// </para>
+    ///
+    /// <para>Pinned to <c>baseline</c> at the journal's own seed, this went red on
+    /// the balance change of Issue #333 — measured, <c>injury_mending</c> occurs in
+    /// four of the six shipped parties and 20260726 is one of the two it misses.
+    /// That is the same trap
+    /// <c>A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave</c>
+    /// was in, and it is repaired the same way rather than by moving the check to
+    /// a seed that happens to hold: a scene that exists somewhere in the matrix is
+    /// asked of the matrix.</para>
+    /// </summary>
     [Fact]
     public void A_wound_closes_in_a_creature_that_rests_and_eats()
     {
-        var world = new PrototypeWorld(LoadFixture("baseline"));
-        var wounded = new HashSet<int>();
-        var mendedTicks = new List<int>();
+        var partiesThatClimbedOutOfHeavy = 0;
+        var partiesThatClosedAWound = 0;
+        var report = new System.Text.StringBuilder();
 
-        while (!world.IsComplete)
+        foreach (var fixtureName in new[] { "baseline", "prepared" })
         {
-            world.Step();
-            var state = world.GetSnapshot();
-            foreach (var creature in state.Creatures.Where(creature => creature.Injury != InjuryKind.None))
+            foreach (var seed in MatrixSeeds)
             {
-                wounded.Add(creature.Id);
+                var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
+                var wounded = new HashSet<int>();
+                while (!world.IsComplete)
+                {
+                    world.Step();
+                    foreach (var creature in world.GetSnapshot().Creatures
+                                 .Where(creature => creature.Injury != InjuryKind.None))
+                    {
+                        wounded.Add(creature.Id);
+                    }
+                }
+
+                var final = world.GetSnapshot();
+                var closed = final.Events.Where(item => item.ReasonCode == "injury_healed").ToArray();
+                foreach (var @event in closed)
+                {
+                    Assert.Equal(JobKind.Rest, @event.JobKind);
+                    Assert.Equal(@event.Details["maxHp"], @event.Details["hp"]);
+                }
+
+                var mending = final.Events.Count(item => item.ReasonCode == "injury_mending");
+                Assert.True(
+                    wounded.Count > 0,
+                    $"{fixtureName}/{seed}: nobody was ever hurt at all, so nothing below was tested.");
+                if (closed.Length > 0)
+                {
+                    partiesThatClosedAWound++;
+                }
+
+                if (mending > 0)
+                {
+                    partiesThatClimbedOutOfHeavy++;
+                }
+
+                report.AppendLine(string.Create(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    $"{fixtureName}/{seed}: hurt {wounded.Count}, injury_mending {mending}, injury_healed {closed.Length}"));
             }
         }
 
-        var final = world.GetSnapshot();
-        foreach (var @event in final.Events.Where(@event => @event.ReasonCode == "injury_healed"))
-        {
-            mendedTicks.Add(@event.LastTick);
-            Assert.Equal(JobKind.Rest, @event.JobKind);
-            Assert.Equal(@event.Details["maxHp"], @event.Details["hp"]);
-        }
-
-        Assert.NotEmpty(wounded);
-        Assert.NotEmpty(mendedTicks);
-        Assert.Contains(final.Events, @event => @event.ReasonCode == "injury_mending");
+        Assert.True(
+            partiesThatClosedAWound > 0,
+            $"no wound closed anywhere in the shipped matrix, so `light → none` is a rung of §10.5 " +
+            $"that nothing climbs.\n{report}");
+        Assert.True(
+            partiesThatClimbedOutOfHeavy > 0,
+            $"nobody in the whole shipped matrix ever came back up from a heavy wound, so " +
+            $"`heavy → light` is a rung of §10.5 that nothing climbs.\n{report}");
     }
 
     /// <summary>
@@ -369,7 +462,7 @@ public sealed class PrototypeWaveTests
             .Where(creature => creature.Mode != CreatureMode.Downed)
             .ToArray();
         var turnedAway = standing
-            .Where(creature => creature.Satiety < PrototypeTuning.CombatMinSatiety)
+            .Where(creature => creature.Satiety < PrototypeTuning.CombatJoinSatiety)
             .ToArray();
 
         // The tick has to contain both kinds and the excluded ones have to be

@@ -17,51 +17,99 @@ namespace DungeonFortress.Presentation.Tests;
 public sealed class BlowReadoutTests
 {
     /// <summary>
-    /// The tick the shipped <c>prepared</c> journal lands two blows and a kill on.
-    /// Snapshot <c>Tick</c> 1313 draws step 1312: Кремень (1) strikes raider 1 for
-    /// 6, Тишина (8) strikes it for 4 and puts it down.
+    /// The scene every check in this class reads: the tick the shipped
+    /// <c>prepared</c> journal lands two blows and a kill on, one body taking both.
     ///
-    /// <para>It was tick 1318 with the same two strikers on the same raider, for 5
-    /// and 2, until Issue #361 made the damage jitter live. The party is fought
-    /// differently from the first blow onwards, so the tick the scene falls on
-    /// moved; the scene itself is the same one.</para>
+    /// <para><b>The tick is found and no longer written down, and that is the
+    /// repair rather than a convenience.</b> It was pinned by number twice — 1318
+    /// until Issue #361 made the jitter live, then 1313 — and the balance change
+    /// of Issue #333 moved it a third time, to 1325 with a different cast
+    /// entirely: the old one, Кремень (1) and Тишина (8) on raider 1, does not
+    /// occur in this journal at all any more. A number that has to be re-pinned
+    /// every time the party is re-tuned is a trap for whoever re-pins it next, so
+    /// the scene is now located by the shape that makes it the right scene.</para>
     ///
-    /// <para><b>How to find it again, stated exactly, because the obvious recipe
-    /// is the wrong one.</b> Walk the same journal, collect every tick that
-    /// carries two blows on one body of which one is a kill, and take the first
-    /// one with <b>this cast</b> — Кремень (1) and Тишина (8) on raider 1. The
-    /// cast is the load-bearing half and «first» alone is not enough: this party
-    /// has two such ticks, and the first of them is 1306, where creature 2 hits
-    /// raider 0 for 3 and creature 3 puts it down for 5. Re-pinning by «the first
-    /// such tick» lands on 1306 — a different scene with different bodies — and
-    /// every id below would then be wrong for a reason nothing in this file would
-    /// explain.</para>
+    /// <para><b>The shape, stated exactly, because the obvious recipe is the wrong
+    /// one.</b> The first tick carrying two recorded blows on ONE body of which
+    /// one is a kill. «First» alone used to be insufficient when the point was to
+    /// land on one nominated cast; it is sufficient now precisely because nothing
+    /// below names a cast — every identity is read off the scene that was found.
+    /// The scene is asserted to exist, so a party that stopped producing it fails
+    /// loudly instead of silently testing nothing.</para>
     /// </summary>
-    private const int BlowTick = 1313;
+    private static (PrototypeSnapshot State, int Tick) BattleScene()
+    {
+        var world = new PrototypeWorld(PresentationFixtures.LogOf("prepared"));
+        while (!world.IsComplete)
+        {
+            world.Step();
+            var state = world.GetSnapshot();
+            var reading = BlowReadout.Of(state);
+            if (reading.Blows.Count == 2 &&
+                reading.Blows[0].Target == reading.Blows[1].Target &&
+                reading.Blows.Any(blow => blow.Outcome == BlowOutcome.Downed) &&
+                reading.Blows.Any(blow => blow.Outcome == BlowOutcome.Hit))
+            {
+                return (state, state.Tick);
+            }
+        }
 
-    private static PrototypeSnapshot Battle() =>
-        PresentationFixtures.RunFixture("prepared", BlowTick);
+        throw new InvalidOperationException(
+            "the shipped `prepared` journal no longer contains a tick on which one body takes " +
+            "two recorded blows and the second puts it down. Every check in this class reads " +
+            "that scene, so this is a change of what the party does and not a broken test.");
+    }
+
+    private static PrototypeSnapshot Battle() => BattleScene().State;
 
     private static PrototypeSnapshot Quiet() =>
         PresentationFixtures.RunFixture("prepared", 600);
 
+    /// <summary>
+    /// The claim of the name: a recorded blow names its striker, its target and
+    /// its damage, and the three agree with the journal entry the reading was made
+    /// from. The identities are read off the scene rather than written down here —
+    /// what is asserted is that the reading transcribes the journal faithfully,
+    /// which is the adapter's whole job and is what a literal id could never check.
+    /// </summary>
     [Fact]
     public void A_recorded_blow_names_the_striker_the_target_and_the_damage()
     {
-        var reading = BlowReadout.Of(Battle());
+        var (state, tick) = BattleScene();
+        var reading = BlowReadout.Of(state);
 
         Assert.Equal(2, reading.Blows.Count);
         Assert.All(reading.Blows, blow => Assert.Equal(BlowEvidence.Recorded, blow.Evidence));
 
         var hit = Assert.Single(reading.Blows, blow => blow.Outcome == BlowOutcome.Hit);
-        Assert.Equal(new BodyRef(BodyKind.Creature, 1), hit.Attacker);
-        Assert.Equal(new BodyRef(BodyKind.Raider, 1), hit.Target);
-        Assert.Equal(6, hit.Damage);
-
         var kill = Assert.Single(reading.Blows, blow => blow.Outcome == BlowOutcome.Downed);
-        Assert.Equal(new BodyRef(BodyKind.Creature, 8), kill.Attacker);
-        Assert.Equal(new BodyRef(BodyKind.Raider, 1), kill.Target);
-        Assert.Equal(4, kill.Damage);
+
+        // One body, two strikers, and both strikers named.
+        Assert.Equal(hit.Target, kill.Target);
+        Assert.Equal(BodyKind.Raider, hit.Target.Kind);
+        Assert.NotNull(hit.Attacker);
+        Assert.NotNull(kill.Attacker);
+        Assert.Equal(BodyKind.Creature, hit.Attacker!.Value.Kind);
+        Assert.Equal(BodyKind.Creature, kill.Attacker!.Value.Kind);
+        Assert.NotEqual(hit.Attacker, kill.Attacker);
+
+        // And the naming is the journal's own, not the adapter's invention. Read
+        // independently from the events of the tick that has just run.
+        var acted = state.Tick - 1;
+        var struck = state.Events
+            .Where(item => item.LastTick == acted &&
+                item.ReasonCode == BlowReadout.AttackReason &&
+                item.Details["raiderId"] == hit.Target.Id)
+            .ToArray();
+        Assert.Contains(
+            struck,
+            item => item.CreatureId == hit.Attacker!.Value.Id && item.Details["damage"] == hit.Damage);
+        Assert.Contains(
+            struck,
+            item => item.CreatureId == kill.Attacker!.Value.Id && item.Details["damage"] == kill.Damage);
+        Assert.True(
+            hit.Damage > 0 && kill.Damage > 0,
+            $"tick {tick}: a recorded blow reported {hit.Damage} and {kill.Damage} damage.");
     }
 
     /// <summary>
@@ -73,15 +121,14 @@ public sealed class BlowReadoutTests
     {
         var reading = BlowReadout.Of(Battle());
 
-        Assert.Equal(
-            BodyActionPhase.Windup,
-            reading.PhaseOf(new BodyRef(BodyKind.Creature, 1)));
-        Assert.Equal(
-            BodyActionPhase.Windup,
-            reading.PhaseOf(new BodyRef(BodyKind.Creature, 8)));
-        Assert.Equal(
-            BodyActionPhase.Flinch,
-            reading.PhaseOf(new BodyRef(BodyKind.Raider, 1)));
+        // Whoever struck in this scene winds up and whoever was struck flinches.
+        // Asked of every body the scene names rather than of three written-down
+        // ids, so it keeps meaning the same thing when the party is re-tuned.
+        foreach (var blow in reading.Blows)
+        {
+            Assert.Equal(BodyActionPhase.Windup, reading.PhaseOf(blow.Attacker!.Value));
+            Assert.Equal(BodyActionPhase.Flinch, reading.PhaseOf(blow.Target));
+        }
     }
 
     /// <summary>
@@ -92,11 +139,21 @@ public sealed class BlowReadoutTests
     [Fact]
     public void A_body_no_blow_touches_has_no_phase_and_a_quiet_tick_has_no_blows()
     {
-        var battle = BlowReadout.Of(Battle());
-        Assert.Equal(
-            BodyActionPhase.None,
-            battle.PhaseOf(new BodyRef(BodyKind.Creature, 5)));
-        Assert.Equal(BodyActionPhase.None, battle.PhaseOf(new BodyRef(BodyKind.Raider, 3)));
+        var state = Battle();
+        var battle = BlowReadout.Of(state);
+        var touched = battle.Blows
+            .SelectMany(blow => new[] { blow.Attacker!.Value, blow.Target })
+            .ToHashSet();
+
+        // Every body of the scene that no blow touched, rather than two written
+        // down ids that a re-tuned party may well have put in the fight.
+        var untouched = state.Creatures
+            .Select(creature => new BodyRef(BodyKind.Creature, creature.Id))
+            .Concat(state.Raiders.Select(raider => new BodyRef(BodyKind.Raider, raider.Id)))
+            .Where(body => !touched.Contains(body))
+            .ToArray();
+        Assert.NotEmpty(untouched);
+        Assert.All(untouched, body => Assert.Equal(BodyActionPhase.None, battle.PhaseOf(body)));
 
         var quiet = BlowReadout.Of(Quiet());
         Assert.Empty(quiet.Blows);
@@ -113,15 +170,16 @@ public sealed class BlowReadoutTests
     [Fact]
     public void Only_the_tick_that_has_just_run_is_drawn()
     {
-        Assert.NotEmpty(BlowReadout.Of(PresentationFixtures.RunFixture("prepared", BlowTick)).Blows);
+        var (state, tick) = BattleScene();
+        var now = BlowReadout.Of(state);
+        Assert.NotEmpty(now.Blows);
+        var felled = Assert.Single(now.Blows, blow => blow.Outcome == BlowOutcome.Downed).Target;
 
-        // Step 1312 is the one with the kill in it. One tick later the world has
-        // moved on and the same entries are stale.
-        var later = BlowReadout.Of(PresentationFixtures.RunFixture("prepared", BlowTick + 1));
+        // One tick later the world has moved on and the same entries are stale.
+        var later = BlowReadout.Of(PresentationFixtures.RunFixture("prepared", tick + 1));
         Assert.DoesNotContain(
             later.Blows,
-            blow => blow.Outcome == BlowOutcome.Downed &&
-                blow.Target == new BodyRef(BodyKind.Raider, 1));
+            blow => blow.Outcome == BlowOutcome.Downed && blow.Target == felled);
     }
 
     /// <summary>
@@ -208,10 +266,22 @@ public sealed class BlowReadoutTests
     [Fact]
     public void A_hit_a_body_left_alone_and_a_body_put_down_read_differently()
     {
-        var reading = BlowReadout.Of(Battle());
+        var state = Battle();
+        var reading = BlowReadout.Of(state);
         var hit = Assert.Single(reading.Blows, blow => blow.Outcome == BlowOutcome.Hit);
         var downed = Assert.Single(reading.Blows, blow => blow.Outcome == BlowOutcome.Downed);
-        var untouched = new BodyRef(BodyKind.Raider, 3);
+        // A body of the found scene that nobody struck, read off the scene for the
+        // reason the scene itself is: `Raider 3` was the cast of a tick this class
+        // was pinned to, and a literal beside a scene that moves is the trap the
+        // pinning was taken out for. Its sibling
+        // `Several_blows_on_one_body_keep_the_worse_outcome` was red on exactly
+        // that; this one was green by luck.
+        var untouched = new BodyRef(
+            BodyKind.Raider,
+            state.Raiders
+                .First(raider => reading.Blows.All(blow =>
+                    blow.Target != new BodyRef(BodyKind.Raider, raider.Id)))
+                .Id);
 
         Assert.NotEqual(BlowEffects.DamageColor(hit), BlowEffects.DamageColor(downed));
         Assert.NotEqual(
@@ -229,12 +299,20 @@ public sealed class BlowReadoutTests
     /// Two blows on one body at once: both are kept, and the flash carries the
     /// harder outcome. Losing the kill to a scratch that arrived in the same tick
     /// would say the raider is still up.
+    ///
+    /// <para><b>The body is read off the scene and no longer written down.</b> It
+    /// was <c>Raider 1</c> — the cast of the tick this class used to be pinned to.
+    /// The repair that took the class off a tick number left this one literal
+    /// behind, so the check went on asking about a raider the found scene does not
+    /// strike, and it went red the moment the party moved. Same trap, one layer
+    /// down: the scene is located by its shape and the identity beside it is
+    /// still a number.</para>
     /// </summary>
     [Fact]
     public void Several_blows_on_one_body_keep_the_worse_outcome()
     {
-        var target = new BodyRef(BodyKind.Raider, 1);
         var reading = BlowReadout.Of(Battle());
+        var target = reading.Blows[0].Target;
 
         Assert.Equal(2, reading.Struck(target).Count);
         Assert.Equal(BlowOutcome.Downed, reading.OutcomeOf(target));

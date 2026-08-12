@@ -85,15 +85,136 @@ public static class PrototypeTuning
     // gap between two waves a decision instead of dead time.
     public const int RecoveryMinSatiety = 30;
     public const int HpRecoveryPeriod = 6;
+    // How much health one period of mending returns. It used to be the literal
+    // 1 in MendTheWounded, and that 1 was denominated in the old health units:
+    // with health eight times larger it would have made a wound take eight times
+    // as long to close, which is a change nobody decided. Eight per six ticks on
+    // a scale eight times larger is the same fraction of a creature per tick as
+    // one per six ticks was — so the window between two waves buys exactly what
+    // it bought before, and the price of a lost wave is still measured in labour
+    // rather than in a longer wait.
+    //
+    // **It is load-bearing, and it bears more than the mending ladder.** Renown
+    // counts raiders put down, and whether a domain puts them down is decided by
+    // whether it entered the wave mended. Dropping this number back to the old
+    // literal 1 reddens sixteen checks of the package, and among them is
+    // `Deliberately_losing_creatures_and_stock_never_scores_better` — the promise
+    // that impoverishment must not pay — at 148 for giving up half way against
+    // 113 for keeping. That check is held by THIS number and not by
+    // DamageReadinessDivisor, which was measured and does not hold it. Mutant M13
+    // and the search for it are in evidence/333-mutants.json.
+    public const int HpRecoveryStep = 8;
 
-    public const int RaiderHp = 30;
+    // The combat economy is denominated in units eight times the old ones on the
+    // health side and four times the old ones on the damage side (Issue #336,
+    // owner's decision of 2026-08-08: «по дефолту хп всех добавить и сделать
+    // дамаг рандом какой-то, чтобы чуть дольше было и менее детерминированно»).
+    //
+    // Two different multipliers on purpose, and the difference between them is
+    // the whole of «дольше»: a blow buys half of what it used to buy, so an
+    // exchange takes about twice as many of them. Measured on the nine shipped
+    // parties, pooled over every body that actually fell — seven blows to fell a
+    // raider before, fourteen after (evidence/333-before-merged.json and
+    // evidence/333-after-merged.json).
+    //
+    // The damage side is not merely multiplied, it is given resolution, and that
+    // is the second half of the change rather than a side effect. A blow used to
+    // be `might + readiness/25`, and readiness — half of which is satiety —
+    // therefore entered it as one of four whole numbers: a creature at satiety 20
+    // and a creature at satiety 40 struck exactly as hard. In the new
+    // denomination readiness enters as `readiness/6`, so it is worth up to 16
+    // points of a blow of about 20 and every four points of satiety are visible
+    // in it. That is what carries the two properties this slice had to restore by
+    // design instead of by accident — see PrototypeWorld.Combat.cs, ActCombatant.
+    public const int RaiderHp = 240;
     public const int RaiderMightBase = 3;
     public const int RaiderMightJitter = 1;
     public const int RaiderEntryInterval = 2;
     public const int StealPeriod = 6;
-    public const int DefenderHpBase = 20;
-    public const int DefenderHpPerMight = 4;
-    public const int CombatMinSatiety = 20;
+    public const int DefenderHpBase = 160;
+    public const int DefenderHpPerMight = 32;
+    // Getting into the line is harder than staying in it, and the two numbers say
+    // so separately (Issue #333, owner's decision of 2026-08-11).
+    //
+    // Before them there was one number, 20, and it was only ever asked on the way
+    // in. What took a hungry fighter back out was not a rule of combat at all: it
+    // was the needs phase overwriting CreatureMode two phases later, at
+    // EatThreshold (30), with nothing in the journal saying the line had lost
+    // anybody and nothing in the wave counting it. Removing that overwrite without
+    // replacing it would have meant hunger could no longer end anybody's fight,
+    // and the invariant that impoverishment must never pay broke on exactly that:
+    // a party that stopped feeding at t1400 scored 138 against 133 for one that
+    // kept feeding (evidence/333-variants.json).
+    //
+    // CombatJoinSatiety is 30. It was 41 for one round, chosen on the balance
+    // surface the longer fight of Issue #336 creates, and the paragraphs below
+    // are the record of that choice; the value moved to 30 on the owner's
+    // constraint «not above EatThreshold», because above the eat threshold the
+    // domain cannot sustain fitness for a fight at all and the HUD reads
+    // `strength 0` for nine healthy creatures. The sweep and the rule of choice
+    // are evidence/333-tension.json, section
+    // theLowThresholdSweepUnderTheEatThresholdConstraint; 30 is the largest of
+    // the admissible values and the only one on which the label invariant of
+    // Issue #389 holds. Read the paragraphs below as history of the 41, not as a
+    // description of the constant.
+    //
+    // 41 rather than 42, and the difference is one measured defect deep. The value
+    // was 42 while the check `A_verdict_makes_the_named_creature_behave_differently
+    // _in_the_next_wave` could only ever look at `baseline`: it built its arms by
+    // REPLACING the fixture's command log rather than adding to it, so a fixture
+    // that carries commands could not be asked at all. With that repaired the
+    // check sees the whole shipped matrix, and the matrix says the scene it looks
+    // for leaves `baseline` and arrives in `prepared` as the fight lengthens — so
+    // what read as a balance conflict was in part an instrument that could not
+    // turn its head. Repaired, the sweep of 40..42 has both of the opposed checks
+    // green at 40 and at 41, and neither at 42.
+    //
+    // 40 is excluded and 41 taken: at 40 the whole suite gives seven red, among
+    // them `The_contract_invariants_hold_on_every_seed_of_the_matrix` and
+    // `Preparation_changes_the_deterministic_party_without_direct_orders` — one of
+    // the two properties this slice exists to restore — while at 41 it gives
+    // three. 41 also carries the observability floor of memory of place with room
+    // (51 refusals on `prepared` against a floor of 10) where 40 meets it exactly.
+    // The sweep and the rule of choice stated before it are in
+    // evidence/333-tension.json; what moves with the threshold is in
+    // evidence/333-after-merged.json, section `joinThresholdOnTheLongFight`.
+    //
+    // There is ONE threshold and it is asked on the way in only. A second one,
+    // CombatHoldSatiety = 20, was introduced by the owner's decision of
+    // 2026-08-11 to let hunger take a fighter out of the line through combat's
+    // own door, and it was REMOVED by the owner's decision of the same day once
+    // it was measured: no party can reach it. A creature is in the line only if
+    // it entered above the join threshold; while fighting its satiety only falls,
+    // and only by the global decay of one point per SatietyDecayPeriod ticks; and
+    // a spell in the line ends when the wave resolves. So the fall from join to
+    // below hold cost (join - hold + 1) * 5 unbroken ticks in the line — 110 at a
+    // join of 41 — against a longest spell of 53 ticks measured over twenty-four
+    // party-runs at four thresholds, and nothing in the command vocabulary
+    // lengthens a wave. The measurement is evidence/333-hold-reachability.json.
+    // The precedent for deleting rather than annotating is this same method:
+    // independent review of PR #328 removed an unreachable branch from it, on the
+    // grounds that a clause the mechanics cannot reach is a promise the contract
+    // does not keep.
+    //
+    // AND THAT ARITHMETIC WAS TAKEN AT A JOIN OF 41. At 30 it gives a different
+    // answer, so it is restated here rather than left to be rediscovered: the
+    // fall from 30 to 19 is eleven points at five ticks each, which is 55 unbroken
+    // ticks and not 110; the longest unbroken spell in the line measured on the
+    // final party is 69 ticks (prepared/20260726); and the lowest satiety observed
+    // on a creature while it was fighting is 21, one point above the hold
+    // threshold that was removed. So the ground on which the rule was retired as
+    // unreachable does not reproduce at this threshold. The rule is NOT brought
+    // back by this slice — it was removed by the owner's decision and combat
+    // mechanics are his call, not an executor's — and the fact is recorded so that
+    // the next decision is taken on the numbers of the party that exists.
+    // Measurement: evidence/333-starving-reachability.json,
+    // theHoldRuleArithmeticAtThirty.
+    //
+    // What this leaves standing: a fighter is never taken out of the line by
+    // hunger at all. It falls, or it breaks, or the wave ends. The promise that a
+    // hungry domain fights worse therefore rests ENTIRELY on
+    // DamageReadinessDivisor below — see the note there before touching it.
+    public const int CombatJoinSatiety = 30;
     public const int CombatJoinRecheck = 20;
     public const int EngageRadius = 8;
 
@@ -102,10 +223,71 @@ public static class PrototypeTuning
     // edit a bow would need on this side of the seam.
     public const int MeleeAttackRange = 1;
     public const int RaiderAttackRange = 1;
+    // Floored at one and not at the new denomination's four. It is the reading
+    // «an attack in reach always lands», which BlowReadoutTests holds by name,
+    // and raising it would quietly turn the armour term into a number that can
+    // never win.
     public const int DamageFloor = 1;
-    public const int DamageReadinessDivisor = 25;
-    public const int ArmourReadinessDivisor = 50;
-    public const int DamageJitter = 1;
+    // What a defender's own condition is worth in its blow, and what it is worth
+    // in the armour that meets a raider's. Both were divided by 25 and 50 and are
+    // now divided by 6 and 12 — the same ratio between them, four times the
+    // resolution, because the numbers they divide into are four times larger.
+    //
+    // **DamageReadinessDivisor is load-bearing, and it is the only thing bearing
+    // that load.** Readiness is half satiety, so this divisor is the whole of the
+    // rule «a hungry domain fights worse». It used to share the job with a second
+    // satiety threshold that pulled a starving fighter out of the line; that rule
+    // was removed on 2026-08-11 as unreachable (see CombatJoinSatiety above), so
+    // hunger now has exactly one way to reach a fight: through this number. At 25
+    // the whole range of readiness was worth four integers of damage and a
+    // fighter at satiety 20 hit exactly as hard as one at 40 — which is how the
+    // property came to be riding on a defect in the first place. At 6 every four
+    // points of satiety are visible in a blow, and a fight of about thirteen
+    // blows is long enough for the difference to decide whether a raider falls.
+    // Anyone raising this divisor is spending that property, and exactly ONE
+    // check goes red when they do: `Preparation_changes_the_deterministic_party_
+    // without_direct_orders`. It is named here so that a change to the number
+    // meets the consequence rather than discovering it.
+    //
+    // This note used to name a second one,
+    // `Deliberately_losing_creatures_and_stock_never_scores_better`, and that was
+    // a promise the party does not keep. Measured by the mutants of this slice
+    // (evidence/333-mutants.json, M3): at a divisor of 25 it stays green, and it
+    // stays green at 1000 too — that is, with readiness contributing nothing to a
+    // blow at all. The name was removed rather than left standing, for the same
+    // reason round 3 of this slice removed a false promise from the neighbouring
+    // constant: a note that names a check which cannot fail is worse than a note
+    // that names none, because it is read as coverage.
+    //
+    // What DOES hold that check is HpRecoveryStep, and it was found by putting a
+    // mutant on each candidate rather than by picking one
+    // (evidence/333-mutants.json, theSearchForWhatHoldsDeliberatelyLosing).
+    // Renown counts raiders put down, the whole gap between the two runs of that
+    // check sits in that single term — 16 against 10 — and what decides it is
+    // whether the domain enters the third wave mended. Of the seven substitutions
+    // tried, six leave the check green, this divisor at 1000 and the join
+    // threshold at 0 among them; the one that reddens it is
+    // `HpRecoveryStep = 8 -> 1`, at which giving up half way scores 148 against
+    // 113 for keeping (M13). So the two properties of the slice rest on two
+    // different numbers, and this constant bears exactly one of them:
+    // `Preparation_changes_the_deterministic_party_without_direct_orders`.
+    public const int DamageMightWeight = 4;
+    public const int DamageReadinessDivisor = 6;
+    public const int RaiderMightWeight = 5;
+    public const int ArmourReadinessDivisor = 12;
+    // How far a blow scatters, plus or minus, drawn per blow from the party's own
+    // DeterministicRandom stream (PrototypeWorld.CombatJitter). Six on a blow of
+    // about twenty is a third either way, against the ±1 on about 4 — a quarter —
+    // that the old denomination had.
+    //
+    // The shape stays uniform on [−a, +a] and the alternative was measured rather
+    // than dismissed: a triangular roll, the sum of two half-width uniforms, was
+    // tried at the same total width and rejected. It is the same mean and a
+    // narrower middle, so it makes the common exchange *more* predictable and
+    // spends the amplitude on tails a party of four waves sees a handful of
+    // times — the opposite of what the owner asked for. The numbers are in
+    // evidence/333-after-merged.json, section `theShapeOfTheSpread`.
+    public const int DamageJitter = 6;
     public const int LightInjuryShare = 40;
     // Nerve is measured per creature and dread is measured from where that
     // creature is standing. The two new terms are what keep the moment of
@@ -462,6 +644,20 @@ public static class PrototypeTuning
     // WaveIntervalTicks: this is a rule about a creature's own idleness, not about
     // the rhythm of waves.
     public const int OffDutyDelayTicks = 8;
+
+    // How long a raider waits for an occupied tile to clear before it takes the
+    // crowded one anyway (Issue #76, criterion 2: a blocked body must not stall
+    // silently, so the wait has a limit).
+    //
+    // The limit is not a nicety, it is what keeps the party finishing. A wave
+    // resolves only when every raider that entered has stopped raiding, and a
+    // raider only stops by filling CarryCapacity or by being felled. Measured
+    // without a limit: raiders queued behind one another never reached the larder,
+    // no wave after the first resolved, and the party ran to SessionTicks with a
+    // null outcome - `The party did not end (outcome null)`. Four ticks is long
+    // enough for an occupant that is walking through to clear the tile, since a
+    // raider moves every tick, and far short of the eighteen a full theft takes.
+    public const int RaiderBlockedPatience = 4;
 
     // Ticks of extra delay per creature id before it leaves the ground a fight
     // was fought on. A group that stands up all on the same tick walks off as a

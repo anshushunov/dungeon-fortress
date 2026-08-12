@@ -1,0 +1,367 @@
+{
+  "schemaVersion": 1,
+  "issue": "#333 + #336 (merged balance slice)",
+  "when": "2026-08-11",
+  "what": "The narrow sweep of PrototypeTuning.CombatJoinSatiety over 30..42 against the two checks the predecessor named as the one real tension, and the measurement of why they oppose each other.",
+  "tree": "1356036 (fix/333-combat-mode-hold), working copy clean, origin/main = 3b627bf, behind 0",
+  "ruleOfChoiceStatedBeforeTheSweep": "The smallest value in 30..42 at which BOTH checks are green. Stated before the first run and not changed after it, by the pattern of the previous sweep. If no such value exists the range is not widened and no third mechanism is invented: the sweep is brought whole and the tension is returned to the coordinator as a finding about the contract.",
+  "theTwoChecks": {
+    "verdict": {
+      "name": "PrototypeMomentOfTruthTests.A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave",
+      "whatItAsserts": "three things at once, at the hand-picked ConsequenceSeed = 20260728 of the `baseline` fixture: (1) punish and reward produce different decision streams for the creature on card 0; (2) punish differs from not answering at all; (3) at least one of the three carded creatures moves when rewarded.",
+      "promiseOrMeasure": "обещание — criterion 7 of Issue #312, that a verdict has a consequence. The number it is read at is not part of the promise; the promise is that the consequence exists."
+    },
+    "memoryFloor": {
+      "name": "PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next(prepared)",
+      "whatItAsserts": "memory of place refused work at least 10 times over the three-seed matrix of the fixture. `A memory nobody ever acts on is a field in the snapshot, not a slice.`",
+      "promiseOrMeasure": "обещание — criterion 2 of Issue #117, the observability floor of memory of place. The floor of 10 is the smallest number that can mean `ever`, not a corridor fitted to a measurement."
+    }
+  },
+  "command": "for each value: PrototypeTuning.CombatJoinSatiety rewritten, then `dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave|FullyQualifiedName~A_remembered_place_changes_what_the_creature_does_next\" --logger \"console;verbosity=detailed\"`. Thirteen values, about thirteen seconds each. The constant was restored to its committed value by the harness in a `finally`, and the tree is clean at the commit named above.",
+  "sweep": [
+    {
+      "join": 30,
+      "verdict": "green",
+      "memoryPrepared": "red",
+      "refusalsPrepared": 0,
+      "refusalsBaseline": 168,
+      "refusalsPreparedBySeed": {
+        "20260726": 0,
+        "20260727": 0,
+        "20260728": 0
+      }
+    },
+    {
+      "join": 31,
+      "verdict": "green",
+      "memoryPrepared": "red",
+      "refusalsPrepared": 0,
+      "refusalsBaseline": 168,
+      "refusalsPreparedBySeed": {
+        "20260726": 0,
+        "20260727": 0,
+        "20260728": 0
+      }
+    },
+    {
+      "join": 32,
+      "verdict": "green",
+      "memoryPrepared": "red",
+      "refusalsPrepared": 5,
+      "refusalsBaseline": 168,
+      "refusalsPreparedBySeed": {
+        "20260726": 5,
+        "20260727": 0,
+        "20260728": 0
+      }
+    },
+    {
+      "join": 33,
+      "verdict": "green",
+      "memoryPrepared": "red",
+      "refusalsPrepared": 1,
+      "refusalsBaseline": 200,
+      "refusalsPreparedBySeed": {
+        "20260726": 1,
+        "20260727": 0,
+        "20260728": 0
+      }
+    },
+    {
+      "join": 34,
+      "verdict": "green",
+      "memoryPrepared": "red",
+      "refusalsPrepared": 1,
+      "refusalsBaseline": 199,
+      "refusalsPreparedBySeed": {
+        "20260726": 1,
+        "20260727": 0,
+        "20260728": 0
+      }
+    },
+    {
+      "join": 35,
+      "verdict": "green",
+      "memoryPrepared": "red",
+      "refusalsPrepared": 5,
+      "refusalsBaseline": 182,
+      "refusalsPreparedBySeed": {
+        "20260726": 1,
+        "20260727": 0,
+        "20260728": 4
+      }
+    },
+    {
+      "join": 36,
+      "verdict": "green",
+      "memoryPrepared": "red",
+      "refusalsPrepared": 5,
+      "refusalsBaseline": 182,
+      "refusalsPreparedBySeed": {
+        "20260726": 1,
+        "20260727": 0,
+        "20260728": 4
+      }
+    },
+    {
+      "join": 37,
+      "verdict": "green",
+      "memoryPrepared": "red",
+      "refusalsPrepared": 5,
+      "refusalsBaseline": 184,
+      "refusalsPreparedBySeed": {
+        "20260726": 1,
+        "20260727": 0,
+        "20260728": 4
+      }
+    },
+    {
+      "join": 38,
+      "verdict": "green",
+      "memoryPrepared": "red",
+      "refusalsPrepared": 5,
+      "refusalsBaseline": 174,
+      "refusalsPreparedBySeed": {
+        "20260726": 1,
+        "20260727": 0,
+        "20260728": 4
+      }
+    },
+    {
+      "join": 39,
+      "verdict": "red",
+      "memoryPrepared": "red",
+      "refusalsPrepared": 5,
+      "refusalsBaseline": 124,
+      "refusalsPreparedBySeed": {
+        "20260726": 1,
+        "20260727": 0,
+        "20260728": 4
+      },
+      "verdictMessage": "creature 7 decided exactly the same things whether the player rewarded it or punished it, so the sign of the verdict is not a decision about anything. Who moved between the two: nobody at all."
+    },
+    {
+      "join": 40,
+      "verdict": "red",
+      "memoryPrepared": "green",
+      "refusalsPrepared": 10,
+      "refusalsBaseline": 84,
+      "refusalsPreparedBySeed": {
+        "20260726": 6,
+        "20260727": 0,
+        "20260728": 4
+      },
+      "note": "the memory floor is met exactly, with nothing to spare, and the predecessor measured contract invariant 4 failing here on 20260728 by 7 points of raid cost"
+    },
+    {
+      "join": 41,
+      "verdict": "red",
+      "memoryPrepared": "green",
+      "refusalsPrepared": 51,
+      "refusalsBaseline": 84,
+      "refusalsPreparedBySeed": {
+        "20260726": 3,
+        "20260727": 0,
+        "20260728": 48
+      }
+    },
+    {
+      "join": 42,
+      "verdict": "red",
+      "memoryPrepared": "green",
+      "refusalsPrepared": 53,
+      "refusalsBaseline": 18,
+      "refusalsPreparedBySeed": {
+        "20260726": 5,
+        "20260727": 0,
+        "20260728": 48
+      },
+      "note": "the value committed on the branch; 42 and 45 are one plateau"
+    }
+  ],
+  "result": "There is no such value. The verdict check is green on 30..38 and red on 39..42; the memory floor on `prepared` is red on 30..39 and green on 40..42. The two green intervals are disjoint and adjacent: 38 is the last value where the verdict holds, 40 the first where the memory floor does, and 39 satisfies neither. The rule of choice therefore selects nothing, and by the rule stated before the sweep the range was not widened and no third mechanism was tried.",
+  "theCrossoverConfirmedWithMessages": {
+    "join38": "verdict GREEN; memory prepared RED — `prepared: memory refused work 5 times over the whole matrix`",
+    "join39": "verdict RED — `creature 7 decided exactly the same things whether the player rewarded it or punished it`; memory prepared RED — 5 refusals",
+    "join40": "verdict RED — same message; memory prepared GREEN"
+  },
+  "whyTheyOppose": {
+    "claim": "The join threshold is not the instrument for the verdict check, and the two checks are not in fact pulling on one designed quantity. The memory floor responds to the threshold through a mechanism (a smaller line lets raiders reach the larder, so nerves break where there is work to refuse). The verdict check does not: it is an existence claim about one creature in one party, and the threshold reaches it only by accident.",
+    "measuredDirectly": "A scratch probe walked the moment of truth of `baseline`/20260728 at joins 30, 38, 39 and 42. At every one of the four the moment of truth is IDENTICAL: it opens on tick 1346, the three cards are [7,8,0], the subject is creature 7, and the satiety vector of the whole domain is the same nine numbers [51,47,53,46,51,53,62,57,45]. The threshold does not touch the scene the check reads at all. Its entire influence is on the waves AFTER the verdict, where it decides who stands in the line and therefore who is free to be matched to work.",
+    "andThereItIsNotAConsequenceOfSize": "At join 39 the three arms — punish, reward and no answer — produce byte-identical parties: 788 decisions each for the subject, 5940 events each, 2212 blocked each. The verdict changed nothing whatsoever. At join 42 punish equals silence while reward differs; at 38 and 30 all three differ. `job_taken_by_other` is 0 in every arm at every threshold, so this is not competition for work being won or lost — it is whether a weight nudge to one creature happens to change any single matching outcome in a party of five thousand events."
+  },
+  "doesAnyShippedPartyStillContainTheScene": {
+    "why": "If the check is an existence claim, the question that decides whether it can be held at all is not which threshold, but whether any shipped party still contains the scene. Measured over all six shipped parties — two fixtures by three matrix seeds — by evaluating the check's own three assertions against each.",
+    "harnessDefectFoundWhileMeasuring": "The check builds its arms as `log with { Commands = [new VerdictCommand(...)] }`, which REPLACES the fixture's command list instead of appending to it. `baseline` carries 0 commands so this is harmless today, but it means the check structurally cannot be asked of any fixture that carries commands: pointed at `prepared` (6 commands) it throws `A verdict is only accepted while the moment of truth is open`, because the party it then plays is not the party the tick was measured on. The probe below appends.",
+    "matrix": {
+      "join42": {
+        "baseline/20260726": "RED — harshVsKind differ, harshVsQuiet SAME, rewardWitnesses 2",
+        "baseline/20260727": "RED — harshVsKind SAME, harshVsQuiet SAME, rewardWitnesses 2",
+        "baseline/20260728": "RED — harshVsKind differ, harshVsQuiet SAME, rewardWitnesses 1",
+        "prepared/20260726": "RED — harshVsKind differ, harshVsQuiet SAME, rewardWitnesses 2",
+        "prepared/20260727": "RED — harshVsKind differ, harshVsQuiet SAME, rewardWitnesses 3",
+        "prepared/20260728": "RED — harshVsKind differ, harshVsQuiet SAME, rewardWitnesses 2"
+      },
+      "join40": {
+        "baseline/20260726": "RED",
+        "baseline/20260727": "RED",
+        "baseline/20260728": "RED",
+        "prepared/20260726": "RED",
+        "prepared/20260727": "GREEN — tick 1338, subject 5, cards [5,8,2], all three assertions hold",
+        "prepared/20260728": "GREEN — tick 1335, subject 5, cards [5,1,8], all three assertions hold"
+      },
+      "join38": {
+        "baseline/20260726": "RED — and note harshVsKind SAME with rewardWitnesses 0, i.e. this party has no scene at all",
+        "baseline/20260727": "RED",
+        "baseline/20260728": "GREEN — the one party the check is pointed at, and the only baseline party that holds",
+        "prepared/20260726": "RED",
+        "prepared/20260727": "GREEN",
+        "prepared/20260728": "GREEN"
+      }
+    },
+    "whatThisMeans": "At the committed threshold of 42 NOT ONE of the six shipped parties contains the scene. At 40 two do, and both are `prepared` — which the check cannot currently read because of the harness defect above. At 38 the check is green solely because it is pointed at `baseline`/20260728, the single baseline party that still holds; the other two baseline parties are red there too. The check was already re-pointed once for exactly this reason: its own doc comment records that after Issue #361 made the damage jitter live, `the creature on the first card of the journal's own seed decides the same things whichever way it is answered, so that party no longer contains the scene`, and ConsequenceSeed was introduced then."
+  },
+  "whatIsReturnedToTheCoordinator": {
+    "theFork": "Which of two promises gives way, and by what means. This is a decision about the contract, not a number a sweep can find, and the executor does not take it.",
+    "optionsWithTheirPrice": [
+      {
+        "option": "Keep join 42. The memory floor holds with 53 refusals on a plateau (42 and 45 agree on every number the probe prints), and `A_verdict_makes...` has no shipped party left to stand on anywhere.",
+        "price": "Criterion 7 of Issue #312 loses its executable form on shipped journals. It would have to be re-founded on a synthetic party built to contain the scene, or the promise re-stated as something a long fight can still deliver. Re-founding it is not balance work and is not in this slice's scope."
+      },
+      {
+        "option": "Join 40, and re-point the verdict check at `prepared`/20260727 or `prepared`/20260728, fixing the harness to append commands rather than replace them.",
+        "price": "40 meets the memory floor exactly (10 against a floor of 10) with nothing to spare, and the predecessor measured contract invariant 4 failing at 40 on 20260728 by 7 points of raid cost. Two of the three assertions would then rest on a fixture chosen after the fact, which is the second time this check has been re-pointed to keep it green."
+      },
+      {
+        "option": "Keep join 42 and treat `A_verdict_makes...` as owing its own synthetic scene, the same way `CombatHoldSatiety` owes one.",
+        "price": "Honest and the most durable, but it is a second synthetic party inside a balance slice, and it says the shipped journals no longer demonstrate criterion 7 by themselves."
+      }
+    ],
+    "whatIsNotOnTheList": "Widening the range beyond 30..42, and inventing a third balance mechanism. Both were excluded by the brief before the sweep was run, and nothing measured here argues for reopening them: the threshold provably does not reach the scene the verdict check reads."
+  },
+  "theFiveRedsByClass": {
+    "why": "Each red is either a ЗАМЕР — a number produced by a run, which may legitimately be re-measured — or an ОБЕЩАНИЕ — a product invariant, which may not be moved under a result. The class is read off the assertion and its own doc comment, not off how inconvenient the number is.",
+    "reds": [
+      {
+        "test": "PrototypeScenarioTests.Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party",
+        "measured": "end production baseline=135 against `MealsProduced is >= 95 and <= 130`; prepared=81 and neglected=0 are both inside their corridors",
+        "class": "ЗАМЕР",
+        "grounds": "The assertion is a corridor around an observed quantity rather than a statement about what the domain owes anybody, and the check's own comment records that both corridors have already been moved once — «Both corridors moved down and towards each other, because walls cost the domain logistics». Only the upper bound is broken, and broken from ABOVE: the domain now produces MORE food than the corridor expected, which is a consequence of fewer bodies standing in the line and more of them working. Re-measuring the upper bound is legitimate, and the class must be named in the pull-request body when it is.",
+        "blockedBy": "the join threshold. Production moves with how many creatures the fight takes out of the work rota, so re-measuring this corridor before the threshold is settled would fix a number to a value that is about to move."
+      },
+      {
+        "test": "PrototypeOffDutyTests.A_creature_left_without_work_after_a_fight_does_not_stand_where_it_was_fought(baseline, 20260728)",
+        "measured": "1 creature spent a whole 60-tick window after a wave standing where the fight left it — #6 at (23,6), mode=Moving, last=waiting_blocked_by_other",
+        "class": "ОБЕЩАНИЕ",
+        "grounds": "Issue #201 promises that a creature is not abandoned where the fight left it. The creature is `Moving` and blocked by another body, so the promise is not being met by the clinch clearing, and no number here may be relaxed to make it green.",
+        "blockedBy": "nothing in this slice's gift: measured red at every health scale tried and at joins 25 and 42 alike, so it answers to neither knob. It shares a cause with the next one, and the cause is that a longer fight leaves more bodies in the corridor for longer."
+      },
+      {
+        "test": "PrototypePostCombatDispersalTests.Walking_round_reaches_more_of_the_clinch_than_a_yield_could",
+        "measured": "443 against 296, a ratio of 1,4966, where 1,5 is the floor — short by four thousandths",
+        "class": "ОБЕЩАНИЕ for the floor, ЗАМЕР for 443 and 296",
+        "grounds": "The floor is explicitly a chosen claim and the check says so: «One and a half is a floor that was chosen, not a number that was derived. The measured ratio is 1.86; the floor sits under it with room», and it was placed below every variant of the comparison on purpose. So 1,5 may not be lowered to admit 1,4966 — that would be moving the promise under the result, and the check's own words say what a breach means: «Issue #186 named the pathfinder as the mechanism on the strength of this ratio; below the floor the naming has to be taken again».",
+        "note": "This is the honest cost of the slice made visible. The ratio went 1,86 (when #186 named the mechanism) to 1,06, then 1,33, then 1,4966 as the fight lengthened. It is the closest of the five to green, and it is also the one that says the longer fight has changed which mechanism clears the clinch."
+      },
+      {
+        "test": "PrototypeMomentOfTruthTests.A_domain_that_punishes_without_cause_is_eventually_refused_the_line",
+        "measured": "best case over the party: Дёготь released 1 x3 = 3 against holding 8 (fear 0, grudge 1)",
+        "class": "ОБЕЩАНИЕ",
+        "grounds": "Issue #312 promises that a grudge can still reach the one behaviour it has left. A grudge is credited per moment-of-truth card, and a card is owed to a creature that did something in the wave; a smaller line means fewer creatures with a deed, fewer cards, and a grudge that never accumulates.",
+        "blockedBy": "the join threshold. It is red at 25 and at 42 and the numbers differ (holding 14 against holding 8), so it does respond — and therefore it cannot be judged before the threshold is chosen."
+      },
+      {
+        "test": "PrototypeMomentOfTruthTests.A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave",
+        "measured": "see the sweep above",
+        "class": "ОБЕЩАНИЕ",
+        "grounds": "Criterion 7 of Issue #312. The party it is read at is a fixture choice and not part of the promise, which is why re-pointing it is on the coordinator's list of options rather than excluded outright — but the promise itself, that a verdict has a consequence, may not be weakened to fit.",
+        "blockedBy": "it IS the fork."
+      }
+    ],
+    "summary": "One of the five is a замер (the production corridor) and four are обещания. None of the four may be moved. Of the five, three — the production corridor, the grudge and the verdict — move with the join threshold and cannot honestly be settled before it is chosen; two — the off-duty promise and the clinch ratio — answer to neither knob and are the measured price of a fight twice as long."
+  },
+  "theLowThresholdSweepUnderTheEatThresholdConstraint": {
+    "why": "The coordinator turned the `strength 11 -> 0` finding into a constraint: the join threshold may not exceed EatThreshold = 30, because above it fitness to fight is a state the domain only occupies just after eating rather than one it sustains. That excludes 41 and 42 both. The coordinator also observed what the executor had inherited without checking: the 20..30 sweep was taken in the FIRST round, before `readiness / 6` existed, so low thresholds had never been measured on the current mechanism.",
+    "ruleOfChoiceStatedBeforeTheSweep": "The LARGEST candidate not exceeding EatThreshold at which all contract invariants and both checks the slice exists for are green. Largest and not smallest, because a lower threshold weakens the tie between hunger and who stands in the line, and the second channel of that tie was just removed with the hold rule. If the candidates do not differ, take 30, which sits exactly on the boundary.",
+    "whatWasRun": "the WHOLE simulation suite and the WHOLE presentation suite at each of 20, 25 and 30, on the current state: readiness/6, the hold rule removed, the verdict harness repaired, the three scene checks on the matrix.",
+    "theCoordinatorsHypothesisIsConfirmed": {
+      "claim": "Both properties the slice exists to restore are now carried by `readiness / 6` and NOT by the join threshold.",
+      "measured": "`Deliberately_losing_creatures_and_stock_never_scores_better` and `Preparation_changes_the_deterministic_party_without_direct_orders` are GREEN at 20, at 25 and at 30 — and they were green at 41 too. They no longer respond to the threshold at all. In the first round, before readiness/6, `Preparation_changes...` was red at all eleven values of 20..30. That is the difference the new coefficient made, and it is now measured rather than argued."
+    },
+    "theTable": {
+      "columns": "join | slice-defining checks | contract invariants | memory-of-place family | precombat invariants | clinch ratio | gesture invariant (2380) | the jam | suite totals",
+      "rows": [
+        {
+          "join": 20,
+          "sliceDefiningChecks": "green (both)",
+          "contractInvariantsOnEverySeed": "green",
+          "memoryOfPlaceFamily": "RED x3 — prepared refused work 0 times over the matrix",
+          "precombatInvariants": "RED — no `combat_refused_starving` anywhere in prepared",
+          "clinchRatio": "RED — 432/324 = 1,33 against a floor of 1,5",
+          "gestureInvariantAt2380": "RED — pointing at «Хват Старший» on (15,7) costs «Долговязый» on (14,7) his name",
+          "theJam": "RED — 1 creature, 1 window, departures=8",
+          "simulation": "6 red of 359",
+          "presentation": "13 red of 728"
+        },
+        {
+          "join": 25,
+          "sliceDefiningChecks": "green (both)",
+          "contractInvariantsOnEverySeed": "green",
+          "memoryOfPlaceFamily": "RED x3 — identical to 20",
+          "precombatInvariants": "RED — identical to 20",
+          "clinchRatio": "RED",
+          "gestureInvariantAt2380": "RED",
+          "theJam": "RED",
+          "simulation": "6 red of 359",
+          "presentation": "13 red of 728"
+        },
+        {
+          "join": 30,
+          "sliceDefiningChecks": "green (both)",
+          "contractInvariantsOnEverySeed": "green",
+          "memoryOfPlaceFamily": "RED x3 — prepared refused work 0 times over the matrix",
+          "precombatInvariants": "RED — no `combat_refused_starving` anywhere in prepared",
+          "clinchRatio": "RED — 412/319 = 1,29 against a floor of 1,5",
+          "gestureInvariantAt2380": "GREEN",
+          "theJam": "RED — 1 creature, 1 window, departures=8",
+          "simulation": "6 red of 359",
+          "presentation": "12 red of 728"
+        }
+      ],
+      "aCaveatOnTheExecutorsOwnFirstReading": "A coarse column that matched the gesture check by name alone reported it RED at all three, because the theory has two parametrisations and `(ticks: 2025)` fails at every value on a vacuity guard (`Assert.NotEmpty`, the scene stopped containing anything to test). Only the per-parametrisation detail shows that the INVARIANT at 2380 is red at 20 and 25 and GREEN at 30. The coarse reading is recorded here because it was wrong and the correction is the useful part."
+    },
+    "theAnswerToTheCoordinatorsSpecificQuestion": {
+      "question": "is `A_gesture_never_takes_a_name_from_a_body_on_another_cell` green on 20, 25 or 30?",
+      "answer": "GREEN at 30, RED at 20 and 25. So it is NOT a universal tension between the gesture promise and the verdict promise: it is satisfiable, and satisfied at exactly the candidate the rule of choice prefers anyway. Nothing is returned on this one and the one-cell exemption was not rewritten.",
+      "theFullPictureOfThisCheckAcrossEveryThresholdEverMeasured": "green at 30, red at 41, green at 42, red at 20 and 25. It does not vary monotonically with the threshold, which is consistent with what it measures — whether one crowded frame of one party happens to put two label-carrying bodies on neighbouring cells."
+    },
+    "theSqueezeThatIsReturned": {
+      "what": "The constraint and a contract promise are incompatible, and the incompatibility is structural rather than a matter of which number in 20..30 is picked.",
+      "aboveTheConstraint": "join > EatThreshold — the domain cannot sustain fitness to fight, and `DomainStrength()` honestly reads 0 for nine healthy creatures between meals. That is the coordinator's own reason for the constraint.",
+      "atOrBelowTheConstraint": "join <= EatThreshold — the domain feeds itself at 30, so satiety almost never sits below the gate, and the gate therefore never fires. Measured: `combat_refused_starving` does not occur ANYWHERE in `prepared` at 20, 25 or 30, and `Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party` fails on exactly that — `Assert.Contains(preparedEnd.State.Events, e => e.ReasonCode == \"combat_refused_starving\")`, read in the source rather than inferred from the message.",
+      "thePlainStatement": "At a threshold the domain can sustain, hunger never refuses anybody the line; at a threshold where hunger refuses somebody, the domain cannot sustain readiness. The reason code `combat_refused_starving` is in §10.2 of the contract and the check requires it to be reachable, so this is a promise and it is not the executor's to lower.",
+      "andTheSecondCasualty": "The memory-of-place family goes with it. At 20, 25 and 30 `prepared` refuses work by memory ZERO times over the whole matrix, which reddens three simulation checks (`A_remembered_place_changes_what_the_creature_does_next`, `A_refusal_by_memory_names_the_work_the_creature_would_have_taken`, `A_refusal_the_memory_free_tick_does_not_honour_lost_the_work_to_somebody`) and one presentation check (`Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel`, 7 creature-parties against a floor of 9). The mechanism was measured in the first round of this branch: a lower threshold puts MORE defenders in the line, `prepared` musters at the gate and holds the raiders there, and a nerve that breaks at the gate writes a memory of a corridor where there is no work to refuse."
+    },
+    "whatTheRuleOfChoiceSelects": {
+      "primaryCondition": "NOT SATISFIED at any candidate: `Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party` is red at 20, 25 and 30 alike, for the structural reason above.",
+      "tieBreak": "The candidates are not identical — 30 is the only one where the gesture invariant at 2380 holds, and it is also the largest. So if the coordinator resolves the squeeze in a way that keeps the constraint, 30 is the value: it is the largest admissible, it sits exactly on the boundary the constraint names, and it is the only candidate that costs no label invariant.",
+      "whatTheExecutorDidNotDo": "The threshold has NOT been changed on the branch. It stays at 41 until the squeeze is decided, because moving it to 30 would trade one red for six in the simulation suite and would do so under a promise the coordinator has not had the chance to weigh. The ten OwnerScene checks were left alone as instructed, for the same reason."
+    },
+    "costOfEachOptionAsMeasured": [
+      {
+        "option": "join 30, keeping the constraint",
+        "simulationRed": "6 of 359",
+        "presentationRed": "12 of 728",
+        "whatBreaks": "the hunger gate becomes unobservable (`combat_refused_starving` never fires), the memory-of-place family collapses on `prepared`, the clinch ratio falls to 1,29",
+        "whatItBuys": "the domain sustains fitness to fight; the HUD never reads strength 0 for a healthy domain; the gesture invariant holds"
+      },
+      {
+        "option": "join 41, the current branch state, which the constraint forbids",
+        "simulationRed": "1 of 359",
+        "presentationRed": "11 of 728",
+        "whatBreaks": "the constraint itself — strength reads 0 between meals — and the gesture invariant at 2380",
+        "whatItBuys": "every memory-of-place check, the hunger gate observable, the clinch ratio green, the precombat invariants green"
+      }
+    ]
+  }
+}

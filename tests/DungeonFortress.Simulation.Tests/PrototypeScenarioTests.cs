@@ -271,9 +271,10 @@ public sealed class PrototypeScenarioTests(ITestOutputHelper output)
         Assert.Contains(
             prepared.State.Events,
             @event => @event.ReasonCode == "chosen_ration");
-        Assert.Contains(
-            preparedEnd.State.Events,
-            @event => @event.ReasonCode == "combat_refused_starving");
+        // `combat_refused_starving` used to be asserted here, on `preparedEnd`
+        // and over the matrix only. It has moved into AssertEndOfPartyInvariants
+        // and onto the party that witnesses it — read the note there before
+        // moving it back.
         Assert.InRange(baseline.State.Creatures.Average(c => c.Satiety), 45, 75);
         Assert.InRange(prepared.State.Creatures.Average(c => c.Satiety), 45, 75);
         Assert.InRange(neglected.State.Creatures.Average(c => c.Satiety), 0, 15);
@@ -437,6 +438,33 @@ public sealed class PrototypeScenarioTests(ITestOutputHelper output)
         PrototypeSnapshot prepared,
         PrototypeSnapshot neglected)
     {
+        // Invariant 5, the half about hunger, moved here from
+        // Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party and
+        // re-homed onto the party that witnesses it.
+        //
+        // The promise is that hunger can refuse a creature the line and that it
+        // is observable in a shipped party. It was asked of `prepared` and «over
+        // the matrix rather than on every seed», and both of those are the scar
+        // of one owner's decision of 2026-07-31: the reference plan was rewritten
+        // for the dungeon, and under the new plan `prepared` gave 13, 21 and 0 of
+        // these events. The fixture was never part of the claim; the claim is
+        // about the reason code.
+        //
+        // Measured on this branch at a join threshold of 30, over a whole party
+        // at SessionTicks: `prepared` gives 0, 0, 0 over the matrix and `baseline`
+        // gives 26, 5 and 3 — on every seed. That is what a prepared domain means:
+        // it rations before the wave, so nobody is caught under the threshold. So
+        // the fixture that carried the promise has stopped being able to, and the
+        // one that always could is now asked instead — on every seed, which is the
+        // strength the 2026-07-31 weakening gave up.
+        //
+        // What this is NOT: a promise retired as unreachable. The reason code is
+        // reached three to twenty-six times a party. Figures and commands are in
+        // evidence/333-starving-reachability.json.
+        Assert.Contains(
+            baseline.Events,
+            @event => @event.ReasonCode == "combat_refused_starving");
+
         Assert.True(
             baseline.Domain.Renown > neglected.Domain.Renown &&
             prepared.Domain.Renown > neglected.Domain.Renown,

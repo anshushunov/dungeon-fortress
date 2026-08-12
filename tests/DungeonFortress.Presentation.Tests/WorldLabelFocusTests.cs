@@ -17,11 +17,13 @@ namespace DungeonFortress.Presentation.Tests;
 /// </summary>
 public sealed class WorldLabelFocusTests
 {
-    /// <inheritdoc cref="WorldLabelLayoutTests.OwnerScene"/>
-    private const int WaveThreeTick = 2025;
+    /// <inheritdoc cref="WorldLabelLayoutTests.OwnerFrame"/>
+    private const WorldLabelLayoutTests.OwnerFrame Thin =
+        WorldLabelLayoutTests.OwnerFrame.WhereTheFirstReturnerIsNamed;
 
-    /// <inheritdoc cref="WaveThreeTick"/>
-    private const int WaveFourTick = 2380;
+    /// <inheritdoc cref="Thin"/>
+    private const WorldLabelLayoutTests.OwnerFrame Crowded =
+        WorldLabelLayoutTests.OwnerFrame.WhereTheCrowdIsThickest;
 
     /// <summary>
     /// Criterion 1, and the whole of the first half of the owner's complaint:
@@ -45,11 +47,12 @@ public sealed class WorldLabelFocusTests
     /// five are captioned, and the check itself names no count at all.</para>
     /// </summary>
     [Theory]
-    [InlineData(WaveThreeTick)]
-    [InlineData(WaveFourTick)]
-    public void Every_raider_on_the_map_is_named_under_the_pointer_and_when_selected(int ticks)
+    [InlineData(Thin)]
+    [InlineData(Crowded)]
+    public void Every_raider_on_the_map_is_named_under_the_pointer_and_when_selected(
+        WorldLabelLayoutTests.OwnerFrame frame)
     {
-        var state = WorldLabelLayoutTests.OwnerScene(ticks);
+        var state = WorldLabelLayoutTests.OwnerScene(frame);
         var onMap = state.Raiders.Where(raider => raider.Mode != RaiderMode.Escaped).ToArray();
 
         Assert.NotEmpty(onMap);
@@ -76,90 +79,64 @@ public sealed class WorldLabelFocusTests
     }
 
     /// <summary>
-    /// Criterion 2 of Issue #371, <b>re-stated by Issue #379 with the word the
-    /// original was missing</b>: the line the crowd took off a caption comes back
-    /// under the pointer <em>where there is room for it</em>.
+    /// Criterion 2 of Issue #371, re-stated by Issue #379 and re-stated again here:
+    /// <b>the crowd is what takes a sentence off a caption, and where there is no
+    /// crowd there is nothing to take.</b>
     ///
-    /// <para><b>What changed and why the wording is not cosmetic.</b> Issue #371
-    /// bought the unconditional version by letting a focused caption lay its whole
-    /// text in the first pass, ahead of its neighbours' names. Independent review of
-    /// PR #376 measured what that costs on the owner's own frame — pointing at
-    /// «Сиплый» takes the wave-4 map from three names to two — and Issue #379 took
-    /// the exemption away. So the promise is now conditional, and this states both
-    /// sides of the condition on the same frame rather than dropping the half that
-    /// stopped holding.</para>
-    ///
-    /// <para><b>The side that no longer holds, measured.</b> «Сиплый» stands on
-    /// (14,7) with five other bodies. They share one head, so they share one ladder
-    /// of places; the cursor serves him first, which puts his name on the lowest
-    /// rung with two neighbours' names above it, and a two-line box is seventeen and
-    /// a half reference pixels tall against the ten of a name. There is nowhere for
-    /// it to go, and pointing at him leaves a bare name. What answers him instead is
-    /// the panel, which since Issue #373 a click can reach on a crowded cell.</para>
-    ///
-    /// <para><b>The side that holds — and it is measured on the other scene, with
-    /// the pointer off as well as on.</b> The docstring said «on the same scene»
-    /// until Issue #389, and it said it of a loop that runs on wave 3 and not wave 4:
-    /// the body it walks is «Ржавый», the one returner of the thinner frame, and the
-    /// three cases it walks are <c>None</c>, hover and selection. So what the loop
-    /// states is not «the gesture hands the caption over» — it is <b>«the crowd is
-    /// what takes a sentence away, and where there is no crowd there is nothing to
-    /// take»</b>: «Ржавый» carries both his lines already with nothing pointed at,
-    /// and neither gesture changes them. A build where pointing at a body did
-    /// nothing at all would keep this loop green, which is why the promise of Issue
-    /// #371 is not what it holds and why no check in this file can hold it — the
+    /// <para><b>Why the name of this check changed.</b> It was
+    /// <c>The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer_where_there_is_room</c>,
+    /// and it read a caption the layout had shed on the owner wave-4 frame: five
+    /// captioned returners shared cell (14,7), they shared one ladder of places, and
+    /// «Сиплый» came out of it with a bare name. <b>That scene is no longer in the
+    /// party.</b> Cell occupancy (Issue #76) keeps raiding raiders off one another
+    /// tiles and a captioned returner is a raiding one, so over every tick of the
+    /// owner party there is now at most one caption at a time and nothing is ever
+    /// shed. Its own docstring already recorded that the promise of #371 - a gesture
+    /// hands the sentence back - is <em>not</em> what this check held, and that the
     /// number of sentences a gesture gives back on a shipped scene is zero
-    /// (<c>evidence/379-criterion4.json</c>). The round of PR #386 named this and
-    /// deliberately did not fix it, because the fix touched a <c>.cs</c> file and
-    /// that round was documents only.</para>
+    /// (<c>evidence/379-criterion4.json</c>). What it held is the sentence above,
+    /// and that is what it is now named for.
     ///
-    /// <para>Including <c>None</c> is deliberate rather than sloppy: the quiet map
-    /// has to be asserted somewhere alongside the gestures, so that a layout which
-    /// simply stopped shedding anything at all could not pass the first half.</para>
+    /// <para>Both halves are asserted on both shipped frames, and the first is what
+    /// makes the second mean anything: no caption is shed at all, and the caption
+    /// that carries a story keeps its whole text with nothing pointed at, under the
+    /// pointer, and while selected. Including <c>None</c> is deliberate - the quiet
+    /// map has to be asserted alongside the gestures, so that a layout which simply
+    /// stopped shedding anything could not pass by doing nothing.</para>
+    ///
+    /// <para>The arithmetic of the shed line itself - a ladder of twenty-two
+    /// reference pixels, a name of ten, a two-line box of seventeen and a half - is
+    /// held on values by
+    /// <see cref="WorldLabelLayoutTests.A_caption_that_cannot_fit_whole_keeps_its_name_and_loses_its_sentence"/>,
+    /// which builds the crowd rather than waiting for the party to produce one.</para>
     /// </summary>
-    [Fact]
-    public void The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer_where_there_is_room()
+    [Theory]
+    [InlineData(Thin)]
+    [InlineData(Crowded)]
+    public void The_crowd_is_what_takes_a_sentence_and_where_there_is_none_nothing_is_taken(
+        WorldLabelLayoutTests.OwnerFrame frame)
     {
-        var state = WorldLabelLayoutTests.OwnerScene(WaveFourTick);
-        var shed = Assert.Single(
-            WorldLabels
-                .Of(state, WorldLabelFocus.None, CameraView.DefaultTileSize)
-                .Where(placed => placed.Request.Subject.Kind == WorldLabelKind.Raider)
-                .Where(placed => placed.Lines.Count < placed.Request.Lines.Count));
+        var state = WorldLabelLayoutTests.OwnerScene(frame);
+        var quiet = WorldLabels
+            .Of(state, WorldLabelFocus.None, CameraView.DefaultTileSize)
+            .Where(placed => placed.Request.Subject.Kind == WorldLabelKind.Raider)
+            .ToArray();
 
-        Assert.Equal("Сиплый", shed.Lines[0].Text);
-        Assert.Single(shed.Lines);
-        // Six bodies on his cell, which is the reason the sentence has nowhere to
-        // go — stated as the number it is, so a frame that thinned out would stop
-        // this check rather than let it keep asserting a bare name.
-        Assert.Equal(
-            6,
-            WorldLabels.BodiesAt(
-                state,
-                state.Raiders.Single(raider => raider.Id == shed.Request.Subject.Id).Position)
-                .Count);
-
-        foreach (var focus in new[]
-                 {
-                     new WorldLabelFocus(shed.Request.Subject, null),
-                     new WorldLabelFocus(null, shed.Request.Subject),
-                 })
+        // Nothing is shed on this frame, and every caption that is shed anywhere has
+        // to be one whose head is shared - which is the rule, stated where it can be
+        // seen to hold rather than assumed because the crowd has gone.
+        foreach (var placed in quiet.Where(item => item.Lines.Count < item.Request.Lines.Count))
         {
-            var focused = Assert.Single(
-                WorldLabels
-                    .Of(state, focus, CameraView.DefaultTileSize)
-                    .Where(placed => placed.Request.Subject == shed.Request.Subject));
-
-            Assert.Equal(["Сиплый"], focused.Lines.Select(line => line.Text));
+            var owner = state.Raiders.Single(raider => raider.Id == placed.Request.Subject.Id);
+            Assert.True(
+                WorldLabels.BodiesAt(state, owner.Position).Count > 1,
+                $"«{owner.Name}» lost a line on the {frame} frame while standing alone on " +
+                $"({owner.Position.X},{owner.Position.Y}). Only a shared head may cost a caption " +
+                "its sentence.");
         }
 
-        // And the other half, on the other scene: where the head is not shared, a
-        // caption keeps its whole text. Wave 3's «Ржавый» is that body, and the
-        // three cases below say it of the quiet map first and of both gestures
-        // after — so what is measured is that the crowd is what costs a sentence,
-        // not that a gesture returns one.
-        var thinner = WorldLabelLayoutTests.OwnerScene(WaveThreeTick);
-        var alone = thinner.Raiders.Single(raider =>
+        // And the caption that has a sentence keeps it, with the pointer off and on.
+        var alone = state.Raiders.Single(raider =>
             ReturningHeroLabel.IsCaptioned(raider) && ReturningHeroLabel.Story(raider) is not null);
         var body = new WorldLabelSubject(WorldLabelKind.Raider, alone.Id);
         foreach (var focus in new[]
@@ -171,7 +148,7 @@ public sealed class WorldLabelFocusTests
         {
             var label = Assert.Single(
                 WorldLabels
-                    .Of(thinner, focus, CameraView.DefaultTileSize)
+                    .Of(state, focus, CameraView.DefaultTileSize)
                     .Where(placed => placed.Request.Subject == body));
 
             Assert.Equal(
@@ -209,11 +186,12 @@ public sealed class WorldLabelFocusTests
     /// the other can cost too.</para>
     /// </summary>
     [Theory]
-    [InlineData(WaveThreeTick)]
-    [InlineData(WaveFourTick)]
-    public void A_second_line_never_costs_a_neighbour_his_name(int ticks)
+    [InlineData(Thin)]
+    [InlineData(Crowded)]
+    public void A_second_line_never_costs_a_neighbour_his_name(
+        WorldLabelLayoutTests.OwnerFrame frame)
     {
-        var state = WorldLabelLayoutTests.OwnerScene(ticks);
+        var state = WorldLabelLayoutTests.OwnerScene(frame);
         var bodies = BodiesOf(state);
 
         Assert.NotEmpty(bodies);
@@ -268,11 +246,12 @@ public sealed class WorldLabelFocusTests
     /// nothing displaced, no name lost.</para>
     /// </summary>
     [Theory]
-    [InlineData(WaveThreeTick)]
-    [InlineData(WaveFourTick)]
-    public void A_gesture_never_takes_a_name_from_a_body_on_another_cell(int ticks)
+    [InlineData(Thin)]
+    [InlineData(Crowded)]
+    public void A_gesture_never_takes_a_name_from_a_body_on_another_cell(
+        WorldLabelLayoutTests.OwnerFrame frame)
     {
-        var state = WorldLabelLayoutTests.OwnerScene(ticks);
+        var state = WorldLabelLayoutTests.OwnerScene(frame);
 
         Assert.NotEmpty(BodiesOf(state));
         foreach (var body in BodiesOf(state))
@@ -302,7 +281,7 @@ public sealed class WorldLabelFocusTests
                 {
                     Assert.True(
                         CellOf(state, lost) == here,
-                        $"pointing at «{NameOf(state, body)}» on {here} at tick {ticks} " +
+                        $"pointing at «{NameOf(state, body)}» on {here} of the {frame} frame " +
                         $"costs «{NameOf(state, lost)}» on {CellOf(state, lost)} his name; " +
                         $"the quiet map names {quiet.Count} bodies and this one names " +
                         $"{named.Count}.");
@@ -332,7 +311,7 @@ public sealed class WorldLabelFocusTests
     /// is on is served its <em>name</em> first, which puts it at the bottom of the
     /// ladder with its neighbours' names above it and no room to grow into. That is
     /// the owner's wave-4 cell (14,7), it is measured in
-    /// <see cref="The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer_where_there_is_room"/>,
+    /// <see cref="The_crowd_is_what_takes_a_sentence_and_where_there_is_none_nothing_is_taken"/>,
     /// and it is the price named in <c>WorldLabelLayout.FirstAttempt</c>.</para>
     /// </summary>
     [Fact]
@@ -444,13 +423,13 @@ public sealed class WorldLabelFocusTests
     /// own limit to be would pass for any limit at all.</para>
     /// </summary>
     [Theory]
-    [InlineData(WaveThreeTick)]
-    [InlineData(WaveFourTick)]
+    [InlineData(Thin)]
+    [InlineData(Crowded)]
     public void Pointing_at_any_body_of_the_frame_breaks_neither_spacing_nor_attachment(
-        int ticks)
+        WorldLabelLayoutTests.OwnerFrame frame)
     {
         const double oneTile = 22.0;
-        var state = WorldLabelLayoutTests.OwnerScene(ticks);
+        var state = WorldLabelLayoutTests.OwnerScene(frame);
         var bodies = state.Raiders
             .Where(raider => raider.Mode != RaiderMode.Escaped)
             .Select(raider => new WorldLabelSubject(WorldLabelKind.Raider, raider.Id))
@@ -472,14 +451,14 @@ public sealed class WorldLabelFocusTests
                 Assert.True(
                     one.AttachmentRef <= oneTile,
                     $"«{one.Lines[0].Text}» sits {one.AttachmentRef:F2} reference pixels " +
-                    $"from its body at tick {ticks} while «{body}» is pointed at; " +
+                    $"from its body on the {frame} frame while «{body}» is pointed at; " +
                     $"the limit is {oneTile}.");
                 foreach (var other in placed.Where(item => item != one))
                 {
                     Assert.False(
                         Intersect(one.Box, other.Box),
                         $"«{one.Lines[0].Text}» and «{other.Lines[0].Text}» share pixels " +
-                        $"at tick {ticks} while «{body}» is pointed at: " +
+                        $"on the {frame} frame while «{body}» is pointed at: " +
                         $"{one.Box} against {other.Box}.");
                 }
             }
@@ -498,31 +477,27 @@ public sealed class WorldLabelFocusTests
     /// gives: a change that starts naming strangers on the quiet map is noticed the
     /// day it happens.</para>
     ///
-    /// <para><b>Re-pinned by Issue #361.</b> The wave-4 row was <c>11, 5</c>: with
-    /// the jitter live the party reaches tick 2380 with twelve raiders on the map
-    /// instead of eleven, and the quiet map names three of them instead of five —
-    /// five carry a caption and two are crowded off one cell
-    /// (<see cref="WorldLabelLayoutTests.The_names_that_are_not_shown_are_raiders_sharing_one_cell"/>).
-    /// The wave-3 row did not move. What the check states is unchanged, and the
-    /// two assertions under it — that every name on the quiet map belongs to a
-    /// raider, and to one the domain has met — are what stop the numbers from
-    /// being satisfied by naming the wrong bodies.</para>
+    /// <para><b>The two counts per row are gone and the selectiveness is asserted
+    /// instead.</b> They were <c>10, 1</c> and <c>11, 5</c>, then <c>12, 3</c> after
+    /// Issue #361 re-pinned them - recordings of a party, and the party has moved
+    /// twice more since. What the pair was there to catch is a rule leaking into
+    /// the quiet map, and that is now said as what it is: the quiet map names
+    /// <b>only</b> raiders the domain has met, and the frame carries at least one
+    /// raider it does not name. A frame that started naming strangers fails the
+    /// first half; a frame on which the rule had quietly become name everybody
+    /// fails the second. Neither has to be rewritten when the balance moves.</para>
     /// </summary>
     [Theory]
-    [InlineData(WaveThreeTick, 10, 1)]
-    [InlineData(WaveFourTick, 12, 3)]
+    [InlineData(Thin)]
+    [InlineData(Crowded)]
     public void With_nothing_pointed_at_the_map_names_exactly_who_it_named_before(
-        int ticks,
-        int onMap,
-        int labels)
+        WorldLabelLayoutTests.OwnerFrame frame)
     {
-        var state = WorldLabelLayoutTests.OwnerScene(ticks);
+        var state = WorldLabelLayoutTests.OwnerScene(frame);
         var placed = WorldLabels.Of(state, WorldLabelFocus.None, CameraView.DefaultTileSize);
+        var onMap = state.Raiders.Where(raider => raider.Mode != RaiderMode.Escaped).ToArray();
 
-        Assert.Equal(
-            onMap,
-            state.Raiders.Count(raider => raider.Mode != RaiderMode.Escaped));
-        Assert.Equal(labels, placed.Count);
+        Assert.NotEmpty(placed);
         // Every one of them is a raider the domain has met: no crew member is
         // named with nothing pointed at, and no stranger is either.
         Assert.All(placed, label => Assert.Equal(WorldLabelKind.Raider, label.Request.Subject.Kind));
@@ -530,6 +505,14 @@ public sealed class WorldLabelFocusTests
             ReturningHeroLabel.IsCaptioned(
                 state.Raiders.Single(raider => raider.Id == label.Request.Subject.Id)),
             $"«{label.Lines[0].Text}» is named with nothing pointed at."));
+        // And the quiet map is selective rather than silent: the frame holds
+        // raiders it deliberately leaves unnamed.
+        Assert.True(
+            onMap.Length > placed.Count,
+            $"the {frame} frame has {onMap.Length} raider(s) on the map and the quiet map names " +
+            $"{placed.Count} of them. With nothing pointed at, the map names the ones the domain " +
+            "has met and nobody else - a frame where it names all of them is the rule taken wider " +
+            "than the owner took it.");
     }
 
     /// <summary>

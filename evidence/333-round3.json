@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "issue": "#333 + #336 (merged balance slice)",
+  "when": "2026-08-11",
+  "what": "Third executor's round: the tension was tested rather than confirmed and it dissolved, the join threshold is chosen, the hold rule is removed by the owner's decision, and the contract is brought back to the numbers the code holds.",
+  "tree": "fix/333-combat-mode-hold, working copy clean, origin/main = 3b627bf",
+  "theTensionDissolved": {
+    "theHypothesisTested": "The coordinator read two of the previous round's facts together — that the join threshold does not touch the moment of truth at all, and that at join 40 the scene lives only in `prepared` parties which the check could not address because of a harness defect — and proposed that the conflict was partly an instrument that could not turn its head. The instruction was to TEST it, with a refutation as valuable as a confirmation.",
+    "theHarnessDefect": "Every arm in PrototypeMomentOfTruthTests was built as `log with { Commands = [new VerdictCommand(...)] }`, which REPLACES the fixture's command log instead of adding to it. `baseline` carries 0 commands so it was invisible; `prepared` carries 6, and pointed at it the replacement plays a different party from the one the verdict tick was measured on, so the run dies with «A verdict is only accepted while the moment of truth is open». Repaired by `WithVerdict`, at all six sites.",
+    "result": "CONFIRMED. On the repaired harness both opposed checks are green at 40 and at 41 and neither at 42.",
+    "sweepOnTheRepairedHarness": {
+      "ruleOfChoiceStatedBeforeTheSweep": "unchanged from the previous round — the smallest value in 40..42 at which BOTH are green",
+      "rows": [
+        {
+          "join": 40,
+          "verdict": "green",
+          "memoryPrepared": "green",
+          "refusalsPrepared": 10
+        },
+        {
+          "join": 41,
+          "verdict": "green",
+          "memoryPrepared": "green",
+          "refusalsPrepared": 51
+        },
+        {
+          "join": 42,
+          "verdict": "red",
+          "memoryPrepared": "green",
+          "refusalsPrepared": 53,
+          "verdictNote": "not one of the six shipped parties contains the scene; `punish differs from silence` is False in ALL SIX"
+        }
+      ]
+    }
+  },
+  "theThresholdIs41": {
+    "howItWasChosen": "The rule of choice selects 40. 40 is then excluded by a готовности criterion that stands outside the sweep — «все инварианты контракта зелёные» — and 41 is the smallest remaining value satisfying the rule. This is an exclusion by a pre-existing criterion, not a rule changed after the run.",
+    "measuredAt40": "the whole simulation suite gives SEVEN red, among them `The_contract_invariants_hold_on_every_seed_of_the_matrix` and `Preparation_changes_the_deterministic_party_without_direct_orders` — one of the two properties this slice exists to restore — plus `A_refusal_the_memory_free_tick_does_not_honour_lost_the_work_to_somebody` and `A_wound_closes_in_a_creature_that_rests_and_eats`.",
+    "measuredAt41": "three red, and the memory-of-place floor is carried with room (51 refusals on `prepared` against a floor of 10) where 40 meets it exactly at 10."
+  },
+  "theHoldRuleIsRemoved": {
+    "decision": "Owner's decision of 2026-08-11, on the measurement in evidence/333-hold-reachability.json. The rule was introduced by the owner's decision of the same day and removed by it once the arithmetic was measured.",
+    "whatWasRemoved": "PrototypeTuning.CombatHoldSatiety; PrototypeWorld.Combat.LeaveTheLineWhenTooHungryToStandInIt and its call; the `combat_left_starving` decision; WaveState.DefendersLeftStarving and CountDefenderLeftStarving.",
+    "whatStays": "the mod guard in DecideNeedsAndMuster. It is a different thing: it stops the needs phase silently overwriting combat's decision about participation, which is the original defect of #333. Only the rule by which hunger took a fighter out by itself is gone.",
+    "removalIsBehaviourNeutralAndItWasPredictedBeforeItWasRun": "The rule fired on no party, so removing it can change no party. Predicted, then measured: the suite gives the same three red before and after the removal, and DefendersLeftStarving never reached the canonical document (PrototypeCanonical writes defendersDowned and defendersFled and not this one), so no checksum can see it either.",
+    "precedentForDeletingRatherThanAnnotating": "independent review of PR #328 removed an unreachable branch from this same method, on the grounds that a clause the mechanics cannot reach is a promise the contract does not keep."
+  },
+  "threeChecksWereScenesPinnedToOneParty": {
+    "theClass": "A check that states «this behaviour is reachable» but is asked of one hand-picked party states something narrower than the promise, and goes red whenever the balance moves the scene to a neighbouring party. It then gets re-pointed by hand, which hides the trap for the next executor instead of removing it. Three checks in this suite were in that state and all three were repaired the same way: asked of the whole shipped matrix, with every part of them that is a RULE rather than an existence claim now checked on six parties instead of one.",
+    "each": [
+      {
+        "check": "A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave",
+        "history": "already re-pointed once, after Issue #361 made the damage jitter live — its own doc comment records it",
+        "measured": "at join 38 the scene exists in baseline/20260728 and in two `prepared` parties, and in neither other `baseline`; at 42 in none of the six"
+      },
+      {
+        "check": "A_wound_closes_in_a_creature_that_rests_and_eats",
+        "measured": "`injury_mending` occurs in FOUR of the six shipped parties. The party the check read — baseline at the journal's own seed, 20260726 — is one of the two that miss it. The §10.5 rung is alive; the pinning was the defect.",
+        "strengthened": "every wound closure in any of the six parties must now be a `Rest` job that reached full health; that was previously checked on one party"
+      },
+      {
+        "check": "A_domain_that_punishes_without_cause_is_eventually_refused_the_line",
+        "strengthened": "every refusal by grudge in any of the six parties must name a non-zero grudge and what held the creature; previously one party"
+      }
+    ]
+  },
+  "theContractHadNeverBeenUpdatedOnThisBranch": {
+    "howItWasFound": "`git log origin/main..HEAD -- docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md` returns nothing and `git diff origin/main..HEAD` on it is empty. The previous handover states «правка контракта §10.2 — с прошлых кругов, не откатывается»; there is no such change in this branch's history.",
+    "whatWasStale": "T.raider_hp 30 against RaiderHp 240; T.defender_hp_base 20 against 160; T.defender_hp_per_might 4 against 32; T.damage_readiness_divisor 25 against 6; T.armour_readiness_divisor 50 against 12; T.damage_jitter 1 against 6; T.combat_min_satiety 20 against a constant of that name that no longer exists; the damage formulas omitted the might weights entirely; the mending rule said `hp` grows by 1 where HpRecoveryStep is 8.",
+    "whyItDriftedSilently": "`The_tuning_table_of_the_contract_carries_the_numbers_the_code_holds` guards docs/design/SLICE_03_MOMENT_OF_TRUTH.md only. Nothing guards the prototype-1 tuning table, so its numbers can go stale without any check reddening. That is a gap worth its own issue and is NOT fixed here.",
+    "whatWasDone": "§10.2, §10.3, §10.5 and the tuning table of §15 brought to the numbers the code holds, plus a new rule in §10.2 — «порог один и он спрашивается только на входе» — with the measurement referenced, so the removal of the hold threshold is written where the next reader will look."
+  },
+  "damageReadinessDivisorIsNowLoadBearing": "With the hold rule gone, hunger reaches a fight through exactly one number: readiness is half satiety, and DamageReadinessDivisor is what turns it into damage. The note beside the constant says so and names the two checks that go red if it is raised — `Deliberately_losing_creatures_and_stock_never_scores_better` and `Preparation_changes_the_deterministic_party_without_direct_orders`. It deliberately does not promise any check that does not exist; the previous round found exactly that kind of false promise in this file's neighbour and it is not being reintroduced.",
+  "whatIsStillRed": {
+    "count": "1 of 359 in the simulation suite, against 5 at the start of this round",
+    "the one": {
+      "test": "PrototypeOffDutyTests.A_creature_left_without_work_after_a_fight_does_not_stand_where_it_was_fought(baseline, 20260728)",
+      "message": "1 creature spent a whole 60-tick window after a wave standing where the fight left it — #6 at (23,6), mode=Moving, last=waiting_blocked_by_other",
+      "class": "ОБЕЩАНИЕ of Issue #201",
+      "whyItIsNotThisSliceToFix": "The creature is `Moving` and blocked by another body. That is the jam, and `ActOffDuty`'s own doc comment names it as deliberately out of its scope: «The jam itself — bodies blocking each other — is cell occupancy, Issue #76, left on slice 6 by the owner's decision of 2026-08-03». This slice's non-goals forbid touching cell capture in as many words. So it cannot be fixed here without breaking two independent rules.",
+      "whatTheSliceDidToIt": "A fight twice as long puts more bodies in the corridor for longer, which makes a deferred defect observable on one party of six. It does not respond to either knob — measured red at every health scale tried and at joins 25, 41 and 42 alike.",
+      "whatIsOwed": "a decision by the coordinator: either this red is accepted as the named price of the longer fight until #76 lands on slice 6, or #76 is pulled forward. The executor is not taking it."
+    }
+  },
+  "entryNoteForTheNextExecutor": {
+    "stateOfTheTree": "Branch fix/333-combat-mode-hold, clean, pushed. The simulation suite is 1 red of 359. The threshold is 41, the hold rule is gone, the contract matches the code, and three pinned scene-checks are matrix checks.",
+    "doNotRepeat": [
+      "the join threshold. 40..42 has been swept twice, before and after the harness repair, and 41 is chosen with the reason recorded in PrototypeTuning.cs beside the constant. 40 gives seven red, 42 gives the verdict check no party to stand on.",
+      "the synthetic party for CombatHoldSatiety. The rule is gone; evidence/333-hold-reachability.json is now history rather than a task.",
+      "re-pointing a scene check at a seed that happens to hold. Three of them have been converted to matrix existence claims instead, and the reason is written in each one's doc comment.",
+      "everything in the previous two entry notes — evidence/333-after-merged.json `entryNoteForTheNextExecutor` and evidence/333-variants.json `entryNoteForTheMergedSlice` — is still valid, in particular the health scale of x8/x4 and the fact that StealPeriod cannot be re-denominated."
+    ],
+    "whatIsLeftToDo": [
+      "READ FIRST: round4_presentationSuite. The presentation suite is 11 red of 728, down from 20. Ten of them share one pinned fixture and are rebasable zamer/vacuity cases with the repair already described; the eleventh is a genuine invariant break and is a coordinator decision, not a task.",
+      "evidence/333-mutants.json — one mutant per assertion, substitutions verbatim, run only after the checked state is committed. Nothing of this is done yet. The assertions needing a mutant include the three matrix checks in their NEW form: the point to prove is that widening them to the matrix did not weaken them, i.e. M6 (a verdict's effect made nothing) and M7 (the reward channel zeroed) still redden `A_verdict_makes...` across all six parties.",
+      "both checksums re-taken and explained. Expect them to move: the join threshold changed from 42 to 41, which changes who joins the line and therefore every party.",
+      "the full verify.ps1, once, on the final state. NOT yet run in this round. A whole-solution `dotnet test` was started at the end of this round and its result is the first thing to read — if the Presentation or golden-file projects moved with the threshold, that is where it will show.",
+      "the pull request, closing BOTH #333 and #336, with the five required body sections."
+    ],
+    "thePullRequestBodySections": [
+      "1. The outcome of sentence 1 of #333: «добивают труп» is absent from the simulation (strikesOnARaiderAlreadyOut = 0 on all nine runs) and the observation belongs to the view — `BlowReadout.Of` counts records stamped `Tick − 1` as fresh, and during the moment-of-truth pause the world does not tick. Goes to #334.",
+      "2. The partition extension to PrototypeTuning.cs made by the first executor — which file, why, which criterion required it — plus any of your own by the same method. This round extended nothing: every file touched was already named as owned, including tests/** and docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md.",
+      "3. The blind spot of `A_place_is_remembered_by_one_creature_and_not_by_the_group`: it calls the case inheritance of memory, while `Remember` writes only at `creature.Position`, so what is observable is one tile occupied by two creatures in different phases of a tick. The check is NOT to be touched; a paragraph is owed to the next reader.",
+      "4. Which of the two verify.ps1 checksums can see this change: measured, neither — `viewInvariantChecksum` is taken on tick 1, 1299 ticks before the first wave, and `deterministicChecksum` is not about `PrototypeWorld`. The criterion is served by the journal checksums, and the pull request must make clear which checksum is which.",
+      "5. NEW, and owed to the owner's decision: the removal of the hold threshold — that it was introduced by the owner's decision of 2026-08-11, what measured its unreachability, and that it was removed by the same owner on the same day on that measurement. It is a measured result and not a change of mind, and it has to be visible as one."
+    ],
+    "theOneOpenQuestionForTheCoordinator": "the last red, `A_creature_left_without_work_after_a_fight...`, is the promise of #201 failing through the jam that #201's own implementation defers to #76 on slice 6 by the owner's decision of 2026-08-03, and this slice's non-goals forbid touching cell capture. It needs a decision, not a fix."
+  },
+  "thePresentationSuiteHasBeenRedSinceTheBalanceChangeAndNobodyHadLooked": {
+    "what": "The whole-solution test run of this round is the first one anybody on this branch has done. `tests/DungeonFortress.Presentation.Tests` is 20 red of 728.",
+    "itIsNotThisRound": "Measured against the predecessor's last commit in a throwaway worktree at 1356036: it was 22 red of 728 there. This round took it from 22 to 20 — three failures went green and one new parametrisation went red, and the one that appeared (`A_gesture_never_takes_a_name_from_a_body_on_another_cell(ticks: 2380)`) is the sibling of one that was already red at ticks 2025.",
+    "theCause": "Every one of them reads the party at a named tick — golden HUD text, blow readouts, label layout and focus at ticks 2025 and 2380. The slice made the party different: health x8, damage x4 from commit 97863d4, and now a join threshold of 41. Which particular parametrisation is red is arbitrary; the set moves with any change to the party.",
+    "whyNeitherPreviousRoundSawIt": "both ran `dotnet test tests/DungeonFortress.Simulation.Tests` only. The criterion «полный verify.ps1 зелёный один раз на финальном состоянии» exists for exactly this, and it has not been run on this branch at any point.",
+    "whyTheExecutorDidNotFixIt": "`src/DungeonFortress.Presentation/**` and the Presentation tests are FOREIGN to this slice — they belong to #334, and the previous round already recorded that `tests/DungeonFortress.Presentation.Tests/BlowReadoutTests.cs` is somebody else's file. The right to extend the partition is for ONE file of one's own area; this is twenty checks across at least six files of another slice's area. Three conditions cannot be met, so the executor stopped rather than reached.",
+    "whatIsOwed": "a coordinator decision, and it is the largest single thing standing between this branch and a pull request: either #334 takes the Presentation fallout, or the golden frames are regenerated by whoever owns them, or the slice is re-scoped to include them. It cannot be decided by the executor and it cannot be left silent."
+  },
+  "round4_presentationSuite": {
+    "partition": "Extended to `tests/DungeonFortress.Presentation.Tests/**` by the COORDINATOR's decision, not by the executor's self-extension right. `src/DungeonFortress.Presentation/**` and `src/DungeonFortress.Game/**` remain foreign and were not touched.",
+    "partitionItemNeedingRatification": "`tests/golden/ui/*.json` (three files) is the fixture data of the golden test that was handed over, but it sits outside `tests/DungeonFortress.Presentation.Tests/**` and outside the one-file self-extension right. It was edited because the extension is inoperative without it. Named here and in the pull-request body for the coordinator to ratify.",
+    "result": "20 red -> 11 red of 728.",
+    "repairedAndHowEachWasClassified": [
+      {
+        "tests": "BlowReadoutTests (5 red, the class is now 12 of 12 green)",
+        "whatWasRebased": "the tick the scene is read at, and the cast",
+        "class": "ZAMER (a recorded number)",
+        "grounds": "The tick had already been re-pinned twice - 1318 before Issue #361, then 1313. Measured now: the old cast (creature 1 and creature 8 on raider 1) does not occur anywhere in the journal any more, and the scene shape lands on 1325 with a different cast.",
+        "notRebasedButRemoved": "Rather than re-pin a third time, the scene is LOCATED BY ITS SHAPE - the first tick with two recorded blows on one body of which one is a kill - and every identity is read off the scene found. Absence of the scene now throws with an explanation instead of silently testing nothing.",
+        "strengthened": "the check no longer compares literals; it asserts the reading transcribes the journal faithfully, read independently from state.Events of the same tick. The windup/flinch check is asked of every body the scene names instead of three written-down ids, and the no-phase check of every body the scene did NOT touch instead of two."
+      },
+      {
+        "tests": "BlowJournalSourceTests.Every_blow_of_the_party_is_recoverable_tick_by_tick",
+        "whatWasRebased": "nothing was rebased",
+        "class": "ZAMER for the literals 53/68/3, OBESHCHANIE for the equalities",
+        "grounds": "The literals guarded against vacuity - the check's own comment says that if this stopped being true the claim below would be about nothing. The equalities that ARE the claim compare two independently derived numbers and were untouched.",
+        "strengthened": "the literals were replaced by the property they guarded: fewer entries than blows, and at least one entry holding more than one. It cannot go stale and still fails if the fold disappears."
+      },
+      {
+        "tests": "GoldenUiTextTests (3)",
+        "whatWasRebased": "the canonical world checksum in the recorded frame, and `strength` in one of the three",
+        "class": "ZAMER",
+        "grounds": "A golden frame is a recording of a run. Everything else in each frame - jobs, renown, stone, the inspector text - reproduced identically, which is what says the frame is the same frame.",
+        "howItWasKeptHonest": "only the checksum token was substituted first. Two files then passed and one did not, which is what surfaced the second difference below. A blind rebase of the whole string would have buried it."
+      }
+    ],
+    "theFindingTheGoldenRebaseSurfaced": {
+      "what": "`strength 11` became `strength 0` at tick 190 of the stone demo.",
+      "itIsNotTheGoldenFile": "DomainStrength() sums only creatures that pass CanAnswerTheCall, which requires Satiety >= CombatJoinSatiety. StartSatiety is 70 and satiety decays 1 per 5 ticks, so at tick 190 everybody is at about 32. With the threshold at 41 nobody qualifies and the mirror correctly reports nothing.",
+      "whyItIsWorthTheCoordinatorsAttention": "the join threshold (41) is now ABOVE the eat threshold (30). A creature that behaves exactly as designed - eating whenever it falls below 30 - spends part of its cycle unable to join a fight, and the HUD reads `strength 0` for a domain of nine healthy creatures. Before this slice the join threshold sat BELOW the eat threshold, so a fed domain was always fightable. This is a gameplay consequence of the balance number, visible to the player, and it is named rather than absorbed.",
+      "itDoesNotAffectAWave": "at wave time the domain is fed - Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party holds average satiety in [45,75] and is green. The reading of 0 is an early-party and between-meals effect."
+    },
+    "theElevenLeftAndWhatEachNeeds": {
+      "sharedCause": "Ten of the eleven read one shared fixture - WorldLabelLayoutTests.OwnerScene, the frame the owner actually played on 2026-08-10 at seed 20260729, ticks 2025 and 2380. The slice changed the party, so that frame no longer holds the crowd it was chosen for.",
+      "byClass": [
+        {
+          "tests": "With_nothing_pointed_at_the_map_names_exactly_who_it_named_before(2025 and 2380)",
+          "class": "ZAMER - the InlineData counts (onMap 10/12, labels 1/3) describe the scene"
+        },
+        {
+          "tests": "The_feedback_line_says_which_body_of_how_many_the_click_reached; The_pointer_answers_with_the_selected_body_when_it_stands_on_that_cell; The_line_the_crowd_took_off_a_caption_comes_back_under_the_pointer_where_there_is_room",
+          "class": "ZAMER - all three fail on a count of how many bodies share the crowded cell (expected 6, got 7)"
+        },
+        {
+          "tests": "Every_returning_raider_of_the_owners_scene_is_still_named(2025)",
+          "class": "ZAMER - expected 1 captioned returner, the scene now has 0, so the check tests nothing"
+        },
+        {
+          "tests": "No_two_labels_of_the_owners_scene_are_printed_over_one_another(2025); No_label_ends_up_further_than_a_tile_from_its_own_body(2025); A_gesture_never_takes_a_name_from_a_body_on_another_cell(2025)",
+          "class": "vacuity guard - all three fail on Assert.NotEmpty, i.e. the scene stopped containing anything to test. The INVARIANTS themselves are untouched and untested at that tick."
+        },
+        {
+          "tests": "CreatureStoryTests.Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel",
+          "class": "OBESHCHANIE - an observability floor: only 8 creature-parties over the whole matrix ever refused by memory, fewer than the 9 creatures of a single party. It is 8 against a floor of 9 and the floor MUST NOT be lowered."
+        }
+      ],
+      "theRecommendedRepair": "The same one that worked three times already: stop pinning the scene to a tick number and locate it by the shape that makes it the right scene - a tick where enough bodies share a cell and at least one returner carries a caption. That would cure most of the ten in one place, inside OwnerScene. It is NOT done here because OwnerScene is deliberately anchored to a real owner playtest - its own doc says nothing about it is a fixture written for the test - and replacing that anchor with a search is a judgement worth naming to the coordinator rather than slipping in at the end of a round."
+    },
+    "theOneThatIsAStopAndNotATask": {
+      "test": "WorldLabelFocusTests.A_gesture_never_takes_a_name_from_a_body_on_another_cell(ticks: 2380)",
+      "message": "pointing at Kremen on (13,6) at tick 2380 costs Dolgovyazyy on (14,7) his name; the quiet map names 3 bodies and this one names 3",
+      "whyItIsDifferentFromTheOtherTen": "This is the INVARIANT assertion failing, not a vacuity guard and not a count. The check's own doc carves out exactly one exemption - bodies sharing ONE cell share one ladder of places - and says that losing the name of somebody on ANOTHER cell is the other thing entirely, the gesture reaching past its own body, and that is what this refuses. (13,6) and (14,7) are different cells.",
+      "whenItAppeared": "Measured: green at the predecessor's commit 1356036, which had the join threshold at 42; red at 41. So the executor's own threshold choice surfaced it.",
+      "whyTheExecutorStopped": "Making it green needs either a change in src/DungeonFortress.Presentation/** - foreign, and the coordinator's instruction was to stop if the code rather than the check has to move - or a re-statement of the invariant, which is a promise and may not be moved under a result. Both are the coordinator's call.",
+      "theTradeToBeAwareOf": "join 42 keeps this label invariant but leaves A_verdict_makes_the_named_creature_behave_differently_in_the_next_wave with no shipped party to stand on at all. So this is not pick 42 and be done; it is a choice between two promises again, now across two suites."
+    }
+  },
+  "theRemainingSimulationRedClassified": {
+    "test": "PrototypeOffDutyTests.A_creature_left_without_work_after_a_fight_does_not_stand_where_it_was_fought(baseline, 20260728)",
+    "theCoordinatorAskedWhichOfTwoCasesItIs": "whether it is pinned to a named tick like the twenty presentation checks, or whether the longer fight created a jam that was not there.",
+    "answer": "CASE TWO. It is not pinned to anything: the check is a Theory over two fixtures by three seeds, and within each party it walks EVERY 60-tick window that follows a wave. There is no tick, no seed and no cast written into it that the slice could have invalidated.",
+    "measured": "On origin/main the check is GREEN on all six parametrisations (run in a throwaway worktree at origin/main, `--filter FullyQualifiedName~A_creature_left_without_work_after_a_fight`: 6 passed, 0 failed). On this branch it is red on one of the six.",
+    "theScale": "one creature in one window of one party: `departures=10 ontoABunk=0 beforeTheFirstWaveEnded=0 stoodStillWithoutWork=1 windowsCutShort=1`, creature #6 at (23,6), mode=Moving, last=waiting_blocked_by_other.",
+    "theMechanism": "The creature is Moving and blocked by another body, which is the cell-occupancy jam. ActOffDuty's own doc names it as deliberately outside its scope: the jam itself, bodies blocking each other, is cell occupancy, Issue #76, left on slice 6 by the owner's decision of 2026-08-03. A fight twice as long leaves more bodies in the corridor for longer, so a deferred defect that never surfaced now surfaces once in six parties.",
+    "consequence": "By the coordinator's own dichotomy this is a finding and not a task, and the slice's non-goals forbid touching cell capture. Not fixed, and deliberately so."
+  }
+}

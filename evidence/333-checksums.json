@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "issue": "333 + 336 + 76",
+  "what": "Both checksums verify.ps1 prints, re-taken on the final state of the slice and explained — criterion 6 of Issue #336. Four numbers, because they see four different things.",
+  "when": "2026-08-12",
+  "tree": {
+    "branch": "fix/333-combat-mode-hold",
+    "takenAt": "ba13f4d",
+    "build": "dotnet build DungeonFortress.sln -c Release"
+  },
+  "thePredictionThisRoundHadToCheck": {
+    "whatWasWritten": "evidence/333-before.json and the entry note of evidence/333-round3.json both say that NEITHER of the two checksums verify.ps1 prints can see this change: viewInvariantChecksum because it is taken on tick 1, 1299 ticks before the first wave, and deterministicChecksum because PrototypeWorld is not on that path at all.",
+    "whatWasMeasured": "Half of it is right and half of it is wrong. deterministicChecksum has not moved by a single character — e65273aa… on origin/main and e65273aa… on this branch. viewInvariantChecksum HAS moved — 83bcf75c… to 8a63a099… — and the reason is not the fight: the health denomination of Issue #336 is applied when the world is built, so a creature already carries hp = 160 + might*32 on tick 1 and the canonical state of that tick is a different document. «Before the first wave» is not the same as «before the change», and the earlier rounds reasoned about the tick rather than about the state.",
+    "howThatWasPinnedDownRatherThanAsserted": {
+      "probe": "the three health constants were put back to their pre-#336 values on the final tree — RaiderHp 240 -> 30, DefenderHpBase 160 -> 20, DefenderHpPerMight 32 -> 4 — and the tick-1 checksum was taken again",
+      "result": "54985f1ce778d190d49c79e2c1b6236b05852dbd16168c5b72c7e56e44c35dc9, which is exactly the number evidence/333-before.json recorded at the start of the slice",
+      "conclusion": "viewInvariantChecksum moves because of the health denomination and because of nothing else in this slice. The threshold, the damage spread, the readiness divisor, the mending step, the participation guard and both halves of Issue #76 are all invisible to it — they need a wave, and tick 1 has none.",
+      "reverted": "git checkout -- src/ immediately after the probe; the probe is not in any commit"
+    }
+  },
+  "aSecondCorrection_theRecordedCommandsWereProxiesAndNotTheOnesVerifyRuns": {
+    "whatWasFound": "Both numbers evidence/333-before.json records were taken with commands that are NOT what verify.ps1 runs, so neither of them is the checksum verify.ps1 prints. Measured on the final tree: the recorded command for deterministicChecksum gives de573ef3…, while verify.ps1 prints e65273aa… — because Invoke-Scenario also passes `--commands scenarios/smoke.commands.json`, which the recorded command omits. The recorded command for viewInvariantChecksum gives cf0f9aa5…, while verify.ps1 prints 8a63a099… — because the Godot stage takes the adapter checksum over four view cases (base, overview-shifted, detail-scaled-ui, large-same-zoom), not one scenario run.",
+    "howItWasFixed": "verify.ps1 was run with -Stage sim,godot in a temporary worktree at origin/main (3b627bf), which gives the real before-numbers of both. The worktree was removed afterwards. This is a second run of two stages on a DIFFERENT tree, not a re-run of the full verify on the final state — rule 22 is about the latter.",
+    "whyItMatters": "The proxies happen to support the same conclusion — one moves, the other does not — but a number that is called «the checksum verify prints» and is not it cannot be checked by anybody reading the pull request. Both pairs are given below."
+  },
+  "whichChecksumIsWhich": {
+    "viewInvariantChecksum": {
+      "whatItIs": "the Godot adapter's _checksum over the four view cases of the godot stage. Each case loads a fixture for ONE tick (Main.cs loads screenshotTicks = 1 for the headless smoke) and the stage asserts every case gives the same value. It is a view-invariance guard — «the same world, drawn at any camera, is the same world» — not a party guard.",
+      "asVerifyRunsIt": {
+        "command": "powershell -File scripts/verify.ps1 -Stage godot",
+        "beforeAt_origin_main_3b627bf": "83bcf75cfd6b518517d529b16c5f07e07262f6bdb204c7ba05ae841b5634d33f",
+        "afterOnThisBranch": "8a63a099455b7f0fffb3b848e76d3a7d7b9951a0094c873665b1c92891c0b754",
+        "moved": true
+      },
+      "theProxyRecordedByEarlierRounds": {
+        "command": "dotnet run --project ./tests/DungeonFortress.Scenarios -c Release --no-build -- --prototype --commands ./scenarios/prototype1/baseline.commands.v2.json --ticks 1",
+        "before": "54985f1ce778d190d49c79e2c1b6236b05852dbd16168c5b72c7e56e44c35dc9",
+        "after": "cf0f9aa5bc4c5279450d6fe9e8770315894f5aa4343f4471693023dd8a8bc58a",
+        "moved": true
+      },
+      "why": "the health of every creature and every raider is written into the state at construction, so the state of tick 1 is already a different document"
+    },
+    "deterministicChecksum": {
+      "whatItIs": "the sim stage — 32 agents x 256 ticks on the LEGACY SimulationWorld, run twice on one seed and once on another. PrototypeWorld is not on that path.",
+      "asVerifyRunsIt": {
+        "command": "powershell -File scripts/verify.ps1 -Stage sim",
+        "beforeAt_origin_main_3b627bf": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+        "afterOnThisBranch": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+        "moved": false,
+        "changedSeedChecksum": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2 on both trees"
+      },
+      "theProxyRecordedByEarlierRounds": {
+        "command": "dotnet run --project ./tests/DungeonFortress.Scenarios -c Release --no-build -- --seed 424242 --agents 32 --ticks 256",
+        "before": "de573ef3d7e0b185c8ca48aa632b643b8e4687a79f64157693c6ab0aeb4daead",
+        "after": "de573ef3d7e0b185c8ca48aa632b643b8e4687a79f64157693c6ab0aeb4daead",
+        "moved": false
+      },
+      "why": "nothing this slice touched is reachable from that world. It is here to be shown unchanged rather than to prove anything."
+    }
+  },
+  "theChecksumsThatActuallyServeTheCriterion": {
+    "whatTheyAre": "the canonical checksums of the three shipped journals run to the end of the party. These are the numbers that see the fight, and they are what criterion 6 of #336 is about even though verify.ps1 does not print them.",
+    "command": "dotnet run --project ./tests/DungeonFortress.Scenarios -c Release --no-build -- --prototype --commands ./scenarios/prototype1/<fixture>.commands.v2.json --ticks 2700",
+    "runs": [
+      {
+        "fixture": "baseline",
+        "ticksBefore": 2413,
+        "ticksAfter": 2444,
+        "before": "18e74e7be92b0a9791b4a596955431d24a2480724775e39cfea5936f1fd41626",
+        "after": "16b85fc9948bc2562677a1491fcd244438fdcda676847670d5fe3b18188c5e9b"
+      },
+      {
+        "fixture": "prepared",
+        "ticksBefore": 2406,
+        "ticksAfter": 2440,
+        "before": "c168f8306c02ddadd8832e82cc76e8c70f22a5a3a8bd7bb11d1152fa4a1d738b",
+        "after": "76b6291657d244e7955a5d710bff4ec2e575163b9a78f90af9e826a59870226a"
+      },
+      {
+        "fixture": "neglected",
+        "ticksBefore": 615,
+        "ticksAfter": 595,
+        "before": "da7ddd6c9a067bdbc567c61312d55a4a39d5794e7553e599eca81ec06d6e2c3a",
+        "after": "3c57a5187a0df9b4c56f3ac614b6a77abfade88842d0f7d529a1cc30b938f406"
+      }
+    ],
+    "whatMovedAndWhy": {
+      "baselineAndPrepared": "every number of the fight moved: health x8, damage x4 with a spread of ±6, the join threshold from 20 to 30, readiness entering a blow through /6 instead of /25, the mending step of 8, the participation guard of #333 and both halves of #76. The parties run 31 and 34 ticks longer, which is the fight itself taking longer to resolve.",
+      "neglected": "moved too, and it carries no fight at all — it falls before the first wave arrives. It is 20 ticks SHORTER, 595 against 615. evidence/333-before.json had this fixture in the matrix as «the run that must stay unchanged», and it did not stay unchanged. THE CAUSE IS MEASURED — see theCauseOfTheNeglectedRegress below. The reading recorded here in round 5 («the participation guard of #333 is the only part of this slice that can reach a party with no wave in it») was WRONG as a statement about the code, and independent review of PR #402 said so: StepAroundBodies is called from Move, that is on every step of every creature of every party, wave or no wave."
+    },
+    "theFullVerifyOfRoundSix": {
+      "when": "2026-08-12, tree 12484a5 on fix/333-combat-mode-hold, working copy clean",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
+      "result": "10 of 10 stages ok, exit code 0",
+      "stagesSeconds": { "scripts": 217.9, "build": 8.4, "tests": 154.3, "mcp": 5.5, "sim": 0.3, "load": 0.6, "godot": 39.6, "ui": 4.4, "screenshots": 13.5, "token-budget": 127.5 },
+      "bothPrintedChecksumsMatchWhatIsRecordedAbove": {
+        "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+        "viewInvariantChecksum": "8a63a099455b7f0fffb3b848e76d3a7d7b9951a0094c873665b1c92891c0b754"
+      },
+      "packagesSeparately": "Simulation 359 of 360 with one Skip (#380); Presentation 734 of 734; DomainMcp 8 of 8.",
+      "aCorrection": "Round 5 recorded «Presentation.Tests 735 of 735». It is 734, and it was 734 already at 2a3b38a — the tree independent review read. Checked by putting that one test file back to 2a3b38a and running the package: 734. The number was wrong when it was written, not made wrong by round 6."
+    },
+    "theCauseOfTheNeglectedRegress": {
+      "what": "Which change of the slice shortens `neglected` by twenty ticks, measured rather than read. Round 5 named a reading and called it a reading; round 6 measured it and the reading was wrong.",
+      "howItWasMeasured": "Read-only, no mutants at first: a detached worktree on the branch's own history, and one command per commit — `dotnet run --project ./tests/DungeonFortress.Scenarios -c Release --no-build -- --prototype --commands ./scenarios/prototype1/neglected.commands.v2.json --ticks 2700`, reading `ticks` and `checksum` off the single JSON line it prints.",
+      "walkOfTheBranch": [
+        { "commit": "3b627bf (origin/main)", "ticks": 615, "checksum": "da7ddd6c" },
+        { "commit": "5ee6956 — the participation guard of #333", "ticks": 615, "checksum": "da7ddd6c", "note": "byte for byte identical to main. The guard that round 5 named as the cause does not touch this fixture at all." },
+        { "commit": "97863d4 — the denomination of #336 (health x8, damage x4, spread ±6)", "ticks": 615, "checksum": "f8bc7841", "note": "the journal changes, the length does not: creatures are built with different hit points, and nothing in this fixture ever spends them." },
+        { "commit": "56031c0", "ticks": 615, "checksum": "f8bc7841" },
+        { "commit": "2b69117 — join threshold 30 and cell occupancy in the pathfinder", "ticks": 595, "checksum": "3c57a518", "note": "the whole of the change lands here." }
+      ],
+      "whichHalfOfThatCommit": [
+        { "substitution": "public const int CombatJoinSatiety = 30; -> = 20; on the final tree", "result": "595 / 3c57a518 — identical to the unmutated tree. The threshold does not reach this fixture: no wave arrives, so the muster loop never runs." },
+        { "substitution": "var next = StepAroundBodies(creature, target); -> var next = _map.NextStep(creature.Position, target, _zones[ZoneKind.Forbidden]); (mutant M5) on the final tree", "result": "615 / f8bc7841 — exactly the numbers the fixture had before commit 2b69117. So the domain half of Issue #76 accounts for the whole regress, and everything else in the slice leaves this fixture byte for byte alone." }
+      ],
+      "theMechanism": "Also measured, on the same two runs. `neglected` cooks nothing: it eats its eight starting portions and then falls, because HasFallen asks for no meals anywhere AND nobody above CollapseThreshold. Both runs eat exactly 8. What the pathfinder changes is how much the domain gets done per tick while they last: eating ticks 156 against 149, training-post occupancy 48% against 37%, journal entries 1718 against 1793 — fewer steps refused by somebody else's back. The domain does more of everything and therefore reaches the bottom of its larder sooner. It is not a defect of #76; it is the fixture measuring exactly what it is for.",
+      "consequence": "«The run that must stay unchanged» is a promise about a fixture with no fight in it, and this slice put a change into every party, fight or no fight. The promise as written cannot survive a change to movement, and the fixture has to be re-baselined or the promise restated. That belongs to the coordinator: `evidence/333-before.json` and the matrix note are outside this slice's partition."
+    }
+  }
+}

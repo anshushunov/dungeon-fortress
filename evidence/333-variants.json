@@ -1,0 +1,332 @@
+{
+  "schemaVersion": 1,
+  "issue": 333,
+  "when": "2026-08-11, deciding how the participation flag should be held",
+  "what": "Three ways of stopping the needs phase from overwriting the fight's decision about who is in the line, each run against the whole simulation suite, so that the fork the fix opens is presented with numbers rather than as an opinion.",
+  "tree": {
+    "branch": "fix/333-combat-mode-hold",
+    "baseCommit": "1ca313f",
+    "note": "Variants B and E were measured and then removed from the tree; only variant A is committed. The base commit is on `main` and survives squash."
+  },
+  "howItWasMeasured": {
+    "suite": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release",
+    "baseline": "all 356 tests pass on the unmodified base, checked by stashing the edit and re-running the five tests named below: 6 passed, 0 failed. So every failure listed here is caused by the edit and by nothing else.",
+    "probe": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_combat_mode_hold_over_the_seed_matrix\" --logger \"console;verbosity=detailed\""
+  },
+  "variants": [
+    {
+      "id": "A",
+      "what": "One guard at the top of the DecideNeedsAndMuster loop: skip Fighting, Fled and Downed. The guard both neighbouring phases already carry.",
+      "substitution": "if (creature.Mode is CreatureMode.Fighting or CreatureMode.Fled or CreatureMode.Downed)\n{\n    continue;\n}",
+      "defectFaces": "all four go to 0 on all nine runs",
+      "suite": "5 failed, 350 passed, 1 skipped of 356",
+      "failures": [
+        {
+          "test": "PrototypeScenarioTests.Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party",
+          "message": "Assert.Contains failed on `combat_refused_starving` in preparedEnd.State.Events",
+          "kind": "written contract invariant 5 — `prepared` must carry at least one `combat_refused_starving` over the matrix"
+        },
+        {
+          "test": "PrototypeWaveTests.Deliberately_losing_creatures_and_stock_never_scores_better",
+          "message": "giving up half way scored 138, keeping scored 133",
+          "kind": "score invariant of ADR 0010 — impoverishment must not pay"
+        },
+        {
+          "test": "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders",
+          "message": "prepared put down 7 raiders, baseline 7",
+          "kind": "differentiation corridor between two shipped plans"
+        },
+        {
+          "test": "PrototypeReturningRaiderTests.A_returning_raider_walks_round_the_place_it_was_hit_hardest",
+          "message": "Крюк Немой neither reached the larder nor left: avoidance must not be able to strand a raider",
+          "kind": "robustness claim about raider avoidance on one seed"
+        },
+        {
+          "test": "PrototypeMemoryTests.A_place_is_remembered_by_one_creature_and_not_by_the_group(prepared)",
+          "message": "on tick 2020 Дёготь wrote (24,7) and Уголёк, standing 1 tiles away, came out of the same tick remembering it too",
+          "kind": "blind spot of the test rather than a defect — see `theMemoryTest` below"
+        }
+      ]
+    },
+    {
+      "id": "B",
+      "what": "The same guard narrowed to Fled and Downed, leaving the hungry fighter alone. Tried because the two undisputed faces — a body that gets up and a runner that goes to dinner — carry no gameplay content at all.",
+      "substitution": "if (creature.Mode is CreatureMode.Fled or CreatureMode.Downed)\n{\n    continue;\n}",
+      "defectFaces": "the Downed and Fled faces go to 0; the Fighting face stays, so the issue's own criterion 2 is not met",
+      "suite": "2 failed, 353 passed, 1 skipped of 356",
+      "failures": [
+        {
+          "test": "PrototypeCombatModeHoldTests.A_creature_leaves_the_line_only_by_a_decision_of_the_fight",
+          "message": "by construction — this variant does not fix that face",
+          "kind": "the issue's own criterion"
+        },
+        {
+          "test": "PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix(seed: 20260727)",
+          "message": "the raid cost prepared 436 over 4 resolved wave(s) and baseline 397 over 4: preparation has stopped making the raid cheaper. Stolen 44/41, defenders lost 27/24.",
+          "kind": "written contract invariant 4 — and note that variant A passes this one"
+        }
+      ],
+      "verdict": "rejected: it does not close the issue and it breaks a contract invariant of its own."
+    },
+    {
+      "id": "E",
+      "what": "Variant A plus combat's own door: a new pass in UpdateCombatParticipation, run every tick of an active wave, that takes a fighter out of the line when its satiety falls below the admission threshold and writes `combat_left_starving`. Tried because it would keep the departure and make it a recorded decision of the fight instead of a silent overwrite.",
+      "substitution": "private void LeaveTheLineWhenTooHungryToStandInIt(WaveState wave)\n{\n    foreach (var creature in _creatures\n                 .Where(creature =>\n                     creature.Mode == CreatureMode.Fighting &&\n                     creature.Satiety < PrototypeTuning.CombatMinSatiety)\n                 .OrderBy(creature => creature.Id)\n                 .ToArray())\n    {\n        creature.Mode = CreatureMode.Waiting;\n        RecordDecision(creature, \"combat_left_starving\", new Dictionary<string, int>\n        {\n            [\"satiety\"] = creature.Satiety,\n            [\"threshold\"] = PrototypeTuning.CombatMinSatiety,\n            [\"wave\"] = wave.Number,\n        });\n    }\n}",
+      "suite": "5 failed — the same five as variant A, with the same numbers (138/133, 7/7, the same stranded raider)",
+      "whyItChangedNothing": "the new pass never fires. `leftThroughCombatsOwnDoor` is 0 on all nine runs: no fighter's satiety ever falls below CombatMinSatiety (20) while a wave is on. It is exactly the unreachable branch the independent review of PR #328 removed from this same method — «a term the mechanic cannot reach is a promise the contract does not keep» — so it was removed rather than argued for.",
+      "verdict": "rejected, and the reason is the finding: the departure that happens today happens at satiety below EatThreshold (30), not below the admission threshold (20). Making it official at 20 is dead code; making it official at 30 splits the threshold for entering the line from the threshold for standing in it, which is a change to the rules of combat and a creature that joins and leaves on the same tick by design."
+    }
+  ],
+  "whatTheForkActuallyIs": {
+    "question": "Может ли голод выводить существо из строя — и если да, то по какому правилу?",
+    "whatTheContractSays": "Section 10.2 of docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md states admission only: «существо вступает в бой, если одновременно верно: … satiety >= T.combat_min_satiety (20)». It says nothing at all about a creature already in the line being taken out of it by hunger.",
+    "whatHappensToday": "it is taken out — but by accident, at satiety below 30, by DecideNeedsAndMuster overwriting CreatureMode two phases after combat decided participation, with nothing in the journal saying the line lost anybody and nothing in the wave's tally counting it.",
+    "whatTheFixDoes": "removes the overwrite, so hunger no longer takes anybody out of the line.",
+    "theMeasuredConsequence": "starving the domain stops weakening its line. `Deliberately_losing_creatures_and_stock_never_scores_better` is where that shows: the run that zeroes Harvest, Cook and Rest at t1400 now scores 138 against 133 for the run that keeps feeding and mending. The invariant that impoverishment must never pay is what breaks, and it breaks for a reason that is about the design and not about the arithmetic.",
+    "whyItIsNotThisTasksToDecide": "the issue's non-goals forbid changing the rules of combat beyond the two sentences, and choosing whether hunger may end a fighter's participation — and at which threshold — is a rule of combat and a gameplay decision."
+  },
+  "theMemoryTest": {
+    "test": "PrototypeMemoryTests.A_place_is_remembered_by_one_creature_and_not_by_the_group",
+    "whatItAsserts": "that a second creature standing within MemoryAvoidRadius of a tile somebody remembered did not come out of the same tick remembering that tile too, and calls such a case inheritance — the herd of Issue #101 coming back.",
+    "whyItIsNotInheritanceHere": "`Remember` writes at `creature.Position` and nowhere else, so a creature can only ever write the tile it is standing on. Two creatures writing the same tile in one tick therefore cannot be one memory copied to two; it is one tile occupied by two different creatures at two different phases of the same tick — ApplyMorale runs at the top of ActCreatures, the runner then vacates the tile, and ActRaiders can put a second creature down on it later in the same tick.",
+    "status": "named, not fixed. Making the test tell the two apart is a change to somebody else's check and is offered to the coordinator rather than taken."
+  },
+  "ownersDecision": {
+    "when": "2026-08-11, owner's choice: entering the line is harder than staying in it",
+    "what": "CombatJoinSatiety = 30 (de facto value at which the departure already happened), CombatHoldSatiety = 20 with the departure moved to combat's own door as `combat_left_starving`, counted on the wave as DefendersLeftStarving. The mod guard in DecideNeedsAndMuster stays.",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release",
+    "whatItFixed": "four of the five failures variant A caused go green: contract invariant 5 (`combat_refused_starving` is reachable in prepared again), the ADR 0010 score invariant (`Deliberately_losing_creatures_and_stock_never_scores_better`, 138 vs 133 gone), the stranded raider on `A_returning_raider_walks_round_the_place_it_was_hit_hardest`, and the memory herd check `A_place_is_remembered_by_one_creature_and_not_by_the_group`. The four assertions of this issue stay green: all four faces of the defect are 0.",
+    "suite": "5 failed, 350 passed, 1 skipped of 356 — but a different five",
+    "failures": [
+      {
+        "test": "PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix(20260727)",
+        "message": "the raid cost prepared 436 over 4 resolved wave(s) and baseline 399 over 4: preparation has stopped making the raid cheaper. Stolen 44/43, defenders lost 27/23.",
+        "kind": "written contract invariant 4"
+      },
+      {
+        "test": "PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix(20260728)",
+        "message": "prepared ended the party as fallen and baseline as raided: preparation may cost score on a seed, but it may not end the domain in a worse state than doing nothing.",
+        "kind": "written contract invariant 4"
+      },
+      {
+        "test": "PrototypeScenarioTests.Preparation_outscores_its_absence_over_the_matrix",
+        "message": "over the matrix preparation scored 1366 and its absence 2132. 20260726: prepared 834 / baseline 650; 20260727: prepared 694 / baseline 741; 20260728: prepared -162 (fallen) / baseline 741.",
+        "kind": "product promise about what a plan is for"
+      },
+      {
+        "test": "PrototypeMemoryCostTests.A_party_that_wins_its_fights_does_not_end_it_starving",
+        "message": "prepared/20260728 ended the party as `fallen` at t2386 with a score of -162, having produced 78 meals and finished at an average satiety of 0.",
+        "kind": "promise of Issue #171"
+      },
+      {
+        "test": "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders",
+        "message": "Assert.True failure — the only one of the original five that stayed red",
+        "kind": "differentiation corridor between two shipped plans"
+      }
+    ],
+    "diagnosis": {
+      "what": "30 under-mans the domain, and it under-mans `prepared` far more than `baseline`.",
+      "joinsPerParty": {
+        "howItWasMeasured": "`joinsSeen` of Report_combat_mode_hold_over_the_seed_matrix — `combat_joined` entries that stand alone on one tick",
+        "baseline": {
+          "20260726": "48 -> 40",
+          "20260727": "51 -> 45",
+          "20260728": "47 -> 45"
+        },
+        "prepared": {
+          "20260726": "35 -> 24",
+          "20260727": "28 -> 32",
+          "20260728": "31 -> 15"
+        }
+      },
+      "theExtreme": "prepared/20260728 loses half its line (31 joins to 15), the raiders carry the larder off, and the domain starves to death at t2386 with a score of -162. Baseline on the same seed still ends `raided` at 741, so the plan that prepares is now strictly worse than the plan that does nothing.",
+      "theHoldThresholdStillNeverFires": "lowestSatietyInTheLine over the nine runs is 25..30 against a hold threshold of 20, and longestSpellInTheLine is 25..38. Predicted before the change and unchanged by it: ten points of satiety is fifty ticks of a wave and no wave is that long yet."
+    },
+    "verdict": "returned to the coordinator rather than tuned. The direction is right — it fixes four of five by construction and keeps all four defect faces at zero — but 30 is a de facto number and the measurement says it is too strict. Choosing the number is Issue #336."
+  },
+  "joinThresholdSweep": {
+    "when": "2026-08-11, after the owner chose the rule and the coordinator ruled that the number is tuning by ADR 0010 and stays in #333",
+    "ruleOfChoiceStatedBeforeTheSweep": "the smallest value at which every contract invariant is green and `prepared` still outscores `baseline` over the matrix. Smallest, because every extra point of the threshold takes fighters away from both plans, and this issue repairs a promise rather than builds a new one.",
+    "whatWasSwept": "CombatJoinSatiety over 20..30 inclusive, step 1. CombatHoldSatiety fixed at 20 - chosen by the owner and not part of the sweep.",
+    "command": "for each value: patch `public const int CombatJoinSatiety = <v>;` in src/DungeonFortress.Simulation/PrototypeTuning.cs, then `dotnet build DungeonFortress.sln -c Release`, then `dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_combat_mode_hold\" --logger \"console;verbosity=detailed\"` for the per-run numbers and `dotnet test tests/DungeonFortress.Simulation.Tests -c Release` for the whole suite. Eleven values, about 4.5 minutes each.",
+    "columns": "threshold | failing tests of 356 | joinsSeen baseline 26/27/28 | joinsSeen prepared 26/27/28 | score sum baseline | score sum prepared | score prepared per seed | outcome prepared per seed | which tests fail",
+    "table": [
+      {
+        "threshold": 20,
+        "failing": 5,
+        "joinsBaseline": "41/41/44",
+        "joinsPrepared": "33/29/31",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 2363,
+        "scorePrepared": "797/740/826",
+        "outcomePrepared": "raided/raided/raided",
+        "failures": "ADR0010-losing-pays, contract-5-refused_starving, memory-herd(prepared), prepared-differs, raider-stranded"
+      },
+      {
+        "threshold": 21,
+        "failing": 5,
+        "joinsBaseline": "41/41/44",
+        "joinsPrepared": "33/29/31",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 2363,
+        "scorePrepared": "797/740/826",
+        "outcomePrepared": "raided/raided/raided",
+        "failures": "same as 20"
+      },
+      {
+        "threshold": 22,
+        "failing": 5,
+        "joinsBaseline": "41/41/44",
+        "joinsPrepared": "33/29/31",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 2363,
+        "scorePrepared": "797/740/826",
+        "outcomePrepared": "raided/raided/raided",
+        "failures": "same as 20"
+      },
+      {
+        "threshold": 23,
+        "failing": 5,
+        "joinsBaseline": "41/41/44",
+        "joinsPrepared": "33/29/31",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 2363,
+        "scorePrepared": "797/740/826",
+        "outcomePrepared": "raided/raided/raided",
+        "failures": "same as 20"
+      },
+      {
+        "threshold": 24,
+        "failing": 5,
+        "joinsBaseline": "41/41/44",
+        "joinsPrepared": "33/29/31",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 2363,
+        "scorePrepared": "797/740/826",
+        "outcomePrepared": "raided/raided/raided",
+        "failures": "same as 20"
+      },
+      {
+        "threshold": 25,
+        "failing": 3,
+        "joinsBaseline": "41/41/44",
+        "joinsPrepared": "25/29/31",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 2392,
+        "scorePrepared": "826/740/826",
+        "outcomePrepared": "raided/raided/raided",
+        "failures": "ADR0010-losing-pays, prepared-differs, raider-stranded"
+      },
+      {
+        "threshold": 26,
+        "failing": 3,
+        "joinsBaseline": "40/41/44",
+        "joinsPrepared": "25/29/31",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 2392,
+        "scorePrepared": "826/740/826",
+        "outcomePrepared": "raided/raided/raided",
+        "failures": "ADR0010-losing-pays, prepared-differs, raider-stranded"
+      },
+      {
+        "threshold": 27,
+        "failing": 6,
+        "joinsBaseline": "40/41/44",
+        "joinsPrepared": "25/29/15",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 1404,
+        "scorePrepared": "826/740/-162",
+        "outcomePrepared": "raided/raided/fallen",
+        "failures": "ADR0010-losing-pays, contract-4(20260728), prepared-differs, prepared-outscores, raider-stranded, wins-then-starves"
+      },
+      {
+        "threshold": 28,
+        "failing": 6,
+        "joinsBaseline": "40/41/44",
+        "joinsPrepared": "25/29/15",
+        "scoreSumBaseline": 2070,
+        "scoreSumPrepared": 1404,
+        "scorePrepared": "826/740/-162",
+        "outcomePrepared": "raided/raided/fallen",
+        "failures": "same as 27"
+      },
+      {
+        "threshold": 29,
+        "failing": 4,
+        "joinsBaseline": "40/45/45",
+        "joinsPrepared": "24/29/15",
+        "scoreSumBaseline": 2127,
+        "scoreSumPrepared": 1412,
+        "scorePrepared": "834/740/-162",
+        "outcomePrepared": "raided/raided/fallen",
+        "failures": "contract-4(20260728), prepared-differs, prepared-outscores, wins-then-starves"
+      },
+      {
+        "threshold": 30,
+        "failing": 5,
+        "joinsBaseline": "40/45/45",
+        "joinsPrepared": "24/32/15",
+        "scoreSumBaseline": 2132,
+        "scoreSumPrepared": 1366,
+        "scorePrepared": "834/694/-162",
+        "outcomePrepared": "raided/raided/fallen",
+        "failures": "contract-4(20260727), contract-4(20260728), prepared-differs, prepared-outscores, wins-then-starves"
+      }
+    ],
+    "result": "NO VALUE IN 20..30 IS ALL GREEN. The best are 25 and 26, with three failures each.",
+    "theShapeOfIt": "the surface has two opposite slopes and they do not overlap. Below 27 the domain keeps its line, `prepared` outscores `baseline` (2363..2392 against 2070) and every party ends `raided` - but `Deliberately_losing_creatures_and_stock_never_scores_better` stays red at 138 against 133, because a line that hunger cannot thin out is a line a starving domain gets to keep. At 29 and 30 that invariant goes green, and it goes green by killing the plan it exists to protect: `prepared` loses half its line on seed 20260728 (31 joins to 15), the larder is carried off, and the party ends `fallen` at -162 against baseline's 741 - which is `Preparation_outscores_its_absence_over_the_matrix` and `A_party_that_wins_its_fights_does_not_end_it_starving` going red instead.",
+    "whatIsRedEverywhere": "`Preparation_changes_the_deterministic_party_without_direct_orders` (`prepared put down 7 raiders, baseline 7`) is red at all eleven values, so it does not respond to this threshold at all. `A_returning_raider_walks_round_the_place_it_was_hit_hardest` (`Крюк Немой neither reached the larder nor left`) is red at 20..28 and green at 29..30.",
+    "atTheBestValue25": [
+      {
+        "test": "PrototypeWaveTests.Deliberately_losing_creatures_and_stock_never_scores_better",
+        "message": "giving up half way scored 138, keeping scored 133",
+        "kind": "product promise (ADR 0010)"
+      },
+      {
+        "test": "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders",
+        "message": "prepared put down 7 raiders, baseline 7",
+        "kind": "differentiation corridor"
+      },
+      {
+        "test": "PrototypeReturningRaiderTests.A_returning_raider_walks_round_the_place_it_was_hit_hardest",
+        "message": "Крюк Немой neither reached the larder nor left: avoidance must not be able to strand a raider",
+        "kind": "robustness claim about avoidance"
+      }
+    ],
+    "verdict": "returned to the coordinator. The owner's rule with the hold threshold fixed at 20 has no solution on this balance surface within 20..30. The range was not widened and no third threshold was invented."
+  },
+  "theRationHypothesis": {
+    "question": "does the muster's ration fail to bring a defender up to the join threshold, which would explain why `prepared` is hit harder than `baseline`?",
+    "answer": "no - the hypothesis is disconfirmed in the form it was stated. Measured at CombatJoinSatiety = 25.",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_combat_mode_hold\" --logger \"console;verbosity=detailed\", the RATION lines",
+    "whatTheRationDoes": "MealSatiety is 62 against a gate of 40, so a creature that gets a ration lands far above any value in the swept range, and it shows: on prepared/20260726 the satieties on the tick wave 1 lands are 57,40,53,47,95,78,55,39,46 - the 95 and the 78 are the rationed ones.",
+    "whereTheAsymmetryActuallyIs": "in the late waves rather than in the muster. By wave 3 the whole domain has decayed into the 24..44 band on every fixture, and by wave 4 `prepared` is starving outright - prepared/20260726 arrives at wave 4 with 0,0,0,0,9,0,0,0,0. That is where the join threshold decides the size of the line, and it is why one point of it moves whole parties. `prepared` is hit harder because it spends more food earlier, not because the ration misses the threshold.",
+    "status": "a finding about the food economy over a whole party rather than about preparation, so there is no separate defect to open an Issue against. It is named because it is what the threshold actually trades against, and it belongs to the balance work of #336."
+  },
+  "entryNoteForTheMergedSlice": {
+    "why": "Written on the handover of the merged #333+#336 slice, so that what is already known is not paid for twice. Everything below is read off the tree at commit 57941e3, with the command that shows it.",
+    "whatOf336IsAlreadyDone": {
+      "claim": "Scope item 2 of #336 — «ввести разброс урона через DeterministicRandom» — is already in the tree in full. What is left of that item is the amplitude and the shape, not the mechanism.",
+      "command": "rg -n \"DamageJitter|_combatRandom\" src/DungeonFortress.Simulation/*.cs",
+      "theMechanism": [
+        "src/DungeonFortress.Simulation/PrototypeWorld.cs:56,134 — `_combatRandom` is a DeterministicRandom seeded from the party seed (`commandLog.Seed ^ 0x636F6D626174UL`), so the spread is seed-derived and reproducible by construction. No System.Random, no clock, no Guid anywhere near it.",
+        "src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs:921 — `CombatJitter(amplitude)` is uniform on [-amplitude, +amplitude], drawn per blow. Per blow is what #361 fixed: before it the roll was frozen for a whole party, so every blow of every fight used one and the same number (see the remark in PrototypeCombatApproachTests and evidence/361-contract-numbers.json).",
+        "both sides already use it: Combat.cs:259 for a defender's blow and Combat.cs:380 for a raider's."
+      ],
+      "whatIsLeft": "PrototypeTuning.DamageJitter is 1. Base damage is roughly `might + readiness/25`, i.e. about 4..7, so the spread today is plus or minus one point on about five — around 20 per cent, with DamageFloor 1 underneath it. That is why the outcome of an exchange still reads off the first blow. The work of item 2 is therefore choosing the amplitude and the shape and proving the spread observable, not building the source.",
+      "theHealthSide": "PrototypeTuning.RaiderHp is 30; a defender has DefenderHpBase 20 plus DefenderHpPerMight 4 per point of might. Both are item 1 of #336."
+    },
+    "whatThisBranchAlreadyProved": {
+      "theTwoPropertiesRodeOnTheDefect": "«Намеренный проигрыш не даёт больше очков» and the differentiation of the two shipped plans were both held up by hunger silently pulling fighters out of the line. The proof is in joinThresholdSweep: `Preparation_changes_the_deterministic_party_without_direct_orders` is red at all eleven threshold values and does not respond to the threshold at all, so it is the guard that broke it and not the number.",
+      "theSurfaceHasTwoOpposingSlopes": "below 27 the line survives and `prepared` outscores `baseline`, but a starving domain keeps its line; at 29..30 the score invariant goes green by killing `prepared` outright. The two do not overlap anywhere in 20..30.",
+      "theFoodEconomyIsTheRealConstraint": "by wave 3 every fixture has decayed into the 24..44 satiety band and by wave 4 prepared/20260726 arrives at 0,0,0,0,9,0,0,0,0. Any threshold on satiety is therefore a lever on the late waves and on nothing else. A longer fight makes this sharper, not softer, because a longer fight spends more satiety inside the line where nobody can eat.",
+      "theHoldThresholdHasNeverFired": "lowestSatietyInTheLine over the nine runs is 25..30 against a hold threshold of 20, and longestSpellInTheLine is 25..43. Ten points of satiety is fifty ticks of a wave. A longer fight is exactly what would make CombatHoldSatiety reachable — so the synthetic check for it, which #333 still owes, may become an ordinary check on a shipped journal once the fight is longer. Worth testing before building the synthetic party."
+    },
+    "whatIsStillOwedFrom333": [
+      "a check that reddens when CombatHoldSatiety is removed — on a synthetic party if the fight is still too short to reach it, on a shipped journal if it is not",
+      "evidence/333-mutants.json with one mutant per assertion, run after the checked state is committed",
+      "the PR body sections the coordinator named: the outcome of sentence 1 (the corpse-finishing belongs to the view) with its numbers for #334; the partition extension to PrototypeTuning.cs under the three conditions; the blind spot of A_place_is_remembered_by_one_creature_and_not_by_the_group; and which of the two verify.ps1 checksums can see this change at all"
+    ],
+    "theProbeIsReusable": "tests/DungeonFortress.Simulation.Tests/PrototypeCombatModeHoldTests.cs already walks nine parties tick by tick and prints, per run: joins, score, outcome, raid cost per wave, longest spell in the line, lowest satiety in the line, satiety of everybody on the tick each wave lands, and the four defect faces. Measuring the length of a fight and the spread of damage is a column added to it rather than a new harness."
+  }
+}

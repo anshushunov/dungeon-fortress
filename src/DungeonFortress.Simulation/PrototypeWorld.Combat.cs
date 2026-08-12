@@ -97,10 +97,10 @@ public sealed partial class PrototypeWorld
                 RecordDecision(creature, "combat_refused_injured", failed);
                 continue;
             }
-            if (creature.Satiety < PrototypeTuning.CombatMinSatiety)
+            if (creature.Satiety < PrototypeTuning.CombatJoinSatiety)
             {
                 failed["satiety"] = creature.Satiety;
-                failed["threshold"] = PrototypeTuning.CombatMinSatiety;
+                failed["threshold"] = PrototypeTuning.CombatJoinSatiety;
                 RecordDecision(creature, "combat_refused_starving", failed);
                 continue;
             }
@@ -189,7 +189,9 @@ public sealed partial class PrototypeWorld
         }
 
         var damage = Math.Max(PrototypeTuning.DamageFloor,
-            creature.Might + ComputeReadiness(creature) / PrototypeTuning.DamageReadinessDivisor + CombatJitter(PrototypeTuning.DamageJitter));
+            creature.Might * PrototypeTuning.DamageMightWeight +
+            ComputeReadiness(creature) / PrototypeTuning.DamageReadinessDivisor +
+            CombatJitter(PrototypeTuning.DamageJitter));
         target.Hp -= damage;
         // The raider writes down what this cost it and where it was standing. It
         // is the source of both the scar and the memory of place a return carries
@@ -310,7 +312,9 @@ public sealed partial class PrototypeWorld
                 Manhattan(defender.Position, raider.Position) <= PrototypeTuning.RaiderAttackRange)
             {
                 var damage = Math.Max(PrototypeTuning.DamageFloor,
-                    raider.Might - ComputeReadiness(defender) / PrototypeTuning.ArmourReadinessDivisor + CombatJitter(PrototypeTuning.DamageJitter));
+                    raider.Might * PrototypeTuning.RaiderMightWeight -
+                    ComputeReadiness(defender) / PrototypeTuning.ArmourReadinessDivisor +
+                    CombatJitter(PrototypeTuning.DamageJitter));
                 defender.Hp -= damage;
                 if (defender.Hp * 100 <= defender.MaxHp * PrototypeTuning.LightInjuryShare && defender.Injury == InjuryKind.None)
                 {
@@ -754,7 +758,7 @@ public sealed partial class PrototypeWorld
     private static bool CanAnswerTheCall(CreatureState creature) =>
         creature.Mode != CreatureMode.Downed &&
         creature.Injury != InjuryKind.Heavy &&
-        creature.Satiety >= PrototypeTuning.CombatMinSatiety;
+        creature.Satiety >= PrototypeTuning.CombatJoinSatiety;
 
     /// <summary>
     /// One creature writes down where it is standing and what happened to it
