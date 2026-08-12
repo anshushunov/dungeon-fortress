@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "issue": "333 + 336 + 76",
+  "what": "Both checksums verify.ps1 prints, re-taken on the final state of the slice and explained — criterion 6 of Issue #336. Four numbers, because they see four different things.",
+  "when": "2026-08-12",
+  "tree": {
+    "branch": "fix/333-combat-mode-hold",
+    "takenAt": "ba13f4d",
+    "build": "dotnet build DungeonFortress.sln -c Release"
+  },
+  "thePredictionThisRoundHadToCheck": {
+    "whatWasWritten": "evidence/333-before.json and the entry note of evidence/333-round3.json both say that NEITHER of the two checksums verify.ps1 prints can see this change: viewInvariantChecksum because it is taken on tick 1, 1299 ticks before the first wave, and deterministicChecksum because PrototypeWorld is not on that path at all.",
+    "whatWasMeasured": "Half of it is right and half of it is wrong. deterministicChecksum has not moved by a single character. viewInvariantChecksum HAS moved, and the reason is not the fight: the health denomination of Issue #336 is applied when the world is built, so a creature already carries hp = 160 + might*32 on tick 1 and the canonical state of that tick is a different document. «Before the first wave» is not the same as «before the change», and the earlier rounds reasoned about the tick rather than about the state.",
+    "howThatWasPinnedDownRatherThanAsserted": {
+      "probe": "the three health constants were put back to their pre-#336 values on the final tree — RaiderHp 240 -> 30, DefenderHpBase 160 -> 20, DefenderHpPerMight 32 -> 4 — and the tick-1 checksum was taken again",
+      "result": "54985f1ce778d190d49c79e2c1b6236b05852dbd16168c5b72c7e56e44c35dc9, which is exactly the number evidence/333-before.json recorded at the start of the slice",
+      "conclusion": "viewInvariantChecksum moves because of the health denomination and because of nothing else in this slice. The threshold, the damage spread, the readiness divisor, the mending step, the participation guard and both halves of Issue #76 are all invisible to it — they need a wave, and tick 1 has none.",
+      "reverted": "git checkout -- src/ immediately after the probe; the probe is not in any commit"
+    }
+  },
+  "whichChecksumIsWhich": {
+    "viewInvariantChecksum": {
+      "whatItIs": "the Godot adapter's _checksum — PrototypeScenario.Capture of a fixture loaded for ONE tick (Main.cs loads screenshotTicks = 1 for the headless smoke). It is a view-invariant guard, not a party guard.",
+      "command": "dotnet run --project ./tests/DungeonFortress.Scenarios -c Release --no-build -- --prototype --commands ./scenarios/prototype1/baseline.commands.v2.json --ticks 1",
+      "before": "54985f1ce778d190d49c79e2c1b6236b05852dbd16168c5b72c7e56e44c35dc9",
+      "after": "cf0f9aa5bc4c5279450d6fe9e8770315894f5aa4343f4471693023dd8a8bc58a",
+      "moved": true,
+      "why": "the health of every creature and every raider is written into the state at construction"
+    },
+    "deterministicChecksum": {
+      "whatItIs": "SimulationScenario.Run WITHOUT --prototype, i.e. the legacy SimulationWorld. PrototypeWorld is not on that path.",
+      "command": "dotnet run --project ./tests/DungeonFortress.Scenarios -c Release --no-build -- --seed 424242 --agents 32 --ticks 256",
+      "before": "de573ef3d7e0b185c8ca48aa632b643b8e4687a79f64157693c6ab0aeb4daead",
+      "after": "de573ef3d7e0b185c8ca48aa632b643b8e4687a79f64157693c6ab0aeb4daead",
+      "moved": false,
+      "why": "nothing this slice touched is reachable from that world. It is here to be shown unchanged rather than to prove anything."
+    }
+  },
+  "theChecksumsThatActuallyServeTheCriterion": {
+    "whatTheyAre": "the canonical checksums of the three shipped journals run to the end of the party. These are the numbers that see the fight, and they are what criterion 6 of #336 is about even though verify.ps1 does not print them.",
+    "command": "dotnet run --project ./tests/DungeonFortress.Scenarios -c Release --no-build -- --prototype --commands ./scenarios/prototype1/<fixture>.commands.v2.json --ticks 2700",
+    "runs": [
+      {
+        "fixture": "baseline",
+        "ticksBefore": 2413,
+        "ticksAfter": 2444,
+        "before": "18e74e7be92b0a9791b4a596955431d24a2480724775e39cfea5936f1fd41626",
+        "after": "16b85fc9948bc2562677a1491fcd244438fdcda676847670d5fe3b18188c5e9b"
+      },
+      {
+        "fixture": "prepared",
+        "ticksBefore": 2406,
+        "ticksAfter": 2440,
+        "before": "c168f8306c02ddadd8832e82cc76e8c70f22a5a3a8bd7bb11d1152fa4a1d738b",
+        "after": "76b6291657d244e7955a5d710bff4ec2e575163b9a78f90af9e826a59870226a"
+      },
+      {
+        "fixture": "neglected",
+        "ticksBefore": 615,
+        "ticksAfter": 595,
+        "before": "da7ddd6c9a067bdbc567c61312d55a4a39d5794e7553e599eca81ec06d6e2c3a",
+        "after": "3c57a5187a0df9b4c56f3ac614b6a77abfade88842d0f7d529a1cc30b938f406"
+      }
+    ],
+    "whatMovedAndWhy": {
+      "baselineAndPrepared": "every number of the fight moved: health x8, damage x4 with a spread of ±6, the join threshold from 20 to 30, readiness entering a blow through /6 instead of /25, the mending step of 8, the participation guard of #333 and both halves of #76. The parties run 31 and 34 ticks longer, which is the fight itself taking longer to resolve.",
+      "neglected": "moved too, and it carries no fight at all — it falls before the first wave arrives. It is 20 ticks SHORTER, 595 against 615. evidence/333-before.json had this fixture in the matrix as «the run that must stay unchanged», and it did not stay unchanged. Which change moves it is NOT measured here, and the plausible reading is not asserted as one: the fixture starves, and the participation guard of #333 stops the needs phase from overwriting the mode of a creature that is Downed, which is the only part of this slice that can reach a party with no wave in it. Naming the expectation as wrong is the point; naming the cause would need its own probe."
+    }
+  }
+}
