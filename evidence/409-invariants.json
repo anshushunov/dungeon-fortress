@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "issue": 409,
+  "when": "2026-08-12",
+  "checkpoint": "4 — переизмерение двух продуктовых инвариантов, сразу за торсом",
+  "what": "Критерий 5 требует не «инварианты зелёные», а «переизмерено, что именно их держит», и прямо запрещает предполагать, что держит то же, что держало до правки. Здесь по каждому кандидату поставлен свой мутант, и красное записано вместе с зелёным.",
+  "why": "Условие отката, назначенное координатором до работы (запись 1 #415): если инвариант не восстанавливается ни на одном кандидате — исполнитель останавливается и возвращает координатору с числами. Он восстановился, и ниже видно, на чём.",
+  "tree": {
+    "branch": "feature/409-localised-injury",
+    "commit": "1ebbc03 — торс закоммичен, мутанты сняты ПОСЛЕ коммита",
+    "worktree": "../_wt-409-injury"
+  },
+  "howAMutantIsRun": {
+    "substitution": "sed -i \"s/<старое>/<новое>/\" src/DungeonFortress.Simulation/PrototypeTuning.cs (для гарда и готовности — по одной строке в PrototypeWorld.Combat.cs и PrototypeWorld.State.cs)",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests --filter \"FullyQualifiedName~Deliberately_losing_creatures_and_stock_never_scores_better|FullyQualifiedName~Preparation_changes_the_deterministic_party_without_direct_orders\"",
+    "restore": "git checkout <файл>"
+  },
+  "baseline_noMutant": {
+    "Deliberately_losing_creatures_and_stock_never_scores_better": "зелёная",
+    "Preparation_changes_the_deterministic_party_without_direct_orders": "зелёная"
+  },
+  "candidates": {
+    "HpRecoveryStep": {
+      "substitution": "8 -> 1",
+      "Deliberately_losing…": "КРАСНАЯ",
+      "Preparation_changes…": "КРАСНАЯ",
+      "reading": "Держит оба. Находка PR #402 — что первый инвариант держится на HpRecoveryStep, а не на DamageReadinessDivisor — пережила слайс, и на готовом дереве этот же счёт держит и второй инвариант. Ни одна правка слайса этого не сдвинула."
+    },
+    "DamageReadinessDivisor": {
+      "substitution": "6 -> 1",
+      "Deliberately_losing…": "КРАСНАЯ",
+      "Preparation_changes…": "зелёная",
+      "reading": "Держит первый, вопреки записи #402, где он был измерен как НЕ держащий. Расхождение названо, а не сглажено: подстановка здесь крайняя (делитель 1 — это готовность, входящая в удар вшестеро сильнее), и #402 мерил другую. Утверждение, которое можно унести отсюда, — «на 1 краснеет», а не «#402 ошибся»."
+    },
+    "theTorsoGate": {
+      "substitution": "creature.PartInjury(BodyPart.Torso) == Heavy -> creature.Injury == Heavy (откат половины решения координатора, всё остальное на месте)",
+      "Deliberately_losing…": "КРАСНАЯ",
+      "Preparation_changes…": "КРАСНАЯ",
+      "reading": "Самая неожиданная строка таблицы и главный ответ рубежа. Решение координатора не просто не сломало инварианты — на готовом дереве ОНО ИХ ДЕРЖИТ: верни гард на сводную рану, оставив остальное, и обе краснеют. Названный риск («если раненые перестанут выбывать, заброшенное владение перестанет платить за то, что не лечится») не сработал и оказался повёрнут: раненые в строю — это существа, которых снова роняют, и заброшенное владение платит больше, а не меньше."
+    },
+    "torsoReadiness": {
+      "substitution": "creature.PartInjury(BodyPart.Torso) switch -> creature.Injury switch (откат второй половины решения)",
+      "Deliberately_losing…": "зелёная",
+      "Preparation_changes…": "зелёная",
+      "reading": "Не держит ни одного. Вторая половина решения — про то, чьё следствие штраф, а не про цену разорения."
+    },
+    "TorsoHeavyPenalty": {
+      "substitution": "40 -> 0",
+      "Deliberately_losing…": "зелёная",
+      "Preparation_changes…": "зелёная",
+      "reading": "Не держит ни одного."
+    },
+    "RecoveryMinSatiety": {
+      "substitution": "30 -> 0",
+      "Deliberately_losing…": "зелёная",
+      "Preparation_changes…": "зелёная",
+      "reading": "Не держит ни одного; остаётся гейтом заживления по критерию 3, но цену разорения несёт не он."
+    },
+    "ArmHeavyMightPercent": {
+      "substitution": "0 -> 100",
+      "Deliberately_losing…": "зелёная",
+      "Preparation_changes…": "зелёная",
+      "reading": "Следствие руки не держит ни одного."
+    },
+    "HeadHeavyStunPeriod": {
+      "substitution": "3 -> 0",
+      "Deliberately_losing…": "зелёная",
+      "Preparation_changes…": "зелёная",
+      "reading": "Следствие головы не держит ни одного."
+    },
+    "LegHeavyLimpPeriod": {
+      "substitution": "2 -> 0",
+      "Deliberately_losing…": "зелёная",
+      "Preparation_changes…": "зелёная",
+      "reading": "Следствие ноги не держит ни одного."
+    }
+  },
+  "conclusion": [
+    "Оба инварианта зелёные на дереве с торсом — условие отката не наступило, останавливаться и возвращать координатору нечего.",
+    "Первый инвариант держат HpRecoveryStep и гард участия; второй — HpRecoveryStep и гард участия. DamageReadinessDivisor держит только первый и только на крайней подстановке.",
+    "Ни одно из четырёх следствий локализации (рука, нога, голова, штраф торса) не несёт ни одного из инвариантов. Это ровно то, чего слайс хотел: следствие меняет, как дерётся конкретное существо, а не то, окупается ли разорение."
+  ]
+}
