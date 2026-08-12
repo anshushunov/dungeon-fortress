@@ -86,6 +86,35 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// Criterion 2 for the arm: «по руке — роняет оружие» is a consequence and not
+    /// a note in the journal. A creature whose arm is hurt lands a measurably
+    /// weaker blow than one whose arm is whole, over every blow of every shipped
+    /// party.
+    ///
+    /// <para>The threshold is stated as a direction plus a floor rather than as a
+    /// number, per ADR 0010: the size of the gap is tuning and may move, that
+    /// there is a gap at all is what the mutant of
+    /// <c>evidence/409-mutants.json</c> holds.</para>
+    /// </summary>
+    [Fact]
+    public void A_hurt_arm_lands_a_weaker_blow()
+    {
+        var arm = Matrix.Where(run => run.Arm.HurtCount > 0).ToArray();
+        Assert.True(arm.Length > 0, "No party landed a blow with a hurt arm; the question cannot be asked.");
+
+        var hurt = Matrix.Sum(run => run.Arm.HurtMean * run.Arm.HurtCount) /
+            Matrix.Sum(run => run.Arm.HurtCount);
+        var whole = Matrix.Sum(run => run.Arm.WholeMean * run.Arm.WholeCount) /
+            Matrix.Sum(run => run.Arm.WholeCount);
+
+        output.WriteLine($"ARM pooledHurtMean={hurt / 100.0} pooledWholeMean={whole / 100.0}");
+        Assert.True(
+            hurt < whole,
+            $"a hurt arm landed {hurt / 100.0} against {whole / 100.0} whole: the consequence is not there."
+            + Environment.NewLine + Detail());
+    }
+
+    /// <summary>
     /// The derivation invariant, checked on every creature of every published tick
     /// of every party: <c>injury</c> is the worst entry of <c>injuries</c>, and a
     /// creature with an empty list is whole.
@@ -197,7 +226,7 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
         var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
         var tally = new Measurement(fixtureName, seed);
         var previous = world.GetSnapshot();
-        Observe(previous, previous.Tick, tally);
+        Observe(previous, previous, previous.Tick, tally);
 
         while (!world.IsComplete)
         {
@@ -209,14 +238,18 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
                 continue;
             }
 
-            Observe(current, current.Tick - 1, tally);
+            Observe(previous, current, current.Tick - 1, tally);
             previous = current;
         }
 
         return tally;
     }
 
-    private static void Observe(PrototypeSnapshot state, int acted, Measurement tally)
+    private static void Observe(
+        PrototypeSnapshot before,
+        PrototypeSnapshot state,
+        int acted,
+        Measurement tally)
     {
         foreach (var creature in state.Creatures)
         {
@@ -262,6 +295,46 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
             }
         }
 
+        // The named quantity of each consequence, split by whether the part that
+        // is supposed to move it is hurt. Each of the four is measured on its own
+        // part and on nothing else, which is what makes a mutant on one of them
+        // able to be red alone (criterion 2).
+        //
+        // The state read is `state` — the snapshot after the tick acted — and the
+        // wound was set inside that same tick, so a creature whose arm was ruined
+        // on this tick is already counted as hurt for the blow it struck. That is
+        // one tick of imprecision per wound in the direction that makes the
+        // measured gap SMALLER, so it can only understate a consequence and never
+        // invent one.
+        foreach (var entry in state.Events.Where(entry => entry.LastTick == acted))
+        {
+            var creature = state.Creatures.FirstOrDefault(item => item.Id == entry.CreatureId);
+            if (creature is null)
+            {
+                continue;
+            }
+
+            if (entry.ReasonCode == "combat_attack" && entry.Details.TryGetValue("damage", out var damage))
+            {
+                tally.Arm.Add(Hurt(creature, BodyPart.Arm), damage, entry.Repeats);
+            }
+
+            if (entry.ReasonCode == "injury_limped")
+            {
+                tally.LimpEvents += entry.Repeats;
+            }
+
+            if (entry.ReasonCode == "injury_stunned")
+            {
+                tally.StunEvents += entry.Repeats;
+            }
+        }
+
+        foreach (var creature in state.Creatures)
+        {
+            tally.Torso.Add(Hurt(creature, BodyPart.Torso), creature.Readiness, 1);
+        }
+
         // Criterion 3 is asked exactly where it is stated: on the tick a wave
         // arrives, of everybody still on their feet.
         foreach (var wave in state.Waves.Where(wave => wave.ArriveTick == acted && wave.Number > 1))
@@ -277,9 +350,67 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
         }
     }
 
+    private static bool Hurt(PrototypeCreatureSnapshot creature, BodyPart part) =>
+        creature.Injuries.Any(injury => injury.Part == part);
+
+    /// <summary>
+    /// One quantity measured twice: over the creature-ticks where the part in
+    /// question is hurt, and over the ones where it is whole. The gap between the
+    /// two means is the consequence, and a mutant that switches the consequence
+    /// off has to close it.
+    /// </summary>
+    private sealed class Split
+    {
+        private long _hurtSum;
+        private long _hurtCount;
+        private long _wholeSum;
+        private long _wholeCount;
+
+        public void Add(bool hurt, int value, int weight)
+        {
+            if (hurt)
+            {
+                _hurtSum += (long)value * weight;
+                _hurtCount += weight;
+            }
+            else
+            {
+                _wholeSum += (long)value * weight;
+                _wholeCount += weight;
+            }
+        }
+
+        public long HurtCount => _hurtCount;
+
+        public long WholeCount => _wholeCount;
+
+        /// <summary>Mean over the hurt side, in hundredths so it prints exactly.</summary>
+        public long HurtMean => _hurtCount == 0 ? 0 : _hurtSum * 100 / _hurtCount;
+
+        public long WholeMean => _wholeCount == 0 ? 0 : _wholeSum * 100 / _wholeCount;
+
+        public override string ToString() =>
+            $"hurt={Format(HurtMean)}/n{_hurtCount} whole={Format(WholeMean)}/n{_wholeCount}";
+
+        private static string Format(long hundredths) =>
+            string.Create(CultureInfo.InvariantCulture, $"{hundredths / 100}.{Math.Abs(hundredths % 100):00}");
+    }
+
     private sealed class Measurement(string fixtureName, ulong seed)
     {
         public string Name { get; } = $"{fixtureName}/{seed}";
+
+        /// <summary>Damage of a blow, split by whether the striker's arm is hurt.</summary>
+        public Split Arm { get; } = new();
+
+        /// <summary>Readiness, split by whether the torso is hurt.</summary>
+        public Split Torso { get; } = new();
+
+        /// <summary>Steps the limp took away — the leg's consequence, counted.</summary>
+        public int LimpEvents { get; set; }
+
+        /// <summary>Actions the stun took away — the head's consequence, counted.</summary>
+        public int StunEvents { get; set; }
 
         public int[] WoundsByPart { get; } = new int[BodyParts.Count];
 
@@ -304,7 +435,10 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
             return
                 $"  INJURY {Name} wounds={Wounds} byPart=[{string.Join(',', byPart)}] " +
                 $"light={Light} heavy={Heavy} " +
-                $"laterWaveEntries={EntriesIntoALaterWave} carrying={CarriedIntoNextWave}";
+                $"laterWaveEntries={EntriesIntoALaterWave} carrying={CarriedIntoNextWave}" +
+                Environment.NewLine +
+                $"    CONSEQUENCE {Name} armBlow[{Arm}] torsoReadiness[{Torso}] " +
+                $"limped={LimpEvents} stunned={StunEvents}";
         }
     }
 

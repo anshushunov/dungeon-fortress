@@ -135,26 +135,64 @@ public sealed class WorldLabelFocusTests
                 "its sentence.");
         }
 
-        // And the caption that has a sentence keeps it, with the pointer off and on.
-        var alone = state.Raiders.Single(raider =>
-            ReturningHeroLabel.IsCaptioned(raider) && ReturningHeroLabel.Story(raider) is not null);
-        var body = new WorldLabelSubject(WorldLabelKind.Raider, alone.Id);
-        foreach (var focus in new[]
-                 {
-                     WorldLabelFocus.None,
-                     new WorldLabelFocus(body, null),
-                     new WorldLabelFocus(null, body),
-                 })
+        // And every caption that has a sentence keeps it, with the pointer off and
+        // on.
+        //
+        // Asked of all of them and not of the one, and the widening is a finding of
+        // Issue #409 rather than a tidy-up. This used to be `Single(...)`, which
+        // asserted in passing that exactly one raider of the frame is a returner
+        // carrying a scar — a fact about the party and not about the layout. A
+        // longer fight moved it: the thin frame now carries none and the crowded
+        // one carries several, and the check threw before reaching a single layout
+        // invariant. Whether such a raider exists at all is asked once, below, over
+        // both frames, which is where a fact about the party belongs.
+        foreach (var alone in state.Raiders
+                     .Where(raider =>
+                         ReturningHeroLabel.IsCaptioned(raider) &&
+                         ReturningHeroLabel.Story(raider) is not null)
+                     .OrderBy(raider => raider.Id))
         {
-            var label = Assert.Single(
-                WorldLabels
-                    .Of(state, focus, CameraView.DefaultTileSize)
-                    .Where(placed => placed.Request.Subject == body));
+            var body = new WorldLabelSubject(WorldLabelKind.Raider, alone.Id);
+            foreach (var focus in new[]
+                     {
+                         WorldLabelFocus.None,
+                         new WorldLabelFocus(body, null),
+                         new WorldLabelFocus(null, body),
+                     })
+            {
+                var label = Assert.Single(
+                    WorldLabels
+                        .Of(state, focus, CameraView.DefaultTileSize)
+                        .Where(placed => placed.Request.Subject == body));
 
-            Assert.Equal(
-                [alone.Name, ReturningHeroLabel.Story(alone)],
-                label.Lines.Select(line => line.Text));
+                Assert.Equal(
+                    [alone.Name, ReturningHeroLabel.Story(alone)],
+                    label.Lines.Select(line => line.Text));
+            }
         }
+    }
+
+    /// <summary>
+    /// The loop above is not vacuous: somewhere in the two shipped frames there is
+    /// a raider who has been here before, was hurt then, and carries the sentence
+    /// that says so. Asked once, over both frames, because it is a fact about the
+    /// party rather than about either layout — and it is exactly the fact the check
+    /// above could otherwise pass by having nothing to check.
+    /// </summary>
+    [Fact]
+    public void At_least_one_captioned_returner_carries_a_sentence_on_the_owners_frames()
+    {
+        var carriers = new[] { Thin, Crowded }
+            .SelectMany(frame => WorldLabelLayoutTests.OwnerScene(frame).Raiders)
+            .Count(raider =>
+                ReturningHeroLabel.IsCaptioned(raider) &&
+                ReturningHeroLabel.Story(raider) is not null);
+
+        Assert.True(
+            carriers > 0,
+            "neither shipped frame carries a returner with a story, so the check that a sentence " +
+            "survives the pointer has nothing to read it on. Either nobody survives a wave and " +
+            "comes back hurt any more, or these frames stopped being the ones to read it on.");
     }
 
     /// <summary>

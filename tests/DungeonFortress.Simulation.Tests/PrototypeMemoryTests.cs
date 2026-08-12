@@ -28,7 +28,15 @@ namespace DungeonFortress.Simulation.Tests;
 /// </summary>
 public sealed class PrototypeMemoryTests(ITestOutputHelper output)
 {
-    private static readonly ulong[] MatrixSeeds = [20_260_726UL, 20_260_727UL, 20_260_728UL];
+    // The fourth seed is the party the owner played on 2026-08-12, added by
+    // Issue #409 for the same reason it was added to
+    // PrototypePostCombatDispersalTests: a longer fight moves which refusals the
+    // matrix happens to contest, and on `prepared` over three seeds the branch
+    // «the memory-free tick did not honour this refusal» stopped being reached at
+    // all. That branch is what the check exists for, so the matrix was widened
+    // rather than the branch relaxed.
+    private static readonly ulong[] MatrixSeeds =
+        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL];
 
     /// <summary>
     /// The writing half. Over the matrix, creatures come out of a party with

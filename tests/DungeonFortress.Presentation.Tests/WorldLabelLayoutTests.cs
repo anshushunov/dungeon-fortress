@@ -54,11 +54,57 @@ public sealed class WorldLabelLayoutTests
     {
         WhereTheFirstReturnerIsNamed,
         WhereTheCrowdIsThickest,
+
+        /// <summary>
+        /// The first tick at which a crew member stands on the same cell as a
+        /// raider and is the first body of it. Added by Issue #409 for the same
+        /// reason the other two stopped being tick numbers: the case is a shape,
+        /// and until now it was read off <see cref="WhereTheCrowdIsThickest"/> in
+        /// the hope that the fullest cell would happen to be a mixed one. The
+        /// localised-injury slice lengthens a fight, which moved which cell is
+        /// fullest, and the hope stopped holding. A frame found by the shape the
+        /// rule is about cannot be moved by a balance change that leaves that
+        /// shape in the party.
+        /// </summary>
+        WhereACrewMemberStandsInFrontOfARaider,
     }
 
     /// <inheritdoc cref="OwnerFrame"/>
-    internal static PrototypeSnapshot OwnerScene(OwnerFrame frame) =>
-        frame == OwnerFrame.WhereTheFirstReturnerIsNamed ? Scenes.Value.Thin : Scenes.Value.Crowded;
+    internal static PrototypeSnapshot OwnerScene(OwnerFrame frame) => frame switch
+    {
+        OwnerFrame.WhereTheFirstReturnerIsNamed => Scenes.Value.Thin,
+        OwnerFrame.WhereACrewMemberStandsInFrontOfARaider => Scenes.Value.Mixed ??
+            throw new InvalidOperationException(
+                "no tick of the owner's party puts a crew member in front of a raider, so the " +
+                "frame the click-through rule is about does not exist anywhere in the party. " +
+                "That is a change in what the party does and not a broken test."),
+        _ => Scenes.Value.Crowded,
+    };
+
+    /// <summary>
+    /// The cell whose first body is a crew member with a raider standing behind
+    /// it, or <c>null</c> when the frame has none. Shared with
+    /// <c>WorldLabelInspectorTests</c>, which is where the click-through rule is
+    /// checked; it lives here because the walk that finds the frames lives here.
+    /// </summary>
+    internal static GridPoint? CrewInFrontOfARaider(PrototypeSnapshot state) =>
+        state.Creatures
+            .Select(creature => creature.Position)
+            .Concat(state.Raiders
+                .Where(raider => raider.Mode != RaiderMode.Escaped)
+                .Select(raider => raider.Position))
+            .Distinct()
+            .Where(cell =>
+            {
+                var bodies = WorldLabels.BodiesAt(state, cell);
+                return bodies.Count > 1 &&
+                    bodies[0].Kind == WorldLabelKind.Creature &&
+                    bodies.Any(body => body.Kind == WorldLabelKind.Raider);
+            })
+            .OrderBy(cell => cell.Y)
+            .ThenBy(cell => cell.X)
+            .Cast<GridPoint?>()
+            .FirstOrDefault();
 
     /// <summary>
     /// How many bodies of both populations stand on the fullest cell of a frame.
@@ -74,18 +120,29 @@ public sealed class WorldLabelLayoutTests
             .GroupBy(position => position)
             .Max(group => group.Count());
 
-    private static readonly Lazy<(PrototypeSnapshot Thin, PrototypeSnapshot Crowded)> Scenes =
+    private static readonly Lazy<(PrototypeSnapshot Thin, PrototypeSnapshot Crowded, PrototypeSnapshot? Mixed)> Scenes =
         new(() =>
         {
             var world = new PrototypeWorld(
                 PresentationFixtures.LogOf("baseline") with { Seed = OwnerSeed });
             PrototypeSnapshot? thin = null;
             PrototypeSnapshot? crowded = null;
+            PrototypeSnapshot? mixed = null;
             var thickest = 0;
             while (!world.IsComplete)
             {
                 world.Step();
                 var state = world.GetSnapshot();
+
+                // The mixed frame is looked for over the whole party and not only
+                // over the ticks that carry a caption: the click-through rule is
+                // about two bodies on one cell and has nothing to do with whether
+                // anybody has been here before.
+                if (mixed is null && CrewInFrontOfARaider(state) is not null)
+                {
+                    mixed = state;
+                }
+
                 if (!state.Raiders.Any(ReturningHeroLabel.IsCaptioned))
                 {
                     continue;
@@ -108,7 +165,7 @@ public sealed class WorldLabelLayoutTests
                     "survives a wave and comes back — and not a broken test.");
             }
 
-            return (thin, crowded);
+            return (thin, crowded, mixed);
         });
 
     /// <summary>

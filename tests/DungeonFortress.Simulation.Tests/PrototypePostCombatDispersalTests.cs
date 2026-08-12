@@ -94,7 +94,16 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     /// </summary>
     private const int DetourSlack = 4;
 
-    private static readonly ulong[] MatrixSeeds = [20_260_726UL, 20_260_727UL, 20_260_728UL];
+    // The fourth seed is the party the owner played on 2026-08-12, added by
+    // Issue #409 and for a stated reason rather than for symmetry with the rest
+    // of the repository. The localised-injury slice makes a fight last longer, so
+    // the shape of the ticks after one moves with it: on three seeds the sample
+    // of refused steps came to 99 against the floor of 100 this file holds itself
+    // to. Lowering that floor would have been the wrong repair — the floor says
+    // how big a sample the conclusions below need — so the sample was made bigger
+    // instead, on the seed the rest of the suite already reads.
+    private static readonly ulong[] MatrixSeeds =
+        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL];
 
     private static readonly string[] Fixtures = ["baseline", "prepared"];
 

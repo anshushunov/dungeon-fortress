@@ -308,6 +308,22 @@ public static class PrototypeTuning
     // Two is enough to observe and few enough that a head wound stays the thing
     // worth telling somebody about.
     public static readonly int[] InjuryPartWeights = [2, 5, 3, 3];
+
+    // «По руке — роняет оружие» (pitch 6.13), as the only thing Prototype 1 has
+    // to say it with: the weight of the blow that comes from the creature's own
+    // might. There are no weapon items here, so the weapon is that term — what
+    // the creature swings, as opposed to how fit it is to swing it — and a hand
+    // that cannot hold it loses it.
+    //
+    // As a percentage of the might term and not as a subtraction, so that the
+    // consequence scales with the creature: taking a flat ten off the blow of
+    // the domain's strongest and of its weakest is the same sentence about two
+    // different bodies. A light arm keeps half its grip; a heavy one keeps
+    // nothing, and what lands is then readiness, jitter and DamageFloor.
+    //
+    // A mutant disables the consequence by setting both to 100.
+    public const int ArmLightMightPercent = 50;
+    public const int ArmHeavyMightPercent = 0;
     // Nerve is measured per creature and dread is measured from where that
     // creature is standing. The two new terms are what keep the moment of
     // breaking personal: `MoraleGritWeight` and `MoraleReadinessDivisor` barely

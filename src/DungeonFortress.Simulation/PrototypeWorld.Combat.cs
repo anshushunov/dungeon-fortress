@@ -258,7 +258,7 @@ public sealed partial class PrototypeWorld
         }
 
         var damage = Math.Max(PrototypeTuning.DamageFloor,
-            creature.Might * PrototypeTuning.DamageMightWeight +
+            WeaponWeight(creature) +
             ComputeReadiness(creature) / PrototypeTuning.DamageReadinessDivisor +
             CombatJitter(PrototypeTuning.DamageJitter));
         target.Hp -= damage;
@@ -925,6 +925,41 @@ public sealed partial class PrototypeWorld
         place.Cause == "wound" ? "refused_place_of_wound" : "refused_place_of_panic";
 
     private int CombatJitter(int amplitude) => _combatRandom.NextInt32(amplitude * 2 + 1) - amplitude;
+
+    /// <summary>
+    /// What this creature's own strength puts into a blow, after the hand that
+    /// holds the weapon is taken into account. It is the first of the four
+    /// consequences of Issue #409 and the pitch's own words for the arm:
+    /// «по руке — роняет оружие».
+    ///
+    /// <para><b>Why the might term and not a flat subtraction.</b> The blow has
+    /// three parts — what the creature swings
+    /// (<see cref="PrototypeTuning.DamageMightWeight"/> times its might), how fit
+    /// it is to swing it (readiness) and the scatter. The weapon is the first of
+    /// them: it is the only term that is about the arm rather than about the
+    /// whole body, so it is the only one a hurt arm may take away. Readiness
+    /// belongs to the torso (see <see cref="ComputeReadiness"/>) and taking it
+    /// here as well would make one wound charge twice.</para>
+    ///
+    /// <para>A creature whose arm is gone is not disarmed of everything: what is
+    /// left is readiness, the scatter and
+    /// <see cref="PrototypeTuning.DamageFloor"/>, so it still fights and still
+    /// finishes a raider who was nearly down. That is deliberate — «оглушён,
+    /// хромает, роняет оружие» is a list of things a creature keeps fighting
+    /// through, and a wound that removed a fighter outright would be the
+    /// exclusion the slice exists to replace.</para>
+    /// </summary>
+    private static int WeaponWeight(CreatureState creature)
+    {
+        var full = creature.Might * PrototypeTuning.DamageMightWeight;
+        var percent = creature.PartInjury(BodyPart.Arm) switch
+        {
+            InjuryKind.Heavy => PrototypeTuning.ArmHeavyMightPercent,
+            InjuryKind.Light => PrototypeTuning.ArmLightMightPercent,
+            _ => 100,
+        };
+        return full * percent / 100;
+    }
 
     /// <summary>
     /// A blow finds a part of a body and leaves something on it.
