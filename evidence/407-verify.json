@@ -1,0 +1,19 @@
+{
+  "issue": 407,
+  "checkpoint": "verify",
+  "taken_at": "2026-08-12",
+  "commit": "0bc4326",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
+  "note": "Файл заведён намеренно: этим же набором изменений в реестр добавлена запись о том, что заявление «verify.ps1 зелёный» на docs-only PR третьей стороной не проверяется — CI полного прогона не гоняет. Запись остаётся в силе (структурный пробел никуда не делся), но конкретно это заявление подкреплено выводом, а не словом.",
+  "result": {
+    "status": "ok",
+    "scope": "full",
+    "stagesExecuted": ["scripts", "build", "tests", "mcp", "sim", "load", "godot", "ui", "screenshots", "token-budget"],
+    "stagesNotRun": [],
+    "seed": 424242,
+    "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+    "viewInvariantChecksum": "8a63a099455b7f0fffb3b848e76d3a7d7b9951a0094c873665b1c92891c0b754",
+    "godotVersion": "4.7.1.stable.mono.official.a13da4feb",
+    "temporaryRoot": "C:\gamedev\df-verify-a1999571"
+  }
+}
