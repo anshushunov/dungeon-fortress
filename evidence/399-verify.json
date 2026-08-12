@@ -1,0 +1,8 @@
+{
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
+  "run_on_commit": "0ecba59",
+  "result": "ok",
+  "scope": "full",
+  "stagesExecuted": ["scripts","build","tests","mcp","sim","load","godot","ui","screenshots","token-budget"],
+  "stagesNotRun": []
+}
