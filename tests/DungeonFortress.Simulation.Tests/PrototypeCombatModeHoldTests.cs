@@ -190,29 +190,40 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
     /// reach — which is why zeroing that amplitude is the mutant this check owes
     /// (<c>evidence/333-mutants.json</c>, M2).</para>
     ///
+    /// <para><b>Only the blows struck while the condition stood still are
+    /// compared, and that qualification was put here by the mutant rather than by
+    /// foresight.</b> <c>Readiness</c> is republished at the end of the tick, and a
+    /// defender that struck and was wounded on the same tick publishes the wounded
+    /// value — so the plain profile mixes a phase into what should be only a draw.
+    /// Measured with the amplitude zeroed, the plain column still showed five to
+    /// eight «scattered» profiles a party (<c>m1r23 =&gt; 7/10</c> and the like) and
+    /// this check passed green on a world with no spread in it at all. Restricted
+    /// to blows whose striker published the same might and the same readiness at
+    /// both ends of the tick, the same mutant leaves nothing:
+    /// <see cref="Measurement.DamageByProfileWhileSteady"/> is flat everywhere.
+    /// </para>
+    ///
     /// <para><b>The floor is one and the unit is the party</b>, for the same
     /// reason the memory floor of <c>PrototypeMemoryTests</c> is: «observable» has
     /// exactly one number in it, the boundary between observed and not observed,
     /// and the matrix is how this suite tells a property of the world from a
-    /// coincidence of one party (13.4). A party in which nobody ever struck a
-    /// raider is excluded rather than failed — <c>neglected</c> falls before the
-    /// first wave arrives and carries no exchange at all — and the guard against
-    /// excluding everything is asserted separately. Measured on the shipped
-    /// matrix: 25..35 scattered profiles in each of the six parties that fight.
-    /// </para>
+    /// coincidence of one party (13.4). A party that never landed a steady blow is
+    /// excluded rather than failed — <c>neglected</c> falls before the first wave
+    /// arrives and carries no exchange at all — and the guard against excluding
+    /// everything is asserted separately.</para>
     /// </summary>
     [Fact]
     public void The_same_exchange_gives_a_different_result()
     {
-        var fought = Matrix.Where(run => run.DefenderBlows > 0).ToArray();
+        var fought = Matrix.Where(run => run.SteadyBlows > 0).ToArray();
 
         Assert.True(
             fought.Length > 0,
-            $"Not one party of the matrix landed a single blow, so nothing below was asked at " +
-            $"all.{Environment.NewLine}{Detail()}");
+            $"Not one party of the matrix landed a blow whose striker's condition stood still " +
+            $"across the tick, so nothing below was asked at all.{Environment.NewLine}{Detail()}");
 
         var flat = fought
-            .Where(run => !run.DamageByProfile.Any(profile => profile.Value.Count > 1))
+            .Where(run => !run.DamageByProfileWhileSteady.Any(profile => profile.Value.Count > 1))
             .ToArray();
 
         Assert.True(
@@ -360,6 +371,31 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
                 }
 
                 seen.Add(damage);
+
+                // The same profile, taken only from the blows whose striker's
+                // published condition did not move across the tick it struck on.
+                // `Readiness` is republished at the end of the tick and a
+                // defender that struck and was then wounded on the same tick
+                // publishes the wounded value: measured with the jitter zeroed,
+                // that drift alone leaves five to eight «scattered» profiles a
+                // party (m1r23 => 7/10 and the like), so the column above cannot
+                // tell a draw from a phase. Requiring the condition to stand
+                // still across the tick removes every term of the sum except the
+                // draw, and it is what the assertion below is allowed to use.
+                if (creatureBefore.TryGetValue(creature.Id, out var atStart) &&
+                    atStart.Might == creature.Might &&
+                    atStart.Readiness == creature.Readiness)
+                {
+                    if (!tally.DamageByProfileWhileSteady.TryGetValue(profile, out var steady))
+                    {
+                        steady = [];
+                        tally.DamageByProfileWhileSteady[profile] = steady;
+                    }
+
+                    steady.Add(damage);
+                    tally.SteadyBlows++;
+                }
+
                 tally.DefenderBlows++;
                 tally.DefenderDamageTotal += damage;
                 tally.DefenderDamageLowest = Math.Min(tally.DefenderDamageLowest, damage);
@@ -754,6 +790,16 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
 
         public Dictionary<string, SortedSet<int>> DamageByProfile { get; } = [];
 
+        /// <summary>
+        /// The same, restricted to blows whose striker published the same might
+        /// and the same readiness at the start and at the end of the tick it
+        /// struck on. That is the dictionary in which more than one damage value
+        /// on one key can only be the draw.
+        /// </summary>
+        public Dictionary<string, SortedSet<int>> DamageByProfileWhileSteady { get; } = [];
+
+        public int SteadyBlows { get; set; }
+
         public int DefenderBlows { get; set; }
 
         public int DefenderDamageTotal { get; set; }
@@ -823,6 +869,8 @@ public sealed class PrototypeCombatModeHoldTests(ITestOutputHelper output)
                 $"  SPREAD {fixtureName}/{seed} defenderBlows={DefenderBlows} " +
                     $"damage={(DefenderBlows == 0 ? "-" : $"{DefenderDamageLowest}..{DefenderDamageHighest} mean={DefenderDamageTotal * 100 / DefenderBlows}/100")} " +
                     $"profiles={DamageByProfile.Count} scattered={DamageByProfile.Count(pair => pair.Value.Count > 1)} " +
+                    $"steadyBlows={SteadyBlows} steadyProfiles={DamageByProfileWhileSteady.Count} " +
+                    $"steadyScattered={DamageByProfileWhileSteady.Count(pair => pair.Value.Count > 1)} " +
                     $"hpOffRaiders={HealthTakenOffRaiders} hpOffDefenders={HealthTakenOffDefenders}",
                 $"    widest=[{string.Join(' ', ScatteredProfiles.Take(6))}]",
                 $"  MEMORY {fixtureName}/{seed} refusalsByMemory={RefusalsByMemory} " +
