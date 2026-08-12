@@ -234,11 +234,21 @@ public static class PrototypeTuning
     // property came to be riding on a defect in the first place. At 6 every four
     // points of satiety are visible in a blow, and a fight of about thirteen
     // blows is long enough for the difference to decide whether a raider falls.
-    // Anyone raising this divisor is spending that property; the checks that
-    // would go red are `Deliberately_losing_creatures_and_stock_never_scores_
-    // better` and `Preparation_changes_the_deterministic_party_without_direct_
-    // orders`, and both are named here so that a change to the number meets the
-    // consequence rather than discovering it.
+    // Anyone raising this divisor is spending that property, and exactly ONE
+    // check goes red when they do: `Preparation_changes_the_deterministic_party_
+    // without_direct_orders`. It is named here so that a change to the number
+    // meets the consequence rather than discovering it.
+    //
+    // This note used to name a second one,
+    // `Deliberately_losing_creatures_and_stock_never_scores_better`, and that was
+    // a promise the party does not keep. Measured by the mutants of this slice
+    // (evidence/333-mutants.json, M3): at a divisor of 25 it stays green, and it
+    // stays green at 1000 too — that is, with readiness contributing nothing to a
+    // blow at all. Whatever holds it, this number is not it. The name was removed
+    // rather than left standing, for the same reason round 3 of this slice
+    // removed a false promise from the neighbouring constant: a note that names a
+    // check which cannot fail is worse than a note that names none, because it is
+    // read as coverage.
     public const int DamageMightWeight = 4;
     public const int DamageReadinessDivisor = 6;
     public const int RaiderMightWeight = 5;

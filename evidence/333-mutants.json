@@ -1,0 +1,262 @@
+{
+  "schemaVersion": 1,
+  "issue": "333 + 336 + 76",
+  "what": "One mutant per assertion of the combat balance slice, rule 21 and criterion 5 of Issue #336. Every substitution below is the changed fragment of code verbatim, not a description of it.",
+  "when": "2026-08-12",
+  "tree": {
+    "branch": "fix/333-combat-mode-hold",
+    "checkedStateCommittedBefore": "ffba85a",
+    "why": "Issue #147 measured the trap: a mutant run on an uncommitted tree is reverted together with the edit it was meant to check. Every run below was taken with the tree clean at ffba85a, and reverted with `git checkout -- src/ tests/` afterwards."
+  },
+  "howEachWasRun": {
+    "build": "dotnet build DungeonFortress.sln -c Release",
+    "test": "dotnet test tests/DungeonFortress.<Simulation|Presentation>.Tests -c Release --no-build [--filter <names>]",
+    "baselineOfTheUnmutatedTree": "Simulation 359 of 360 passed with one Skip (Issue #380); Presentation 735 of 735; DomainMcp 8 of 8. The one new check of this round, The_same_exchange_gives_a_different_result, brings the simulation total from 359 to 360."
+  },
+  "mutants": [
+    {
+      "id": "M1",
+      "assertion": "criterion 1 of #336 — two runs of one seed give one canonical document byte for byte over a whole party",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs",
+      "substitutionFrom": "private int CombatJitter(int amplitude) => _combatRandom.NextInt32(amplitude * 2 + 1) - amplitude;",
+      "substitutionTo": "private int CombatJitter(int amplitude) => System.Random.Shared.Next(amplitude * 2 + 1) - amplitude;",
+      "whatItBites": "the source of the draw, which is the whole of the hard constraint of #336: the spread may only come from the party's seed",
+      "result": "RED, 7 of 7",
+      "red": [
+        "PrototypeCombatRandomTests.A_whole_party_of_one_seed_replays_byte_for_byte (all three parametrisations)",
+        "PrototypeCombatRandomTests.The_combat_stream_advances_on_every_tick_a_blow_lands (all three parametrisations)",
+        "PrototypeScenarioTests.Replay_from_loaded_command_log_is_byte_identical"
+      ],
+      "noteOnTheThirdOne": "The pre-existing economy replay reddens too, and it is worth naming why the new check was still needed: it runs to FirstRaidTick + 1 and can only see this substitution through the raider MIGHT jitter, which is drawn from the same stream on raider entry. No blow has landed at that tick, so nothing it asserts is about the damage draw."
+    },
+    {
+      "id": "M2",
+      "assertion": "criterion 3 of #336 — the same exchange gives a different result",
+      "file": "src/DungeonFortress.Simulation/PrototypeTuning.cs",
+      "substitutionFrom": "public const int DamageJitter = 6;",
+      "substitutionTo": "public const int DamageJitter = 0;",
+      "whatItBites": "the amplitude itself — with it zeroed a blow is exactly might*W + readiness/D and two blows of one profile can no longer differ",
+      "result": "RED",
+      "red": [
+        "PrototypeCombatModeHoldTests.The_same_exchange_gives_a_different_result",
+        "PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix (seed 20260727)",
+        "PrototypeScenarioTests.Preparation_outscores_its_absence_over_the_matrix",
+        "PrototypeReturningRaiderTests.A_memory_takes_away_a_road_and_never_the_objective",
+        "PrototypeReturningRaiderTests.A_returning_raider_walks_round_the_place_it_was_hit_hardest",
+        "PrototypePostCombatDispersalTests.A_refused_step_after_a_fight_usually_had_a_way_round_it",
+        "PrototypeMemoryCostTests.A_party_that_wins_its_fights_does_not_end_it_starving"
+      ],
+      "thisMutantChangedTheSliceAndThatIsTheFinding": {
+        "whatHappenedFirst": "Run against the check as it was first written, the mutant came back GREEN. The check grouped blows by the profile m{Might}r{Readiness} read off the snapshot taken at the END of the tick, and Readiness is republished there: a defender that struck and was wounded on the same tick publishes the wounded value (injury_light_penalty 15, heavy 40). With the amplitude at zero the plain profile still showed 5..8 «scattered» profiles a party — m1r23 => 7/10, a gap of three where there was no draw at all.",
+        "whatWasChanged": "The assertion was restricted to blows whose striker published the same might AND the same readiness at both ends of the tick it struck on. In that set no term of might*W + readiness/D + jitter can move except the draw. Commit ffba85a.",
+        "afterTheChange": "steadyScattered = 0 in all six fighting parties under the mutant, 19..31 without it, on 104..171 steady blows of 127..200. The check reddens.",
+        "whyItIsRecorded": "Because the six reddened checks above would have been enough to satisfy the letter of criterion 5 while no check said anything about the spread — they speak about the party score, about memory of place and about contract invariants. That is the shape open as Issue #340: a mutant that lands on a consequence and is read as coverage of the claim."
+      }
+    },
+    {
+      "id": "M3",
+      "assertion": "readiness / 6 is the coefficient the slice's restored properties rest on",
+      "file": "src/DungeonFortress.Simulation/PrototypeTuning.cs",
+      "substitutionFrom": "public const int DamageReadinessDivisor = 6;",
+      "substitutionTo": "public const int DamageReadinessDivisor = 25;",
+      "whatItBites": "the resolution with which hunger reaches a blow. At 25 the whole range of readiness is worth four whole numbers of damage, which is the state the slice was raised out of.",
+      "result": "RED, 1 of the 2 checks the constant's own note named",
+      "red": [
+        "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders — «prepared put down 7 raiders, baseline 9»"
+      ],
+      "greenAndItIsAFinding": {
+        "check": "PrototypeScenarioTests.Deliberately_losing_creatures_and_stock_never_scores_better",
+        "measuredAt25": "green",
+        "measuredAt1000": "green — that is, with readiness contributing nothing to a blow at all",
+        "consequence": "The note beside the constant promised that both checks go red when the divisor is raised. One of them does. The name of the other was removed from the note in this same commit rather than left standing: a note naming a check that cannot fail is read as coverage. Round 3 of this slice removed exactly this kind of false promise from the neighbouring constant and wrote down that it must not be reintroduced; it was, one constant over, and the mutant is what found it."
+      }
+    },
+    {
+      "id": "M4",
+      "assertion": "the join threshold of 30 — the owner's decision of 2026-08-11 under the coordinator's constraint «not above EatThreshold»",
+      "file": "src/DungeonFortress.Simulation/PrototypeTuning.cs",
+      "substitutionFrom": "public const int CombatJoinSatiety = 30;",
+      "substitutionTo": "public const int CombatJoinSatiety = 20;",
+      "whatItBites": "the value the slice inherited — CombatMinSatiety was 20 before it. If 30 changes nothing observable, the whole thread of decisions about it is decoration.",
+      "result": "RED, 6 of 360",
+      "red": [
+        "PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix — all three seeds, on invariant 5: `combat_refused_starving` is no longer reachable on `baseline`",
+        "PrototypeScenarioTests.Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party — the same invariant, on the single check",
+        "PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next (baseline) — «memory of place changed nothing in 1 of 3 parties of the matrix — 20260726»",
+        "PrototypeMoraleTests.A_runner_told_to_yield_goes_to_the_booked_tile_or_nowhere — «traffic arbitration booked a runner 3 times over the whole matrix — 71 is what it does today»"
+      ]
+    },
+    {
+      "id": "M5",
+      "assertion": "cell occupancy in the pathfinder, the domain's side — Issue #76 as this slice raised it",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.Work.cs",
+      "substitutionFrom": "        var next = StepAroundBodies(creature, target);",
+      "substitutionTo": "        var next = _map.NextStep(creature.Position, target, _zones[ZoneKind.Forbidden]);",
+      "whatItBites": "the call site, which is exactly the pre-#76 code: the pathfinder stops seeing bodies and a creature walks into one, is refused, and walks into it again next tick",
+      "result": "RED, 4 of 42",
+      "red": [
+        "PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next (baseline and prepared)",
+        "PrototypeMemoryTests.A_refusal_by_memory_names_the_work_the_creature_would_have_taken (baseline)",
+        "PrototypeMemoryTests.A_refusal_the_memory_free_tick_does_not_honour_lost_the_work_to_somebody (baseline)"
+      ],
+      "whatStayedGreenAndItIsSaidPlainly": {
+        "check": "PrototypeOffDutyTests.A_creature_left_without_work_after_a_fight_does_not_stand_where_it_was_fought",
+        "why": "This is the check the jam showed up in — one creature, one sixty-tick window, baseline/20260728, `mode=Moving last=waiting_blocked_by_other` — and it is what commit 2b69117 named as the reason #76 was raised out of slice 6. Reverting this one call site on the FINAL party does not reproduce it: the party the jam was measured on had a different threshold, a different damage denomination and a blind raider pathfinder as well. So the jam has no check that reproduces it by this substitution alone, and the observable price of #76 on this party is the memory-of-place family above. Named rather than dressed up: nothing here proves the jam cannot come back, only that memory of place stops being observable without the fix."
+      }
+    },
+    {
+      "id": "M6",
+      "assertion": "cell occupancy in the pathfinder, the raiders' side — criterion 1 of Issue #76",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.ReturningRaiders.cs",
+      "substitutionFrom": "        foreach (var other in _raiders)\n        {\n            if (other != raider &&\n                other.Mode == RaiderMode.Raiding &&\n                other.Position != target)\n            {\n                blocked.Add(other.Position);\n            }\n        }\n",
+      "substitutionTo": "(the whole block removed, so a raider's blocked set holds the forbidden zone and its own remembered place only — which is what RaiderBlockedTiles was before this slice)",
+      "whatItBites": "the raider pathfinder's knowledge of other raiders. The hard step check in RaiderStep is deliberately left in place, so what this measures is the PATHFINDING half of #76 on its own.",
+      "result": "RED, 4 of 360",
+      "red": [
+        "PrototypePostCombatDispersalTests.A_refused_step_after_a_fight_usually_had_a_way_round_it",
+        "PrototypeReturningRaiderTests.A_returning_raider_walks_round_the_place_it_was_hit_hardest",
+        "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders",
+        "PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next (baseline)"
+      ]
+    },
+    {
+      "id": "M7",
+      "assertion": "RaiderBlockedPatience — criterion 2 of Issue #76, a blocked body must not stall silently",
+      "file": "src/DungeonFortress.Simulation/PrototypeTuning.cs",
+      "substitutionFrom": "public const int RaiderBlockedPatience = 4;",
+      "substitutionTo": "public const int RaiderBlockedPatience = int.MaxValue;",
+      "whatItBites": "the limit on the wait. With no limit a raider queued behind an occupied tile waits for ever, no wave after the first resolves, and the party runs to SessionTicks with a null outcome.",
+      "result": "RED, 29 of 360",
+      "red": [
+        "PrototypeWaveTests.A_party_ends_by_itself_once_the_last_wave_is_resolved",
+        "PrototypeWaveTests.A_party_of_waves_replays_byte_for_byte_however_it_is_stepped (both fixtures)",
+        "PrototypeWaveTests.A_party_is_a_sequence_of_waves_each_stronger_than_the_one_before (both fixtures)",
+        "PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix (20260727, 20260728)",
+        "PrototypeScenarioTests.Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party",
+        "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders",
+        "PrototypeScenarioTests.Preparation_outscores_its_absence_over_the_matrix",
+        "PrototypeSnapshotShapeTests.The_canonical_snapshot_carries_exactly_the_recorded_composition",
+        "PrototypePartyScoreTests.A_finished_party_carries_the_score_its_own_facts_add_up_to",
+        "the whole PrototypeReturningRaiderTests family, the memory family, and eleven more — 29 in total"
+      ],
+      "note": "This is the measurement the constant's own comment records, taken again here: the limit is not a nicety, it is what keeps the party finishing."
+    },
+    {
+      "id": "M8",
+      "assertion": "the observability floor of memory of place, in the derived form of commit e8d6519 — memory of place is observable in EVERY party of the matrix",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs",
+      "substitutionFrom": "        return creature.RememberedPlaces.Count == 0 ||",
+      "substitutionTo": "        return creature.RememberedPlaces.Count >= 0 ||",
+      "whatItBites": "AvoidedPlace now returns null always, so a memory is written and published but never changes what a creature does — memory not observed AT ALL, which is precisely the state the floor exists to catch",
+      "result": "RED, 7 of 17",
+      "red": [
+        "PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next — «prepared: memory of place changed nothing in 3 of 3 parties of the matrix — 20260726, 20260727, 20260728», and the same on baseline",
+        "PrototypeMemoryTests.A_refusal_by_memory_names_the_work_the_creature_would_have_taken (both fixtures)",
+        "PrototypeMemoryTests.A_refusal_the_memory_free_tick_does_not_honour_lost_the_work_to_somebody (both fixtures)",
+        "PrototypeMemoryTests.An_idle_creature_that_is_avoiding_a_place_says_so_rather_than_something_else"
+      ],
+      "whatThisDoesNotProve": "It does not prove the per-party floor is stronger than the retired sum of ten — a mutant that silences exactly one party of three is not constructible by substitution, because which party goes silent is a property of the balance and not of a line of code. That the sum of ten is satisfied by 10/0/0 while the per-party rule is not is arithmetic, and it is argued in the check's own docstring and in evidence/333-memory-floor.json rather than measured here."
+    },
+    {
+      "id": "M9",
+      "assertion": "the reformulated post-combat detour check — the two guards that replaced the retired «a fifth of the ways round are strictly longer»",
+      "file": "tests/DungeonFortress.Simulation.Tests/PrototypePostCombatDispersalTests.cs",
+      "substitutionFrom": "                var seeing = Distance(creature.Position, destination, walls, bodies);",
+      "substitutionTo": "                var seeing = Distance(creature.Position, destination, walls, bodies: null);",
+      "whatItBites": "the second search's knowledge of bodies, which is the only thing that makes the detour share mean anything. This is the substitution the check's own docstring promises is run here.",
+      "result": "RED",
+      "red": [
+        "PrototypePostCombatDispersalTests.A_refused_step_after_a_fight_usually_had_a_way_round_it — «Not one of the 104 refused steps after a fight was one from which no route to the destination existed at all with bodies as walls»"
+      ],
+      "note": "Both new guards go to zero under it, as designed: walledIn = 0 because a search that ignores bodies always finds a route on a connected map, and longerWayRound = 0 because two searches that ignore bodies return the same length by construction."
+    },
+    {
+      "id": "M10",
+      "assertion": "the rebased presentation checks whose literals were replaced by rules — the rule must catch what the literal caught",
+      "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+      "substitutionFrom": "    public static bool Overlap(ViewRect one, ViewRect other) =>\n        one.X < other.X + other.Width &&\n        other.X < one.X + one.Width &&\n        one.Y < other.Y + other.Height &&\n        other.Y < one.Y + one.Height;",
+      "substitutionTo": "    public static bool Overlap(ViewRect one, ViewRect other) =>\n        one.X < other.X + other.Width ||\n        other.X < one.X + one.Width ||\n        one.Y < other.Y + other.Height ||\n        other.Y < one.Y + one.Height;",
+      "whatItBites": "collision between label boxes: with the conjunction turned into a disjunction any two boxes collide, so every label after the first is given up whatever its neighbours do",
+      "result": "RED, 8 of 48",
+      "red": [
+        "WorldLabelFocusTests.A_gesture_never_takes_a_name_from_a_body_on_another_cell — both rebased frames",
+        "WorldLabelLayoutTests.A_label_with_nowhere_to_go_is_dropped_rather_than_detached is not among them; the eight are A_caption_that_cannot_fit_whole_keeps_its_name_and_loses_its_sentence, A_crew_caption_that_cannot_fit_whole_keeps_its_name_and_loses_its_state, The_crews_caption_bids_its_name_first_and_grows_into_its_state_after, A_sentence_never_takes_the_place_of_a_neighbours_name, One_layout_holds_the_crew_and_the_raiders_together, The_body_under_the_cursor_is_offered_its_sentence_first"
+      ]
+    },
+    {
+      "id": "M10b",
+      "assertion": "the same family, with the substitution aimed at the rule rather than at the geometry",
+      "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+      "substitutionFrom": "            if (Fit(request, FirstAttempt(request), placed, null, scale) is { } named)",
+      "substitutionTo": "            if (request.Order % 2 == 0 && Fit(request, FirstAttempt(request), placed, null, scale) is { } named)",
+      "whatItBites": "a label is now given up for a reason that has nothing to do with a shared head — which is exactly what the rule «a caption is lost only on a shared head» forbids",
+      "result": "RED, 8 of 48",
+      "red": [
+        "the same family as M10, plus WorldLabelFocusTests.Every_raider_on_the_map_is_named_under_the_pointer_and_when_selected (WhereTheCrowdIsThickest)"
+      ]
+    },
+    {
+      "id": "M10c",
+      "assertion": "the four owner-scene checks rebased from counts to rules",
+      "file": "src/DungeonFortress.Presentation/WorldLabelLayout.cs",
+      "substitutionFrom": "            if (Fit(request, FirstAttempt(request), placed, null, scale) is { } named)",
+      "substitutionTo": "            if (request.Subject.Kind != WorldLabelKind.Raider &&\n                Fit(request, FirstAttempt(request), placed, null, scale) is { } named)",
+      "whatItBites": "no raider label is ever placed, whatever its head — the most direct denial of «every captioned returner is named unless another shares its head»",
+      "result": "RED, 21 of 48",
+      "red": [
+        "WorldLabelLayoutTests.Every_returning_raider_of_the_owners_scene_is_still_named — both frames",
+        "WorldLabelLayoutTests.The_names_that_are_not_shown_are_raiders_sharing_one_cell — both frames",
+        "WorldLabelFocusTests.With_nothing_pointed_at_the_map_names_exactly_who_it_named_before — both frames",
+        "WorldLabelFocusTests.A_gesture_never_takes_a_name_from_a_body_on_another_cell — both frames",
+        "WorldLabelFocusTests.The_crowd_is_what_takes_a_sentence_and_where_there_is_none_nothing_is_taken — both frames",
+        "WorldLabelFocusTests.Every_raider_on_the_map_is_named_under_the_pointer_and_when_selected — both frames",
+        "WorldLabelFocusTests.Pointing_at_any_body_of_the_frame_breaks_neither_spacing_nor_attachment — both frames",
+        "WorldLabelLayoutTests.A_label_with_nowhere_to_go_is_dropped_rather_than_detached and six more — 21 in total"
+      ],
+      "whatM10AndM10bMeasuredAboutTheOwnerSceneAndItIsSaidPlainly": "Neither of the first two reddens `Every_returning_raider_of_the_owners_scene_is_still_named` or `The_names_that_are_not_shown_are_raiders_sharing_one_cell`. The reason is in the checks' own docstrings and it is not a defect of the substitutions: since #76 the owner party carries at most ONE captioned returner at a time, so those two rules are exercised on a single subject and are currently satisfied by nothing being dropped. Their teeth are in the synthetic-crowd neighbours that BUILD the crowd instead of waiting for the party to produce one — `A_label_with_nowhere_to_go_is_dropped_rather_than_detached` and `A_caption_that_cannot_fit_whole_keeps_its_name_and_loses_its_sentence` — and both of those redden under M10 and M10c. What M10c shows is that the rule form still catches the thing the retired counts caught, a raider losing its name; what M10 and M10b show is that on THIS party it can only be caught by denying every raider label at once.",
+      "notOnTheList": "WorldLabelInspectorTests.Every_captioned_returner_of_the_owners_frame_can_be_reached_by_clicking stays green under all three, and correctly: it is about the click target under a body, not about the label above it."
+    },
+    {
+      "id": "M11",
+      "assertion": "HpRecoveryStep — the mending ladder redenominated with health, scope item 4 of #336",
+      "file": "src/DungeonFortress.Simulation/PrototypeTuning.cs",
+      "substitutionFrom": "public const int HpRecoveryStep = 8;",
+      "substitutionTo": "public const int HpRecoveryStep = 1;",
+      "whatItBites": "the literal the constant replaced. At 1 on health eight times larger a wound takes eight times as long to close, which is the change nobody decided.",
+      "result": "RED",
+      "red": [
+        "PrototypeWaveTests.A_wound_closes_in_a_creature_that_rests_and_eats — the `light → none` rung is climbed by nobody in the whole shipped matrix"
+      ],
+      "aSecondFindingFromTheSameRun": {
+        "check": "PrototypeMomentOfTruthTests.The_tuning_table_of_the_contract_carries_the_numbers_the_code_holds",
+        "measured": "GREEN with HpRecoveryStep = 1 while the contract's table says 8",
+        "consequence": "the guard over the contract's tuning table does not cover this row, so the table and the code can disagree without anything saying so. Raised as Issue #401; not fixed here, because a change to that guard is a change to what the contract checks and belongs in its own Issue."
+      }
+    },
+    {
+      "id": "M12",
+      "assertion": "the guard of Issue #333 itself — participation is decided by the fight and not overwritten by the needs phase two phases later",
+      "file": "src/DungeonFortress.Simulation/PrototypeWorld.Planning.cs",
+      "substitutionFrom": "            if (creature.Mode is CreatureMode.Fighting or CreatureMode.Fled or CreatureMode.Downed)\n            {\n                continue;\n            }\n",
+      "substitutionTo": "(the whole guard removed, restoring DecideNeedsAndMuster's pre-#333 loop over every creature)",
+      "whatItBites": "the one mechanism the second sentence of #333 is about",
+      "result": "RED, 3 of 6",
+      "red": [
+        "PrototypeCombatModeHoldTests.A_creature_leaves_the_line_only_by_a_decision_of_the_fight",
+        "PrototypeCombatModeHoldTests.A_creature_that_was_put_down_stays_down_until_the_domain_picks_it_up",
+        "PrototypeCombatModeHoldTests.A_defender_that_broke_keeps_running_until_the_wave_is_over"
+      ],
+      "note": "Three separate checks and three separate mutant results, because the same overwrite shows up as three different losses — a fighter out of the line for a tick, a runner that stopped running, and a body that got up and can never be raised again. Rule 9: one mutant per part, not one per change."
+    }
+  ],
+  "assertionsWithNoHonestMutant": [
+    {
+      "assertion": "«добивают труп» is absent from the simulation — No_blow_lands_on_a_raider_that_was_already_out",
+      "why": "It is a floor over a count that was zero before this slice and is zero after it. A substitution that makes it non-zero would have to add a mechanism that has never existed — striking a target re-read from the world as already out — rather than remove one. The check is not made worthless by that: it is a regression floor over a measured absence, and it is honest about being one."
+    },
+    {
+      "assertion": "the per-party form of the memory floor is stronger than the retired sum of ten",
+      "why": "Which party of the three goes silent is a property of the balance, not of any single line, so no substitution produces a 10/0/0 distribution on demand. See M8."
+    }
+  ]
+}
