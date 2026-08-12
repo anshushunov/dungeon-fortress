@@ -2,7 +2,8 @@
   "criterion": 5,
   "text": "Мутант — на критерий 5 и только на него. Добавление нового нумерованного пункта обязано сделать счёт отличным от 40.",
   "command": "rg -c '^\*\*[0-9]+\. ' docs/engineering/DEVELOPMENT_PACE.md",
-  "run_after_commit": "5457902",
+  "run_after_commit": "8e0e44b",
+  "note": "commit hash updated after rebase onto origin/main 3083e9c (PR #406); measurement itself not re-run, file content identical before and after rebase (rebase touched no file in this task's diff)",
   "steps": [
     { "step": "baseline on committed state (5457902)", "count": 40 },
     { "step": "mutant: appended '**41. Мутант проверки счёта правил, временная строка.**' to end of file", "count": 41, "caught": true },

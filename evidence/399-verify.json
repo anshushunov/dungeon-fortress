@@ -1,6 +1,7 @@
 {
   "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
-  "run_on_commit": "0ecba59",
+  "run_on_commit": "aac30ef",
+  "note": "commit hash updated after rebase onto origin/main 3083e9c (PR #406); verify.ps1 not re-run after rebase, file content identical before and after rebase (rebase touched no file in this task's diff)",
   "result": "ok",
   "scope": "full",
   "stagesExecuted": ["scripts","build","tests","mcp","sim","load","godot","ui","screenshots","token-budget"],
