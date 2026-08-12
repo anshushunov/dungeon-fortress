@@ -289,42 +289,91 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
     /// Criterion 5: the route of the returning raider does not pass through the
     /// tile he remembers, and the route of the same raider before he remembered it
     /// does.
+    ///
+    /// <para><b>Read over twelve parties and as a floor, and both of those were
+    /// put here by a measurement rather than by taste (Issue #405).</b> It used to
+    /// be read on <see cref="RouteSeed"/> alone and to forbid the step outright,
+    /// and that claim is stronger than the mechanic it is about:
+    /// <c>RaiderStep</c> walks round the remembered tile <b>when there is a way
+    /// round</b> and straight through when there is not, which is its own
+    /// documented bound and the reason the rule cannot strand anybody. Scanned
+    /// over seeds 20260726..20260755 on the tree the check was green on
+    /// (<c>main</c> at 8977b0d, no edit of this branch applied): of 54 returning
+    /// raiders carrying a memory off the objective, four walked over it and three
+    /// were stranded. So the absolute form was already false on the shipped world
+    /// — it passed because it was pinned to one seed on which it happened to
+    /// hold.</para>
+    ///
+    /// <para>What replaces it is the same claim read on a wider subject and stated
+    /// as what the mechanic promises: a memory takes a road away from nearly
+    /// everybody who carries one, and takes the raid away from nobody. On the
+    /// twelve parties below, on that same tree, 2 of 25 avoiders stepped on their
+    /// tile and none was stranded; with the admission fix of Issue #405 applied,
+    /// the same 25 avoiders give the same 2 and the same 0. The floor is one fifth
+    /// and the stranding claim stays absolute — it is the half a raider actually
+    /// loses the raid to, and the half the admission fix carries from three
+    /// stranded to none over the full thirty.</para>
     /// </summary>
     [Fact]
     public void A_returning_raider_walks_round_the_place_it_was_hit_hardest()
     {
-        var (visits, state) = RaiderRoutes(ShippedFixture, RouteSeed);
+        var avoiderCount = 0;
+        var walkedOverIt = new List<string>();
+        var stranded = new List<string>();
 
-        var avoiders = state.Raiders
-            .Where(raider =>
-                raider.ReturnedFromWave is not null &&
-                raider.RememberedPlace is { } place &&
-                place.Place != FirstLarderTile)
-            .ToArray();
-        Assert.NotEmpty(avoiders);
-
-        foreach (var raider in avoiders)
+        foreach (var seed in SearchSeeds.Take(12))
         {
-            var remembered = raider.RememberedPlace!.Place;
+            var (visits, state) = RaiderRoutes(ShippedFixture, seed);
+            var avoiders = state.Raiders
+                .Where(raider =>
+                    raider.ReturnedFromWave is not null &&
+                    raider.RememberedPlace is { } place &&
+                    place.Place != FirstLarderTile)
+                .ToArray();
 
-            // Before: the body that carried this name last time stood there. It has
-            // to have — the tile is where it was hit — and asserting it is what
-            // makes the "after" half a change rather than an absence.
-            var previous = state.Raiders.Single(other =>
-                other.Name == raider.Name && other.Wave == raider.ReturnedFromWave!.Value);
-            Assert.Contains(remembered, visits[previous.Id]);
+            foreach (var raider in avoiders)
+            {
+                avoiderCount++;
+                var remembered = raider.RememberedPlace!.Place;
 
-            // After: never again.
-            Assert.DoesNotContain(remembered, visits[raider.Id]);
+                // Before: the body that carried this name last time stood there. It
+                // has to have — the tile is where it was hit — and asserting it is
+                // what makes the "after" half a change rather than an absence. This
+                // one stays absolute, because it is a fact about how the memory was
+                // written and not about how a route is walked.
+                var previous = state.Raiders.Single(other =>
+                    other.Name == raider.Name && other.Wave == raider.ReturnedFromWave!.Value);
+                Assert.Contains(remembered, visits[previous.Id]);
 
-            // And he did get where he was going, so the memory took a road and not
-            // the raid: he reached the larder or left through the gate.
-            Assert.True(
-                visits[raider.Id].Contains(FirstLarderTile) ||
-                raider.Mode == RaiderMode.Escaped,
-                $"{raider.Name} neither reached the larder nor left: avoidance must " +
-                "not be able to strand a raider");
+                if (visits[raider.Id].Contains(remembered))
+                {
+                    walkedOverIt.Add($"{seed}/{raider.Name}@({remembered.X},{remembered.Y})");
+                }
+
+                if (!visits[raider.Id].Contains(FirstLarderTile) && raider.Mode != RaiderMode.Escaped)
+                {
+                    stranded.Add($"{seed}/{raider.Name}");
+                }
+            }
         }
+
+        Assert.True(
+            avoiderCount > 0,
+            "No returning raider of the twelve parties carries a memory off the objective, so " +
+            "criterion 5 has no subject at all. That is a finding about the world rather than a " +
+            "broken check: either raiders stopped being hit anywhere but the larder tile, or they " +
+            "stopped coming back remembering it.");
+
+        Assert.True(
+            walkedOverIt.Count * 5 <= avoiderCount,
+            $"{walkedOverIt.Count} of {avoiderCount} returning raiders walked over the tile they " +
+            $"remember, which is more than the one fifth the way-round-when-there-is-a-way-round " +
+            $"rule leaves room for: {string.Join(' ', walkedOverIt)}");
+
+        Assert.True(
+            stranded.Count == 0,
+            $"{stranded.Count} returning raiders neither reached the larder nor left: avoidance " +
+            $"must not be able to strand a raider. {string.Join(' ', stranded)}");
     }
 
     /// <summary>
@@ -340,9 +389,11 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
     /// larder tile any more — the scene the bound is about is simply not in that
     /// party. Scanned over <c>baseline</c> and <c>prepared</c> at seeds
     /// 20260726–20260755, it is in eight parties; this one has two raiders in it
-    /// rather than one, which is why it and not the first hit was taken. This is
-    /// the same move <see cref="RouteSeed"/> already makes for the other half of
-    /// the rule, and for the same reason.</para>
+    /// rather than one, which is why it and not the first hit was taken. The other
+    /// half of the rule — walking round a memory that is not the objective — was
+    /// pinned to <see cref="RouteSeed"/> in the same way and for the same reason,
+    /// and Issue #405 replaced that pin with a floor read over twelve parties; see
+    /// <see cref="A_returning_raider_walks_round_the_place_it_was_hit_hardest"/>.</para>
     [Fact]
     public void A_memory_takes_away_a_road_and_never_the_objective()
     {

@@ -148,6 +148,70 @@ public sealed class PrototypeMusterParticipationTests(ITestOutputHelper output)
             $"{Environment.NewLine}{Detail()}");
     }
 
+    /// <summary>
+    /// First half of the admission fix of Issue #405: the nearest-raider arm of
+    /// contract 10.2 exists at all.
+    ///
+    /// <para>«Расстояние от самого существа до ближайшего налётчика <b>или</b> до
+    /// ближайшего тайла кладовой не превышает T.engage_radius» — the code measured
+    /// only the larder arm, so a creature with a raider two tiles from it and the
+    /// larder twelve tiles from it was turned away. Over the twelve parties that
+    /// is 20 roll calls on the tree this branch starts from and 30 on the tree
+    /// before the balance slice; the worst of them is <c>baseline/20260729</c> at
+    /// t2020, where five of nine were refused with raiders 2, 5, 5, 6 and 6 tiles
+    /// away — the wave the owner is describing.</para>
+    ///
+    /// <para><b>Manhattan and therefore a floor of zero rather than a count.</b>
+    /// Manhattan never exceeds the walk, so a reading of 6 does not prove the walk
+    /// was 6; a refusal could in principle be honest with a raider close in a
+    /// straight line and far round a wall. The check is nonetheless an equality to
+    /// zero, because over these twelve parties the fixed world has none at all,
+    /// and a floor that admitted «a few» would be a number nothing chose. If a
+    /// legitimate one ever appears, the message says which party and tick to look
+    /// at.</para>
+    /// </summary>
+    [Fact]
+    public void A_creature_a_raider_is_already_near_is_not_turned_away_for_being_far_from_the_larder()
+    {
+        var turnedAway = Matrix.SelectMany(run => run.UnreachableWhileARaiderStoodNear).ToArray();
+
+        Assert.True(
+            turnedAway.Length == 0,
+            $"{turnedAway.Length} roll calls refused a creature as unreachable while a raider stood " +
+            $"within the engage radius of it, which contract 10.2 admits: " +
+            $"{string.Join(' ', turnedAway.Take(10))}{Environment.NewLine}{Detail()}");
+    }
+
+    /// <summary>
+    /// Second half of the same fix: the larder arm is <b>kept</b> and not traded
+    /// for the raider arm.
+    ///
+    /// <para>It is what lets the domain form a line before a raider is anywhere
+    /// near it — the first roll call of a wave happens on the tick the wave lands,
+    /// when the raiders are still walking in at the gate. This counts the joins
+    /// where every raider on the map is <b>provably</b> further than the engage
+    /// radius from the creature that joined: Manhattan is a lower bound on the
+    /// walk, so a Manhattan greater than the radius proves the walk is greater
+    /// too, and the arm that admitted such a creature can only have been the
+    /// larder one.</para>
+    ///
+    /// <para>A floor of one join, and the unit is the matrix. Replacing
+    /// <c>min(toLarder, toRaider)</c> with <c>toRaider</c> alone empties this
+    /// entirely — that is mutant M5 of <c>evidence/405-mutant.json</c>.</para>
+    /// </summary>
+    [Fact]
+    public void A_creature_within_reach_of_the_larder_is_admitted_before_any_raider_is_near()
+    {
+        var joins = Matrix.Sum(run => run.JoinedWhileEveryRaiderWasFarAway.Count);
+
+        Assert.True(
+            joins > 0,
+            $"Not one creature of the matrix took the field while every raider on the map was " +
+            $"provably further than the engage radius from it, so nothing admits a defender but " +
+            $"the nearness of a raider and the larder arm of contract 10.2 is gone." +
+            $"{Environment.NewLine}{Detail()}");
+    }
+
     private static string Detail() =>
         string.Join(Environment.NewLine, Matrix.Select(measurement => measurement.ToString()))
         + Environment.NewLine + Pooled(Matrix);
@@ -254,6 +318,23 @@ public sealed class PrototypeMusterParticipationTests(ITestOutputHelper output)
             {
                 tallyForWave.Joined.Add(entry.CreatureId);
                 tallyForWave.JoinTick.TryAdd(entry.CreatureId, acted);
+
+                // A join that only the larder arm of contract 10.2 can explain:
+                // every raider on the map is further from this creature in a
+                // straight line than the engage radius, and the walk is never
+                // shorter than the straight line.
+                var nearestRaider = current.Raiders
+                    .Where(raider => raider.Mode == RaiderMode.Raiding)
+                    .Select(raider => Math.Abs(raider.Position.X - PositionOf(current, entry.CreatureId).X) +
+                        Math.Abs(raider.Position.Y - PositionOf(current, entry.CreatureId).Y))
+                    .DefaultIfEmpty(int.MaxValue)
+                    .Min();
+                if (nearestRaider > PrototypeTuning.EngageRadius)
+                {
+                    tally.JoinedWhileEveryRaiderWasFarAway.Add(
+                        $"t{acted}#{entry.CreatureId}(toNearestRaider={(nearestRaider == int.MaxValue ? "none" : nearestRaider)})");
+                }
+
                 continue;
             }
 
@@ -383,6 +464,12 @@ public sealed class PrototypeMusterParticipationTests(ITestOutputHelper output)
         /// </summary>
         public List<string> UnreachableWhileARaiderStoodNear { get; } = [];
 
+        /// <summary>
+        /// Joins that only the larder arm of contract 10.2 can account for: every
+        /// raider on the map was provably further than the engage radius away.
+        /// </summary>
+        public List<string> JoinedWhileEveryRaiderWasFarAway { get; } = [];
+
         public IEnumerable<WaveTally> Waves => _waves.Values.OrderBy(wave => wave.Number);
 
         public WaveTally WaveOf(int number)
@@ -450,7 +537,8 @@ public sealed class PrototypeMusterParticipationTests(ITestOutputHelper output)
             lines.Add(
                 $"  CONTRACT {fixtureName}/{seed} unreachableWhileARaiderStoodNear=" +
                 $"{UnreachableWhileARaiderStoodNear.Count} " +
-                $"[{string.Join(' ', UnreachableWhileARaiderStoodNear.Take(6))}]");
+                $"[{string.Join(' ', UnreachableWhileARaiderStoodNear.Take(6))}] " +
+                $"joinedWhileEveryRaiderWasFarAway={JoinedWhileEveryRaiderWasFarAway.Count}");
             lines.Add(
                 $"  RUNSHARE {fixtureName}/{seed} onFeet={totalOnFeet} joined={totalJoined} " +
                 $"share={(totalOnFeet == 0 ? "-" : $"{totalJoined * 100 / totalOnFeet}%")}");
