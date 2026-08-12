@@ -52,5 +52,34 @@
       },
       "whatItProves": "The floor check is not vacuous: it is held by the admission threshold and it reddens when the threshold takes the line away. Without this the report could be green on a world where nobody musters at all."
     }
+  },
+  "mutantsOnTheFix": {
+    "why": "Rule 9 as narrowed by rule 21: the fix has two halves — the nearest-raider arm of contract 10.2 is added, and the larder arm is kept rather than traded for it — and a mutant must redden on each half separately, not on the change as a whole.",
+    "theFix": "PrototypeWorld.Combat.cs, DistanceToTheFight: the distance the admission rule compares against T.engage_radius is the smaller of the walk to LarderTiles[0] and the walk to the nearest raiding raider. Before it, only the larder walk was measured.",
+    "committedStateUnderTest": "3235803",
+    "M4": {
+      "half": "the nearest-raider arm exists at all",
+      "substitution": "the call site goes back to the pre-fix line — `var distance = _map.Distance(creature.Position, PrototypeMap.LarderTiles[0], _zones[ZoneKind.Forbidden]);`",
+      "predicted": "A_creature_a_raider_is_already_near_is_not_turned_away_for_being_far_from_the_larder goes red and nothing else does",
+      "measured": "RED, exactly that check, 1 failed of 5. The other four including the larder-arm check stayed green.",
+      "command": "the python substitution above, then dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeMusterParticipationTests\"; git checkout src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs"
+    },
+    "M5": {
+      "half": "the larder arm is kept and not traded for the raider arm",
+      "substitution": "inside DistanceToTheFight, `var nearest = _map.Distance(... LarderTiles[0] ...)` and its early return are replaced by `int? nearest = null;`, leaving the raider arm alone",
+      "predicted": "A_creature_within_reach_of_the_larder_is_admitted_before_any_raider_is_near goes red",
+      "measured": "RED. It also reddens the raider-arm check, which is expected — this mutant breaks the distance rule on both sides — and the point stands because the larder-arm check is green under M4 and red only under M5.",
+      "whatTheCheckCounts": "107 joins over the twelve parties that only the larder arm can account for: the creature was not mustering at the start of the tick, at least one raider stood on the map, and every one of them was further away in a straight line than the engage radius. All 107 are on `baseline`; on `prepared` the count is 0, because its creatures are already mustering when the wave lands and the muster escape carries them past the distance test."
+    },
+    "whyTheFirstAttemptAtM5IsRecordedToo": "The larder-arm check was first written as «somebody joined while every raider was far away», and M5 left it green. The reason is a finding rather than a slip: the admission rule skips the distance test entirely for a creature that is mustering (`!creature.IsMustering`), so the check was being held by the muster escape and not by the larder arm. Requiring the joiner to have NOT been mustering, and requiring a raider to be on the map at all, is what made it measure the arm it names."
+  },
+  "theCollateralOnIssue358": {
+    "what": "PrototypeReturningRaiderTests.A_returning_raider_walks_round_the_place_it_was_hit_hardest went red when the admission fix was applied, and repairing it is part of this branch.",
+    "howItWasDiagnosed": "A throwaway probe walked every raider route of `baseline` over seeds 20260726..20260755 (30 parties) on two trees: the committed state of this branch with the fix stashed, and with it applied.",
+    "onMainWithNoEditOfThisBranch": { "avoiders": 54, "walkedOverTheirRememberedTile": 4, "stranded": 3, "seedsThatWalkedOver": [20260733, 20260737, 20260739, 20260749], "seedsThatStranded": [20260747, 20260750, 20260754] },
+    "withTheAdmissionFix": { "avoiders": 55, "walkedOverTheirRememberedTile": 7, "stranded": 0 },
+    "whatThatMeans": "The check asserted the step outright, which is stronger than the mechanic it is about: RaiderStep walks round the remembered tile when there is a way round and straight through when there is not, and that fallback is what keeps avoidance from stranding anybody. The absolute claim was ALREADY false on the shipped world — it passed because it was pinned to RouteSeed = 20260729, one party on which it happened to hold. The admission fix moves the fight and 20260729 stops being that party.",
+    "theRepair": "The check now reads the first twelve seeds of the same range and states what the mechanic promises: at most a fifth of the avoiders walk over their tile, and none is stranded. On those twelve parties the numbers are the same on both trees — 25 avoiders, 2 walked over, 0 stranded — so the repair is not a bar lowered to let this branch through. The stranding half is kept absolute, and it is the half the fix improves: 3 stranded on main over the full thirty, 0 with the fix.",
+    "whatWasNotDone": "The mechanic of Issue #358 is not touched. Only the check that reads it is."
   }
 }

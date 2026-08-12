@@ -261,7 +261,7 @@ public sealed class PrototypeMusterParticipationTests(ITestOutputHelper output)
             }
 
             var acted = current.Tick - 1;
-            Observe(current, acted, tally);
+            Observe(previous, current, acted, tally);
             previous = current;
         }
 
@@ -275,7 +275,11 @@ public sealed class PrototypeMusterParticipationTests(ITestOutputHelper output)
         return tally;
     }
 
-    private static void Observe(PrototypeSnapshot current, int acted, Measurement tally)
+    private static void Observe(
+        PrototypeSnapshot previous,
+        PrototypeSnapshot current,
+        int acted,
+        Measurement tally)
     {
         // The roster is taken on the tick the wave lands, after that tick has
         // acted — which is the first roll call, so a creature that answered at
@@ -319,20 +323,32 @@ public sealed class PrototypeMusterParticipationTests(ITestOutputHelper output)
                 tallyForWave.Joined.Add(entry.CreatureId);
                 tallyForWave.JoinTick.TryAdd(entry.CreatureId, acted);
 
-                // A join that only the larder arm of contract 10.2 can explain:
-                // every raider on the map is further from this creature in a
-                // straight line than the engage radius, and the walk is never
-                // shorter than the straight line.
-                var nearestRaider = current.Raiders
+                // A join that only the larder arm of contract 10.2 can account
+                // for. Three conditions together, and each of them removes one
+                // other thing that could have admitted this creature:
+                //
+                //  - it was NOT mustering at the start of the tick, so the
+                //    `!creature.IsMustering` escape in the admission rule did not
+                //    let it past the distance test. Read off the previous snapshot
+                //    because joining clears the flag in the same tick;
+                //  - at least one raider is standing on the map, so the distance
+                //    test had something to measure to at all;
+                //  - every one of them is further away in a straight line than the
+                //    engage radius, and the walk is never shorter than the straight
+                //    line — so the raider arm cannot have admitted it.
+                var wasMustering = previous.Creatures
+                    .FirstOrDefault(creature => creature.Id == entry.CreatureId)?.IsMustering ?? false;
+                var raidersOnTheMap = current.Raiders
                     .Where(raider => raider.Mode == RaiderMode.Raiding)
                     .Select(raider => Math.Abs(raider.Position.X - PositionOf(current, entry.CreatureId).X) +
                         Math.Abs(raider.Position.Y - PositionOf(current, entry.CreatureId).Y))
-                    .DefaultIfEmpty(int.MaxValue)
-                    .Min();
-                if (nearestRaider > PrototypeTuning.EngageRadius)
+                    .ToArray();
+                if (!wasMustering &&
+                    raidersOnTheMap.Length > 0 &&
+                    raidersOnTheMap.Min() > PrototypeTuning.EngageRadius)
                 {
                     tally.JoinedWhileEveryRaiderWasFarAway.Add(
-                        $"t{acted}#{entry.CreatureId}(toNearestRaider={(nearestRaider == int.MaxValue ? "none" : nearestRaider)})");
+                        $"t{acted}#{entry.CreatureId}(toNearestRaider={raidersOnTheMap.Min()})");
                 }
 
                 continue;
