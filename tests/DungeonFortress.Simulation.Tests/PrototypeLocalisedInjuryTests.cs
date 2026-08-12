@@ -97,21 +97,35 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
     /// <c>evidence/409-mutants.json</c> holds.</para>
     /// </summary>
     [Fact]
-    public void A_hurt_arm_lands_a_weaker_blow()
+    public void A_hurt_arm_puts_less_of_its_own_strength_into_a_blow()
     {
-        var arm = Matrix.Where(run => run.Arm.HurtCount > 0).ToArray();
-        Assert.True(arm.Length > 0, "No party landed a blow with a hurt arm; the question cannot be asked.");
+        var pooled = new Ratio();
+        foreach (var run in Matrix)
+        {
+            pooled.Add(true, run.WeaponPerMight.Hurt * run.WeaponPerMight.HurtSamples / 100, run.WeaponPerMight.HurtSamples);
+            pooled.Add(false, run.WeaponPerMight.Whole * run.WeaponPerMight.WholeSamples / 100, run.WeaponPerMight.WholeSamples);
+        }
 
-        var hurt = Matrix.Sum(run => run.Arm.HurtMean * run.Arm.HurtCount) /
-            Matrix.Sum(run => run.Arm.HurtCount);
-        var whole = Matrix.Sum(run => run.Arm.WholeMean * run.Arm.WholeCount) /
-            Matrix.Sum(run => run.Arm.WholeCount);
-
-        output.WriteLine($"ARM pooledHurtMean={hurt / 100.0} pooledWholeMean={whole / 100.0}");
         Assert.True(
-            hurt < whole,
-            $"a hurt arm landed {hurt / 100.0} against {whole / 100.0} whole: the consequence is not there."
-            + Environment.NewLine + Detail());
+            pooled.HurtSamples > 0,
+            "No party landed a blow with a hurt arm, so the question cannot be asked.");
+
+        output.WriteLine(
+            $"ARM weaponPerMight hurt={pooled.Hurt / 100.0} whole={pooled.Whole / 100.0} " +
+            $"(T.damage_might_weight = {PrototypeTuning.DamageMightWeight})");
+
+        // Four fifths, and the number is measured on both sides rather than
+        // chosen. With the consequence on, the hurt cohort reads 2.66 against 4.08
+        // whole — a ratio of 0.65. With ArmLightMightPercent and
+        // ArmHeavyMightPercent both set to 100 and nothing else touched, it reads
+        // 4.14 against 4.08 — a ratio of 1.01, the gap gone entirely. A bar at 0.8
+        // sits with room on both sides of that pair and is what the mutant of
+        // evidence/409-mutants.json is red against.
+        Assert.True(
+            pooled.Hurt * 5 < pooled.Whole * 4,
+            $"a hurt arm put {pooled.Hurt / 100.0} of weapon into a blow per point of might against " +
+            $"{pooled.Whole / 100.0} whole — not the gap a dropped weapon makes." +
+            Environment.NewLine + Detail());
     }
 
     /// <summary>
@@ -316,7 +330,32 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
 
             if (entry.ReasonCode == "combat_attack" && entry.Details.TryGetValue("damage", out var damage))
             {
-                tally.Arm.Add(Hurt(creature, BodyPart.Arm), damage, entry.Repeats);
+                var hurtArm = Hurt(creature, BodyPart.Arm);
+                tally.ArmBlow.Add(hurtArm, damage, entry.Repeats);
+
+                // The weapon alone, isolated from the rest of the blow, and the
+                // isolation is what makes the mutant of criterion 2 able to be red.
+                //
+                // A blow is weapon + readiness/T.damage_readiness_divisor +
+                // scatter. Raw blow damage is therefore NOT a measurement of the
+                // arm: a creature with a hurt arm is usually hurt somewhere else
+                // too, that other wound costs it readiness, and readiness is a term
+                // of the same sum. Measured: with the arm's consequence switched
+                // off entirely, raw damage still read 16.57 for hurt arms against
+                // 19.09 for whole ones — a gap of the torso's making that a check
+                // on raw damage would have reported as the arm's.
+                //
+                // Subtracting the published readiness term leaves weapon + scatter,
+                // and the scatter is uniform on [-a,+a] and so averages out. What is
+                // left is divided by the creature's own might, because the weapon
+                // term is might times T.damage_might_weight: whole arms should read
+                // about that constant, a light arm about half of it, a gone one
+                // about nothing. Sums are pooled rather than averaged per blow so a
+                // strong creature and a weak one weigh what they actually swing.
+                tally.WeaponPerMight.Add(
+                    hurtArm,
+                    (damage - creature.Readiness / PrototypeTuning.DamageReadinessDivisor) * entry.Repeats,
+                    creature.Might * entry.Repeats);
             }
 
             if (entry.ReasonCode == "injury_limped")
@@ -396,12 +435,61 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
             string.Create(CultureInfo.InvariantCulture, $"{hundredths / 100}.{Math.Abs(hundredths % 100):00}");
     }
 
+    /// <summary>
+    /// A quotient measured twice — once where the part is hurt and once where it
+    /// is whole — pooled over numerators and denominators rather than averaged per
+    /// sample, so that a big contributor weighs what it contributes.
+    /// </summary>
+    private sealed class Ratio
+    {
+        private long _hurtNumerator;
+        private long _hurtDenominator;
+        private long _wholeNumerator;
+        private long _wholeDenominator;
+
+        public void Add(bool hurt, long numerator, long denominator)
+        {
+            if (hurt)
+            {
+                _hurtNumerator += numerator;
+                _hurtDenominator += denominator;
+            }
+            else
+            {
+                _wholeNumerator += numerator;
+                _wholeDenominator += denominator;
+            }
+        }
+
+        public long HurtSamples => _hurtDenominator;
+
+        public long WholeSamples => _wholeDenominator;
+
+        /// <summary>The quotient in hundredths, so it prints exactly.</summary>
+        public long Hurt => _hurtDenominator == 0 ? 0 : _hurtNumerator * 100 / _hurtDenominator;
+
+        public long Whole => _wholeDenominator == 0 ? 0 : _wholeNumerator * 100 / _wholeDenominator;
+
+        public override string ToString() =>
+            $"hurt={Hurt / 100.0} whole={Whole / 100.0}";
+    }
+
     private sealed class Measurement(string fixtureName, ulong seed)
     {
         public string Name { get; } = $"{fixtureName}/{seed}";
 
-        /// <summary>Damage of a blow, split by whether the striker's arm is hurt.</summary>
-        public Split Arm { get; } = new();
+        /// <summary>
+        /// Raw damage of a blow, split by whether the striker's arm is hurt. Kept
+        /// in the report and deliberately not asserted on: see
+        /// <see cref="WeaponPerMight"/>.
+        /// </summary>
+        public Split ArmBlow { get; } = new();
+
+        /// <summary>
+        /// What one point of might puts into a blow — the weapon term, isolated.
+        /// This is the arm's own quantity and the one criterion 2 is asserted on.
+        /// </summary>
+        public Ratio WeaponPerMight { get; } = new();
 
         /// <summary>Readiness, split by whether the torso is hurt.</summary>
         public Split Torso { get; } = new();
@@ -437,8 +525,8 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
                 $"light={Light} heavy={Heavy} " +
                 $"laterWaveEntries={EntriesIntoALaterWave} carrying={CarriedIntoNextWave}" +
                 Environment.NewLine +
-                $"    CONSEQUENCE {Name} armBlow[{Arm}] torsoReadiness[{Torso}] " +
-                $"limped={LimpEvents} stunned={StunEvents}";
+                $"    CONSEQUENCE {Name} weaponPerMight[{WeaponPerMight}] armBlow[{ArmBlow}] " +
+                $"torsoReadiness[{Torso}] limped={LimpEvents} stunned={StunEvents}";
         }
     }
 
