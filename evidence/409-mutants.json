@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "issue": 409,
+  "when": "2026-08-12",
+  "what": "Подстановки, показывающие, что следствие каждой локализации несущее, а не декоративное (критерий 2). Правило 9 требует красноты на каждую половину, поэтому мутант ставится на одну часть тела за раз и обязан оставить остальные проверки зелёными.",
+  "howAMutantIsRun": {
+    "tree": "feature/409-localised-injury, рабочая копия ../_wt-409-injury",
+    "rule": "Каждый прогон снят ПОСЛЕ коммита проверяемого состояния — откат мутанта по незакоммиченному файлу снёс бы саму правку (измерено на #147).",
+    "substitution": "sed -i \"s/public const int <ИМЯ> = <старое>;/public const int <ИМЯ> = <новое>;/\" src/DungeonFortress.Simulation/PrototypeTuning.cs",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~LocalisedInjury\" --logger \"console;verbosity=detailed\"",
+    "restore": "git checkout src/DungeonFortress.Simulation/PrototypeTuning.cs"
+  },
+
+  "baseline": {
+    "commit": "f921761",
+    "arm": "weaponPerMight hurt=2,88 whole=4,06",
+    "leg": "stepsLostPerCreatureTick hurt=0,05 whole=0 (hurtTicks=17717, wholeTicks=178843)",
+    "suite": "tests/DungeonFortress.Simulation.Tests — пройдено 372, не пройдено 0; tests/DungeonFortress.Presentation.Tests — пройдено 735, не пройдено 0"
+  },
+
+  "M-ARM": {
+    "part": "рука",
+    "substitution": "ArmLightMightPercent 50 -> 100 и ArmHeavyMightPercent 0 -> 100. Больше ничего.",
+    "meaning": "Раненая рука держит оружие как целая — следствие отключено целиком.",
+    "predictedBeforeTheRun": "вес оружия у раненой руки поднимается до уровня целой (около T.damage_might_weight = 4), проверка руки краснеет; нога не двигается",
+    "measured": {
+      "arm": "hurt=4,46 whole=4,08 — разрыв не просто закрылся, а сменил знак; A_hurt_arm_puts_less_of_its_own_strength_into_a_blow КРАСНАЯ",
+      "leg": "hurt=0,06 whole=0 — A_hurt_leg_loses_steps_and_a_whole_one_loses_none зелёная"
+    },
+    "verdict": "предсказание исполнено, изоляция подтверждена"
+  },
+
+  "M-LEG": {
+    "part": "нога",
+    "substitution": "LegLightLimpPeriod 3 -> 0 и LegHeavyLimpPeriod 2 -> 0. Ноль означает «никогда».",
+    "meaning": "Раненая нога ходит как целая — хромота отключена целиком.",
+    "predictedBeforeTheRun": "потерянных шагов становится ровно 0 на обеих сторонах, проверка ноги краснеет; рука не двигается",
+    "measured": {
+      "leg": "hurt=0 whole=0 при hurtTicks=17543 — то есть подопытных тиков столько же, а шагов не теряется ни одного; A_hurt_leg_loses_steps_and_a_whole_one_loses_none КРАСНАЯ",
+      "arm": "hurt=2,66 whole=4,08 — A_hurt_arm_puts_less_of_its_own_strength_into_a_blow зелёная"
+    },
+    "verdict": "предсказание исполнено, изоляция подтверждена"
+  },
+
+  "aMutantThatFailedAndWhatItCost": {
+    "when": "между коммитами f100e3b и 3ef63a4",
+    "what": "Первая проверка руки мерила сырой урон удара и утверждала «раненой рукой бьют слабее». M-ARM оставил её ЗЕЛЁНОЙ: 16,57 против 19,04 целой.",
+    "why": "Удар — это оружие + готовность/T.damage_readiness_divisor + разброс. Раненный в руку обычно ранен и где-то ещё, вторая рана стоит готовности, а готовность входит в тот же удар. Разрыв делал торс, а проверка приписывала его руке.",
+    "repair": "Мерить вес оружия отдельно: урон минус опубликованный член готовности, делённый на силу существа. Целая рука читает 4,08 — ровно константу; разброс равномерен на [-a,+a] и в среднем уходит.",
+    "whyItMatters": "Это ровно тот случай, ради которого правило 9 требует мутанта на каждую половину, а не на изменение целиком: проверка выглядела осмысленной, числа выглядели убедительно, и она не умела отличить своё следствие от чужого."
+  },
+
+  "notYetDone": {
+    "M-HEAD": "голова — следствие ещё не сделано (рубеж 2, часть третья)",
+    "M-TORSO": "торс — следствие ещё не сделано (рубеж 2, часть четвёртая)"
+  }
+}

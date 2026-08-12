@@ -98,6 +98,33 @@
     "A_decision_that_held_for_several_ticks_prints_its_span_and_its_count": "красная как следствие ранга 2: панель существа держит ограниченное число записей, и одна новая запись того же ранга вытеснила свёрнутую запись ранга 1 с той единственной партии, на которой проверка её читала. Свёртка не сломана — проверка расширена с одной партии на шесть (Fixtures × MatrixSeeds, обе величины файл уже объявлял). Собственное сообщение проверки называло ровно эту развилку: «this fixture stopped being the one to read it on»."
   },
 
+  "afterCheckpoint2_armAndLeg": {
+    "commit": "f921761",
+    "note": "Числа рубежа 1 выше сняты до следствий и намеренно не переписаны: они доказывают отсутствие сдвига поведения. Ниже — состояние после руки и ноги, когда бой уже изменён замыслом.",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~LocalisedInjury\" --logger \"console;verbosity=detailed\"",
+    "pooled": {
+      "wounds": 140,
+      "byPart": { "head": 21, "torso": 43, "arm": 26, "leg": 50 },
+      "light": 109,
+      "heavy": 31,
+      "entriesIntoALaterWave": 216,
+      "carrying": 76,
+      "carryingShare": "35%"
+    },
+    "arm": {
+      "measured": "вес оружия на очко силы: раненая рука 2,88, целая 4,06 при T.damage_might_weight = 4",
+      "whyNotRawDamage": "сырой урон эту величину не измеряет — см. evidence/409-mutants.json, раздел aMutantThatFailedAndWhatItCost"
+    },
+    "leg": {
+      "measured": "потерянных шагов на тик: раненая нога 0,05, целая ровно 0 (17717 против 178843 тиков)",
+      "whyZeroOnTheWholeSide": "счётчик stepsLostToLimp двигает только хромота, поэтому вторая половина утверждения не нуждается в пороге"
+    },
+    "suites": {
+      "simulation": "пройдено 372, пропущено 1, не пройдено 0",
+      "presentation": "пройдено 735, не пройдено 0"
+    }
+  },
+
   "whatIsNotDoneYet": [
     "следствия по частям (рубеж 2) — сегодня раненая часть не меняет ничего, кроме записи",
     "заживление по частям (рубеж 3) — RecoveryTicks по-прежнему один счётчик, и все части заживают по одной доле здоровья",
