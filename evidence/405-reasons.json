@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "issue": 405,
+  "when": "2026-08-12",
+  "what": "Criterion 3 of Issue #405: every reason a creature does not take the field, said to be designed or not, with the decision that introduced it. The counts are the pooled ones of evidence/405-before-after.json; the command that re-takes them is there too.",
+  "howToReadTheCounts": "«final» is the reason that still held at a creature's last roll call of a wave, counted once per creature per wave — the partition of the absentees. «occurrences» is how many roll calls wrote the code at all, and a creature can contribute to two different codes in one wave (turned away as unreachable early and as starving later).",
+  "reasons": [
+    {
+      "code": "combat_refused_injured",
+      "meaning": "a heavy wound bars this creature from the fight until it is mended",
+      "final": { "before": 23, "after": 18 },
+      "designed": true,
+      "decision": "Contract 10.2 of docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md, first condition of admission (`injury != heavy`), and PrototypeWorld.Combat.cs RaiseTheDowned: «they stand with a heavy wound and one point of health: barred from the next fight, and worth a bunk and a portion for as long as it takes to mend. That is the price of a lost wave — a domain that meets the next one short-handed».",
+      "isItNew": "No, and it went the other way: 23 absentees before the slice against 18 after it.",
+      "whatThePlayerSees": "The same creature stands out of several waves in a row — #8 Тишина is the absentee of nine of the twelve parties. That is not the muster refusing; it is a wound the domain has not finished mending, and it is the largest single cause of «не все бегут защищаться» both before and after the slice."
+    },
+    {
+      "code": "combat_refused_starving",
+      "meaning": "satiety below the admission threshold T.combat_join_satiety",
+      "final": { "before": 9, "after": 12 },
+      "designed": true,
+      "decision": "Owner's decision of 2026-08-11 («вход строже удержания»), value narrowed to «not above EatThreshold» by the coordinator's constraint; the whole record is the comment above PrototypeTuning.CombatJoinSatiety and evidence/333-tension.json, section theLowThresholdSweepUnderTheEatThresholdConstraint. The threshold moved 20 -> 30 in PR #402.",
+      "isItNew": "The rise is new and it is the whole of what the owner saw on his own seed. Rolling the threshold back to 20 and changing nothing else recovers every one of those creatures (evidence/405-mutant.json, M1).",
+      "whatThePlayerSees": "The admission threshold is 30 and EatThreshold is also 30, so the two coincide exactly: **anybody hungry enough to want a meal is exactly the person the line will not take**. A creature at satiety 25 walks to the muster point, goes on getting hungrier on the way at one point per five ticks, and is turned away at the roll call it arrives for. That is the sentence that will survive the next playtest, and it is a consequence of a number the owner chose, not a defect."
+    },
+    {
+      "code": "combat_absent_unreachable",
+      "meaning": "the creature is further than T.engage_radius from where the fight is",
+      "final": { "before": 13, "after": 1 },
+      "occurrences": { "before": 30, "after": 20, "note": "the counts restricted to roll calls where a raider stood within the engage radius — see below" },
+      "designed": "PARTLY. The rule is designed; the implementation of it does not match the rule.",
+      "decision": "Contract 10.2: «расстояние от самого существа до ближайшего налётчика **или** до ближайшего тайла кладовой не превышает T.engage_radius = 8 тиков хода, и путь существует».",
+      "whereTheCodeDiffers": "UpdateCombatParticipation measures the distance to PrototypeMap.LarderTiles[0] only. The nearest-raider arm of the contract's «or» is not implemented, so a creature standing two tiles from a raider and twelve from the larder is refused by the code and admitted by the contract.",
+      "isItNew": "No. The line is identical on both trees and the slice does not touch it. Pooled it bites less often after the slice (20 against 30); on the owner's own seed it bites twice as often (14 against 7), because #76 changed where bodies stand and the longer fight gives more roll calls.",
+      "isItDesigned": "No. It is the one finding of this issue that contradicts a decision instead of following one, and it is what this branch fixes.",
+      "whatThePlayerSees": "On baseline/20260729 at t2020 five of nine creatures were turned away while raiders stood 2, 5, 5, 6 and 6 tiles from them. That is «не бегут защищаться» in its most literal form: the enemy is next to them and they go back to work."
+    },
+    {
+      "code": "combat_refused_grudge",
+      "meaning": "accumulated resentment outweighs everything holding this creature in the line",
+      "final": { "before": 0, "after": 0 },
+      "designed": true,
+      "decision": "Issue #167, fifth condition of admissibility of a verdict value; the contest and not a gate is stated in PrototypeWorld.Combat.cs, ResentmentOutweighsTheLine.",
+      "isItNew": "Not observed at all on any of the 24 parties measured, before or after. It is named here so that the partition of the reasons is complete and so that a future reading of «nobody refuses out of a grudge» is known to have been measured rather than assumed."
+    },
+    {
+      "code": "never_asked",
+      "meaning": "on their feet at the wave's arrival and no roll call ever wrote anything about them",
+      "final": { "before": 0, "after": 0 },
+      "designed": true,
+      "isItNew": "Never observed. Every absentee of every wave of every party carries a reason code, which is what makes the breakdown above a partition and not a sample."
+    }
+  ],
+  "theFourCandidatesTheIssueNamed": {
+    "thresholdRaisedFrom20To30": "CONFIRMED as the cause on the owner's own seed and DESIGNED. Named creatures and the counterfactual are in evidence/405-before-after.json and evidence/405-mutant.json.",
+    "theModGuardInDecideNeedsAndMuster": "NOT a cause of absence, and it works the other way. The guard stops the needs phase from taking a creature out of the line after combat put it in; nobody is kept out of the line by it. It is part of why the pooled share rose.",
+    "occupancyOfACellFrom76": "NOT a cause of absence pooled — `combat_absent_unreachable` as a final reason fell from 13 to 1. It is a cause of WHERE the refusals happen: the contract indicator doubled on the owner's seed while halving pooled, which is bodies standing in different places.",
+    "aLongerFightMeaningMoreRollCalls": "Works AGAINST absence, not for it. More roll calls is more chances to join, and the joinedLate column shows creatures arriving 20 to 100 ticks after their wave landed. A creature the player sees standing still at the moment the attack starts may well be in the line a minute later — which is itself part of what «не все бегут защищаться» looks like from the outside."
+  }
+}

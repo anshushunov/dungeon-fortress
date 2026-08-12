@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "issue": 405,
+  "when": "2026-08-12",
+  "what": "The substitutions that show the instrument of Issue #405 measures what it claims to measure, and — after the fix — that each half of the fix is held by a check. Every run below was taken AFTER the state under test was committed, so reverting a mutant cannot revert the work with it.",
+  "howAMutantIsRun": {
+    "tree": "fix/405-muster-participation, in the worktree ../_wt-405-muster",
+    "substitution": "sed -i \"s/public const int CombatJoinSatiety = [0-9]*;/public const int CombatJoinSatiety = <value>;/\" src/DungeonFortress.Simulation/PrototypeTuning.cs",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeMusterParticipationTests\" --logger \"console;verbosity=detailed\"",
+    "restore": "git checkout src/DungeonFortress.Simulation/PrototypeTuning.cs"
+  },
+  "mutantsOnTheInstrument": {
+    "why": "Criterion of the brief: «подстановка, меняющая порог входа, обязана сдвинуть измеренную долю в предсказанную сторону». An instrument that does not move with the number it is supposed to be measuring cannot be used to say whether that number is the cause.",
+    "baseline": {
+      "state": "committed state at 37bf0ad, CombatJoinSatiety = 30",
+      "pooledShare": "89% (257/288)",
+      "absentBy": { "combat_absent_unreachable": 1, "combat_refused_injured": 18, "combat_refused_starving": 12 },
+      "ownersSeedBaseline20260729": "86% (31/36)",
+      "suite": "3 of 3 green"
+    },
+    "M1": {
+      "substitution": "CombatJoinSatiety 30 -> 20, the value that stood before the balance slice. Nothing else changed.",
+      "predicted": "the share rises, starving refusals fall, and the four creatures the after-run names on the owner's seed come back into the line",
+      "measured": {
+        "pooledShare": "92% (266/288)",
+        "absentBy": { "combat_absent_unreachable": 1, "combat_refused_injured": 18, "combat_refused_starving": 3 },
+        "ownersSeedBaseline20260729": "97% (35/36), wave 3 back from 55% to 88% and wave 4 from 88% to 100%",
+        "theNamedCreatures": "#1 Кремень joins at t2080, #2 Мотылёк at t2080, #6 Прель at t2100, and #5 Уголёк joins wave 4 — the four the after-run reports as absent at satiety 25, 27, 26 and 22",
+        "suite": "3 of 3 green"
+      },
+      "whatItProves": "The instrument moves with the threshold, and the new absences on the owner's own party are the threshold's doing and not another part of the slice's. This is the substitution the attribution of Issue #405 rests on."
+    },
+    "M2": {
+      "substitution": "CombatJoinSatiety 30 -> 0",
+      "predicted": "hunger stops being able to keep anybody out at all",
+      "measured": {
+        "pooledShare": "93% (269/288)",
+        "absentBy": { "combat_absent_unreachable": 1, "combat_refused_injured": 18 },
+        "note": "combat_refused_starving disappears entirely and `thresholdSeen` goes empty",
+        "suite": "3 of 3 green"
+      },
+      "whatItProves": "Every starving refusal in the breakdown is the threshold's and nothing else's; there is no second door hunger keeps anybody out through."
+    },
+    "M3": {
+      "substitution": "CombatJoinSatiety 30 -> 60",
+      "predicted": "the share collapses and the floor check goes red",
+      "measured": {
+        "pooledShare": "36% (101/279)",
+        "absentBy": { "combat_refused_injured": 13, "combat_refused_starving": 165 },
+        "ownersSeedBaseline20260729": "13% (5/36)",
+        "suite": "Most_of_the_domain_on_its_feet_takes_the_field RED — «Only 101 of 279 creature-slots on their feet took the field over 31 waves (36%), which is below the floor of 60%»"
+      },
+      "whatItProves": "The floor check is not vacuous: it is held by the admission threshold and it reddens when the threshold takes the line away. Without this the report could be green on a world where nobody musters at all."
+    }
+  }
+}

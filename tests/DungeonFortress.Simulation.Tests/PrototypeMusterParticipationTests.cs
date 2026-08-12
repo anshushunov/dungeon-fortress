@@ -258,6 +258,34 @@ public sealed class PrototypeMusterParticipationTests(ITestOutputHelper output)
             }
 
             tallyForWave.Refusals.Add(new Refusal(entry.CreatureId, entry.ReasonCode, acted, entry.Details));
+            if (entry.ReasonCode == "combat_absent_unreachable")
+            {
+                // The contract's distance test (10.2) admits a creature that is
+                // within T.engage_radius of the nearest RAIDER **or** of the
+                // nearest larder tile; the implementation measures only to
+                // LarderTiles[0]. This counts the roll calls where the two could
+                // disagree — the creature was turned away for being far from the
+                // larder while a raider stood near it.
+                //
+                // Manhattan and not a path, and it is therefore an indicator and
+                // not a verdict: Manhattan never exceeds the walk, so a small one
+                // does not prove the walk was short. It is read off the snapshot
+                // at the end of the tick, one phase after the roll call, so the
+                // raider may have taken a step since. Both approximations are why
+                // this is reported and not asserted on.
+                var nearestRaider = current.Raiders
+                    .Where(raider => raider.Mode == RaiderMode.Raiding)
+                    .Select(raider => Math.Abs(raider.Position.X - PositionOf(current, entry.CreatureId).X) +
+                        Math.Abs(raider.Position.Y - PositionOf(current, entry.CreatureId).Y))
+                    .DefaultIfEmpty(int.MaxValue)
+                    .Min();
+                if (nearestRaider <= PrototypeTuning.EngageRadius)
+                {
+                    tally.UnreachableWhileARaiderStoodNear.Add(
+                        $"t{acted}#{entry.CreatureId}(toLarder={entry.Details.GetValueOrDefault("distance", -1)},toRaider={nearestRaider})");
+                }
+            }
+
             if (entry.ReasonCode == "combat_refused_starving")
             {
                 var satiety = entry.Details.GetValueOrDefault("satiety", -1);
@@ -271,6 +299,9 @@ public sealed class PrototypeMusterParticipationTests(ITestOutputHelper output)
             }
         }
     }
+
+    private static GridPoint PositionOf(PrototypeSnapshot snapshot, int creatureId) =>
+        snapshot.Creatures.First(creature => creature.Id == creatureId).Position;
 
     private sealed record Refusal(int CreatureId, string ReasonCode, int Tick, IReadOnlyDictionary<string, int> Details);
 
@@ -345,6 +376,13 @@ public sealed class PrototypeMusterParticipationTests(ITestOutputHelper output)
 
         public List<string> StarvingRefusalsThatDoNotHold { get; } = [];
 
+        /// <summary>
+        /// Roll calls where <c>combat_absent_unreachable</c> was written while a
+        /// raider stood within the engage radius of the creature it turned away.
+        /// Reported and not asserted on — see the note at the site that fills it.
+        /// </summary>
+        public List<string> UnreachableWhileARaiderStoodNear { get; } = [];
+
         public IEnumerable<WaveTally> Waves => _waves.Values.OrderBy(wave => wave.Number);
 
         public WaveTally WaveOf(int number)
@@ -409,6 +447,10 @@ public sealed class PrototypeMusterParticipationTests(ITestOutputHelper output)
                 lines.Add($"    joinedLate w{wave.Number}: {(late.Length == 0 ? "nobody" : string.Join(' ', late))}");
             }
 
+            lines.Add(
+                $"  CONTRACT {fixtureName}/{seed} unreachableWhileARaiderStoodNear=" +
+                $"{UnreachableWhileARaiderStoodNear.Count} " +
+                $"[{string.Join(' ', UnreachableWhileARaiderStoodNear.Take(6))}]");
             lines.Add(
                 $"  RUNSHARE {fixtureName}/{seed} onFeet={totalOnFeet} joined={totalJoined} " +
                 $"share={(totalOnFeet == 0 ? "-" : $"{totalJoined * 100 / totalOnFeet}%")}");
