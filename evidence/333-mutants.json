@@ -5,8 +5,9 @@
   "when": "2026-08-12",
   "tree": {
     "branch": "fix/333-combat-mode-hold",
-    "checkedStateCommittedBefore": "ffba85a",
-    "why": "Issue #147 measured the trap: a mutant run on an uncommitted tree is reverted together with the edit it was meant to check. Every run below was taken with the tree clean at ffba85a, and reverted with `git checkout -- src/ tests/` afterwards."
+    "checkedStateCommittedBefore": "ffba85a for M1..M12, c6006e9 for M13 and for theSearchForWhatHoldsDeliberatelyLosing",
+    "why": "Issue #147 measured the trap: a mutant run on an uncommitted tree is reverted together with the edit it was meant to check. Every run below was taken with the tree clean — M1..M12 at ffba85a, M13 at c6006e9, the commit that carries the rule M13 checks — and reverted with `git checkout --` afterwards.",
+    "whyTwoTrees": "M13 was measured a round later than the rest, after independent review of PR #402 returned criterion 3 of #336 as half-unfulfilled. Between the two trees the only change to src/ is comment text at two constants; the difference in tests/ is the docstring and one added assertion of the very check M13 is about, which is why M13 could not honestly be recorded against ffba85a."
   },
   "howEachWasRun": {
     "build": "dotnet build DungeonFortress.sln -c Release",
@@ -249,8 +250,57 @@
         "PrototypeCombatModeHoldTests.A_defender_that_broke_keeps_running_until_the_wave_is_over"
       ],
       "note": "Three separate checks and three separate mutant results, because the same overwrite shows up as three different losses — a fighter out of the line for a tick, a runner that stopped running, and a body that got up and can never be raised again. Rule 9: one mutant per part, not one per change."
+    },
+    {
+      "id": "M13",
+      "assertion": "«impoverishment must not pay» — the second of the two properties this slice exists to restore, and the one M3 measured NOT to rest on DamageReadinessDivisor. Criterion 3 of #336 after merge: a rule the property follows from, not a green check.",
+      "file": "src/DungeonFortress.Simulation/PrototypeTuning.cs",
+      "substitutionFrom": "    public const int HpRecoveryStep = 8;",
+      "substitutionTo": "    public const int HpRecoveryStep = 1;",
+      "sameTextAsM11AndRecordedSeparatelyOnPurpose": "The substitution is character for character the one under M11, and it is a second entry rather than a line in the first for the reason rule 9 gives and M12 already used: one mutant per assertion, not one per edit. M11 asks whether the mending ladder was redenominated with health. M13 asks what keeps a neglected domain from out-scoring a kept one. The same edit answers both, and recording it once under the first would have left the second unanswered — which is precisely what happened between rounds 5 and 6.",
+      "whatItBites": "the rate at which a wound closes, denominated for the new health scale. At 1 on health eight times larger, resting buys a domain almost nothing: the run that KEEPS resting stops mending too (injury_mending and injury_healed are 0 in both runs under the mutant), so the advantage the promise is about disappears.",
+      "result": "RED, 16 of 360",
+      "redOnTheCheckThisMutantIsFor": "PrototypeWaveTests.Deliberately_losing_creatures_and_stock_never_scores_better — «giving up half way scored 148, keeping scored 113». The abandoned run is untouched by the substitution (148 with and without it, because it was not resting anyway); what the substitution takes away is the kept run's 178, which falls to 113 — three waves arrived instead of four, 7 raiders put down instead of 16, and the party ends `fallen` at tick 2289 instead of `raided` at 2439.",
+      "red": [
+        "PrototypeWaveTests.Deliberately_losing_creatures_and_stock_never_scores_better",
+        "PrototypeWaveTests.A_wound_closes_in_a_creature_that_rests_and_eats",
+        "PrototypeWaveTests.A_party_is_a_sequence_of_waves_each_stronger_than_the_one_before (prepared)",
+        "PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix (20260726, 20260727)",
+        "PrototypeScenarioTests.Contract_scenarios_satisfy_the_precombat_invariants_of_a_wave_party",
+        "PrototypeScenarioTests.Preparation_changes_the_deterministic_party_without_direct_orders",
+        "PrototypeScenarioTests.Preparation_outscores_its_absence_over_the_matrix",
+        "PrototypePostCombatDispersalTests.The_matrix_still_produces_post_combat_windows_to_measure",
+        "PrototypeMoraleTests.No_single_tick_breaks_more_than_a_third_of_the_domain (baseline, 20260728)",
+        "PrototypeMemoryCostTests.A_party_that_wins_its_fights_does_not_end_it_starving",
+        "PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next (baseline, prepared)",
+        "PrototypeMemoryTests.A_refusal_by_memory_names_the_work_the_creature_would_have_taken (prepared)",
+        "PrototypeMemoryTests.A_refusal_the_memory_free_tick_does_not_honour_lost_the_work_to_somebody (prepared)",
+        "PrototypeMemoryTests.A_place_is_remembered_by_one_creature_and_not_by_the_group (baseline)"
+      ],
+      "theRuleItStates": "Renown is a sum of monotone counters, and on the party this check builds the whole gap between its two runs sits in ONE of them: raiders put down, 16 against 10, which is 80 renown against 50. The other terms are equal — four waves arrive in both runs, and the high-water mark of the larder is 36 in both, because it is reached before the plan is abandoned. So «impoverishment must not pay» is carried entirely by why a neglected domain puts down fewer raiders, and the answer is mending: a wound closes only in a bunk and it closes at HpRecoveryStep per period. The run that zeroes Rest at t1400 enters the third wave carrying the wounds the second one gave it, its heavily wounded are refused the line by `combat_refused_injured`, that wave ends `overrun` with nobody put down, and the party ends `fallen`.",
+      "tree": "Run on the committed state c6006e9 of fix/333-combat-mode-hold, reverted with `git checkout -- src/DungeonFortress.Simulation/PrototypeTuning.cs` afterwards. Command: `dotnet test tests/DungeonFortress.Simulation.Tests -c Release` (whole package, no filter — that is the point of this entry)."
     }
   ],
+  "theSearchForWhatHoldsDeliberatelyLosing": {
+    "why": "Round 5 measured that DamageReadinessDivisor does not hold `Deliberately_losing_creatures_and_stock_never_scores_better` (M3) and stopped at «whatever holds it, this number is not it». Independent review of PR #402 called that half of criterion 3 of #336 unfulfilled, and rightly: the criterion asks for the rule the property follows from, and «the check is green» is what it forbids. Round 6 answered it by substitution on every candidate rather than by argument.",
+    "howEachCandidateWasMeasured": "Patch the constant in PrototypeTuning.cs, `dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter FullyQualifiedName~Deliberately_losing`, revert with `git checkout --`. The renown of the three runs was read off a temporary probe during the search and is NOT what the conclusion stands on: every verdict below is the check's own pass or fail, and the numbers of the one red case are its own failure message.",
+    "unmutated": "kept 178 renown (4 waves = 80, 16 raiders down = 80, peak larder 36 = 18); abandoned half way 148 (80 + 10 raiders down = 50 + 18); abandoned at once 4. Digs and builds contribute 0 to all three.",
+    "candidates": [
+      {
+        "candidate": "the join threshold — hunger keeps a fighter out of the line",
+        "substitution": "public const int CombatJoinSatiety = 30; -> = 0;",
+        "verdict": "GREEN, and this is the informative one. The door does open: `combat_refused_starving` on the abandoned run goes 6 -> 0 and six more musters happen. The score does not move at all — 178 against 148, 16 raiders against 10, the same tick of the same outcome. Six extra hungry bodies in the line put down no extra raiders, so the threshold is not what carries this promise on this party. It carried it on the pre-#336 surface — evidence/333-variants.json, `theShapeOfIt`, has this check red at 138/133 for thresholds below 27 — and that is exactly why it had to be re-measured rather than inherited."
+      },
+      { "candidate": "the readiness coefficient", "substitution": "public const int DamageReadinessDivisor = 6; -> = 1000;", "verdict": "GREEN — 113 against 93. This is M3 re-measured at the extreme." },
+      { "candidate": "the weight of might in a blow", "substitution": "public const int DamageMightWeight = 4; -> = 1;", "verdict": "GREEN — 133 against 128." },
+      { "candidate": "the health denomination of #336", "substitution": "public const int DefenderHpBase = 160; -> = 20; and public const int DefenderHpPerMight = 32; -> = 4;", "verdict": "GREEN — 98 against 78. Neither run puts down a single raider, and the inequality holds by both being nothing." },
+      { "candidate": "the spread", "substitution": "public const int DamageJitter = 6; -> = 0;", "verdict": "GREEN — 153 against 148." },
+      { "candidate": "the armour term", "substitution": "public const int ArmourReadinessDivisor = 12; -> = 1000;", "verdict": "GREEN — and exactly equal, 138 against 138. The check asserts <=, so equality passes; worth knowing that this is the substitution that comes closest to erasing the gap without erasing the mechanism." },
+      { "candidate": "the mending rate", "substitution": "public const int HpRecoveryStep = 8; -> = 1;", "verdict": "RED — 148 against 113. This is M13." }
+    ],
+    "whatThisChangesInTheSlicesOwnClaims": "The heading of the pull-request body — «the rule both properties of the slice rest on: readiness / 6» — was false and is replaced. The two properties rest on two different numbers of the same slice: differentiation of two plans on DamageReadinessDivisor (M3 reddens it at 25), and «impoverishment must not pay» on HpRecoveryStep (M13 reddens it at 1). Both are numbers this slice introduced — HpRecoveryStep replaced a bare literal 1 in MendTheWounded, which on health eight times larger would have made a wound take eight times as long to close — so criterion 3 of #336 is answered for both properties and by mechanisms rather than by colours.",
+    "whatItDoesNotClaim": "That HpRecoveryStep is the ONLY thing holding the check. Six substitutions were tried and one reddened it; a substitution outside the seven, or a combination, may bear part of the load too. What is measured is that this number bears enough of it to break the promise on its own, and that the number previously named in its place bears none."
+  },
   "assertionsWithNoHonestMutant": [
     {
       "assertion": "«добивают труп» is absent from the simulation — No_blow_lands_on_a_raider_that_was_already_out",
