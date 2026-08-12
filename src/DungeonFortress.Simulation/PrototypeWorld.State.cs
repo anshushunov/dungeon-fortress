@@ -44,7 +44,8 @@ public sealed partial class PrototypeWorld
             ToSnapshot(creature.Loyalty, ReleasedGrudge(creature) > 0),
             [.. creature.InjuredParts().Select(
                 part => new PrototypeInjurySnapshot(part.Part, part.Severity))],
-            creature.StepsLostToLimp);
+            creature.StepsLostToLimp,
+            creature.ActionsLostToStun);
     }
 
     private PrototypeDigDesignationSnapshot ToSnapshot(GridPoint tile)
@@ -409,6 +410,23 @@ public sealed partial class PrototypeWorld
         /// walking a wounded creature happened to have to do.
         /// </summary>
         public int StepsLostToLimp { get; set; }
+
+        /// <summary>
+        /// Combat actions a hurt head has taken away from this creature over the
+        /// party. The head's own counter, of the same family and for the same
+        /// reason as <see cref="StepsLostToLimp"/>: nothing in the simulation
+        /// reads it, and it exists so the stun can be measured as a rate rather
+        /// than inferred from how many ticks a wounded creature happened to
+        /// spend in a fight.
+        ///
+        /// <para>It is a counter and not a journal count on purpose. The journal
+        /// folds an entry into the creature's own last one, and a stunned
+        /// creature that is still walking towards a raider writes nothing in
+        /// between, so two stuns a tick apart become one entry with a count —
+        /// which is right for a player reading the document and wrong for
+        /// anything that has to add them up.</para>
+        /// </summary>
+        public int ActionsLostToStun { get; set; }
 
         /// <summary>
         /// The last tick a limp was charged, so that two calls to

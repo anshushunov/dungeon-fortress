@@ -235,6 +235,29 @@ public sealed partial class PrototypeWorld
 
     private void ActCombatant(CreatureState creature)
     {
+        // The stun (Issue #409). It sits above the target search, because a
+        // stunned creature has not looked for anybody: what a hurt head takes
+        // away is the action, whole, and there is no half of it left to spend on
+        // closing the distance.
+        //
+        // It says so in the journal, and for the reason the limp already learned:
+        // contract 11 promises that a creature which does not move is a creature
+        // that said why, and a fighter walking towards a raider is a creature
+        // that would have moved. The counter beside it is what a measurement
+        // reads, because folding merges two stuns a tick apart into one entry.
+        if (StunnedThisTick(creature))
+        {
+            creature.ActionsLostToStun++;
+            RecordDecision(
+                creature,
+                "injury_stunned",
+                new Dictionary<string, int>
+                {
+                    ["severity"] = (int)creature.PartInjury(BodyPart.Head),
+                });
+            return;
+        }
+
         var target = _raiders.Where(raider => raider.Mode == RaiderMode.Raiding)
             .OrderBy(raider => Manhattan(creature.Position, raider.Position))
             .ThenBy(raider => raider.Id)
@@ -949,6 +972,42 @@ public sealed partial class PrototypeWorld
     /// through, and a wound that removed a fighter outright would be the
     /// exclusion the slice exists to replace.</para>
     /// </summary>
+    /// <summary>
+    /// Whether a hurt head takes this creature's combat action away on this tick
+    /// — «по голове — оглушён» (pitch 6.13), the third of the four consequences
+    /// of Issue #409.
+    ///
+    /// <para><b>Bounded to the fight by where it is asked, not by a test.</b>
+    /// The only caller is <see cref="ActCombatant"/>, and
+    /// <see cref="ActCreatures"/> reaches that only for a creature in
+    /// <see cref="CreatureMode.Fighting"/>. The limp had to name the bound in a
+    /// condition of its own because <see cref="Move"/> is every kind of walking;
+    /// the stun needs no such condition, and giving it one would be a second
+    /// place for the same rule to be wrong.</para>
+    ///
+    /// <para><b>A period, staggered by creature id, and offset by one from the
+    /// limp's.</b> The stagger is the limp's own argument — a party stunned in
+    /// unison reads as the game stuttering rather than as hurt heads. The offset
+    /// is about a creature carrying both: at a shared period of two the two
+    /// consequences would land on exactly the same ticks, the stun would swallow
+    /// the step the limp was going to take, and one of the two wounds would come
+    /// out free. Offset by one they alternate, and each costs what it costs.</para>
+    ///
+    /// <para>A pure function of the tick and the wound, like the limp: no state
+    /// of its own, no stream of its own, and a replay reproduces every lost
+    /// action exactly.</para>
+    /// </summary>
+    private bool StunnedThisTick(CreatureState creature)
+    {
+        var period = creature.PartInjury(BodyPart.Head) switch
+        {
+            InjuryKind.Heavy => PrototypeTuning.HeadHeavyStunPeriod,
+            InjuryKind.Light => PrototypeTuning.HeadLightStunPeriod,
+            _ => 0,
+        };
+        return period > 0 && (CurrentTick + creature.Id + 1) % period == 0;
+    }
+
     private static int WeaponWeight(CreatureState creature)
     {
         var full = creature.Might * PrototypeTuning.DamageMightWeight;

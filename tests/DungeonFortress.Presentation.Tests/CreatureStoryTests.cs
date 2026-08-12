@@ -47,6 +47,14 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     private static readonly string[] Fixtures = ["baseline", "prepared"];
 
     /// <summary>
+    /// The seed the owner played on 2026-08-12, added to the matrix of the sample
+    /// counted by
+    /// <see cref="Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel"/>
+    /// and to nothing else. See the note there for why.
+    /// </summary>
+    private const ulong PlaytestSeed = 20_260_729UL;
+
+    /// <summary>
     /// The tick the measurements of Issue #140 were taken at: the whole shipped
     /// <c>baseline</c> party, four waves, the same run the evidence files record.
     /// </summary>
@@ -97,6 +105,11 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
         // nerve that broke, a refusal by memory — off the four lines it has. The
         // wound is the story; limping is what the wound looks like afterwards.
         "injury_limped",
+        // Issue #409, and the same argument the line above makes: a moment lost to
+        // a ringing head is what the wound looks like afterwards, and the wound is
+        // the story. Ranking it above routine would let «reeled from a blow» sit
+        // over «was carried off the floor» on the four lines the panel has.
+        "injury_stunned",
         "combat_attack",
         "dig_started", "dig_completed", "dig_cancelled", "dig_unreachable",
         "stone_picked_up", "stone_stored", "stone_spilled", "stone_target_replanned",
@@ -540,9 +553,19 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
         var applies = 0;
         var runsWithASubject = 0;
         var creaturesInAParty = 0;
+        // Four seeds and not three, and the floor is untouched at "as many
+        // subjects as a party has creatures" (Issue #409). The sample this
+        // criterion collects is a function of the shape of a fight — a refusal by
+        // memory needs a wound or a panic first, and then a job planned near where
+        // it happened — so every slice that changes how a fight runs moves it. On
+        // the tree this branch started from it collected exactly 9 subjects
+        // against a floor of 9: no slack at all, and the first consequence added
+        // to the fight took it to 8. Adding the party the owner played widens the
+        // sample the criterion is read on; it does not lower what the criterion
+        // asks. Command and both counts are in evidence/409-mutants.json.
         foreach (var fixtureName in Fixtures)
         {
-            foreach (var seed in MatrixSeeds)
+            foreach (var seed in MatrixSeeds.Append(PlaytestSeed))
             {
                 var state = EndOfParty(fixtureName, seed);
                 creaturesInAParty = state.Creatures.Count;

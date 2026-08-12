@@ -270,6 +270,7 @@ public static class PrototypeCanonical
 
             writer.WriteEndArray();
             writer.WriteNumber("stepsLostToLimp", creature.StepsLostToLimp);
+            writer.WriteNumber("actionsLostToStun", creature.ActionsLostToStun);
             writer.WriteEndObject();
         }
 

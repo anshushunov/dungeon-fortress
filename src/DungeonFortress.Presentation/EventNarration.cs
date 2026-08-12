@@ -168,6 +168,7 @@ public static class EventNarration
                     ? $"took a crippling blow to the {InjuredPartName(details)}."
                     : $"took a blow to the {InjuredPartName(details)}.",
             "injury_limped" => "lost a step to a bad leg.",
+            "injury_stunned" => "reeled from a blow to the head and lost the moment.",
             "injury_tended" => "was carried off the floor, badly hurt.",
             "injury_mending" => "is mending: the wound is no longer bad.",
             "injury_healed" => "is whole again.",

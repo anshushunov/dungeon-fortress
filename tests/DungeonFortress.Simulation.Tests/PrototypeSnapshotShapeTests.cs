@@ -116,7 +116,12 @@ public sealed class PrototypeSnapshotShapeTests
         "$ -> beds, buildSites, commandsApplied, creatures, digDesignations, domain, economy, events, jobs, labor, looseItems, map, materialStockpile, momentOfTruth, nextJobId, pendingCommands, priorities, raiders, rooms, rules, schemaVersion, seed, sessionResult, stations, stocks, survivors, threat, tick, waves, zones",
         "$.beds[] -> growthProgress, position, ripe",
         "$.buildSites[] -> delivered, incomingReserved, jobId, progressTicks, reachable, required, requiredTicks, reservedBy, statusCode, tile",
-        "$.creatures[] -> affinities, blockedTicks, carryAmount, carrying, currentJobId, fatigue, grit, hp, id, injuries, injury, isMustering, lastDecision, lastMoveTick, lastYieldTick, loyalty, martialForm, maxHp, mealReserved, mealTarget, mealTicksRemaining, might, mode, moveCount, musterNeedsRation, musterTarget, name, position, readiness, readinessAtRaid, recoveryTicks, rememberedPlaces, satiety, stepsLostToLimp, watchTicks, workTicks, yieldCount",
+        // Issue #409, additive twice over: `stepsLostToLimp` is what a hurt leg
+        // has taken away and `actionsLostToStun` what a hurt head has, both in the
+        // family of `moveCount` and `blockedTicks` — counters nothing in the
+        // simulation reads, published so that a consequence can be measured as a
+        // rate instead of inferred.
+        "$.creatures[] -> actionsLostToStun, affinities, blockedTicks, carryAmount, carrying, currentJobId, fatigue, grit, hp, id, injuries, injury, isMustering, lastDecision, lastMoveTick, lastYieldTick, loyalty, martialForm, maxHp, mealReserved, mealTarget, mealTicksRemaining, might, mode, moveCount, musterNeedsRation, musterTarget, name, position, readiness, readinessAtRaid, recoveryTicks, rememberedPlaces, satiety, stepsLostToLimp, watchTicks, workTicks, yieldCount",
         // Issue #409. Additive: a new array beside `injury`, which stays and is
         // its worst entry.
         "$.creatures[].injuries[] -> part, severity",

@@ -340,6 +340,52 @@ public static class PrototypeTuning
     public const int LegLightLimpPeriod = 3;
     public const int LegHeavyLimpPeriod = 2;
 
+    // «По голове — оглушён» (pitch 6.13). The same shape as the limp and for the
+    // same reason: a period, one meaning — a creature with a hurt head loses one
+    // combat action in this many. What it loses is the whole action and not a
+    // part of it, so a stunned creature neither strikes nor closes on its target;
+    // it stands where it is, and the journal says why.
+    //
+    // <b>Why an action and not a number.</b> The arm takes weight off a blow and
+    // the torso takes readiness off the body; both leave the creature acting. The
+    // head is the one part whose consequence the player can see without reading a
+    // number at all — the creature simply does nothing this tick — and that is
+    // what «оглушён» means in a game whose unit of time is a tick.
+    //
+    // <b>Why the head is the harshest of the four per event and still the
+    // mildest overall.</b> Losing one action in three is the largest single
+    // consequence in the slice, and the head is the rarest place for a blow to
+    // land: weight 2 of 13 in InjuryPartWeights against the torso's 5. The two
+    // numbers are chosen together — a head wound is meant to be the one worth
+    // telling somebody about, which needs it to be both rare and remembered.
+    //
+    // <b>The size was measured against the party rather than chosen for effect,
+    // and the measurement is worth keeping because it is not monotone.</b> Three
+    // pairs were run over the whole package:
+    //
+    // - 4/2 — `prepared/20260728` ended the party `fallen` at −167 where it had
+    //   been `raided` at 761, and three checks reddened on that one cell, among
+    //   them `Preparation_outscores_its_absence_over_the_matrix`. Rejected: a
+    //   consequence that decides a party by itself is a rebalance of the fight,
+    //   and rebalancing the fight is not this slice's to do;
+    // - 6/3 — every party held, and `baseline/20260728` stopped producing
+    //   refusals by memory of place at all, which reddens
+    //   `A_remembered_place_changes_what_the_creature_does_next`;
+    // - 5/3 — both green. The head reads 0.13 actions lost per fighting tick
+    //   against exactly 0 for a whole head, over the shipped journals.
+    //
+    // <b>What the ordering says, and it is a finding rather than a number.</b>
+    // That memory cell holds 117 refusals at a period of 5, none at 6 and 2 at 8,
+    // and it held 2 on the tree this branch started from. What moves it is not
+    // the size of a consequence but which creature happens to be hurt where, so
+    // the number above is chosen for the fight and the cell is a coincidence of
+    // one party. Both are said in the pull request body.
+    //
+    // A mutant disables the consequence by setting both to 0, which means
+    // "never", exactly as it does for the limp.
+    public const int HeadLightStunPeriod = 5;
+    public const int HeadHeavyStunPeriod = 3;
+
     // Nerve is measured per creature and dread is measured from where that
     // creature is standing. The two new terms are what keep the moment of
     // breaking personal: `MoraleGritWeight` and `MoraleReadinessDivisor` barely

@@ -164,6 +164,99 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// Criterion 2 for the head: «по голове — оглушён». A creature with a hurt
+    /// head loses whole combat actions, and one whose head is whole loses none at
+    /// all.
+    ///
+    /// <para>The quantity is the head's own and nothing else's, which is what the
+    /// arm had to be rewritten to become. Raw output of a fight — blows landed,
+    /// damage dealt — would move for any of the four wounds: a hurt arm takes
+    /// weight off the blow, a hurt torso takes readiness off it, a hurt leg makes
+    /// the fighter arrive later. Actions charged to the stun are charged by one
+    /// place in the simulation, and that place asks about the head.</para>
+    /// </summary>
+    [Fact]
+    public void A_hurt_head_loses_whole_actions_and_a_whole_one_loses_none()
+    {
+        var pooled = new Ratio();
+        foreach (var run in Matrix)
+        {
+            pooled.Add(true, run.Stun.Hurt * run.Stun.HurtSamples / 100, run.Stun.HurtSamples);
+            pooled.Add(false, run.Stun.Whole * run.Stun.WholeSamples / 100, run.Stun.WholeSamples);
+        }
+
+        output.WriteLine(
+            $"HEAD actionsLostPerCreatureTick hurt={pooled.Hurt / 100.0} whole={pooled.Whole / 100.0} " +
+            $"hurtTicks={pooled.HurtSamples} wholeTicks={pooled.WholeSamples}");
+
+        Assert.True(pooled.HurtSamples > 0, "No creature of any shipped party spent a tick with a hurt head.");
+        Assert.True(
+            pooled.Whole == 0,
+            $"a whole head lost {pooled.Whole / 100.0} actions a tick, which it cannot: only the stun " +
+            "charges an action to a wound, so anything but zero here means the counter is being moved " +
+            "by something that is not the head." + Environment.NewLine + Detail());
+        Assert.True(
+            pooled.Hurt > 0,
+            "a hurt head lost no actions at all over the whole matrix: the stun is not there."
+            + Environment.NewLine + Detail());
+    }
+
+    /// <summary>
+    /// The stun takes the action whole, and this is what says so: on a tick a
+    /// creature was stunned it struck nobody. Without it the check above would be
+    /// satisfied by a counter that goes up beside a fight that carries on.
+    /// </summary>
+    [Fact]
+    public void A_stunned_creature_strikes_nobody_on_the_tick_it_is_stunned()
+    {
+        var struck = new List<string>();
+        var stunned = 0;
+        foreach (var fixtureName in Fixtures)
+        {
+            var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = PlaytestSeed });
+            var previous = world.GetSnapshot();
+            while (!world.IsComplete)
+            {
+                world.Step();
+                var current = world.GetSnapshot();
+                if (current.Tick == previous.Tick)
+                {
+                    previous = current;
+                    continue;
+                }
+
+                var acted = current.Tick - 1;
+                foreach (var creature in current.Creatures)
+                {
+                    var was = previous.Creatures.FirstOrDefault(item => item.Id == creature.Id);
+                    if (was is null || creature.ActionsLostToStun == was.ActionsLostToStun)
+                    {
+                        continue;
+                    }
+
+                    stunned++;
+                    var attacked = current.Events.Any(entry =>
+                        entry.CreatureId == creature.Id &&
+                        entry.ReasonCode == "combat_attack" &&
+                        entry.LastTick == acted);
+                    if (attacked)
+                    {
+                        struck.Add($"{fixtureName}/{PlaytestSeed} t{acted} #{creature.Id}");
+                    }
+                }
+
+                previous = current;
+            }
+        }
+
+        output.WriteLine($"HEAD stunnedCreatureTicks={stunned} ofWhichAlsoStruck={struck.Count}");
+        Assert.True(stunned > 0, "Nobody was stunned on the playtest seed; the question cannot be asked.");
+        Assert.True(
+            struck.Count == 0,
+            "Stunned on the same tick it struck: " + string.Join(", ", struck.Take(10)));
+    }
+
+    /// <summary>
     /// The derivation invariant, checked on every creature of every published tick
     /// of every party: <c>injury</c> is the worst entry of <c>injuries</c>, and a
     /// creature with an empty list is whole.
@@ -393,9 +486,13 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
                     creature.Might * entry.Repeats);
             }
 
+            // The head speaks in the journal too, and this is the count of the
+            // entries rather than of the actions behind them: folding merges two
+            // stuns a tick apart into one, so this is a floor on how often the
+            // player was told and never the rate. The rate is the counter below.
             if (entry.ReasonCode == "injury_stunned")
             {
-                tally.StunEvents += entry.Repeats;
+                tally.StunEntries++;
             }
         }
 
@@ -416,6 +513,31 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
                     Hurt(creature, BodyPart.Leg),
                     creature.StepsLostToLimp - was.StepsLostToLimp,
                     1);
+
+                // The stun, per **fighting** creature-tick, and the head's own
+                // quantity for exactly the reason the limp is the leg's: nothing
+                // but a hurt head charges an action to the stun, so the whole side
+                // is not "small" but exactly zero.
+                //
+                // The denominator is fighting ticks and not all ticks, because the
+                // stun is asked in ActCombatant and nowhere else: a hurt head
+                // hauling mushrooms cannot lose an action, and counting those ticks
+                // would divide the consequence by how long the party's peace was
+                // rather than by how long its fight was. Pooled over the whole
+                // matrix that is 0.35 against 0.00 on all ticks — a true number
+                // about the wrong question, and one too small to print.
+                //
+                // A creature stunned on the tick a raider put it down is dropped
+                // from both sides rather than from one: it ends the tick Downed, so
+                // its lost action would otherwise be counted over a denominator
+                // that no longer contains it.
+                if (creature.Mode == CreatureMode.Fighting)
+                {
+                    tally.Stun.Add(
+                        Hurt(creature, BodyPart.Head),
+                        creature.ActionsLostToStun - was.ActionsLostToStun,
+                        1);
+                }
             }
         }
 
@@ -545,8 +667,17 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
         /// </summary>
         public Ratio Limp { get; } = new();
 
-        /// <summary>Actions the stun took away — the head's consequence, counted.</summary>
-        public int StunEvents { get; set; }
+        /// <summary>
+        /// Actions the stun took away per creature-tick, split by whether the head
+        /// is hurt. The head's own quantity.
+        /// </summary>
+        public Ratio Stun { get; } = new();
+
+        /// <summary>
+        /// Journal entries the stun wrote. A floor and not a rate — see the note
+        /// beside where it is counted — and printed rather than asserted on.
+        /// </summary>
+        public int StunEntries { get; set; }
 
         public int[] WoundsByPart { get; } = new int[BodyParts.Count];
 
@@ -574,7 +705,8 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
                 $"laterWaveEntries={EntriesIntoALaterWave} carrying={CarriedIntoNextWave}" +
                 Environment.NewLine +
                 $"    CONSEQUENCE {Name} weaponPerMight[{WeaponPerMight}] armBlow[{ArmBlow}] " +
-                $"stepsLostPerTick[{Limp}] torsoReadiness[{Torso}] stunned={StunEvents}";
+                $"stepsLostPerTick[{Limp}] actionsLostPerTick[{Stun}] " +
+                $"torsoReadiness[{Torso}] stunEntries={StunEntries}";
         }
     }
 

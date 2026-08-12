@@ -312,7 +312,10 @@ public sealed record PrototypeCreatureSnapshot(
     // MoveCount and BlockedTicks above: nothing in the simulation reads it, and
     // it is what makes the limp measurable without guessing at how much walking
     // a wounded creature happened to have to do.
-    int StepsLostToLimp);
+    int StepsLostToLimp,
+    // Combat actions a hurt head has taken away over the party — the stun, in the
+    // same family as StepsLostToLimp above and read by nothing but a measurement.
+    int ActionsLostToStun);
 
 public sealed record PrototypeJobSnapshot(
     long JobId,
