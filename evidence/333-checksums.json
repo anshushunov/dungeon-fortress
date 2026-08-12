@@ -88,6 +88,18 @@
       "baselineAndPrepared": "every number of the fight moved: health x8, damage x4 with a spread of ±6, the join threshold from 20 to 30, readiness entering a blow through /6 instead of /25, the mending step of 8, the participation guard of #333 and both halves of #76. The parties run 31 and 34 ticks longer, which is the fight itself taking longer to resolve.",
       "neglected": "moved too, and it carries no fight at all — it falls before the first wave arrives. It is 20 ticks SHORTER, 595 against 615. evidence/333-before.json had this fixture in the matrix as «the run that must stay unchanged», and it did not stay unchanged. THE CAUSE IS MEASURED — see theCauseOfTheNeglectedRegress below. The reading recorded here in round 5 («the participation guard of #333 is the only part of this slice that can reach a party with no wave in it») was WRONG as a statement about the code, and independent review of PR #402 said so: StepAroundBodies is called from Move, that is on every step of every creature of every party, wave or no wave."
     },
+    "theFullVerifyOfRoundSix": {
+      "when": "2026-08-12, tree 12484a5 on fix/333-combat-mode-hold, working copy clean",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
+      "result": "10 of 10 stages ok, exit code 0",
+      "stagesSeconds": { "scripts": 217.9, "build": 8.4, "tests": 154.3, "mcp": 5.5, "sim": 0.3, "load": 0.6, "godot": 39.6, "ui": 4.4, "screenshots": 13.5, "token-budget": 127.5 },
+      "bothPrintedChecksumsMatchWhatIsRecordedAbove": {
+        "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+        "viewInvariantChecksum": "8a63a099455b7f0fffb3b848e76d3a7d7b9951a0094c873665b1c92891c0b754"
+      },
+      "packagesSeparately": "Simulation 359 of 360 with one Skip (#380); Presentation 734 of 734; DomainMcp 8 of 8.",
+      "aCorrection": "Round 5 recorded «Presentation.Tests 735 of 735». It is 734, and it was 734 already at 2a3b38a — the tree independent review read. Checked by putting that one test file back to 2a3b38a and running the package: 734. The number was wrong when it was written, not made wrong by round 6."
+    },
     "theCauseOfTheNeglectedRegress": {
       "what": "Which change of the slice shortens `neglected` by twenty ticks, measured rather than read. Round 5 named a reading and called it a reading; round 6 measured it and the reading was wrong.",
       "howItWasMeasured": "Read-only, no mutants at first: a detached worktree on the branch's own history, and one command per commit — `dotnet run --project ./tests/DungeonFortress.Scenarios -c Release --no-build -- --prototype --commands ./scenarios/prototype1/neglected.commands.v2.json --ticks 2700`, reading `ticks` and `checksum` off the single JSON line it prints.",
