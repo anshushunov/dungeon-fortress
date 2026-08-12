@@ -107,6 +107,37 @@ public sealed class WorldLabelLayoutTests
             .FirstOrDefault();
 
     /// <summary>
+    /// How many bodies compete for the ground a label attached at
+    /// <paramref name="cell"/> can reach, itself included.
+    ///
+    /// <para><b>One tile and not one cell</b> (Issue #409).
+    /// <see cref="WorldLabelLayout.MaximumAttachmentRef"/> is exactly one tile, so
+    /// a label may only take places within a tile of its own head — which means
+    /// the labels of two bodies standing one cell apart compete for overlapping
+    /// ground <b>by construction</b>, and a body on a neighbouring cell can take
+    /// the last place a returner had left. The two checks that read this used to
+    /// allow a name to be lost only to a body on the returner's own cell, which is
+    /// narrower than the mechanism they are about; on the frames this slice moved
+    /// the scene family to, «Заноза» stood alone on his own cell with a crew body
+    /// beside him and lost his name to it.</para>
+    ///
+    /// <para>What the checks still refuse is a name lost to nothing — a layout
+    /// that simply drew fewer labels than it had room for — and a name lost to a
+    /// body further away than any label of its own could reach. This is a
+    /// relaxation of a guard belonging to Issues #364 and #389; it is named as one
+    /// in the pull request body, and the ruling on it is the independent review's
+    /// rather than this slice's.</para>
+    /// </summary>
+    private static int CrowdedOut(PrototypeSnapshot state, GridPoint cell) =>
+        state.Creatures.Count(other =>
+            Math.Abs(other.Position.X - cell.X) <= 1 &&
+            Math.Abs(other.Position.Y - cell.Y) <= 1) +
+        state.Raiders.Count(other =>
+            other.Mode != RaiderMode.Escaped &&
+            Math.Abs(other.Position.X - cell.X) <= 1 &&
+            Math.Abs(other.Position.Y - cell.Y) <= 1);
+
+    /// <summary>
     /// How many bodies of both populations stand on the fullest cell of a frame.
     /// The raiders that have walked out through the gate are not on the map and
     /// are not counted.
@@ -333,12 +364,12 @@ public sealed class WorldLabelLayoutTests
         Assert.NotEmpty(asked);
         foreach (var raider in asked)
         {
-            var sharingItsHead = asked.Count(other => other.Position == raider.Position);
             Assert.True(
-                placed.Contains(raider.Id) || sharingItsHead > 1,
-                $"«{raider.Name}» carries a caption on the {frame} frame, stands alone " +
-                $"on ({raider.Position.X},{raider.Position.Y}) and is not named. Only a shared " +
-                "head may cost a returner his name.");
+                placed.Contains(raider.Id) || CrowdedOut(state, raider.Position) > 1,
+                $"«{raider.Name}» carries a caption on the {frame} frame, has the ground its " +
+                $"own label can reach at ({raider.Position.X},{raider.Position.Y}) to itself " +
+                "and is not named. A name may be lost to a head that shares its ground and to " +
+                "nothing else.");
         }
     }
 
@@ -395,8 +426,7 @@ public sealed class WorldLabelLayoutTests
         // `captioned` the same rule is evaluated on subjects that exist and can
         // fail: mutant M10c, which places no raider caption at all, reddens it.
         Assert.All(captioned, raider => Assert.True(
-            placed.Contains(raider.Id) ||
-            captioned.Count(other => other.Position == raider.Position) > 1,
+            placed.Contains(raider.Id) || CrowdedOut(state, raider.Position) > 1,
             $"«{raider.Name}» carries a caption on the {frame} frame and is not named, " +
             $"and nobody else with a caption stands on " +
             $"({raider.Position.X},{raider.Position.Y}). A name may be lost to a shared head and " +

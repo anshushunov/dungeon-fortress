@@ -1082,14 +1082,30 @@ public static class WorldLabels
     /// and the name is the last. That is the right order: in a crowd the player
     /// needs to know who that is before knowing what happened to them, and the
     /// panel answers the second question at any time.</para>
+    ///
+    /// <para><b>It takes the state token's place instead of standing beside it,
+    /// and the reason is width.</b> Written as a third token — «Кремень READY ·
+    /// голова» — every hurt creature's label becomes wider than the widest label
+    /// this layout has ever had to place, and a wider label is a label with fewer
+    /// places left inside
+    /// <see cref="WorldLabelLayout.MaximumAttachmentRef"/>; in a projection whose
+    /// crowded frames already put six bodies on two cells, that is paid for by
+    /// somebody else's name. The line has room for a name and one fact, so the
+    /// fact a hurt creature carries is the wound — and the state of all nine is on
+    /// the roster line at the foot of the screen at every moment anyway, which is
+    /// where a player asking «who is fighting» is already looking. Upper case
+    /// because the slot is the state token's and the tokens beside it are upper
+    /// case; the panel prints the same wound in ordinary words.</para>
     /// </summary>
     public static WorldLabelLine CreatureLine(PrototypeCreatureSnapshot creature)
     {
         ArgumentNullException.ThrowIfNull(creature);
         var hurt = HudText.CreatureInjuryShort(creature);
-        var mark = hurt.Length == 0 ? string.Empty : $" · {hurt}";
+        var token = hurt.Length == 0
+            ? HudText.CreatureStateShort(creature)
+            : hurt.ToUpperInvariant();
         return new WorldLabelLine(
-            $"{creature.Name} {HudText.CreatureStateShort(creature)}{mark}",
+            $"{creature.Name} {token}",
             WorldLabelLayout.CreatureNameTextRef);
     }
 

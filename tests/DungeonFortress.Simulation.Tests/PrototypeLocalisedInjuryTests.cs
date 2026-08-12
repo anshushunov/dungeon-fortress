@@ -334,6 +334,69 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// Criterion 4: <b>mending goes part by part and costs time in a bunk</b>, and
+    /// how much time is a number this prints rather than a number anybody chose.
+    ///
+    /// <para>One part closes per recovery period, worst first, so a creature that
+    /// came out of a wave with three hurt parts lies still about three times as
+    /// long as one that came out with one. That is what makes «where» cost the
+    /// domain something: before Issue #409 every part closed on the same tick, so
+    /// a body broken in three places left the bunk with the body that was bruised
+    /// in one.</para>
+    ///
+    /// <para>The gate is asserted as an absolute and not as a tendency: no closure
+    /// anywhere in the matrix happens to a creature below
+    /// <see cref="PrototypeTuning.RecoveryMinSatiety"/>. A domain that cannot feed
+    /// its wounded does not heal them, and that is the whole of why the window
+    /// between two waves is a decision.</para>
+    /// </summary>
+    [Fact]
+    public void Mending_closes_one_part_at_a_time_and_costs_ticks_in_a_bunk()
+    {
+        var report = new StringBuilder();
+        var costByPart = new long[BodyParts.Count];
+        var closuresByPart = new int[BodyParts.Count];
+        var starved = new List<string>();
+        var twoAtOnce = new List<string>();
+
+        foreach (var run in Matrix)
+        {
+            foreach (var (part, ticks) in run.Closures)
+            {
+                costByPart[(int)part] += ticks;
+                closuresByPart[(int)part]++;
+            }
+
+            starved.AddRange(run.MendedWhileStarving);
+            twoAtOnce.AddRange(run.MendedTwoPartsInOneTick);
+        }
+
+        foreach (var part in BodyParts.All)
+        {
+            var closures = closuresByPart[(int)part];
+            var each = closures == 0
+                ? "-"
+                : (costByPart[(int)part] / closures).ToString(CultureInfo.InvariantCulture);
+            report.AppendLine(
+                $"MEND {Camel(part.ToString())}: {closures} closures, {each} ticks resting each");
+        }
+
+        output.WriteLine(report.ToString());
+
+        Assert.True(
+            closuresByPart.Sum() > 0,
+            "Nothing mended anywhere on the matrix, so the cost of mending cannot be measured.");
+        Assert.True(
+            twoAtOnce.Count == 0,
+            "Two parts closed inside one tick, so mending is not going part by part: " +
+            string.Join(", ", twoAtOnce.Take(10)));
+        Assert.True(
+            starved.Count == 0,
+            $"A wound closed on a creature below satiety {PrototypeTuning.RecoveryMinSatiety}: " +
+            string.Join(", ", starved.Take(10)));
+    }
+
+    /// <summary>
     /// The derivation invariant, checked on every creature of every published tick
     /// of every party: <c>injury</c> is the worst entry of <c>injuries</c>, and a
     /// creature with an empty list is whole.
@@ -578,6 +641,35 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
                 }
             }
 
+            // Mending, read off the journal because the journal is the only place
+            // that says WHICH part closed: the counter beside it resets on the same
+            // tick, so a snapshot cannot be differenced for it.
+            if (entry.ReasonCode is "injury_mending" or "injury_healed" &&
+                entry.Details.TryGetValue("part", out var mendedPart))
+            {
+                if (tally.ClosedThisTick.TryGetValue(creature.Id, out var already))
+                {
+                    tally.MendedTwoPartsInOneTick.Add(
+                        $"{tally.Name} t{acted} #{creature.Id}: {already} and {(BodyPart)mendedPart}");
+                }
+
+                tally.ClosedThisTick[creature.Id] = (BodyPart)mendedPart;
+                tally.Closures.Add(
+                    ((BodyPart)mendedPart, tally.RestingSince.GetValueOrDefault(creature.Id)));
+                tally.RestingSince[creature.Id] = 0;
+
+                // The gate, asserted where it is decided rather than inferred. The
+                // satiety read is the one published at the end of the tick the
+                // closure happened on, and the rule is asked at the top of that
+                // same tick, so a creature that ate afterwards cannot make this
+                // fire and one that starved afterwards cannot be excused by it.
+                if (creature.Satiety < PrototypeTuning.RecoveryMinSatiety)
+                {
+                    tally.MendedWhileStarving.Add(
+                        $"{tally.Name} t{acted} #{creature.Id} satiety {creature.Satiety}");
+                }
+            }
+
             // The head speaks in the journal too, and this is the count of the
             // entries rather than of the actions behind them: folding merges two
             // stuns a tick apart into one, so this is a floor on how often the
@@ -588,8 +680,19 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
             }
         }
 
+        tally.ClosedThisTick.Clear();
         foreach (var creature in state.Creatures)
         {
+            // Ticks spent lying still since the last part closed — the cost of
+            // mending, counted where the domain actually pays it. A bunk is the
+            // only place mending happens, so ticks anywhere else are not its
+            // price.
+            if (creature.Mode == CreatureMode.Resting && state.Tick > before.Tick)
+            {
+                tally.RestingSince[creature.Id] =
+                    tally.RestingSince.GetValueOrDefault(creature.Id) + 1;
+            }
+
             tally.Torso.Add(Hurt(creature, BodyPart.Torso), creature.Readiness, 1);
 
             // Somebody standing in the line with a ruined arm, leg or head — the
@@ -810,6 +913,21 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
         public int EntriesIntoALaterWave { get; set; }
 
         public int CarriedIntoNextWave { get; set; }
+
+        /// <summary>Every part that closed, with the resting ticks it cost.</summary>
+        public List<(BodyPart Part, int RestingTicks)> Closures { get; } = [];
+
+        /// <summary>Resting ticks accumulated since each creature's last closure.</summary>
+        public Dictionary<int, int> RestingSince { get; } = [];
+
+        /// <summary>What each creature closed on the tick in hand. Cleared per tick.</summary>
+        public Dictionary<int, BodyPart> ClosedThisTick { get; } = [];
+
+        /// <summary>Closures on a creature the satiety gate should have refused. Must stay empty.</summary>
+        public List<string> MendedWhileStarving { get; } = [];
+
+        /// <summary>Ticks that closed two parts of one creature. Must stay empty.</summary>
+        public List<string> MendedTwoPartsInOneTick { get; } = [];
 
         public List<string> Drift { get; } = [];
 

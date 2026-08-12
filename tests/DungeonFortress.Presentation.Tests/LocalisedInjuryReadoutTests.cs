@@ -72,14 +72,26 @@ public sealed class LocalisedInjuryReadoutTests(ITestOutputHelper output)
                 .OrderByDescending(injury => injury.Severity)
                 .ThenBy(injury => injury.Part)
                 .First();
-            Assert.Contains(HudText.BodyPartName(worst.Part), line, StringComparison.Ordinal);
+            Assert.Contains(
+                HudText.BodyPartName(worst.Part),
+                line,
+                StringComparison.OrdinalIgnoreCase);
             Assert.StartsWith(creature.Name, line, StringComparison.Ordinal);
+
+            // The wound takes the state token's place rather than standing beside
+            // it, so a hurt label is no wider than the widest label the layout
+            // already had to place. Asserted rather than left to the formatter,
+            // because a third token is paid for in somebody else's name.
+            Assert.DoesNotContain(
+                HudText.CreatureStateShort(creature),
+                line,
+                StringComparison.Ordinal);
         }
 
         foreach (var creature in whole)
         {
             var line = WorldLabels.CreatureLine(creature).Text;
-            Assert.DoesNotContain(" · ", line, StringComparison.Ordinal);
+            Assert.Equal($"{creature.Name} {HudText.CreatureStateShort(creature)}", line);
         }
     }
 

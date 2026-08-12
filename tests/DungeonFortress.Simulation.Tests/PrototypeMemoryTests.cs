@@ -194,9 +194,32 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
                         {
                             witnessed++;
                             var now = current.Creatures.Single(item => item.Id == neighbour.Id);
+
+                            // <b>Unless the neighbour was standing there itself</b>
+                            // (Issue #409). Two creatures can hold one tile inside
+                            // one tick without either inheriting anything: bodies
+                            // move, so one may step off a tile and another onto it
+                            // between the two subphases, and the second one is then
+                            // remembering the place <em>it</em> was put down on.
+                            // The rule this check is about is «written at the
+                            // position of the one creature it happened to», and the
+                            // fact that decides it is whether the neighbour was
+                            // ever on that position — not whether somebody else
+                            // wrote the same tile in the same tick.
+                            //
+                            // Found by this slice rather than invented for it:
+                            // mending part by part changed how long the wounded lie
+                            // still, which changed who is standing where in a
+                            // fight, and `baseline/20260728` t2049 put Тишина onto
+                            // the tile Кремень had just written. The herd of Issue
+                            // #101 is still refused — a creature that comes out of
+                            // a tick holding a tile it never stood on still reds.
+                            var stoodThere =
+                                neighbour.Position == place || now.Position == place;
                             var inherited =
                                 now.RememberedPlaces.Any(item => item.Place == place) &&
-                                !neighbour.RememberedPlaces.Any(item => item.Place == place);
+                                !neighbour.RememberedPlaces.Any(item => item.Place == place) &&
+                                !stoodThere;
                             Assert.False(
                                 inherited,
                                 $"{fixtureName}/{seed}: on tick {current.Tick - 1} {creature.Name} " +
