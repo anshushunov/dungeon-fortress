@@ -106,7 +106,7 @@ Issue #12 владелец отдельно решает, добавлять л�
 | № | Система | Границы |
 |---|---|---|
 | 1 | Пространство и зоны | Фиксированная карта 28×16, 8 типов тайла, 7 видов зон, BFS-достижимость |
-| 2 | Существа | 9 именных существ, 2 потребности, 3 характеристики, 1 состояние травмы, память о месте |
+| 2 | Существа | 9 именных существ, 2 потребности, 3 характеристики, **4 части тела с состоянием травмы каждая** (голова, торс, рука, нога) плюс сводное состояние, выводимое из них, память о месте |
 | 3 | Работы и автономный выбор | 6 видов работ, детерминированный скоринг, устойчивый tie-break |
 | 4 | Экономическая цепочка | 2 ресурса, 1 цепочка: рост → сбор → логистика → готовка → логистика → еда |
 | 5 | Готовность | Одна формула из состояния существа |
@@ -704,7 +704,10 @@ BFS исполняемо закреплён тестом `The_reference_distance
 | `satiety` | 0..100 | сытость; падает со временем |
 | `fatigue` | 0..100 | усталость; растёт от работы |
 | `martialForm` | 0..100 | боевая форма; растёт от тренировок |
-| `injury` | `none` / `light` / `heavy` | последствие боя внутри сессии |
+| `injuries[]` | список `{ part, severity }`, `part` ∈ `head` / `torso` / `arm` / `leg`, `severity` ∈ `light` / `heavy` | где существо повреждено; публикуются только повреждённые части, у целого список пуст |
+| `injury` | `none` / `light` / `heavy` | **производное**: худшая из `injuries[]`. Хранится нигде, вычисляется всегда, поэтому сводное и локализованное чтения не могут разойтись |
+| `stepsLostToLimp` | целое | шагов, отнятых раненой ногой за партию; монотонный счётчик семейства `moveCount`, симуляция его не читает |
+| `actionsLostToStun` | целое | боевых действий, отнятых раненой головой за партию; то же семейство |
 | `position` | `(x, y)` | положение на карте |
 | `currentJob` | ссылка или `null` | текущая работа |
 | `lastDecision` | `{tick, jobKind?, target?, reasonCode, details}` | последнее объяснимое решение |
@@ -1846,7 +1849,7 @@ raiderMight = T.raider_might_base + renown / T.renown_per_raider_might
 
 **Правило.** Существо вступает в бой, если одновременно верно:
 
-- `injury != heavy`;
+- `injuries[torso].severity != heavy` — **разрушенный торс, и только он, не пускает в бой**. Тяжёлая рука, нога или голова с волны 2026-08-12 из боя не исключают: питч 6.13 называет следствия ран внутри боя, а существо, которого тяжёлая рука в бой не пускает, оружия в бою не роняет никогда. Решение координатора, запись 1 [#415](https://github.com/anshushunov/dungeon-fortress/issues/415);
 - `satiety >= T.combat_join_satiety` (30);
 - расстояние **от самого существа** до ближайшего налётчика **или** до
   ближайшего тайла кладовой не превышает `T.engage_radius` = 8 тиков хода, и
@@ -2177,7 +2180,7 @@ dread = T.morale_base (50)
 
 **Правило (подъём выбывших).** Существо в состоянии `downed` поднимается в
 `waiting` в подфазе 10 порядка тика, когда на карте нет ни одной волны. Оно
-встаёт с `injury = heavy` и `hp = max(1, hp)`. Тяжёлая травма закрывает ему бой
+встаёт с тяжёлой раной в одной из четырёх частей и `hp = max(1, hp)`. Бой ему закрывает только тяжёлый торс (10.2); с тяжёлой конечностью он в строй возвращается. Тяжёлая травма закрывает ему бой
 (10.2), поэтому цена проигранной волны — встретить следующую меньшим числом
 бойцов, а не откат счётчика.
 
@@ -2190,6 +2193,14 @@ dread = T.morale_base (50)
 - `heavy` → `light`, когда `hp * 100 / maxHp > T.light_injury_share`
   (reason code `injury_mending`);
 - `light` → `none`, когда `hp = maxHp` (reason code `injury_healed`).
+
+**Правило (заживление идёт по частям).** Один период закрывает **одну** часть —
+худшую, при равенстве в порядке `head, torso, arm, leg`, — а не все сразу.
+Существо с тремя повреждёнными частями лежит примерно втрое дольше, чем с одной:
+именно это делает «где» ценой для владения, а окно между волнами — решением.
+Записи `injury_mending` и `injury_healed` называют закрытую часть в
+`details.part` и её новую тяжесть в `details.severity`. Замерено на матрице,
+тиков отдыха на одно закрытие: голова 142, торс 149, рука 178, нога 137.
 
 **Правило.** Существо с любой травмой ищет лежанку независимо от усталости и не
 покидает её, пока травма не закрыта. Лежанок меньше, чем существ, поэтому
@@ -2575,7 +2586,7 @@ reason code не отрисовывается «как похожий»: ада�
 
 | Сущность | Ключевые поля |
 |---|---|
-| `Creature` | `id`, `name`, `might`, `grit`, `affinity`, `satiety`, `fatigue`, `martialForm`, `hp`, `maxHp`, `injury`, `recoveryTicks`, `position`, `currentJob`, `lastDecision`, `readinessAtRaid`, `rememberedPlaces` |
+| `Creature` | `id`, `name`, `might`, `grit`, `affinity`, `satiety`, `fatigue`, `martialForm`, `hp`, `maxHp`, `injuries[]`, `injury` (производное), `stepsLostToLimp`, `actionsLostToStun`, `recoveryTicks`, `position`, `currentJob`, `lastDecision`, `readinessAtRaid`, `rememberedPlaces` |
 | `Tile` | `x`, `y`, `kind`, `zones[]`, `looseItems`, `occupantId` |
 | `DigDesignation` | `tile`, `jobId?`, `reservedBy?`, `workTile?`, `progressTicks`, `requiredTicks`, `reachable`, `statusCode` |
 | `BuildSite` | `tile`, `delivered`, `required`, `incomingReserved`, `jobId?`, `reservedBy?`, `progressTicks`, `requiredTicks`, `reachable`, `statusCode` |
@@ -2738,7 +2749,7 @@ reason code не отрисовывается «как похожий»: ада�
 |---|---|
 | `combat_joined` | существо вступило в бой; `details.wave` называет волну |
 | `combat_refused_starving` | сытость ниже `T.combat_join_satiety`; `details.satiety` и `details.threshold` называют обе стороны сравнения, `details.wave` — волну |
-| `combat_refused_injured` | тяжёлая травма до боя; `details.wave` называет волну |
+| `combat_refused_injured` | тяжёлый **торс** до боя; `details.wave` называет волну |
 | `combat_absent_unreachable` | налётчик недостижим или слишком далеко; `details.wave` называет волну |
 | `combat_attack` | удар по налётчику; `details` несут `raiderId` и урон |
 | `combat_raider_downed` | налётчик выведен из строя |
@@ -2750,9 +2761,12 @@ reason code не отрисовывается «как похожий»: ада�
 
 | Код | Когда |
 |---|---|
+| `injury_localised` | удар нашёл часть тела; `details.part` — индекс части, `details.severity` — тяжесть, `details.raiderId` — кто ударил |
+| `injury_limped` | раненая нога отняла шаг; `details.severity` — тяжесть раны ноги |
+| `injury_stunned` | раненая голова отняла боевое действие целиком; `details.severity` — тяжесть раны головы |
 | `injury_tended` | выбывшего подняли с пола после конца волны, травма `heavy` |
-| `injury_mending` | травма понизилась с `heavy` до `light` от отдыха и еды |
-| `injury_healed` | травма закрылась полностью |
+| `injury_mending` | одна часть понизилась с `heavy` до `light` от отдыха и еды; `details.part`, `details.severity` |
+| `injury_healed` | последняя повреждённая часть закрылась; `details.part`, `details.severity` |
 
 **Раскопка**
 
@@ -3318,8 +3332,15 @@ python -c "import json,io; d=json.load(io.open(r'docs/playtests/data/prototype-0
 | `T.readiness_satiety_num` / `T.readiness_satiety_den` | 1 / 2 | вклад сытости, 0..50 |
 | `T.readiness_martial_num` / `T.readiness_martial_den` | 3 / 10 | вклад боевой формы, 0..30 |
 | `T.readiness_rest_den` | 10 | вклад отдыха |
-| `T.injury_light_penalty` | 15 | штраф лёгкой травмы |
-| `T.injury_heavy_penalty` | 40 | штраф тяжёлой травмы |
+| `T.torso_light_penalty` | 15 | штраф лёгкой раны **торса** к готовности |
+| `T.torso_heavy_penalty` | 40 | штраф тяжёлой раны **торса** к готовности |
+| `T.injury_part_weights` | `[2, 5, 3, 3]` | относительные веса, куда попадает удар: голова, торс, рука, нога. Силуэт, а не анатомия |
+| `T.arm_light_might_percent` | 50 | сколько процентов веса оружия оставляет лёгкая рана руки |
+| `T.arm_heavy_might_percent` | 0 | то же для тяжёлой |
+| `T.leg_light_limp_period` | 3 | лёгкая нога отнимает один шаг из этого числа, только в бою |
+| `T.leg_heavy_limp_period` | 2 | то же для тяжёлой |
+| `T.head_light_stun_period` | 6 | лёгкая голова отнимает одно боевое действие из этого числа |
+| `T.head_heavy_stun_period` | 3 | то же для тяжёлой |
 | `T.combat_join_satiety` | 30 | допуск к бою |
 | `T.engage_radius` | 8 | радиус вступления в бой |
 | `T.combat_join_recheck` | 20 | период перепроверки участия |
