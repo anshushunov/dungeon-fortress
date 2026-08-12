@@ -56,7 +56,11 @@
   "mutantsOnTheFix": {
     "why": "Rule 9 as narrowed by rule 21: the fix has two halves — the nearest-raider arm of contract 10.2 is added, and the larder arm is kept rather than traded for it — and a mutant must redden on each half separately, not on the change as a whole.",
     "theFix": "PrototypeWorld.Combat.cs, DistanceToTheFight: the distance the admission rule compares against T.engage_radius is the smaller of the walk to LarderTiles[0] and the walk to the nearest raiding raider. Before it, only the larder walk was measured.",
-    "committedStateUnderTest": "3235803",
+    "committedStateUnderTest": {
+      "M4": "3235803 — the commit that carries DistanceToTheFight. The check M4 reddens exists there in its final form.",
+      "M5": "0e44f1a, and NOT 3235803. This file named 3235803 for both until the coordinator caught it in the doctoring round, and the correction is about the repository rather than about the measurement: the isolated edition of the larder-arm check — the one requiring the joiner not to have been mustering, without which M5 leaves the check green — first appears in 0e44f1a, one commit later. Verified with `git show 3235803:tests/DungeonFortress.Simulation.Tests/PrototypeMusterParticipationTests.cs | rg -c wasMustering` (no match) against the same command on 0e44f1a (2 matches). What was measured is unchanged; only the commit it was measured against is now named correctly.",
+      "M6": "8ab43c0, the branch head — the state the pull request offers."
+    },
     "M4": {
       "half": "the nearest-raider arm exists at all",
       "substitution": "the call site goes back to the pre-fix line — `var distance = _map.Distance(creature.Position, PrototypeMap.LarderTiles[0], _zones[ZoneKind.Forbidden]);`",
@@ -80,6 +84,17 @@
     "withTheAdmissionFix": { "avoiders": 55, "walkedOverTheirRememberedTile": 7, "stranded": 0 },
     "whatThatMeans": "The check asserted the step outright, which is stronger than the mechanic it is about: RaiderStep walks round the remembered tile when there is a way round and straight through when there is not, and that fallback is what keeps avoidance from stranding anybody. The absolute claim was ALREADY false on the shipped world — it passed because it was pinned to RouteSeed = 20260729, one party on which it happened to hold. The admission fix moves the fight and 20260729 stops being that party.",
     "theRepair": "The check now reads the first twelve seeds of the same range and states what the mechanic promises: at most a fifth of the avoiders walk over their tile, and none is stranded. On those twelve parties the numbers are the same on both trees — 25 avoiders, 2 walked over, 0 stranded — so the repair is not a bar lowered to let this branch through. The stranding half is kept absolute, and it is the half the fix improves: 3 stranded on main over the full thirty, 0 with the fix.",
-    "whatWasNotDone": "The mechanic of Issue #358 is not touched. Only the check that reads it is."
+    "whatWasNotDone": "The mechanic of Issue #358 is not touched. Only the check that reads it is.",
+    "M6": {
+      "why": "Independent review returned this branch for it (finding F2), and the return is correct. M4 and M5 hold the admission fix, but the rewritten check of somebody else's product promise went out with nothing showing it still asserts something. «Does the new edition claim no less than the old one» is answered by a substitution, not by an argument about the scan — and least of all by a rewritten check's own author saying so.",
+      "half": "the rewritten check of Issue #358 is not empty: it is held by the avoidance mechanic itself",
+      "substitution": "PrototypeWorld.ReturningRaiders.cs, RaiderBlockedTiles: the whole `if (raider.RememberedPlace is { } place && ...) { blocked.Add(place.Place); }` block is removed, so a returning raider no longer routes round the tile it remembers at all.",
+      "predicted": "A_returning_raider_walks_round_the_place_it_was_hit_hardest goes red, and only it",
+      "measured": "RED, exactly that check. «15 of 25 returning raiders walked over the tile they remember», against 2 of 25 in the healthy state and a floor that admits 5. The nine other checks of the file stayed green: 10 tests total, 9 passed, 1 failed.",
+      "theFifteen": "20260726/Сиплый@(18,7) 20260728/Долговязый@(24,8) 20260728/Ловчий@(17,7) 20260728/Бельмо@(22,7) 20260728/Ржавый Старший@(23,8) 20260730/Черпак@(25,7) 20260730/Гвоздь@(24,8) 20260732/Гвоздь@(15,7) 20260734/Черпак@(26,7) 20260734/Плешь@(23,8) 20260735/Кистень@(22,8) 20260736/Гвоздь@(21,7) 20260736/Клык@(22,8) 20260736/Сиплый@(24,7) 20260737/Хват@(24,8)",
+      "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~PrototypeReturningRaiderTests\" --logger \"console;verbosity=normal\" — once on the committed 8ab43c0 with a clean tree (10 of 10 green), then with the substitution applied, then `git checkout src/DungeonFortress.Simulation/PrototypeWorld.ReturningRaiders.cs`",
+      "whyTheNumbersWereRerunAndNotCopied": "Review handed these numbers over ready-made. Rule 8 says a number is named with the command that produced it, and a number carried across from somebody else's comment has no command of mine behind it — so the whole pair of runs was taken again here. Two readings differ from the reviewer's and the difference is the count of the file's own checks, not the mutant: I measure 10 tests in PrototypeReturningRaiderTests and review reports 11. The failing check, the 15 of 25, the 2 of 25 and the greenness of every other check in the file are identical.",
+      "whatItProves": "Between the healthy 2, the floor at 5 and the mutant's 15, the check separates «the avoidance works» from «the avoidance is gone». It is a floor and not a zero, and how much room that floor leaves is a fair question — review raised it as F5 and it goes to the debt ledger, not into this round."
+    }
   }
 }
