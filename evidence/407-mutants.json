@@ -1,0 +1,54 @@
+{
+  "issue": 407,
+  "checkpoint": "mutants",
+  "taken_at": "2026-08-12",
+  "base_commit": "e6d7955",
+  "note": "Мутанты прогнаны по коммиченному состоянию: правка вносится поверх коммита и откатывается git checkout -- <файл>. По незакоммиченному файлу откат мутанта снёс бы саму правку (измерено на #147).",
+  "mutants": [
+    {
+      "id": "M1",
+      "criterion": "критерий 6 — проверка колонок краснеет на строке с удалённой колонкой",
+      "target": "docs/engineering/DEBT_LEDGER.md, строка 276 (запись от 2026-08-12 про neglected)",
+      "mutation": "DEBT_LEDGER.md:276: ' | «Срез 5 «возвращающийся герой» — третий заход владельца», 2026-08-11 | 0 |' -> ' | «Срез 5 «возвращающийся герой» — третий заход владельца», 2026-08-11 0 |' (удалён разделитель между колонками «Срок с» и «Переформулировок»; строка стала восьмиполевой вместо девятиполевой)",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-ledger-table-columns.ps1",
+      "expected": "красный",
+      "result": "красный",
+      "exit_code": 1,
+      "output": "{\"event\":\"check_ledger_table_columns\",\"path\":\"C:\\\\gamedev\\\\_wt-407-ledger\\\\docs\\\\engineering\\\\DEBT_LEDGER.md\",\"rowsChecked\":11,\"expectedFields\":9,\"offenderCount\":1,\"offenders\":[{\"line\":276,\"fields\":8}]}"
+    },
+    {
+      "id": "M2",
+      "criterion": "критерий 6 — проверка колонок краснеет на строке с лишней колонкой",
+      "target": "docs/engineering/DEBT_LEDGER.md, строка 276 (та же запись)",
+      "mutation": "DEBT_LEDGER.md:276: ' | ... 2026-08-11 | 0 |' -> ' | ... 2026-08-11 | 0 | лишняя |' (добавлена восьмая колонка; строка стала десятиполевой вместо девятиполевой)",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-ledger-table-columns.ps1",
+      "expected": "красный",
+      "result": "красный",
+      "exit_code": 1,
+      "output": "{\"event\":\"check_ledger_table_columns\",\"path\":\"C:\\\\gamedev\\\\_wt-407-ledger\\\\docs\\\\engineering\\\\DEBT_LEDGER.md\",\"rowsChecked\":11,\"expectedFields\":9,\"offenderCount\":1,\"offenders\":[{\"line\":276,\"fields\":10}]}"
+    },
+    {
+      "id": "M3",
+      "criterion": "критерий 7 — пересчёт возраста краснеет при возврате одной удалённой записи",
+      "target": "docs/engineering/DEBT_LEDGER.md, таблица «Записи», вставка после строки 268 (разделитель заголовка)",
+      "mutation": "DEBT_LEDGER.md: в таблицу «Записи» возвращена удалённая запись — вставлена строка '| 2026-08-07 | review PR #288 (Issue #286) | мутант: возвращённая удалённая запись про deny-записи | — | — | «Потолок боя», 2026-08-06 | 1 |' (якорь «Срок с» — тот же, что нёс удалённый оригинал)",
+      "command": "bash <скрипт из поля recount_script>",
+      "expected": "красный",
+      "result": "красный",
+      "exit_code": 1,
+      "output": "ПРОСРОЧЕНА age=5 <- «Потолок боя», 2026-08-06 / ИТОГО записей=12 просрочено=1",
+      "note": "Первый заход этого мутанта промахнулся мимо цели и назван здесь, а не спрятан: строка была вставлена в таблицу-образец раздела «Формат записи», которая лежит вне сканируемого участка, и обе проверки остались зелёными при записей=11. Это и есть довод, что участок сканирования сужен верно: правка вне таблицы «Записи» на счёт не влияет."
+    }
+  ],
+  "green_direction": {
+    "note": "Обратное направление показано: на финальном состоянии обе проверки зелёные, рабочее дерево чисто после откатов.",
+    "check_ledger_table_columns_exit": 0,
+    "check_ledger_table_columns_output": "{\"event\":\"check_ledger_table_columns\",\"path\":\"C:\\\\gamedev\\\\_wt-407-ledger\\\\docs\\\\engineering\\\\DEBT_LEDGER.md\",\"rowsChecked\":11,\"expectedFields\":9,\"offenderCount\":0,\"offenders\":[]}",
+    "recount_exit": 0,
+    "recount_output": "ИТОГО записей=11 просрочено=0",
+    "git_status_porcelain": ""
+  },
+  "recount_command": "L=docs/engineering/DEBT_LEDGER.md; J=docs/product/GATE_DECISIONS.md; GATE_RE='\\*\\*`(CONTINUE|ADJUST|PROMOTE|DEFER|STOP)`\\*\\*|^\\| 2026-08-06 \\| \\*\\*Потолок боя\\*\\*|^\\| 2026-08-08 \\| \\*\\*Больше здоровья и разброс урона\\*\\*'; якоря берутся из колонки «Срок с» самой таблицы (awk '/^## Записи/,/^## Перечитывание/' $L | rg '^\\| 20' | awk -F'|' '{print $7}'), из каждого строится awk-якорь '^\\| <дата> \\| \\*\\*<заголовок>' по журналу, возраст = число gate в выводе минус один при условии, что первым элементом вывода является сам якорь; запись с возрастом >= 3 или с несчитаемым возрастом делает пересчёт красным",
+  "recount_command_rationale": "Пересчёт читает якоря из самого реестра, а не из списка в голове, — иначе мутант «вернули запись» не был бы пойман командой: список якорей просто не изменился бы.",
+  "recount_script": "#!/usr/bin/env bash\n# Пересчёт возраста по всем записям реестра: якоря берутся из колонки «Срок с»,\n# а не из списка в голове. Печатает по строке на запись и итог.\nL=docs/engineering/DEBT_LEDGER.md\nJ=docs/product/GATE_DECISIONS.md\nGATE_RE='\\*\\*`(CONTINUE|ADJUST|PROMOTE|DEFER|STOP)`\\*\\*|^\\| 2026-08-06 \\| \\*\\*Потолок боя\\*\\*|^\\| 2026-08-08 \\| \\*\\*Больше здоровья и разброс урона\\*\\*'\noverdue=0; total=0\nwhile IFS= read -r cell; do\n  a=$(printf '%s' \"$cell\" | sed 's/^ *//; s/ *$//')\n  d=${a: -10}\n  t=${a%», $d}; t=${t#«}\n  pat=\"^\\| $d \\| \\*\\*$t\"\n  n=$(awk \"/$pat/,0\" \"$J\" | rg -c \"$GATE_RE\" || true); n=${n:-0}\n  first=$(awk \"/$pat/,0\" \"$J\" | head -1)\n  if [ -n \"$first\" ] && printf '%s\\n' \"$first\" | rg -q \"$GATE_RE\"; then age=$((n-1)); else age=\"НЕ_СЧИТАЕТСЯ\"; fi\n  total=$((total+1))\n  if [ \"$age\" = \"НЕ_СЧИТАЕТСЯ\" ] || [ \"$age\" -ge 3 ]; then overdue=$((overdue+1)); mark=\"ПРОСРОЧЕНА\"; else mark=\"ok\"; fi\n  echo \"$mark age=$age <- $a\"\ndone < <(awk '/^## Записи/,/^## Перечитывание/' \"$L\" | rg '^\\| 20' | awk -F'|' '{print $7}')\necho \"ИТОГО записей=$total просрочено=$overdue\"\n[ \"$overdue\" -eq 0 ]\n"
+}
