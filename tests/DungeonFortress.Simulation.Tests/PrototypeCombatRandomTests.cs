@@ -34,8 +34,9 @@ public sealed class PrototypeCombatRandomTests(ITestOutputHelper output)
     /// The combat stream advances on <b>every tick a blow lands</b>.
     ///
     /// <para>A raider's hit points fall in exactly one place —
-    /// <c>PrototypeWorld.Combat.cs:193</c>, where the damage is
-    /// <c>might + readiness/25 + CombatJitter(...)</c> — so «some raider has less
+    /// <c>PrototypeWorld.Combat.cs</c>, where the damage is
+    /// <c>might * DamageMightWeight + readiness / DamageReadinessDivisor +
+    /// CombatJitter(DamageJitter)</c> — so «some raider has less
     /// hp than it had last tick» is an observable, snapshot-only witness that a
     /// draw was taken during that tick. The check pairs that witness with the
     /// private state of <c>_combatRandom</c> and demands that the state moved.

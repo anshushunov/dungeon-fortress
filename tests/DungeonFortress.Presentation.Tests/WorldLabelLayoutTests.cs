@@ -300,15 +300,28 @@ public sealed class WorldLabelLayoutTests
             .Where(label => label.Request.Subject.Kind == WorldLabelKind.Raider)
             .Select(label => label.Request.Subject.Id)
             .ToHashSet();
-        var unnamed = captioned.Where(raider => !placed.Contains(raider.Id)).ToArray();
-
         Assert.NotEmpty(captioned);
-        Assert.All(unnamed, raider => Assert.True(
+
+        // Asked over the captioned raiders and NOT over the unnamed ones. Since
+        // Issue #76 the unnamed set is empty on both shipped frames, and an
+        // Assert.All over an empty set is true identically — it states nothing at
+        // all, which is what independent review of PR #402 caught here. Over
+        // `captioned` the same rule is evaluated on subjects that exist and can
+        // fail: mutant M10c, which places no raider caption at all, reddens it.
+        Assert.All(captioned, raider => Assert.True(
+            placed.Contains(raider.Id) ||
             captioned.Count(other => other.Position == raider.Position) > 1,
             $"«{raider.Name}» carries a caption on the {frame} frame and is not named, " +
             $"and nobody else with a caption stands on " +
             $"({raider.Position.X},{raider.Position.Y}). A name may be lost to a shared head and " +
             "to nothing else."));
+
+        // ... and at least one caption is actually placed, so that «no name was
+        // lost» cannot be satisfied by no name being drawn.
+        Assert.True(
+            captioned.Any(raider => placed.Contains(raider.Id)),
+            $"no captioned raider is named at all on the {frame} frame, so the rule above " +
+            "would be satisfied by an empty screen");
     }
 
     /// <summary>

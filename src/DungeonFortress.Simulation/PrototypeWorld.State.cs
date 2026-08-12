@@ -511,7 +511,6 @@ public sealed partial class PrototypeWorld
         public int RaidersDowned { get; set; }
         public int DefendersDowned { get; private set; }
         public int DefendersFled { get; private set; }
-
         public int MealsStolen { get; set; }
 
         public void CountDefenderDowned() => DefendersDowned++;

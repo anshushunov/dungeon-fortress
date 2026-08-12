@@ -86,7 +86,24 @@
     ],
     "whatMovedAndWhy": {
       "baselineAndPrepared": "every number of the fight moved: health x8, damage x4 with a spread of ±6, the join threshold from 20 to 30, readiness entering a blow through /6 instead of /25, the mending step of 8, the participation guard of #333 and both halves of #76. The parties run 31 and 34 ticks longer, which is the fight itself taking longer to resolve.",
-      "neglected": "moved too, and it carries no fight at all — it falls before the first wave arrives. It is 20 ticks SHORTER, 595 against 615. evidence/333-before.json had this fixture in the matrix as «the run that must stay unchanged», and it did not stay unchanged. Which change moves it is NOT measured here, and the plausible reading is not asserted as one: the fixture starves, and the participation guard of #333 stops the needs phase from overwriting the mode of a creature that is Downed, which is the only part of this slice that can reach a party with no wave in it. Naming the expectation as wrong is the point; naming the cause would need its own probe."
+      "neglected": "moved too, and it carries no fight at all — it falls before the first wave arrives. It is 20 ticks SHORTER, 595 against 615. evidence/333-before.json had this fixture in the matrix as «the run that must stay unchanged», and it did not stay unchanged. THE CAUSE IS MEASURED — see theCauseOfTheNeglectedRegress below. The reading recorded here in round 5 («the participation guard of #333 is the only part of this slice that can reach a party with no wave in it») was WRONG as a statement about the code, and independent review of PR #402 said so: StepAroundBodies is called from Move, that is on every step of every creature of every party, wave or no wave."
+    },
+    "theCauseOfTheNeglectedRegress": {
+      "what": "Which change of the slice shortens `neglected` by twenty ticks, measured rather than read. Round 5 named a reading and called it a reading; round 6 measured it and the reading was wrong.",
+      "howItWasMeasured": "Read-only, no mutants at first: a detached worktree on the branch's own history, and one command per commit — `dotnet run --project ./tests/DungeonFortress.Scenarios -c Release --no-build -- --prototype --commands ./scenarios/prototype1/neglected.commands.v2.json --ticks 2700`, reading `ticks` and `checksum` off the single JSON line it prints.",
+      "walkOfTheBranch": [
+        { "commit": "3b627bf (origin/main)", "ticks": 615, "checksum": "da7ddd6c" },
+        { "commit": "5ee6956 — the participation guard of #333", "ticks": 615, "checksum": "da7ddd6c", "note": "byte for byte identical to main. The guard that round 5 named as the cause does not touch this fixture at all." },
+        { "commit": "97863d4 — the denomination of #336 (health x8, damage x4, spread ±6)", "ticks": 615, "checksum": "f8bc7841", "note": "the journal changes, the length does not: creatures are built with different hit points, and nothing in this fixture ever spends them." },
+        { "commit": "56031c0", "ticks": 615, "checksum": "f8bc7841" },
+        { "commit": "2b69117 — join threshold 30 and cell occupancy in the pathfinder", "ticks": 595, "checksum": "3c57a518", "note": "the whole of the change lands here." }
+      ],
+      "whichHalfOfThatCommit": [
+        { "substitution": "public const int CombatJoinSatiety = 30; -> = 20; on the final tree", "result": "595 / 3c57a518 — identical to the unmutated tree. The threshold does not reach this fixture: no wave arrives, so the muster loop never runs." },
+        { "substitution": "var next = StepAroundBodies(creature, target); -> var next = _map.NextStep(creature.Position, target, _zones[ZoneKind.Forbidden]); (mutant M5) on the final tree", "result": "615 / f8bc7841 — exactly the numbers the fixture had before commit 2b69117. So the domain half of Issue #76 accounts for the whole regress, and everything else in the slice leaves this fixture byte for byte alone." }
+      ],
+      "theMechanism": "Also measured, on the same two runs. `neglected` cooks nothing: it eats its eight starting portions and then falls, because HasFallen asks for no meals anywhere AND nobody above CollapseThreshold. Both runs eat exactly 8. What the pathfinder changes is how much the domain gets done per tick while they last: eating ticks 156 against 149, training-post occupancy 48% against 37%, journal entries 1718 against 1793 — fewer steps refused by somebody else's back. The domain does more of everything and therefore reaches the bottom of its larder sooner. It is not a defect of #76; it is the fixture measuring exactly what it is for.",
+      "consequence": "«The run that must stay unchanged» is a promise about a fixture with no fight in it, and this slice put a change into every party, fight or no fight. The promise as written cannot survive a change to movement, and the fixture has to be re-baselined or the promise restated. That belongs to the coordinator: `evidence/333-before.json` and the matrix note are outside this slice's partition."
     }
   }
 }
