@@ -1,0 +1,16 @@
+{
+  "issue": 407,
+  "checkpoint": "ages-after",
+  "note": "пересчёт возраста на финальном составе реестра; доказательство критерия 1 (ни одной записи с возрастом >= 3) и критерия 4 (якорь первым элементом собственного вывода)",
+  "taken_at": "2026-08-12",
+  "ledger_records_total": 11,
+  "age_command_template": "awk '/<ANCHOR_PATTERN>/,0' docs/product/GATE_DECISIONS.md | rg -o '**`(CONTINUE|ADJUST|PROMOTE|DEFER|STOP)`**|^| 2026-08-06 | **Потолок боя**|^| 2026-08-08 | **Больше здоровья и разброс урона**'",
+  "anchors": [
+    {"anchor": "«Срез 5 «возвращающийся герой» — первый заход владельца», 2026-08-10", "records": 3, "gates_in_output": 3, "anchor_is_first": true, "age": 2, "overdue": false},
+    {"anchor": "«Срез 5 — второй заход владельца», 2026-08-10", "records": 1, "gates_in_output": 2, "anchor_is_first": true, "age": 1, "overdue": false},
+    {"anchor": "«Срез 5 «возвращающийся герой» — третий заход владельца», 2026-08-11", "records": 7, "gates_in_output": 1, "anchor_is_first": true, "age": 0, "overdue": false}
+  ],
+  "anchors_records_sum": 11,
+  "overdue_records": 0,
+  "max_age": 2
+}
