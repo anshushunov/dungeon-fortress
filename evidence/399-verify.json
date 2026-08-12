@@ -6,6 +6,6 @@
   "stagesNotRun": [],
   "runs": [
     { "run_on_commit": "aac30ef", "note": "first full run, pre-rework" },
-    { "run_on_commit": "pending (rework round, before commit)", "note": "re-run per coordinator's rule-22 exception after F1-F7 rework — rework touches ROADMAP.md, GATE_DECISIONS.md, coord.md and evidence, which the prior green covered a different state" }
+    { "run_on_commit": "459cccf", "note": "re-run per coordinator's rule-22 exception after F1-F7 rework — rework touches ROADMAP.md, GATE_DECISIONS.md, coord.md and evidence, which the prior green covered a different state" }
   ]
 }
