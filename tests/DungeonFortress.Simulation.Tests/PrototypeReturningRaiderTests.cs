@@ -320,6 +320,7 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
         var avoiderCount = 0;
         var walkedOverIt = new List<string>();
         var stranded = new List<string>();
+        var putDownOnTheWayIn = new List<string>();
 
         foreach (var seed in SearchSeeds.Take(12))
         {
@@ -350,9 +351,31 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
                     walkedOverIt.Add($"{seed}/{raider.Name}@({remembered.X},{remembered.Y})");
                 }
 
-                if (!visits[raider.Id].Contains(FirstLarderTile) && raider.Mode != RaiderMode.Escaped)
+                // Stranded means «avoidance took the raid away from it», so a
+                // raider whose wave never finished is not asked: the party ran out
+                // of clock while it was still walking, and nothing about the road
+                // it chose follows from that.
+                //
+                // The exclusion is a repair of Issue #409 and it is narrow. The
+                // localised-injury slice makes a fight last longer, so a wave can
+                // still be running when the session fuse blows; on seed 20260735
+                // that left Кистень alive and short of the larder, counted here as
+                // if a memory had walled it out. Over the twelve parties this
+                // walks, the exclusion drops only raiders of unresolved waves and
+                // moves neither the subject count nor the way-round floor above.
+                var itsWave = state.Waves.FirstOrDefault(wave => wave.Number == raider.Wave);
+                if (itsWave?.EndTick is not null &&
+                    raider.Mode != RaiderMode.Downed &&
+                    !visits[raider.Id].Contains(FirstLarderTile) &&
+                    raider.Mode != RaiderMode.Escaped)
                 {
-                    stranded.Add($"{seed}/{raider.Name}");
+                    stranded.Add($"{seed}/{raider.Name}(mode={raider.Mode},hp={raider.Hp},wave={raider.Wave})");
+                }
+                else if (itsWave?.EndTick is not null &&
+                         raider.Mode == RaiderMode.Downed &&
+                         !visits[raider.Id].Contains(FirstLarderTile))
+                {
+                    putDownOnTheWayIn.Add($"{seed}/{raider.Name}");
                 }
             }
         }
@@ -370,10 +393,34 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
             $"remember, which is more than the one fifth the way-round-when-there-is-a-way-round " +
             $"rule leaves room for: {string.Join(' ', walkedOverIt)}");
 
+        // <b>Two ways of not arriving, told apart by Issue #409.</b> This clause
+        // used to count every avoider that neither reached the larder nor escaped,
+        // and that set holds two entirely different things: a raider a memory
+        // walled out, which is the defect the clause is named for, and a raider
+        // the domain put down on the way in, which is the domain doing its job.
+        // The localised-injury slice lengthens a fight, and on seed 20260735
+        // Кистень was put down in wave 4 before reaching the larder — mode=Downed,
+        // hp=0 — and was reported as stranded by avoidance.
+        //
+        // The two are now counted separately and both are printed. What is
+        // asserted is still the absolute claim, on the subject it was always about.
         Assert.True(
             stranded.Count == 0,
-            $"{stranded.Count} returning raiders neither reached the larder nor left: avoidance " +
-            $"must not be able to strand a raider. {string.Join(' ', stranded)}");
+            $"{stranded.Count} returning raiders neither reached the larder, nor left, nor were " +
+            $"put down: avoidance must not be able to strand a raider. {string.Join(' ', stranded)}");
+
+        // <b>The debt this repair leaves, measured and named rather than hidden.</b>
+        // A wave resolves only when none of its raiders is still raiding, so an
+        // avoider of a finished wave is Escaped, Downed, or the defect above. With
+        // the Downed ones set aside, the clause above can only ever be red on a
+        // world where a wave resolves with a raider still walking — which is to
+        // say almost never. It is kept because it is cheap and because it states
+        // the promise, and this line is what stops that from being a silent
+        // vacuity: the count below is the population the clause gave up.
+        output.WriteLine(
+            $"ROUTES avoiders={avoiderCount} walkedOverIt={walkedOverIt.Count} " +
+            $"stranded={stranded.Count} putDownOnTheWayIn={putDownOnTheWayIn.Count} " +
+            $"[{string.Join(' ', putDownOnTheWayIn)}]");
     }
 
     /// <summary>

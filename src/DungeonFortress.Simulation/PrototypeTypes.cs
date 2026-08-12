@@ -307,7 +307,12 @@ public sealed record PrototypeCreatureSnapshot(
     // BodyPart. <see cref="Injury"/> above is the worst entry of this list and
     // is derived from it, so the summary the rest of the simulation reads and
     // the localisation the player reads can never disagree.
-    IReadOnlyList<PrototypeInjurySnapshot> Injuries);
+    IReadOnlyList<PrototypeInjurySnapshot> Injuries,
+    // Steps a hurt leg has taken away over the party, in the same family as
+    // MoveCount and BlockedTicks above: nothing in the simulation reads it, and
+    // it is what makes the limp measurable without guessing at how much walking
+    // a wounded creature happened to have to do.
+    int StepsLostToLimp);
 
 public sealed record PrototypeJobSnapshot(
     long JobId,

@@ -324,6 +324,22 @@ public static class PrototypeTuning
     // A mutant disables the consequence by setting both to 100.
     public const int ArmLightMightPercent = 50;
     public const int ArmHeavyMightPercent = 0;
+
+    // «По ноге — хромает и не убегает» (pitch 6.13). One period, one meaning: a
+    // creature with a hurt leg loses one step in this many. A light leg keeps two
+    // steps of every three, a heavy one half of everything.
+    //
+    // «Не убегает» needs no rule of its own and deliberately does not get one.
+    // Running from a fight is ordinary movement through Move (see
+    // RunFromTheFight), so a creature that limps also limps away, and a wave
+    // usually ends before it reaches the far wall. A separate rule saying "may not
+    // flee" would take a decision away from the creature; a limp takes distance
+    // away from it, and that is what a hurt leg does.
+    //
+    // A mutant disables the consequence by setting both to 0, which means "never".
+    public const int LegLightLimpPeriod = 3;
+    public const int LegHeavyLimpPeriod = 2;
+
     // Nerve is measured per creature and dread is measured from where that
     // creature is standing. The two new terms are what keep the moment of
     // breaking personal: `MoraleGritWeight` and `MoraleReadinessDivisor` barely

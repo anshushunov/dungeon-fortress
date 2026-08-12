@@ -129,6 +129,41 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// Criterion 2 for the leg: «по ноге — хромает и не убегает». A creature with
+    /// a hurt leg loses steps, and one whose leg is whole loses none at all.
+    ///
+    /// <para>The second half is the one that makes the mutant sharp. The rate for
+    /// whole legs is not "small" — it is exactly zero, because nothing but a hurt
+    /// leg can charge a step to the limp, so the check needs no threshold on that
+    /// side and cannot be passed by a party that simply walks less.</para>
+    /// </summary>
+    [Fact]
+    public void A_hurt_leg_loses_steps_and_a_whole_one_loses_none()
+    {
+        var pooled = new Ratio();
+        foreach (var run in Matrix)
+        {
+            pooled.Add(true, run.Limp.Hurt * run.Limp.HurtSamples / 100, run.Limp.HurtSamples);
+            pooled.Add(false, run.Limp.Whole * run.Limp.WholeSamples / 100, run.Limp.WholeSamples);
+        }
+
+        output.WriteLine(
+            $"LEG stepsLostPerCreatureTick hurt={pooled.Hurt / 100.0} whole={pooled.Whole / 100.0} " +
+            $"hurtTicks={pooled.HurtSamples} wholeTicks={pooled.WholeSamples}");
+
+        Assert.True(pooled.HurtSamples > 0, "No creature of any shipped party spent a tick with a hurt leg.");
+        Assert.True(
+            pooled.Whole == 0,
+            $"a whole leg lost {pooled.Whole / 100.0} steps a tick, which it cannot: only the limp " +
+            "charges a step to a wound, so anything but zero here means the counter is being moved " +
+            "by something that is not the leg." + Environment.NewLine + Detail());
+        Assert.True(
+            pooled.Hurt > 0,
+            "a hurt leg lost no steps at all over the whole matrix: the limp is not there."
+            + Environment.NewLine + Detail());
+    }
+
+    /// <summary>
     /// The derivation invariant, checked on every creature of every published tick
     /// of every party: <c>injury</c> is the worst entry of <c>injuries</c>, and a
     /// creature with an empty list is whole.
@@ -358,11 +393,6 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
                     creature.Might * entry.Repeats);
             }
 
-            if (entry.ReasonCode == "injury_limped")
-            {
-                tally.LimpEvents += entry.Repeats;
-            }
-
             if (entry.ReasonCode == "injury_stunned")
             {
                 tally.StunEvents += entry.Repeats;
@@ -372,6 +402,21 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
         foreach (var creature in state.Creatures)
         {
             tally.Torso.Add(Hurt(creature, BodyPart.Torso), creature.Readiness, 1);
+
+            // The limp, per creature-tick during which the leg was hurt. Both
+            // halves are needed: a count of lost steps alone would rise simply
+            // because a party has more wounds in it, and the denominator is what
+            // makes it a rate. Steps lost while whole must stay at exactly zero,
+            // which is the half that says the limp belongs to the leg and to
+            // nothing else.
+            var was = before.Creatures.FirstOrDefault(item => item.Id == creature.Id);
+            if (was is not null && state.Tick > before.Tick)
+            {
+                tally.Limp.Add(
+                    Hurt(creature, BodyPart.Leg),
+                    creature.StepsLostToLimp - was.StepsLostToLimp,
+                    1);
+            }
         }
 
         // Criterion 3 is asked exactly where it is stated: on the tick a wave
@@ -494,8 +539,11 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
         /// <summary>Readiness, split by whether the torso is hurt.</summary>
         public Split Torso { get; } = new();
 
-        /// <summary>Steps the limp took away — the leg's consequence, counted.</summary>
-        public int LimpEvents { get; set; }
+        /// <summary>
+        /// Steps the limp took away per creature-tick, split by whether the leg is
+        /// hurt. The leg's own quantity.
+        /// </summary>
+        public Ratio Limp { get; } = new();
 
         /// <summary>Actions the stun took away — the head's consequence, counted.</summary>
         public int StunEvents { get; set; }
@@ -526,7 +574,7 @@ public sealed class PrototypeLocalisedInjuryTests(ITestOutputHelper output)
                 $"laterWaveEntries={EntriesIntoALaterWave} carrying={CarriedIntoNextWave}" +
                 Environment.NewLine +
                 $"    CONSEQUENCE {Name} weaponPerMight[{WeaponPerMight}] armBlow[{ArmBlow}] " +
-                $"torsoReadiness[{Torso}] limped={LimpEvents} stunned={StunEvents}";
+                $"stepsLostPerTick[{Limp}] torsoReadiness[{Torso}] stunned={StunEvents}";
         }
     }
 

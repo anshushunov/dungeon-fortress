@@ -43,7 +43,8 @@ public sealed partial class PrototypeWorld
             [.. creature.RememberedPlaces.Values],
             ToSnapshot(creature.Loyalty, ReleasedGrudge(creature) > 0),
             [.. creature.InjuredParts().Select(
-                part => new PrototypeInjurySnapshot(part.Part, part.Severity))]);
+                part => new PrototypeInjurySnapshot(part.Part, part.Severity))],
+            creature.StepsLostToLimp);
     }
 
     private PrototypeDigDesignationSnapshot ToSnapshot(GridPoint tile)
@@ -399,6 +400,23 @@ public sealed partial class PrototypeWorld
                 }
             }
         }
+
+        /// <summary>
+        /// Steps a hurt leg has taken away from this creature over the party. A
+        /// monotone counter of the same family as <see cref="MoveCount"/> and
+        /// <see cref="BlockedTicks"/>: nothing reads it, and it exists so that the
+        /// leg's consequence can be measured without inferring it from how much
+        /// walking a wounded creature happened to have to do.
+        /// </summary>
+        public int StepsLostToLimp { get; set; }
+
+        /// <summary>
+        /// The last tick a limp was charged, so that two calls to
+        /// <see cref="PrototypeWorld.Move"/> inside one tick cannot charge it
+        /// twice. Transient, like <see cref="WaitThisTick"/>: it is a function of
+        /// the tick in hand and never survives into the canonical document.
+        /// </summary>
+        public int LastLimpTick { get; set; } = -1;
 
         public int RecoveryTicks { get; set; }
         public CreatureMode Mode { get; set; }

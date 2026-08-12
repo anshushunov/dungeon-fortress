@@ -90,6 +90,13 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
         "refused_zone_not_designated", "refused_zone_unreachable", "refused_priority_zero",
         "refused_rule_reserve", "refused_rule_min_satiety", "refused_too_exhausted",
         "refused_injured",
+        // Issue #409. A step lost to a bad leg is routine on purpose and by the
+        // same argument `chosen_off_duty` is: it is the most frequent thing a hurt
+        // creature does, dozens of times a wound, and ranking it above routine
+        // would push the turning points the panel exists for — the wound itself, a
+        // nerve that broke, a refusal by memory — off the four lines it has. The
+        // wound is the story; limping is what the wound looks like afterwards.
+        "injury_limped",
         "combat_attack",
         "dig_started", "dig_completed", "dig_cancelled", "dig_unreachable",
         "stone_picked_up", "stone_stored", "stone_spilled", "stone_target_replanned",

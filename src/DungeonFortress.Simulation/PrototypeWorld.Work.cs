@@ -711,6 +711,44 @@ public sealed partial class PrototypeWorld
             return false;
         }
 
+        // The limp (Issue #409). It sits here, above every reason a step can fail,
+        // because Move is the single funnel every kind of walking goes through —
+        // to work, to a bunk, at a raider, away from one. A hurt leg that slowed
+        // only the walk to work would be a wound about jobs rather than about the
+        // creature.
+        //
+        // <b>It says so in the journal, and the sentence is not decoration.</b>
+        // The first version of this counted the lost step and stayed silent, on
+        // the ground that a sentence per step would flood the document. It went
+        // red against `Every_tick_a_runner_stands_still_is_explained_in_the_log`,
+        // and rightly: contract 11 promises that a creature which does not move is
+        // a creature that said why. The flood did not happen either, because
+        // folding merges an entry with the creature's own last one and a walk
+        // writes nothing in between — a limping creature crossing the domain
+        // leaves one entry with a count on it, not one entry per tick.
+        //
+        // The counter is kept beside the sentence, in the family of MoveCount,
+        // BlockedTicks and YieldCount: the sentence is what the player reads, and
+        // the counter is what a measurement reads without having to unfold a
+        // journal.
+        if (LimpsThisTick(creature))
+        {
+            if (creature.LastLimpTick != CurrentTick)
+            {
+                creature.LastLimpTick = CurrentTick;
+                creature.StepsLostToLimp++;
+                RecordDecision(
+                    creature,
+                    "injury_limped",
+                    new Dictionary<string, int>
+                    {
+                        ["severity"] = (int)creature.PartInjury(BodyPart.Leg),
+                    });
+            }
+
+            return false;
+        }
+
         if (creature.WaitThisTick)
         {
             creature.BlockedTicks++;
@@ -760,6 +798,51 @@ public sealed partial class PrototypeWorld
         creature.LastMoveTick = CurrentTick;
         creature.BlockedTicks = 0;
         return true;
+    }
+
+    /// <summary>
+    /// Whether a hurt leg takes this creature's step away on this tick.
+    ///
+    /// <para>A period and not a draw, and staggered by creature id: a party of
+    /// nine limping in unison would read as the game stuttering rather than as
+    /// nine hurt legs. It is a pure function of the tick and the wound, so it
+    /// needs no state of its own and no stream of its own, and a replay reproduces
+    /// every lost step exactly.</para>
+    /// </summary>
+    private bool LimpsThisTick(CreatureState creature)
+    {
+        // <b>Only while the fight is what the creature is doing</b>, and the
+        // restriction is the pitch's own sentence read closely rather than a
+        // softening. 6.13 says «по ноге — хромает и не убегает»: both halves are
+        // about a fight — closing on a raider and getting away from one — and
+        // neither is about the walk to the mushroom bed.
+        //
+        // It is also what the measurement asked for. A limp that slowed every
+        // walk moved the whole economy: a wounded hauler reaches the larder later,
+        // so meals are cooked later, so satiety curves shift, and four unrelated
+        // promises went red on one seed each — among them a documented headless
+        // walkthrough of the build demo, a fixture with no combat in it at all.
+        // Halving the period instead did not repair that and broke a different
+        // one, because the sensitivity is chaotic rather than monotone: it is the
+        // reach of the rule that is wrong, not its size. Bounded to the fight, the
+        // consequence is exactly as strong and the domain's working day is
+        // untouched.
+        //
+        // Mustering counts: a creature walking to the line is already answering
+        // the call, and a hurt leg is what makes it arrive late.
+        if (creature.Mode is not (CreatureMode.Fighting or CreatureMode.Fled or CreatureMode.Mustering) &&
+            !creature.IsMustering)
+        {
+            return false;
+        }
+
+        var period = creature.PartInjury(BodyPart.Leg) switch
+        {
+            InjuryKind.Heavy => PrototypeTuning.LegHeavyLimpPeriod,
+            InjuryKind.Light => PrototypeTuning.LegLightLimpPeriod,
+            _ => 0,
+        };
+        return period > 0 && (CurrentTick + creature.Id) % period == 0;
     }
 
     /// <summary>
