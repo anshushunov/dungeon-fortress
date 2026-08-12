@@ -1,9 +1,11 @@
 {
   "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1",
-  "run_on_commit": "aac30ef",
-  "note": "commit hash updated after rebase onto origin/main 3083e9c (PR #406); verify.ps1 not re-run after rebase, file content identical before and after rebase (rebase touched no file in this task's diff)",
   "result": "ok",
   "scope": "full",
   "stagesExecuted": ["scripts","build","tests","mcp","sim","load","godot","ui","screenshots","token-budget"],
-  "stagesNotRun": []
+  "stagesNotRun": [],
+  "runs": [
+    { "run_on_commit": "aac30ef", "note": "first full run, pre-rework" },
+    { "run_on_commit": "pending (rework round, before commit)", "note": "re-run per coordinator's rule-22 exception after F1-F7 rework — rework touches ROADMAP.md, GATE_DECISIONS.md, coord.md and evidence, which the prior green covered a different state" }
+  ]
 }
