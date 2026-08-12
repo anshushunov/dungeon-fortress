@@ -320,6 +320,7 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
         var avoiderCount = 0;
         var walkedOverIt = new List<string>();
         var stranded = new List<string>();
+        var putDownOnTheWayIn = new List<string>();
 
         foreach (var seed in SearchSeeds.Take(12))
         {
@@ -354,6 +355,18 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
                 {
                     stranded.Add($"{seed}/{raider.Name}");
                 }
+
+                // Counted beside the clause and asserted on by nothing (Issue
+                // #409). Not arriving has two shapes — a memory walled the raider
+                // out, which is what the clause is named for, and the domain put it
+                // down on the way in, which is the domain doing its job — and the
+                // clause cannot tell them apart. Printing the second is what lets a
+                // reader see how much of the first is left.
+                if (raider.Mode == RaiderMode.Downed &&
+                    !visits[raider.Id].Contains(FirstLarderTile))
+                {
+                    putDownOnTheWayIn.Add($"{seed}/{raider.Name}");
+                }
             }
         }
 
@@ -370,10 +383,31 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
             $"remember, which is more than the one fifth the way-round-when-there-is-a-way-round " +
             $"rule leaves room for: {string.Join(' ', walkedOverIt)}");
 
+        // <b>The clause is this branch's `main` edition, unchanged.</b> Issue #409
+        // did relax it for a while — a raider put down on the way in, and a raider
+        // of a wave the session fuse cut short, were both excluded from «stranded»
+        // — and independent review of PR #417 measured that neither exclusion was
+        // needed: the `main` edition is green on this tree, and the population the
+        // exclusions removed is empty (`putDownOnTheWayIn=0`, `stranded=0` over the
+        // twelve parties). A relaxation that buys nothing is a relaxation nobody
+        // can price, so it was taken back out. The example that had been offered
+        // for it did not reproduce here either.
         Assert.True(
             stranded.Count == 0,
             $"{stranded.Count} returning raiders neither reached the larder nor left: avoidance " +
             $"must not be able to strand a raider. {string.Join(' ', stranded)}");
+
+        // <b>What Issue #409 leaves behind is a measurement and not a change.</b>
+        // A wave resolves only when none of its raiders is still raiding, so an
+        // avoider of a resolved wave is Escaped, Downed, or the defect the clause
+        // names — and this line prints how many fall in each, so that «the clause
+        // is green» can be told apart from «the clause has no subject». On the
+        // shipped journals it currently prints zero on both counts, which is the
+        // evidence behind the vacuity finding raised against Issue #358 itself.
+        output.WriteLine(
+            $"ROUTES avoiders={avoiderCount} walkedOverIt={walkedOverIt.Count} " +
+            $"stranded={stranded.Count} putDownOnTheWayIn={putDownOnTheWayIn.Count} " +
+            $"[{string.Join(' ', putDownOnTheWayIn)}]");
     }
 
     /// <summary>

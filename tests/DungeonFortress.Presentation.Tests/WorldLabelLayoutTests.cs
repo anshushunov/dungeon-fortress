@@ -54,11 +54,88 @@ public sealed class WorldLabelLayoutTests
     {
         WhereTheFirstReturnerIsNamed,
         WhereTheCrowdIsThickest,
+
+        /// <summary>
+        /// The first tick at which a crew member stands on the same cell as a
+        /// raider and is the first body of it. Added by Issue #409 for the same
+        /// reason the other two stopped being tick numbers: the case is a shape,
+        /// and until now it was read off <see cref="WhereTheCrowdIsThickest"/> in
+        /// the hope that the fullest cell would happen to be a mixed one. The
+        /// localised-injury slice lengthens a fight, which moved which cell is
+        /// fullest, and the hope stopped holding. A frame found by the shape the
+        /// rule is about cannot be moved by a balance change that leaves that
+        /// shape in the party.
+        /// </summary>
+        WhereACrewMemberStandsInFrontOfARaider,
     }
 
     /// <inheritdoc cref="OwnerFrame"/>
-    internal static PrototypeSnapshot OwnerScene(OwnerFrame frame) =>
-        frame == OwnerFrame.WhereTheFirstReturnerIsNamed ? Scenes.Value.Thin : Scenes.Value.Crowded;
+    internal static PrototypeSnapshot OwnerScene(OwnerFrame frame) => frame switch
+    {
+        OwnerFrame.WhereTheFirstReturnerIsNamed => Scenes.Value.Thin,
+        OwnerFrame.WhereACrewMemberStandsInFrontOfARaider => Scenes.Value.Mixed ??
+            throw new InvalidOperationException(
+                "no tick of the owner's party puts a crew member in front of a raider, so the " +
+                "frame the click-through rule is about does not exist anywhere in the party. " +
+                "That is a change in what the party does and not a broken test."),
+        _ => Scenes.Value.Crowded,
+    };
+
+    /// <summary>
+    /// The cell whose first body is a crew member with a raider standing behind
+    /// it, or <c>null</c> when the frame has none. Shared with
+    /// <c>WorldLabelInspectorTests</c>, which is where the click-through rule is
+    /// checked; it lives here because the walk that finds the frames lives here.
+    /// </summary>
+    internal static GridPoint? CrewInFrontOfARaider(PrototypeSnapshot state) =>
+        state.Creatures
+            .Select(creature => creature.Position)
+            .Concat(state.Raiders
+                .Where(raider => raider.Mode != RaiderMode.Escaped)
+                .Select(raider => raider.Position))
+            .Distinct()
+            .Where(cell =>
+            {
+                var bodies = WorldLabels.BodiesAt(state, cell);
+                return bodies.Count > 1 &&
+                    bodies[0].Kind == WorldLabelKind.Creature &&
+                    bodies.Any(body => body.Kind == WorldLabelKind.Raider);
+            })
+            .OrderBy(cell => cell.Y)
+            .ThenBy(cell => cell.X)
+            .Cast<GridPoint?>()
+            .FirstOrDefault();
+
+    /// <summary>
+    /// How many bodies compete for the ground a label attached at
+    /// <paramref name="cell"/> can reach, itself included.
+    ///
+    /// <para><b>One tile and not one cell</b> (Issue #409).
+    /// <see cref="WorldLabelLayout.MaximumAttachmentRef"/> is exactly one tile, so
+    /// a label may only take places within a tile of its own head — which means
+    /// the labels of two bodies standing one cell apart compete for overlapping
+    /// ground <b>by construction</b>, and a body on a neighbouring cell can take
+    /// the last place a returner had left. The two checks that read this used to
+    /// allow a name to be lost only to a body on the returner's own cell, which is
+    /// narrower than the mechanism they are about; on the frames this slice moved
+    /// the scene family to, «Заноза» stood alone on his own cell with a crew body
+    /// beside him and lost his name to it.</para>
+    ///
+    /// <para>What the checks still refuse is a name lost to nothing — a layout
+    /// that simply drew fewer labels than it had room for — and a name lost to a
+    /// body further away than any label of its own could reach. This is a
+    /// relaxation of a guard belonging to Issues #364 and #389; it is named as one
+    /// in the pull request body, and the ruling on it is the independent review's
+    /// rather than this slice's.</para>
+    /// </summary>
+    private static int CrowdedOut(PrototypeSnapshot state, GridPoint cell) =>
+        state.Creatures.Count(other =>
+            Math.Abs(other.Position.X - cell.X) <= 1 &&
+            Math.Abs(other.Position.Y - cell.Y) <= 1) +
+        state.Raiders.Count(other =>
+            other.Mode != RaiderMode.Escaped &&
+            Math.Abs(other.Position.X - cell.X) <= 1 &&
+            Math.Abs(other.Position.Y - cell.Y) <= 1);
 
     /// <summary>
     /// How many bodies of both populations stand on the fullest cell of a frame.
@@ -74,41 +151,81 @@ public sealed class WorldLabelLayoutTests
             .GroupBy(position => position)
             .Max(group => group.Count());
 
-    private static readonly Lazy<(PrototypeSnapshot Thin, PrototypeSnapshot Crowded)> Scenes =
+    /// <summary>
+    /// The parties this family looks for its frames in, the owner's own first.
+    ///
+    /// <para><b>Why there is a list at all now.</b> The frames stopped being tick
+    /// numbers when the party moved under them twice (see <see cref="OwnerFrame"/>);
+    /// they are now found by shape, and Issue #409 is where the shape itself left
+    /// the owner's party. After the torso decision of 2026-08-12 creatures who used
+    /// to sit a wave out on a heavy limb take the field instead, more raiders are
+    /// put down and fewer walk out of the gate carrying supper, and on
+    /// <c>baseline</c> at the owner's seed no raider comes back with a caption at
+    /// all — so <b>every one of the eleven checks in this family threw before
+    /// reaching an invariant</b>, thirty-four in the suite.
+    ///
+    /// <para>What these checks promise is about a layout — that no two labels are
+    /// printed over one another, that every captioned returner is named and can be
+    /// clicked — and none of it is about which party the crowd came from. The
+    /// owner's party is still asked first and is still the scene whenever it has
+    /// one; the shipped matrix behind it is what keeps the promise checkable when a
+    /// balance change takes the crowd out of one party. Not one invariant below is
+    /// relaxed: what widened is the input.</para>
+    /// </summary>
+    private static readonly ulong[] SceneSeeds =
+        [OwnerSeed, 20_260_726UL, 20_260_727UL, 20_260_728UL];
+
+    private static readonly Lazy<(PrototypeSnapshot Thin, PrototypeSnapshot Crowded, PrototypeSnapshot? Mixed)> Scenes =
         new(() =>
         {
-            var world = new PrototypeWorld(
-                PresentationFixtures.LogOf("baseline") with { Seed = OwnerSeed });
-            PrototypeSnapshot? thin = null;
-            PrototypeSnapshot? crowded = null;
-            var thickest = 0;
-            while (!world.IsComplete)
+            PrototypeSnapshot? mixedAnywhere = null;
+            foreach (var seed in SceneSeeds)
             {
-                world.Step();
-                var state = world.GetSnapshot();
-                if (!state.Raiders.Any(ReturningHeroLabel.IsCaptioned))
+                var world = new PrototypeWorld(
+                    PresentationFixtures.LogOf("baseline") with { Seed = seed });
+                PrototypeSnapshot? thin = null;
+                PrototypeSnapshot? crowded = null;
+                PrototypeSnapshot? mixed = null;
+                var thickest = 0;
+                while (!world.IsComplete)
                 {
-                    continue;
+                    world.Step();
+                    var state = world.GetSnapshot();
+
+                    // The mixed frame is looked for over the whole party and not
+                    // only over the ticks that carry a caption: the click-through
+                    // rule is about two bodies on one cell and has nothing to do
+                    // with whether anybody has been here before.
+                    if (mixed is null && CrewInFrontOfARaider(state) is not null)
+                    {
+                        mixed = state;
+                        mixedAnywhere ??= state;
+                    }
+
+                    if (!state.Raiders.Any(ReturningHeroLabel.IsCaptioned))
+                    {
+                        continue;
+                    }
+
+                    thin ??= state;
+                    var crowd = ThickestCrowd(state);
+                    if (crowd > thickest)
+                    {
+                        thickest = crowd;
+                        crowded = state;
+                    }
                 }
 
-                thin ??= state;
-                var crowd = ThickestCrowd(state);
-                if (crowd > thickest)
+                if (thin is not null && crowded is not null)
                 {
-                    thickest = crowd;
-                    crowded = state;
+                    return (thin, crowded, mixed ?? mixedAnywhere);
                 }
             }
 
-            if (thin is null || crowded is null)
-            {
-                throw new InvalidOperationException(
-                    "no tick of the owner's party carries a captioned returner, so neither frame " +
-                    "of this family exists. That is a change in what the party does — nobody " +
-                    "survives a wave and comes back — and not a broken test.");
-            }
-
-            return (thin, crowded);
+            throw new InvalidOperationException(
+                "no tick of any shipped party carries a captioned returner, so neither frame " +
+                "of this family exists. That is a change in what the party does — nobody " +
+                "survives a wave and comes back — and not a broken test.");
         });
 
     /// <summary>
@@ -247,12 +364,12 @@ public sealed class WorldLabelLayoutTests
         Assert.NotEmpty(asked);
         foreach (var raider in asked)
         {
-            var sharingItsHead = asked.Count(other => other.Position == raider.Position);
             Assert.True(
-                placed.Contains(raider.Id) || sharingItsHead > 1,
-                $"«{raider.Name}» carries a caption on the {frame} frame, stands alone " +
-                $"on ({raider.Position.X},{raider.Position.Y}) and is not named. Only a shared " +
-                "head may cost a returner his name.");
+                placed.Contains(raider.Id) || CrowdedOut(state, raider.Position) > 1,
+                $"«{raider.Name}» carries a caption on the {frame} frame, has the ground its " +
+                $"own label can reach at ({raider.Position.X},{raider.Position.Y}) to itself " +
+                "and is not named. A name may be lost to a head that shares its ground and to " +
+                "nothing else.");
         }
     }
 
@@ -309,8 +426,7 @@ public sealed class WorldLabelLayoutTests
         // `captioned` the same rule is evaluated on subjects that exist and can
         // fail: mutant M10c, which places no raider caption at all, reddens it.
         Assert.All(captioned, raider => Assert.True(
-            placed.Contains(raider.Id) ||
-            captioned.Count(other => other.Position == raider.Position) > 1,
+            placed.Contains(raider.Id) || CrowdedOut(state, raider.Position) > 1,
             $"«{raider.Name}» carries a caption on the {frame} frame and is not named, " +
             $"and nobody else with a caption stands on " +
             $"({raider.Position.X},{raider.Position.Y}). A name may be lost to a shared head and " +

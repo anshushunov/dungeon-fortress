@@ -41,7 +41,11 @@ public sealed partial class PrototypeWorld
             creature.ReadinessAtRaid,
             creature.RecoveryTicks,
             [.. creature.RememberedPlaces.Values],
-            ToSnapshot(creature.Loyalty, ReleasedGrudge(creature) > 0));
+            ToSnapshot(creature.Loyalty, ReleasedGrudge(creature) > 0),
+            [.. creature.InjuredParts().Select(
+                part => new PrototypeInjurySnapshot(part.Part, part.Severity))],
+            creature.StepsLostToLimp,
+            creature.ActionsLostToStun);
     }
 
     private PrototypeDigDesignationSnapshot ToSnapshot(GridPoint tile)
@@ -296,13 +300,35 @@ public sealed partial class PrototypeWorld
             @event.Target);
     }
 
+    /// <summary>
+    /// How fit this creature is to do anything at all.
+    ///
+    /// <para><b>The wound term is the torso's and no longer every wound's</b>
+    /// (Issue #409, coordinator's decision of 2026-08-12, record 1 of
+    /// <see href="https://github.com/anshushunov/dungeon-fortress/issues/415">#415</see>).
+    /// Until this slice the penalty was read off the summary <c>Injury</c>, which
+    /// is the worst of the four parts, so a creature with a ruined arm and a whole
+    /// body was as unfit as one that had been opened up. That is «вычитание
+    /// числа» — the exact thing section 6.13 of the pitch replaces with
+    /// consequences — applied to all four parts at once, and it double-charged
+    /// three of them: the arm already loses weight off the blow, the leg already
+    /// loses steps, the head already loses actions, and each of them was paying a
+    /// second time through a term that belongs to the body.</para>
+    ///
+    /// <para>The torso is where it belongs because the torso is the part with no
+    /// consequence of its own to name. The pitch gives the other three a sentence
+    /// each — «роняет оружие», «хромает и не убегает», «оглушён» — and calls the
+    /// torso the fourth part of the readability budget without saying what it
+    /// does. This is what it does: a hurt body is a body that brings less of
+    /// itself to everything, which is what readiness already meant.</para>
+    /// </summary>
     private static int ComputeReadiness(CreatureState creature)
     {
-        var injuryPenalty = creature.Injury switch
+        var injuryPenalty = creature.PartInjury(BodyPart.Torso) switch
         {
             InjuryKind.None => 0,
-            InjuryKind.Light => PrototypeTuning.InjuryLightPenalty,
-            InjuryKind.Heavy => PrototypeTuning.InjuryHeavyPenalty,
+            InjuryKind.Light => PrototypeTuning.TorsoLightPenalty,
+            InjuryKind.Heavy => PrototypeTuning.TorsoHeavyPenalty,
             _ => 0,
         };
         var readiness = PrototypeTuning.ReadinessBase +
@@ -338,7 +364,100 @@ public sealed partial class PrototypeWorld
             definition.Might * PrototypeTuning.DefenderHpPerMight;
         public int Hp { get; set; } = PrototypeTuning.DefenderHpBase +
             definition.Might * PrototypeTuning.DefenderHpPerMight;
-        public InjuryKind Injury { get; set; }
+        /// <summary>
+        /// What each of the four parts carries, indexed by <see cref="BodyPart"/>.
+        /// This is the wound: <see cref="Injury"/> below is read off it and is
+        /// stored nowhere.
+        ///
+        /// <para><b>Why the scalar became a function.</b> Before Issue #409 a
+        /// creature carried one <see cref="InjuryKind"/> and nothing else, so
+        /// «его достали» was a number subtracted from readiness and there was
+        /// no answer to «where». Fifteen call sites read that scalar — combat
+        /// admission, readiness, mending, matching, planning, the loyalty
+        /// ledger — and every one of them asks the same question, «how badly is
+        /// this one hurt overall». Keeping that question answerable in one
+        /// place, from the parts, is what let the localisation be added without
+        /// re-deciding any of the fifteen.</para>
+        /// </summary>
+        private readonly InjuryKind[] _parts = new InjuryKind[BodyParts.Count];
+
+        /// <summary>
+        /// How badly this creature is hurt, whole: the worst of its parts. It
+        /// is exactly the value the field it replaced held — a creature with a
+        /// light arm and a heavy leg is a heavily wounded creature — so nothing
+        /// that read the scalar had to change its meaning.
+        /// </summary>
+        public InjuryKind Injury
+        {
+            get
+            {
+                var worst = InjuryKind.None;
+                foreach (var severity in _parts)
+                {
+                    if (severity > worst)
+                    {
+                        worst = severity;
+                    }
+                }
+
+                return worst;
+            }
+        }
+
+        public InjuryKind PartInjury(BodyPart part) => _parts[(int)part];
+
+        public void SetPartInjury(BodyPart part, InjuryKind severity) =>
+            _parts[(int)part] = severity;
+
+        /// <summary>
+        /// The injured parts in <see cref="BodyPart"/> order. Empty when this
+        /// creature is whole.
+        /// </summary>
+        public IEnumerable<(BodyPart Part, InjuryKind Severity)> InjuredParts()
+        {
+            for (var index = 0; index < BodyParts.Count; index++)
+            {
+                if (_parts[index] != InjuryKind.None)
+                {
+                    yield return ((BodyPart)index, _parts[index]);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Steps a hurt leg has taken away from this creature over the party. A
+        /// monotone counter of the same family as <see cref="MoveCount"/> and
+        /// <see cref="BlockedTicks"/>: nothing reads it, and it exists so that the
+        /// leg's consequence can be measured without inferring it from how much
+        /// walking a wounded creature happened to have to do.
+        /// </summary>
+        public int StepsLostToLimp { get; set; }
+
+        /// <summary>
+        /// Combat actions a hurt head has taken away from this creature over the
+        /// party. The head's own counter, of the same family and for the same
+        /// reason as <see cref="StepsLostToLimp"/>: nothing in the simulation
+        /// reads it, and it exists so the stun can be measured as a rate rather
+        /// than inferred from how many ticks a wounded creature happened to
+        /// spend in a fight.
+        ///
+        /// <para>It is a counter and not a journal count on purpose. The journal
+        /// folds an entry into the creature's own last one, and a stunned
+        /// creature that is still walking towards a raider writes nothing in
+        /// between, so two stuns a tick apart become one entry with a count —
+        /// which is right for a player reading the document and wrong for
+        /// anything that has to add them up.</para>
+        /// </summary>
+        public int ActionsLostToStun { get; set; }
+
+        /// <summary>
+        /// The last tick a limp was charged, so that two calls to
+        /// <see cref="PrototypeWorld.Move"/> inside one tick cannot charge it
+        /// twice. Transient, like <see cref="WaitThisTick"/>: it is a function of
+        /// the tick in hand and never survives into the canonical document.
+        /// </summary>
+        public int LastLimpTick { get; set; } = -1;
+
         public int RecoveryTicks { get; set; }
         public CreatureMode Mode { get; set; }
         public JobState? CurrentJob { get; set; }

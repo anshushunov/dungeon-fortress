@@ -215,6 +215,7 @@ public static class PrototypeTuning
     // hungry domain fights worse therefore rests ENTIRELY on
     // DamageReadinessDivisor below — see the note there before touching it.
     public const int CombatJoinSatiety = 30;
+
     public const int CombatJoinRecheck = 20;
     public const int EngageRadius = 8;
 
@@ -289,6 +290,112 @@ public static class PrototypeTuning
     // evidence/333-after-merged.json, section `theShapeOfTheSpread`.
     public const int DamageJitter = 6;
     public const int LightInjuryShare = 40;
+
+    // Where a blow lands, as relative weights over the four parts of
+    // BodyParts.All in enum order — head, torso, arm, leg. Drawn from
+    // PrototypeWorld._injuryRandom, which is salted apart from the blow's own
+    // jitter on purpose.
+    //
+    // The shape is a silhouette and not an anatomy: a torso is the widest thing
+    // on a body and a head the narrowest, so the torso is the likeliest place
+    // to be hit and the head the least likely. Weights and not probabilities so
+    // that the arithmetic stays integer and the draw stays reproducible on any
+    // machine.
+    //
+    // The head's share is the number that had to be measured rather than
+    // guessed: criterion 1 of Issue #409 asks that each of the four parts be
+    // reached at least once over the shipped journals, and a head at weight 1
+    // of 13 is a part the player would meet about twice in a whole session.
+    // Two is enough to observe and few enough that a head wound stays the thing
+    // worth telling somebody about.
+    public static readonly int[] InjuryPartWeights = [2, 5, 3, 3];
+
+    // «По руке — роняет оружие» (pitch 6.13), as the only thing Prototype 1 has
+    // to say it with: the weight of the blow that comes from the creature's own
+    // might. There are no weapon items here, so the weapon is that term — what
+    // the creature swings, as opposed to how fit it is to swing it — and a hand
+    // that cannot hold it loses it.
+    //
+    // As a percentage of the might term and not as a subtraction, so that the
+    // consequence scales with the creature: taking a flat ten off the blow of
+    // the domain's strongest and of its weakest is the same sentence about two
+    // different bodies. A light arm keeps half its grip; a heavy one keeps
+    // nothing, and what lands is then readiness, jitter and DamageFloor.
+    //
+    // A mutant disables the consequence by setting both to 100.
+    public const int ArmLightMightPercent = 50;
+    public const int ArmHeavyMightPercent = 0;
+
+    // «По ноге — хромает и не убегает» (pitch 6.13). One period, one meaning: a
+    // creature with a hurt leg loses one step in this many. A light leg keeps two
+    // steps of every three, a heavy one half of everything.
+    //
+    // «Не убегает» needs no rule of its own and deliberately does not get one.
+    // Running from a fight is ordinary movement through Move (see
+    // RunFromTheFight), so a creature that limps also limps away, and a wave
+    // usually ends before it reaches the far wall. A separate rule saying "may not
+    // flee" would take a decision away from the creature; a limp takes distance
+    // away from it, and that is what a hurt leg does.
+    //
+    // A mutant disables the consequence by setting both to 0, which means "never".
+    public const int LegLightLimpPeriod = 3;
+    public const int LegHeavyLimpPeriod = 2;
+
+    // «По голове — оглушён» (pitch 6.13). The same shape as the limp and for the
+    // same reason: a period, one meaning — a creature with a hurt head loses one
+    // combat action in this many. What it loses is the whole action and not a
+    // part of it, so a stunned creature neither strikes nor closes on its target;
+    // it stands where it is, and the journal says why.
+    //
+    // <b>Why an action and not a number.</b> The arm takes weight off a blow and
+    // the torso takes readiness off the body; both leave the creature acting. The
+    // head is the one part whose consequence the player can see without reading a
+    // number at all — the creature simply does nothing this tick — and that is
+    // what «оглушён» means in a game whose unit of time is a tick.
+    //
+    // <b>Why the head is the harshest of the four per event and still the
+    // mildest overall.</b> Losing one action in three is the largest single
+    // consequence in the slice, and the head is the rarest place for a blow to
+    // land: weight 2 of 13 in InjuryPartWeights against the torso's 5. The two
+    // numbers are chosen together — a head wound is meant to be the one worth
+    // telling somebody about, which needs it to be both rare and remembered.
+    //
+    // <b>The size was measured against the party rather than chosen for effect,
+    // and it was measured twice — the second time on purpose.</b> The first sweep
+    // ran on a tree where the heavy period could not fire at all: a heavy wound is
+    // written only when health reaches zero, and the roll call of the day refused
+    // anybody whose worst part was heavy, so a creature with a ruined head never
+    // stood in a fight to be stunned in one. The torso decision of 2026-08-12 is
+    // what brings it to life, and a number that half of only starts working after
+    // another change has to be re-chosen once that change is in. Both sweeps are
+    // kept because the difference between them is the point.
+    //
+    // On the finished tree, over the whole package:
+    //
+    // - 4/2 — `The_contract_invariants_hold_on_every_seed_of_the_matrix` reddens
+    //   on seed 20260727. Rejected, and for the same reason it was rejected on the
+    //   first sweep, where it ended `prepared/20260728` as `fallen` at −167
+    //   against `raided` at 761: a consequence that decides a party by itself is a
+    //   rebalance of the fight, and rebalancing the fight is not this slice's to
+    //   do;
+    // - 6/3 — the whole package green. The head reads 0.11 actions lost per
+    //   fighting tick against exactly 0 for a whole head;
+    // - 5/3 — what the first sweep chose, before the torso. Green then, and on the
+    //   finished tree it silences memory of place on `baseline/20260728`.
+    //
+    // <b>One cell of that memory check is a coincidence, and it is worth saying
+    // so.</b> `baseline/20260728` holds 214 refusals at a period of 4, none at 5,
+    // 2 at 6, 1 at 7 and 121 at 8, and held 2 on the tree this branch started
+    // from. What moves it is not the size of any consequence but which creature
+    // happens to be hurt where. `baseline/20260729` is the opposite and the
+    // serious one: zero at all five periods, so no tuning of this slice restores
+    // it — see the note beside `ObservabilitySeeds` in PrototypeMemoryTests.
+    //
+    // A mutant disables the consequence by setting both to 0, which means
+    // "never", exactly as it does for the limp.
+    public const int HeadLightStunPeriod = 6;
+    public const int HeadHeavyStunPeriod = 3;
+
     // Nerve is measured per creature and dread is measured from where that
     // creature is standing. The two new terms are what keep the moment of
     // breaking personal: `MoraleGritWeight` and `MoraleReadinessDivisor` barely
@@ -717,8 +824,24 @@ public static class PrototypeTuning
     public const int ReadinessMartialNumerator = 3;
     public const int ReadinessMartialDenominator = 10;
     public const int ReadinessRestDenominator = 10;
-    public const int InjuryLightPenalty = 15;
-    public const int InjuryHeavyPenalty = 40;
+    // What a hurt <b>body</b> takes off readiness — the torso's consequence, and
+    // the whole of it (Issue #409, coordinator's decision of 2026-08-12, record 1
+    // of #415). The two numbers are the ones the old `InjuryLightPenalty` and
+    // `InjuryHeavyPenalty` held and are deliberately unchanged: what moved is
+    // which wound they answer to, from "the worst of the four parts" to "the
+    // torso", and moving the size at the same time would make the two changes
+    // impossible to tell apart in any measurement.
+    //
+    // The rename is not cosmetic. Under the old name the penalty was charged to a
+    // creature with a ruined arm and an untouched body, on top of the weight that
+    // arm had already lost off its blow; the name said «травма», the code meant
+    // «любая травма», and there was no place left to put the torso's own
+    // consequence. Renamed, the tuning table of contract 15.6 can be read as a
+    // list of what each part does.
+    //
+    // A mutant disables the consequence by setting both to 0.
+    public const int TorsoLightPenalty = 15;
+    public const int TorsoHeavyPenalty = 40;
 
     public const int PriorityMinimum = 0;
     public const int PriorityMaximum = 4;

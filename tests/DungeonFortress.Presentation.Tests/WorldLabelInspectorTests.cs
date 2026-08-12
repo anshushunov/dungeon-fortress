@@ -249,22 +249,32 @@ public sealed class WorldLabelInspectorTests
     /// at the next twitch of the mouse - which is the case the rule was written
     /// for, and the one independent review of PR #368 measured as uncovered.
     ///
-    /// <para>It is a separate check and not a clause of the one above because the
-    /// two frames do not both carry it: the thin frame has no cell where a crew
-    /// member stands in front of a raider at all. Asserting it there would be
-    /// asserting over an empty set; asserting it only here says where it holds and
-    /// fails loudly if the crowded frame stops carrying it too.</para>
+    /// <para>It is a separate check and not a clause of the one above because not
+    /// every frame carries it: the thin frame has no cell where a crew member
+    /// stands in front of a raider at all, and asserting it there would be
+    /// asserting over an empty set.</para>
+    ///
+    /// <para><b>It reads its own frame since Issue #409</b>, and the reason is a
+    /// measurement rather than a preference. It used to read the crowded frame and
+    /// rely on the fullest cell of the party happening to be a mixed one; the
+    /// localised-injury slice lengthens a fight, the fullest cell moved to one
+    /// holding crew alone, and the check went red while the rule it protects was
+    /// untouched.
+    /// <see cref="WorldLabelLayoutTests.OwnerFrame.WhereACrewMemberStandsInFrontOfARaider"/>
+    /// is found by the shape the rule is about, so it now fails only when the
+    /// party genuinely stops producing that shape anywhere.</para>
     /// </summary>
     [Fact]
     public void A_crew_member_in_front_of_a_raider_does_not_come_back_under_the_pointer()
     {
-        var state = OwnerScene(Crowded);
+        var state = OwnerScene(
+            WorldLabelLayoutTests.OwnerFrame.WhereACrewMemberStandsInFrontOfARaider);
         var mixedCell = MixedCell(state);
 
         Assert.True(
             mixedCell is not null,
-            "no cell of the crowded frame has a crew member standing in front of a raider, so " +
-            "the case this rule was written for is not in the frame at all.");
+            "the frame chosen for carrying a crew member in front of a raider has no such cell, " +
+            "so the two ways of asking that question have drifted apart.");
 
         var mixed = WorldLabels.BodiesAt(state, mixedCell!.Value);
         Assert.True(mixed.Count > 1);

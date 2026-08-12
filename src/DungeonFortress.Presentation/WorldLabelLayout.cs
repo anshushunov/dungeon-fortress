@@ -1068,12 +1068,44 @@ public static class WorldLabels
     /// <see cref="CreatureNameLine"/>, handed to the layout as
     /// <see cref="WorldLabelRequest.Name"/>; the wording here has not
     /// changed.</para>
+    ///
+    /// <para><b>The mark of Issue #409 rides here and nowhere else.</b> The pitch
+    /// prices the whole of what a localised wound costs to show at «иконка над
+    /// головой и хромающая походка», and this line is the icon over the head: the
+    /// world label is what this projection draws above a body. A whole creature
+    /// reads exactly as it always did, so the ordinary frame does not change at
+    /// all; a hurt one reads «Кремень FIGHT · нога!».</para>
+    ///
+    /// <para>It rides on the full rung and not on <see cref="CreatureNameLine"/>
+    /// deliberately. The layout's ladder is «whole line → name only → nothing», so
+    /// in a frame too crowded to hold the line the mark is the first thing to go
+    /// and the name is the last. That is the right order: in a crowd the player
+    /// needs to know who that is before knowing what happened to them, and the
+    /// panel answers the second question at any time.</para>
+    ///
+    /// <para><b>It takes the state token's place instead of standing beside it,
+    /// and the reason is width.</b> Written as a third token — «Кремень READY ·
+    /// голова» — every hurt creature's label becomes wider than the widest label
+    /// this layout has ever had to place, and a wider label is a label with fewer
+    /// places left inside
+    /// <see cref="WorldLabelLayout.MaximumAttachmentRef"/>; in a projection whose
+    /// crowded frames already put six bodies on two cells, that is paid for by
+    /// somebody else's name. The line has room for a name and one fact, so the
+    /// fact a hurt creature carries is the wound — and the state of all nine is on
+    /// the roster line at the foot of the screen at every moment anyway, which is
+    /// where a player asking «who is fighting» is already looking. Upper case
+    /// because the slot is the state token's and the tokens beside it are upper
+    /// case; the panel prints the same wound in ordinary words.</para>
     /// </summary>
     public static WorldLabelLine CreatureLine(PrototypeCreatureSnapshot creature)
     {
         ArgumentNullException.ThrowIfNull(creature);
+        var hurt = HudText.CreatureInjuryShort(creature);
+        var token = hurt.Length == 0
+            ? HudText.CreatureStateShort(creature)
+            : hurt.ToUpperInvariant();
         return new WorldLabelLine(
-            $"{creature.Name} {HudText.CreatureStateShort(creature)}",
+            $"{creature.Name} {token}",
             WorldLabelLayout.CreatureNameTextRef);
     }
 

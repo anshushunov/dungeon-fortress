@@ -286,7 +286,15 @@ public sealed class PrototypeMoraleTests(ITestOutputHelper output)
                         decision is not null &&
                         decision.Tick >= current.Tick - 1 &&
                         decision.ReasonCode is "waiting_blocked_by_other"
-                            or "refused_zone_unreachable",
+                            or "refused_zone_unreachable"
+                            // Issue #409. A hurt leg takes the step, and says so.
+                            // A third accepted sentence and not a loosening: this
+                            // list is the whitelist of answers the domain is
+                            // allowed to give to «why is it standing», and
+                            // «хромает» is one of them. The first version of the
+                            // limp charged the step silently, and this check is
+                            // what caught it.
+                            or "injury_limped",
                         $"{fixtureName}/{seed}: creature {creature.Id} was in flight at " +
                         $"({creature.Position.X},{creature.Position.Y}) on tick {current.Tick - 1}, " +
                         $"did not move, and the last thing it said was " +

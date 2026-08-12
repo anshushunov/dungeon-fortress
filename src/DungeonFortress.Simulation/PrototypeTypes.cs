@@ -95,6 +95,50 @@ public enum InjuryKind
 }
 
 /// <summary>
+/// Where a blow landed. Four parts and not two hundred: section 6.13 of
+/// <c>docs/product/PITCH.md</c> names the budget in the same sentence it names
+/// the parts — «не двести частей тела как в Dwarf Fortress, а четыре-пять с
+/// бюджетом читаемости: голова, торс, рука, нога» — because the point of the
+/// mechanic is that the player can tell one creature from another by what
+/// happened to it, and a list nobody can hold in their head does the opposite.
+///
+/// <para>The order is the order the pitch lists them in, and it is the order
+/// the canonical document sorts by, so «which part» never depends on the order
+/// blows happened to land in.</para>
+/// </summary>
+public enum BodyPart
+{
+    Head,
+    Torso,
+    Arm,
+    Leg,
+}
+
+/// <summary>
+/// The four parts, once, in enum order. Everything that walks the body walks
+/// this list, so a fifth part would be added in one place and would appear in
+/// the canonical document, the panel and the label without any of them being
+/// edited.
+/// </summary>
+public static class BodyParts
+{
+    public const int Count = 4;
+
+    public static IReadOnlyList<BodyPart> All { get; } =
+        [BodyPart.Head, BodyPart.Torso, BodyPart.Arm, BodyPart.Leg];
+}
+
+/// <summary>
+/// One injured part of one creature: where, and how badly.
+///
+/// <para>Only parts that carry something are published. A creature nobody has
+/// reached carries an empty list, which is the same shape as
+/// <c>injury = none</c> and is what makes the two readings impossible to
+/// disagree.</para>
+/// </summary>
+public sealed record PrototypeInjurySnapshot(BodyPart Part, InjuryKind Severity);
+
+/// <summary>
 /// The closed enumeration of signs of judgement a player may pass on one
 /// creature (ADR 0019). It is a list of <b>judgements</b> and not of actions:
 /// every value here is walked through the five conditions of admissibility in
@@ -258,7 +302,20 @@ public sealed record PrototypeCreatureSnapshot(
     // Appended on purpose, like every section added since v2. Fear, benefit and
     // grudge with their named terms: what this creature is worth to the domain,
     // and out of what.
-    PrototypeLoyaltySnapshot Loyalty);
+    PrototypeLoyaltySnapshot Loyalty,
+    // Which parts of this creature are hurt and how badly, ordered by
+    // BodyPart. <see cref="Injury"/> above is the worst entry of this list and
+    // is derived from it, so the summary the rest of the simulation reads and
+    // the localisation the player reads can never disagree.
+    IReadOnlyList<PrototypeInjurySnapshot> Injuries,
+    // Steps a hurt leg has taken away over the party, in the same family as
+    // MoveCount and BlockedTicks above: nothing in the simulation reads it, and
+    // it is what makes the limp measurable without guessing at how much walking
+    // a wounded creature happened to have to do.
+    int StepsLostToLimp,
+    // Combat actions a hurt head has taken away over the party — the stun, in the
+    // same family as StepsLostToLimp above and read by nothing but a measurement.
+    int ActionsLostToStun);
 
 public sealed record PrototypeJobSnapshot(
     long JobId,

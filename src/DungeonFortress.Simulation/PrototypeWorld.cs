@@ -54,6 +54,22 @@ public sealed partial class PrototypeWorld
     // SimulationWorld._random, which are declared the same way; the shape is
     // held to by No_readonly_field_of_the_simulation_holds_a_mutable_struct.
     private DeterministicRandom _combatRandom;
+
+    /// <summary>
+    /// Which part of a body a blow found. Its own stream, salted apart from
+    /// combat for the reason <see cref="_raiderNameRandom"/> is: asking where a
+    /// wound landed must not move the jitter of anybody's blow.
+    ///
+    /// <para>The separation is not tidiness. It is what let Issue #409 land the
+    /// localisation of a wound as a <b>refactor with no behavioural delta at
+    /// all</b>: the shipped journals produce the identical fight, the identical
+    /// party score and the identical muster report before and after the four
+    /// parts existed, because the fight never drew from this stream. Had the
+    /// part been drawn from <see cref="_combatRandom"/>, every blow after the
+    /// first wound in the party would have had a different jitter and nothing
+    /// about the change could have been measured against what came before.</para>
+    /// </summary>
+    private DeterministicRandom _injuryRandom;
     private readonly Dictionary<GridPoint, int> _stationOccupiedTicks =
         PrototypeMap.KitchenTiles
             .Concat(PrototypeMap.AuthoredPostTiles)
@@ -136,6 +152,7 @@ public sealed partial class PrototypeWorld
         // the jitter of anybody's blow (Issue #358).
         _raiderNameRandom = new DeterministicRandom(
             commandLog.Seed ^ PrototypeRaiderNames.StreamSalt);
+        _injuryRandom = new DeterministicRandom(commandLog.Seed ^ 0x696E6A757279UL);
     }
 
     /// <summary>

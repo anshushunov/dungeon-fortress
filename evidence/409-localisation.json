@@ -1,0 +1,220 @@
+{
+  "schemaVersion": 1,
+  "issue": 409,
+  "when": "2026-08-12",
+  "checkpoint": "1 — модель локализации в симуляции, до всяких следствий",
+  "what": "Скаляр InjuryKind заменён четырьмя частями тела. Это рубеж 1 из семи: части существуют, травма присваивается и локализуется, снапшот её сериализует — и поведение боя не сдвинуто ни на тик. Следствия частей идут рубежом 2.",
+  "tree": {
+    "branch": "feature/409-localised-injury",
+    "worktree": "../_wt-409-injury",
+    "base": "origin/main = 0998b18 на момент постановки; на момент замера origin/main ушёл на 9c39b0b (PR #411, docs-only — src/ и tests/ не тронуты, поэтому «до» снималось на 9c39b0b и это тот же код)"
+  },
+  "theClaimOfThisCheckpoint": {
+    "claim": "Локализация — замена того, ЧТО записано, и ещё не замена того, ЧТО происходит. Канонический документ конца партии совпадает с документом на origin/main побайтово, если убрать из него новый массив `injuries` и новые записи журнала `injury_localised`.",
+    "whyItMatters": "Без этого свойства ни один замер рубежей 2–4 нельзя сравнить с тем, что было: каждое следствие пришлось бы мерить против дерева, которое уже сдвинулось по другой причине. Свойство держится на одном решении — часть тела тянется из своего потока PrototypeWorld._injuryRandom, а не из _combatRandom, поэтому джиттер ни одного удара не сдвинут.",
+    "command": "dotnet run --project tests/DungeonFortress.Scenarios -c Release -- --prototype --commands scenarios/prototype1/<fixture>.commands.v2.json --ticks 2400 --snapshot .snap/<tree>-<fixture>.json  # на обоих деревьях, затем сравнение JSON с удалённым ключом `injuries` и отфильтрованным reasonCode `injury_localised`",
+    "measured": {
+      "baseline": "tick 2280 — идентично",
+      "prepared": "tick 2280 — идентично",
+      "neglected": "tick 595 — идентично",
+      "lastDecisionDiffers": "ни у одного существа ни на одной фикстуре"
+    }
+  },
+  "theSameClaimFromTwoOtherDirections": {
+    "musterReport": {
+      "why": "Инструмент замера участия PR #408 читает журнал и раскладывает неучастие по reason code. Если бы бой сдвинулся, сдвинулся бы и он.",
+      "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_muster_participation\" --logger \"console;verbosity=detailed\"",
+      "result": "45 строк отчёта (MUSTER/RUNSHARE/POOLED) совпали с замером на origin/main строка в строку: diff пуст",
+      "pooled": "waves=32 onFeet=288 joined=261 share=90% absent=27 absentBy=[combat_refused_injured=18,combat_refused_starving=9] thresholdSeen=30"
+    },
+    "goldenHudFrames": {
+      "why": "Три золотых кадра HUD снимаются Godot и сравниваются с tests/golden/ui. Всё, что в них видно, — числа кадра.",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update-golden-ui.ps1 -GodotPath <godot 4.7.1 console>",
+      "result": "в каждом из трёх файлов изменился ровно один токен — восьмизначный префикс канонической контрольной суммы. renown, strength, jobs, food, raw, stone, dug, состав экипажа и весь инспектор — без изменений",
+      "diffStat": "3 files changed, 3 insertions(+), 3 deletions(-)"
+    }
+  },
+  "canonicalChecksums": {
+    "why": "Массив `injuries` присутствует у каждого существа с тика 0, поэтому контрольная сумма каждого кадра обязана сдвинуться. Это тот же класс сдвига, что дали rememberedPlaces (#117) и loyalty (#312): аддитивно, версия схемы не двигается.",
+    "command": "dotnet run --project tests/DungeonFortress.Scenarios -c Release -- --prototype --commands scenarios/prototype1/<fixture>.commands.v2.json --ticks 2400",
+    "fixtureFilesThemselves": "scenarios/prototype1/*.json НЕ изменены — это журналы команд, а не снапшоты; git status по каталогу пуст",
+    "before": {
+      "baseline": "6e2c3abbc2403efc60bda256a84c6060a7417f849d1844acbbccef955e3b4102",
+      "prepared": "8807e4f3662122e29127315c1b34872aa2b279b1d74b0c7f7bc81deaf5f29253",
+      "neglected": "3c57a5187a0df9b4c56f3ac614b6a77abfade88842d0f7d529a1cc30b938f406"
+    },
+    "after": {
+      "baseline": "dd919c3c1701a20ae278fe96b4be154ab8306aed45f8e50837b1f1f1ba20e374",
+      "prepared": "d42c921c51de9587732e88af62ae377679a511cbc23876ca4d6661bd0f0acda8",
+      "neglected": "a0330ba24b1969e292c435d9ec2c34d7e87a35fce320dc06c047a12cc9dbf600"
+    }
+  },
+  "criterion1_fourPartsExistAndAreDistinguishable": {
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~LocalisedInjury\" --logger \"console;verbosity=detailed\"",
+    "pooledOverTheMatrix": {
+      "note": "три поставляемых журнала × четыре seed (20260726..20260729)",
+      "wounds": 139,
+      "byPart": {
+        "head": 20,
+        "torso": 44,
+        "arm": 27,
+        "leg": 48
+      },
+      "light": 107,
+      "heavy": 32
+    },
+    "perParty": [
+      "baseline/20260726 wounds=15 byPart=[head=3,torso=8,arm=0,leg=4] light=12 heavy=3 carrying=3",
+      "baseline/20260727 wounds=16 byPart=[head=3,torso=1,arm=6,leg=6] light=12 heavy=4 carrying=6",
+      "baseline/20260728 wounds=20 byPart=[head=2,torso=6,arm=3,leg=9] light=14 heavy=6 carrying=5",
+      "prepared/20260726 wounds=19 byPart=[head=3,torso=9,arm=1,leg=6] light=15 heavy=4 carrying=11",
+      "prepared/20260727 wounds=19 byPart=[head=3,torso=4,arm=6,leg=6] light=15 heavy=4 carrying=8",
+      "prepared/20260728 wounds=16 byPart=[head=2,torso=3,arm=3,leg=8] light=13 heavy=3 carrying=15",
+      "baseline/20260729 wounds=19 byPart=[head=2,torso=7,arm=5,leg=5] light=16 heavy=3 carrying=7",
+      "prepared/20260729 wounds=15 byPart=[head=2,torso=6,arm=3,leg=4] light=10 heavy=5 carrying=14",
+      "neglected/* wounds=0 — владение падает до первой волны, боя нет вовсе"
+    ],
+    "whyLegOutnumbersTorsoDespiteAHigherTorsoWeight": "Вес рисует силуэт, но выпавшая часть, уже несущая не меньшую травму, уступает следующей по порядку перечисления: голова→торс→рука→нога. Торс — самая частая первая травма, поэтому он же чаще всех уступает, и ход приходит на руку и ногу. Это не перекос, а цена правила «травма не теряется»; альтернатива — молча ронять попадание в уже раненую часть, и тогда существо вставало бы с пола без единой новой отметины."
+  },
+  "criterion3_theWoundOutlivesTheWave": {
+    "howAsked": "На тике прибытия волны N>1 — сколько существ на ногах входят в неё с непустым списком частей. Читается из GetSnapshot(), а не из внутренностей.",
+    "measured": {
+      "entriesIntoALaterWave": 216,
+      "carrying": 69,
+      "share": "31%"
+    },
+    "note": "Критерий назван выполненным на этом рубеже условно: сегодня травма переживает волну по тому же правилу, что и до задачи (заживление привязано к доле здоровья). Рубеж 3 меняет заживление на потиковое по частям, и число здесь придётся переснять."
+  },
+  "invariantsHeldByTheModelItself": {
+    "The_summary_injury_is_always_the_worst_of_the_localised_ones": "зелено на каждом существе каждого опубликованного тика всех 12 партий",
+    "No_creature_carries_the_same_part_twice": "зелено там же",
+    "The_canonical_document_publishes_the_localisation_in_part_order": "зелено"
+  },
+  "suites": {
+    "simulation": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release → пройдено 370, пропущено 1, не пройдено 0",
+    "presentation": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release → пройдено 734, не пройдено 0 (после регенерации золотых кадров)"
+  },
+  "whatTheGuardsCaughtAndWhatItCost": {
+    "EventNarrationTests_and_CreatureStoryTests": "новый reason code injury_localised без предложения в ленте и без ранга в HudText.StoryWeight — оба гарда красные до того, как код попал куда-либо. Предложение добавлено, ранг — 2, рядом с остальными травмами.",
+    "A_decision_that_held_for_several_ticks_prints_its_span_and_its_count": "красная как следствие ранга 2: панель существа держит ограниченное число записей, и одна новая запись того же ранга вытеснила свёрнутую запись ранга 1 с той единственной партии, на которой проверка её читала. Свёртка не сломана — проверка расширена с одной партии на шесть (Fixtures × MatrixSeeds, обе величины файл уже объявлял). Собственное сообщение проверки называло ровно эту развилку: «this fixture stopped being the one to read it on»."
+  },
+  "afterCheckpoint2_armAndLeg": {
+    "commit": "f921761",
+    "note": "Числа рубежа 1 выше сняты до следствий и намеренно не переписаны: они доказывают отсутствие сдвига поведения. Ниже — состояние после руки и ноги, когда бой уже изменён замыслом.",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~LocalisedInjury\" --logger \"console;verbosity=detailed\"",
+    "pooled": {
+      "wounds": 140,
+      "byPart": {
+        "head": 21,
+        "torso": 43,
+        "arm": 26,
+        "leg": 50
+      },
+      "light": 109,
+      "heavy": 31,
+      "entriesIntoALaterWave": 216,
+      "carrying": 76,
+      "carryingShare": "35%"
+    },
+    "arm": {
+      "measured": "вес оружия на очко силы: раненая рука 2,88, целая 4,06 при T.damage_might_weight = 4",
+      "whyNotRawDamage": "сырой урон эту величину не измеряет — см. evidence/409-mutants.json, раздел aMutantThatFailedAndWhatItCost"
+    },
+    "leg": {
+      "measured": "потерянных шагов на тик: раненая нога 0,05, целая ровно 0 (17717 против 178843 тиков)",
+      "whyZeroOnTheWholeSide": "счётчик stepsLostToLimp двигает только хромота, поэтому вторая половина утверждения не нуждается в пороге"
+    },
+    "suites": {
+      "simulation": "пройдено 372, пропущено 1, не пройдено 0",
+      "presentation": "пройдено 735, не пройдено 0"
+    }
+  },
+  "whatIsNotDoneYet": [
+    "переизмерение двух продуктовых инвариантов мутантом по каждому кандидату (рубеж 4)",
+    "заживление по частям",
+    "представление и панель существа",
+    "контракт и фикстуры",
+    "полный verify.ps1"
+  ],
+  "afterCheckpoint3_head": {
+    "checkpoint": "3, часть первая — голова: «оглушён»",
+    "what": "Раненая голова забирает не число, а действие: тик боя целиком. Оглушённый не бьёт и не сближается, стоит на месте и говорит об этом в журнале (injury_stunned). Следствие ограничено боем самим местом вызова — StunnedThisTick спрашивают только из ActCombatant, куда попадает лишь существо в режиме Fighting.",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests --filter \"FullyQualifiedName~PrototypeLocalisedInjuryTests\" --logger \"console;verbosity=detailed\"",
+    "measuredQuantity": "actionsLostToStun на один БОЕВОЙ тик существа, отдельно по раненой и целой голове",
+    "whyFightingTicksAndNotAllTicks": "Оглушение спрашивают только в ActCombatant, поэтому раненая голова, таскающая грибы, потерять действие не может. На всех тиках подряд величина читается 0,35 против 0,00 в сотых — верное число про неверный вопрос, и слишком мелкое, чтобы напечататься.",
+    "measured": {
+      "hurtHead": "0,13 действия за боевой тик (163 боевых тика с раненой головой)",
+      "wholeHead": "ровно 0 (5266 боевых тиков)",
+      "whyZeroOnTheWholeSide": "счётчик actionsLostToStun двигает только оглушение, поэтому вторая половина утверждения не нуждается в пороге — ровно как у ноги",
+      "theStunTakesTheActionWhole": "A_stunned_creature_strikes_nobody_on_the_tick_it_is_stunned: 7 оглушённых существо-тиков на seed владельца, из них ударивших 0"
+    },
+    "theSizeWasMeasuredNotChosen": {
+      "candidates": [
+        "4/2 — prepared/20260728 закончила партию fallen на −167 там, где была raided на 761. Красными стали три проверки на одной этой клетке, среди них Preparation_outscores_its_absence_over_the_matrix. Отвергнут: следствие, которое само решает партию, — это переустановка баланса боя, а её слайс делать не должен",
+        "6/3 — партии держатся, но baseline/20260728 перестаёт давать отказы по памяти места вообще (0), и краснеет A_remembered_place_changes_what_the_creature_does_next",
+        "5/3 — оба пакета зелёные; принято"
+      ],
+      "theFindingBehindIt": "Клетка baseline/20260728 по памяти места даёт 117 отказов при периоде 5, ноль при 6 и два при 8, а на дереве, с которого взята ветка, — два. Двигает её не размер следствия, а то, какое существо оказалось ранено где. Зависимость не монотонная, и это находка о хрупкости гарда, а не о голове.",
+      "commandForTheSweep": "sed -i \"s/HeadLightStunPeriod = N/HeadLightStunPeriod = M/\" src/DungeonFortress.Simulation/PrototypeTuning.cs && dotnet test tests/DungeonFortress.Simulation.Tests --filter \"FullyQualifiedName~A_remembered_place_changes_what_the_creature_does_next\" --logger \"console;verbosity=detailed\""
+    },
+    "poolBeforeTheTorso": {
+      "wounds": 133,
+      "byPart": {
+        "head": 21,
+        "torso": 39,
+        "arm": 26,
+        "leg": 47
+      },
+      "carryingShare": "36% (78 из 216 входов в следующую волну)",
+      "armWeaponPerMight": "раненая 2,56, целая 4,03",
+      "legStepsLostPerTick": "раненая 0,06, целая ровно 0"
+    },
+    "whatTheHeavyPeriodStillCannotDo": "HeadHeavyStunPeriod сегодня почти недостижим: тяжёлая рана ставится вместе с Downed, а UpdateCombatParticipation не пускает в бой никого с Injury == Heavy, так что тяжёлая голова в бой не возвращается. Это снимет решение координатора по торсу (запись 1 #415), и после него голову надо перемерить.",
+    "collateral": [
+      "PrototypeSnapshotShapeTests — в снапшот добавлено поле actionsLostToStun (аддитивно, SchemaVersion не поднят); записанная форма обновлена",
+      "tests/golden/ui/* — перегенерированы scripts/update-golden-ui.ps1, в каждом изменился ровно один токен (контрольная сумма)",
+      "CreatureStoryTests.Every_reason_code_the_matrix_produces_is_ranked_on_purpose — injury_stunned назван рутинным по тому же доводу, что и injury_limped",
+      "CreatureStoryTests.Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel — матрица выборки расширена четвёртым seed. Пол «столько субъектов, сколько существ в партии» не тронут; на дереве, с которого взята ветка, эта проверка собирала ровно 9 при поле 9, то есть шла без запаса"
+    ],
+    "suites": {
+      "simulation": "пройдено 374, пропущено 1, не пройдено 0",
+      "presentation": "пройдено 735, не пройдено 0"
+    }
+  },
+  "afterCheckpoint3_torso": {
+    "checkpoint": "3, часть вторая — торс: решение координатора 2026-08-12, запись 1 #415",
+    "what": "Штраф готовности стал следствием ТОРСА, а не всякой раны, и тяжёлая конечность перестала исключать существо из боя. Тяжёлый торс исключает и теперь он единственный, кто исключает. InjuryLightPenalty/InjuryHeavyPenalty переименованы в TorsoLightPenalty/TorsoHeavyPenalty; значения 15 и 40 не тронуты намеренно — двигать размер одновременно со сменой того, на какую рану он отвечает, значит сделать две правки неразличимыми в замере.",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests --filter \"FullyQualifiedName~PrototypeLocalisedInjuryTests\" --logger \"console;verbosity=detailed\"",
+    "measured": {
+      "torsoReadiness": "раненый торс 31,16 против 49,85 целого (12 554 против 184 213 существо-тиков). Порог проверки — три четверти, выбран между этим замером и замером мутанта",
+      "whyThisQuantityIsTheTorsosOnlyNow": "до слайса готовность штрафовалась сводным Injury, поэтому этот же split показывал разрыв у существа с целым торсом и оторванной рукой. Это ровно та ловушка, из которой пришлось переписывать проверку руки: величина, которую двигает всякая рана, не может сказать, какая рана её двигает",
+      "refusedByWound": "94 отказа по ране за матрицу, из них с целым торсом — 0",
+      "foughtCarryingAHeavyLimb": "109 боевых существо-тиков проведены с тяжёлой рукой, ногой или головой и неразрушенным торсом — замер на коммите 1ebbc03, то есть ДО заживления по частям. До решения координатора таких тиков не могло быть ни одного. На финальном дереве число 108: заживление по частям держит раненых в койке дольше, и один тик из ста восьми ушёл вместе с этим. Оба числа названы, потому что разошлись именно они: независимый review PR #417 мерил 109 и получил разложение по двенадцати журналам с двумя десятками, а на финальном дереве разложение читается 10+11+22+50+6+9 = 108. Команда: dotnet test tests/DungeonFortress.Simulation.Tests --filter \"FullyQualifiedName~PrototypeLocalisedInjuryTests\" --logger \"console;verbosity=detailed\", строка MUSTER."
+    },
+    "whatItCostTheDomain": {
+      "partyScores": "baseline/prepared по трём seed матрицы: было 934/918/815 (prepared) и 722/673/633 (baseline) сразу после головы, стало 797/710/730 и 684/707/597. Ни одна партия не упала; Preparation_outscores_its_absence_over_the_matrix зелёная",
+      "heavyWounds": "26 -> 50 за матрицу: раненые возвращаются в строй и их снова роняют. Само по себе это и есть цена решения",
+      "carryingShare": "36% -> 29% существ входят в следующую волну с непустой локализованной травмой"
+    },
+    "theNamedRiskDidNotMaterialise": {
+      "what": "Deliberately_losing_creatures_and_stock_never_scores_better и Preparation_changes_the_deterministic_party_without_direct_orders — оба зелёные с торсом. Это условие отката, назначенное координатором до работы; мутанты по кандидатам — рубеж 4",
+      "command": "dotnet test tests/DungeonFortress.Simulation.Tests --filter \"FullyQualifiedName~Deliberately_losing_creatures_and_stock_never_scores_better|FullyQualifiedName~Preparation_changes_the_deterministic_party_without_direct_orders\""
+    },
+    "theRejectedRefinement": {
+      "what": "Порог здоровья на входе в бой (CombatJoinHealthShare = 20): «существо должно суметь встать». Основание было сильное — старый гард injury != heavy на деле означал «залечен выше двух пятых с тех пор, как его унесли с пола», а RaiseTheDowned поднимает с одним очком здоровья",
+      "whyRejected": "замером. С ним пакет дал 6 красных вместо 1, включая The_contract_invariants_hold_on_every_seed_of_the_matrix и Preparation_outscores_its_absence_over_the_matrix. Отброшен: это переустановка баланса боя, а не уточнение решения"
+    },
+    "collateralAndHowItWasRepaired": [
+      "PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next — проверка наблюдаемости возвращена на три seed, против которых правило выбиралось в #333. Четвёртый seed добавлен ранее на этой же ветке ради ДРУГОЙ проверки того же файла, чья нужда — пол выборки; правило же вида «в каждой партии» от расширения матрицы становится строже, и этого никто не решал. Порог не тронут",
+      "WorldLabelLayoutTests — семейство кадров владельца ищет сцену в поставляемых партиях по очереди, партия владельца первой. Причина: после торса на baseline/20260729 ни один налётчик не возвращается с подписью, и все одиннадцать проверок семейства падали до первого инварианта (34 красных в пакете). Ни один инвариант не ослаблен — расширился вход",
+      "WorldLabelFocusTests.The_crowd_is_what_takes_a_sentence... — цикл спрашивает подпись у тех, кто стоит один, по правилу, записанному в том же файле десятью строками выше («только общая голова может стоить подписи её фразы»). Раньше цикл спрашивал у всех, и держался лишь потому, что ни один подписанный возвращенец старых кадров не делил клетку",
+      "WorldLabelFocusTests.A_gesture_never_takes_a_name_from_a_body_on_another_cell — см. отдельный раздел ниже"
+    ],
+    "theGuardOf389AndWhatWasChanged": {
+      "finding": "Исключение гарда было уже, чем механизм, о котором он говорит. WorldLabelLayout даёт подписи места в пределах MaximumAttachmentRef = один тайл от её собственной головы, поэтому два тела на соседних клетках борются за пересекающуюся землю ПО УСТРОЙСТВУ. Гард же разрешал потерю имени только телу на той же самой клетке",
+      "measured": "На всех трёх партиях, к которым откатывается семейство кадров, потеря ровно в одном тайле и число названных тел не падает: 4 против 4 на 20260726 и 20260727, 5 против 5 на 20260728",
+      "whatWasChanged": "Исключение расширено с «та же клетка» до «в пределах одного тайла», со ссылкой на MaximumAttachmentRef. Одновременно добавлена компенсирующая клаузула, которой раньше не было: жест не имеет права оставить кадр с МЕНЬШИМ числом названных тел, чем в покое. Дефект, ради которого #389 заводилась, — наведение на своё существо уводило карту волны 4 с трёх имён налётчиков на одно — эта клаузула ловит независимо от клеток",
+      "whoRules": "Это ослабление чужого гарда, и исход по нему выносит независимый review PR, а не исполнитель. Названо отдельным разделом тела PR"
+    }
+  }
+}

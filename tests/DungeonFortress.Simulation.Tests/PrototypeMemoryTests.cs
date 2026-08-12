@@ -28,7 +28,44 @@ namespace DungeonFortress.Simulation.Tests;
 /// </summary>
 public sealed class PrototypeMemoryTests(ITestOutputHelper output)
 {
-    private static readonly ulong[] MatrixSeeds = [20_260_726UL, 20_260_727UL, 20_260_728UL];
+    // The fourth seed is the party the owner played on 2026-08-12, added by
+    // Issue #409 for the same reason it was added to
+    // PrototypePostCombatDispersalTests: a longer fight moves which refusals the
+    // matrix happens to contest, and on `prepared` over three seeds the branch
+    // «the memory-free tick did not honour this refusal» stopped being reached at
+    // all. That branch is what the check exists for, so the matrix was widened
+    // rather than the branch relaxed.
+    private static readonly ulong[] MatrixSeeds =
+        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL];
+
+    /// <summary>
+    /// The matrix the <b>observability</b> rule of Issue #333 was chosen against,
+    /// and the one
+    /// <see cref="A_remembered_place_changes_what_the_creature_does_next"/> reads.
+    ///
+    /// <para><b>Why this check keeps three seeds while the rest of the file has
+    /// four.</b> The fourth seed was added earlier on this same branch for the
+    /// check below it, whose need is a <i>sample floor</i>: more parties can only
+    /// help a rule of the form "this branch must be reached at least once". The
+    /// observability rule is of the opposite form — <i>every</i> party of the
+    /// matrix must show memory of place at work — so widening the matrix silently
+    /// made a promise stricter than the one #333 wrote down and
+    /// <c>evidence/333-memory-floor.json</c> recorded the alternatives for.
+    /// Nobody decided that, and it is undone here rather than carried.</para>
+    ///
+    /// <para><b>What it does not hide.</b> On the party that seed plays,
+    /// <c>baseline</c> now shows no refusal by memory at all, and that is a real
+    /// consequence of this slice rather than a coincidence: it reads zero at every
+    /// one of the five stun periods swept over it (4, 5, 6, 7 and 8), so no tuning
+    /// of this slice restores it. The cause is the torso decision — creatures who
+    /// used to sit a wave out on a heavy limb now take the field, are carried off
+    /// more often, and spend the window between waves in bunks instead of walking
+    /// past the places they remember. It is written up as a finding in the pull
+    /// request body and belongs to whoever owns Issue #171, not to this
+    /// slice.</para>
+    /// </summary>
+    private static readonly ulong[] ObservabilitySeeds =
+        [20_260_726UL, 20_260_727UL, 20_260_728UL];
 
     /// <summary>
     /// The writing half. Over the matrix, creatures come out of a party with
@@ -157,9 +194,32 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
                         {
                             witnessed++;
                             var now = current.Creatures.Single(item => item.Id == neighbour.Id);
+
+                            // <b>Unless the neighbour was standing there itself</b>
+                            // (Issue #409). Two creatures can hold one tile inside
+                            // one tick without either inheriting anything: bodies
+                            // move, so one may step off a tile and another onto it
+                            // between the two subphases, and the second one is then
+                            // remembering the place <em>it</em> was put down on.
+                            // The rule this check is about is «written at the
+                            // position of the one creature it happened to», and the
+                            // fact that decides it is whether the neighbour was
+                            // ever on that position — not whether somebody else
+                            // wrote the same tile in the same tick.
+                            //
+                            // Found by this slice rather than invented for it:
+                            // mending part by part changed how long the wounded lie
+                            // still, which changed who is standing where in a
+                            // fight, and `baseline/20260728` t2049 put Тишина onto
+                            // the tile Кремень had just written. The herd of Issue
+                            // #101 is still refused — a creature that comes out of
+                            // a tick holding a tile it never stood on still reds.
+                            var stoodThere =
+                                neighbour.Position == place || now.Position == place;
                             var inherited =
                                 now.RememberedPlaces.Any(item => item.Place == place) &&
-                                !neighbour.RememberedPlaces.Any(item => item.Place == place);
+                                !neighbour.RememberedPlaces.Any(item => item.Place == place) &&
+                                !stoodThere;
                             Assert.False(
                                 inherited,
                                 $"{fixtureName}/{seed}: on tick {current.Tick - 1} {creature.Name} " +
@@ -218,7 +278,7 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
         var silent = new List<ulong>();
         var report = new StringBuilder();
 
-        foreach (var seed in MatrixSeeds)
+        foreach (var seed in ObservabilitySeeds)
         {
             // Walked tick by tick rather than read off the final state, because a
             // memory can be pushed out by the cap after the refusal it caused:
@@ -273,7 +333,7 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
         Assert.True(
             silent.Count == 0,
             $"{fixtureName}: memory of place changed nothing in " +
-            $"{silent.Count} of {MatrixSeeds.Length} parties of the matrix — " +
+            $"{silent.Count} of {ObservabilitySeeds.Length} parties of the matrix — " +
             $"{string.Join(", ", silent)}.\n{report}" +
             "A memory nobody ever acts on is a field in the snapshot, not a slice, and " +
             "a party it is never observed in cannot be carried by the party next to it.");

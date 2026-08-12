@@ -1,3 +1,5 @@
+using DungeonFortress.Simulation;
+
 using Xunit;
 
 namespace DungeonFortress.Presentation.Tests;
@@ -196,7 +198,7 @@ public sealed class BodyMotionAdapterTests
         var bob = Assert.Single(AdapterSource.CallsTo(
             push,
             $"{nameof(BodyMotion)}.{nameof(BodyMotion.BobOffsetRef)}"));
-        Assert.Equal(2, bob.Arguments.Count);
+        Assert.Equal(3, bob.Arguments.Count);
         Assert.Contains(
             $"{nameof(BodyMotion)}.{nameof(BodyMotion.PathCells)}(",
             bob.Arguments[0],
@@ -205,6 +207,17 @@ public sealed class BodyMotionAdapterTests
         // "Walking" is the body's own two cells and nothing else: not a mode, not
         // a speed, not a timer.
         Assert.Contains("from != to", bob.Arguments[1], StringComparison.Ordinal);
+
+        // And the third argument is the limp of Issue #409, which is read off the
+        // published snapshot rather than off anything the view remembers. A gait
+        // that limped from a field of the adapter would be the drawing inventing a
+        // wound, and a replay of the same party would not reproduce it.
+        Assert.Contains("IsLimping(body)", bob.Arguments[2], StringComparison.Ordinal);
+        Assert.Contains(
+            $"{nameof(BodyPart)}.{nameof(BodyPart.Leg)}",
+            AdapterSource.Body("IsLimping"),
+            StringComparison.Ordinal);
+        Assert.Contains("_state!.Creatures", AdapterSource.Body("IsLimping"), StringComparison.Ordinal);
 
         var path = Assert.Single(AdapterSource.CallsTo(
             push,

@@ -169,27 +169,67 @@ public sealed partial class PrototypeWorld
 
             creature.Hp = Math.Min(
                 creature.MaxHp, creature.Hp + PrototypeTuning.HpRecoveryStep);
-            var mended = creature.Injury switch
-            {
-                InjuryKind.Heavy when creature.Hp * 100 >
-                    creature.MaxHp * PrototypeTuning.LightInjuryShare => InjuryKind.Light,
-                InjuryKind.Light when creature.Hp >= creature.MaxHp => InjuryKind.None,
-                _ => creature.Injury,
-            };
-            if (mended == creature.Injury)
+            // <b>One part per period, worst first</b> (Issue #409, scope item 3:
+            // «заживление идёт по частям и стоит времени в койке»). The rule that
+            // decides <b>whether</b> a part may close is untouched — the health
+            // share that set a wound is still the health share that closes it —
+            // and what is new is that a period closes one of them rather than all
+            // of them at once.
+            //
+            // Applied to all four, localisation was free: a creature with a ruined
+            // leg, a bad arm and a cracked head left the bunk on the same tick as
+            // one with a bruised arm, so «where» never cost the domain anything
+            // and the window between two waves was worth the same whatever the
+            // last one did to anybody. One part per period is what turns a number
+            // of wounds into a number of ticks somebody has to lie still for,
+            // which is «травма переживает бой» written on the domain's side of the
+            // ledger rather than on the creature's.
+            //
+            // Worst first, because the worst part is the one deciding everything
+            // else: <see cref="CreatureState.Injury"/> is the worst of the four and
+            // it is what the roll call, the readiness term and the mirror all read,
+            // so mending the worst is mending the thing actually keeping this
+            // creature out of the next fight. Ties go to <see cref="BodyPart"/>'s
+            // own order, so two equally bad wounds never make the order of healing
+            // depend on the order the blows happened to land in.
+            var worst = BodyParts.All
+                .Where(item => creature.PartInjury(item) != InjuryKind.None)
+                .OrderByDescending(creature.PartInjury)
+                .ThenBy(item => item)
+                .Cast<BodyPart?>()
+                .FirstOrDefault();
+            if (worst is not { } part)
             {
                 continue;
             }
 
-            creature.Injury = mended;
+            var mendedPart = creature.PartInjury(part) switch
+            {
+                InjuryKind.Heavy when creature.Hp * 100 >
+                    creature.MaxHp * PrototypeTuning.LightInjuryShare => InjuryKind.Light,
+                InjuryKind.Light when creature.Hp >= creature.MaxHp => InjuryKind.None,
+                var unchanged => unchanged,
+            };
+            if (mendedPart == creature.PartInjury(part))
+            {
+                continue;
+            }
+
+            creature.SetPartInjury(part, mendedPart);
             creature.RecoveryTicks = 0;
             RecordDecision(
                 creature,
-                mended == InjuryKind.None ? "injury_healed" : "injury_mending",
+                creature.Injury == InjuryKind.None ? "injury_healed" : "injury_mending",
                 new Dictionary<string, int>
                 {
                     ["hp"] = creature.Hp,
                     ["maxHp"] = creature.MaxHp,
+                    // Which part closed this period. Without it the document says
+                    // «is mending» four times over and never says what changed, and
+                    // «what is he still lying there for» becomes a question only a
+                    // diff of two snapshots can answer.
+                    ["part"] = (int)part,
+                    ["severity"] = (int)mendedPart,
                 },
                 JobKind.Rest);
         }

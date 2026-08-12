@@ -241,6 +241,68 @@ public sealed class PrototypeMusterParticipationTests(ITestOutputHelper output)
             $"thresholdSeen={string.Join('/', waves.SelectMany(wave => wave.ThresholdsSeen).Distinct().Order())}";
     }
 
+    /// <summary>
+    /// What the roll call's own distance test walks over: rock, plus the tiles the
+    /// player has forbidden. It is the same set <c>PrototypeWorld.DistanceToTheFight</c>
+    /// hands to the map — bodies are deliberately not in it, because that method
+    /// does not put them there either, and a harness that walked round bodies
+    /// would be measuring a different rule from the one it is checking.
+    /// </summary>
+    private static HashSet<GridPoint> WallsOf(PrototypeSnapshot state)
+    {
+        var walls = new HashSet<GridPoint>(state.Map.RockTiles);
+        walls.UnionWith(state.Zones[ZoneKind.Forbidden]);
+        return walls;
+    }
+
+    /// <summary>
+    /// Steps from one tile to another over <paramref name="walls"/>, or
+    /// <c>null</c> when there is no way. Breadth-first, four-neighbour, in the
+    /// map's own visiting order — the same shape as <c>PrototypeMap.Distance</c>,
+    /// restated here because the map is internal to the simulation assembly.
+    /// </summary>
+    private static int? Walk(GridPoint start, GridPoint target, IReadOnlySet<GridPoint> walls)
+    {
+        if (start == target)
+        {
+            return 0;
+        }
+
+        var visited = new HashSet<GridPoint> { start };
+        var queue = new Queue<(GridPoint Tile, int Steps)>();
+        queue.Enqueue((start, 0));
+        while (queue.TryDequeue(out var current))
+        {
+            foreach (var next in Neighbors(current.Tile))
+            {
+                if (next.X < 0 || next.X >= PrototypeTuning.MapWidth ||
+                    next.Y < 0 || next.Y >= PrototypeTuning.MapHeight ||
+                    walls.Contains(next) ||
+                    !visited.Add(next))
+                {
+                    continue;
+                }
+
+                if (next == target)
+                {
+                    return current.Steps + 1;
+                }
+
+                queue.Enqueue((next, current.Steps + 1));
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<GridPoint> Neighbors(GridPoint point)
+    {
+        yield return new GridPoint(point.X, point.Y - 1);
+        yield return new GridPoint(point.X + 1, point.Y);
+        yield return new GridPoint(point.X, point.Y + 1);
+        yield return new GridPoint(point.X - 1, point.Y);
+    }
+
     private static Measurement Measure(string fixtureName, ulong seed)
     {
         var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
@@ -364,16 +426,33 @@ public sealed class PrototypeMusterParticipationTests(ITestOutputHelper output)
                 // disagree — the creature was turned away for being far from the
                 // larder while a raider stood near it.
                 //
-                // Manhattan and not a path, and it is therefore an indicator and
-                // not a verdict: Manhattan never exceeds the walk, so a small one
-                // does not prove the walk was short. It is read off the snapshot
-                // at the end of the tick, one phase after the roll call, so the
-                // raider may have taken a step since. Both approximations are why
-                // this is reported and not asserted on.
-                var nearestRaider = current.Raiders
+                // <b>The walk and not Manhattan, and read off the board the roll
+                // call itself saw.</b> Both halves are repairs Issue #409 made,
+                // and both were forced by a false accusation rather than chosen.
+                //
+                // This used to compare Manhattan against the radius, and the
+                // comment here said in as many words that Manhattan is «an
+                // indicator and not a verdict» because it never exceeds the walk —
+                // and then the check below asserted on it anyway. The rule of 10.2
+                // is about the walk, so a raider six tiles away with a wall between
+                // is a raider the rule does not admit, and Manhattan cannot tell
+                // that from a raider six tiles away down a corridor. The
+                // localised-injury slice moved the party into exactly that case:
+                // baseline/20260726 at t2020, a creature refused with toLarder=11
+                // while a raider stood at Manhattan 6 and more than
+                // T.engage_radius of walking away.
+                //
+                // Positions come from `previous` for the second reason: the roll
+                // call runs in phase 4, before anybody moves, so the board at the
+                // start of the tick is the board it decided on. `current` is the
+                // board after the raiders have taken their step.
+                var seenByTheRollCall = PositionOf(previous, entry.CreatureId);
+                var walls = WallsOf(previous);
+                var nearestRaider = previous.Raiders
                     .Where(raider => raider.Mode == RaiderMode.Raiding)
-                    .Select(raider => Math.Abs(raider.Position.X - PositionOf(current, entry.CreatureId).X) +
-                        Math.Abs(raider.Position.Y - PositionOf(current, entry.CreatureId).Y))
+                    .Select(raider => Walk(seenByTheRollCall, raider.Position, walls))
+                    .Where(steps => steps is not null)
+                    .Select(steps => steps!.Value)
                     .DefaultIfEmpty(int.MaxValue)
                     .Min();
                 if (nearestRaider <= PrototypeTuning.EngageRadius)

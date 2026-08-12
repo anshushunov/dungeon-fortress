@@ -91,12 +91,33 @@ public sealed partial class PrototypeWorld
         foreach (var creature in _creatures.Where(c => c.Mode is not (CreatureMode.Fighting or CreatureMode.Fled or CreatureMode.Downed)).OrderBy(c => c.Id))
         {
             var failed = new Dictionary<string, int> { ["wave"] = wave.Number };
-            if (creature.Injury == InjuryKind.Heavy)
+
+            // <b>A ruined body keeps a creature out of the fight; a ruined limb no
+            // longer does</b> (Issue #409, coordinator's decision of 2026-08-12,
+            // record 1 of #415). The gate used to read the summary `Injury`, the
+            // worst of the four parts, so a heavy arm, leg or head excluded a
+            // creature as surely as a heavy torso.
+            //
+            // The reason it had to change is not that the old rule was harsh but
+            // that it made the pitch's own sentence unreachable. 6.13 names the
+            // consequences of a wound inside a fight — «по руке — роняет оружие,
+            // по ноге — хромает и не убегает, по голове — оглушён» — and a
+            // creature the arm keeps out of the fight never drops a weapon in one.
+            // The three consequences this slice adds would have been written for a
+            // creature that is never there to have them.
+            //
+            // Measured before the change and quoted here because it is what the
+            // owner noticed on 2026-08-12: a heavy wound was the largest single
+            // cause of absence, 18 of 27 over the seed matrix (PR #408). What
+            // replaces it is not "nobody is excluded" — a heavy torso still is,
+            // and it is now the only thing that is.
+            if (creature.PartInjury(BodyPart.Torso) == InjuryKind.Heavy)
             {
                 failed["injured"] = 1;
                 RecordDecision(creature, "combat_refused_injured", failed);
                 continue;
             }
+
             if (creature.Satiety < PrototypeTuning.CombatJoinSatiety)
             {
                 failed["satiety"] = creature.Satiety;
@@ -235,6 +256,29 @@ public sealed partial class PrototypeWorld
 
     private void ActCombatant(CreatureState creature)
     {
+        // The stun (Issue #409). It sits above the target search, because a
+        // stunned creature has not looked for anybody: what a hurt head takes
+        // away is the action, whole, and there is no half of it left to spend on
+        // closing the distance.
+        //
+        // It says so in the journal, and for the reason the limp already learned:
+        // contract 11 promises that a creature which does not move is a creature
+        // that said why, and a fighter walking towards a raider is a creature
+        // that would have moved. The counter beside it is what a measurement
+        // reads, because folding merges two stuns a tick apart into one entry.
+        if (StunnedThisTick(creature))
+        {
+            creature.ActionsLostToStun++;
+            RecordDecision(
+                creature,
+                "injury_stunned",
+                new Dictionary<string, int>
+                {
+                    ["severity"] = (int)creature.PartInjury(BodyPart.Head),
+                });
+            return;
+        }
+
         var target = _raiders.Where(raider => raider.Mode == RaiderMode.Raiding)
             .OrderBy(raider => Manhattan(creature.Position, raider.Position))
             .ThenBy(raider => raider.Id)
@@ -258,7 +302,7 @@ public sealed partial class PrototypeWorld
         }
 
         var damage = Math.Max(PrototypeTuning.DamageFloor,
-            creature.Might * PrototypeTuning.DamageMightWeight +
+            WeaponWeight(creature) +
             ComputeReadiness(creature) / PrototypeTuning.DamageReadinessDivisor +
             CombatJitter(PrototypeTuning.DamageJitter));
         target.Hp -= damage;
@@ -387,13 +431,13 @@ public sealed partial class PrototypeWorld
                 defender.Hp -= damage;
                 if (defender.Hp * 100 <= defender.MaxHp * PrototypeTuning.LightInjuryShare && defender.Injury == InjuryKind.None)
                 {
-                    defender.Injury = InjuryKind.Light;
+                    Wound(defender, InjuryKind.Light, raider.Id);
                     defender.RecoveryTicks = 0;
                 }
                 if (defender.Hp <= 0)
                 {
                     defender.Hp = 0;
-                    defender.Injury = InjuryKind.Heavy;
+                    Wound(defender, InjuryKind.Heavy, raider.Id);
                     defender.Mode = CreatureMode.Downed;
                     CurrentWave()?.CountDefenderDowned();
                     Remember(defender, "wound");
@@ -826,7 +870,7 @@ public sealed partial class PrototypeWorld
     /// </summary>
     private static bool CanAnswerTheCall(CreatureState creature) =>
         creature.Mode != CreatureMode.Downed &&
-        creature.Injury != InjuryKind.Heavy &&
+        creature.PartInjury(BodyPart.Torso) != InjuryKind.Heavy &&
         creature.Satiety >= PrototypeTuning.CombatJoinSatiety;
 
     /// <summary>
@@ -925,6 +969,150 @@ public sealed partial class PrototypeWorld
         place.Cause == "wound" ? "refused_place_of_wound" : "refused_place_of_panic";
 
     private int CombatJitter(int amplitude) => _combatRandom.NextInt32(amplitude * 2 + 1) - amplitude;
+
+    /// <summary>
+    /// What this creature's own strength puts into a blow, after the hand that
+    /// holds the weapon is taken into account. It is the first of the four
+    /// consequences of Issue #409 and the pitch's own words for the arm:
+    /// «по руке — роняет оружие».
+    ///
+    /// <para><b>Why the might term and not a flat subtraction.</b> The blow has
+    /// three parts — what the creature swings
+    /// (<see cref="PrototypeTuning.DamageMightWeight"/> times its might), how fit
+    /// it is to swing it (readiness) and the scatter. The weapon is the first of
+    /// them: it is the only term that is about the arm rather than about the
+    /// whole body, so it is the only one a hurt arm may take away. Readiness
+    /// belongs to the torso (see <see cref="ComputeReadiness"/>) and taking it
+    /// here as well would make one wound charge twice.</para>
+    ///
+    /// <para>A creature whose arm is gone is not disarmed of everything: what is
+    /// left is readiness, the scatter and
+    /// <see cref="PrototypeTuning.DamageFloor"/>, so it still fights and still
+    /// finishes a raider who was nearly down. That is deliberate — «оглушён,
+    /// хромает, роняет оружие» is a list of things a creature keeps fighting
+    /// through, and a wound that removed a fighter outright would be the
+    /// exclusion the slice exists to replace.</para>
+    /// </summary>
+    /// <summary>
+    /// Whether a hurt head takes this creature's combat action away on this tick
+    /// — «по голове — оглушён» (pitch 6.13), the third of the four consequences
+    /// of Issue #409.
+    ///
+    /// <para><b>Bounded to the fight by where it is asked, not by a test.</b>
+    /// The only caller is <see cref="ActCombatant"/>, and
+    /// <see cref="ActCreatures"/> reaches that only for a creature in
+    /// <see cref="CreatureMode.Fighting"/>. The limp had to name the bound in a
+    /// condition of its own because <see cref="Move"/> is every kind of walking;
+    /// the stun needs no such condition, and giving it one would be a second
+    /// place for the same rule to be wrong.</para>
+    ///
+    /// <para><b>A period, staggered by creature id, and offset by one from the
+    /// limp's.</b> The stagger is the limp's own argument — a party stunned in
+    /// unison reads as the game stuttering rather than as hurt heads. The offset
+    /// is about a creature carrying both: at a shared period of two the two
+    /// consequences would land on exactly the same ticks, the stun would swallow
+    /// the step the limp was going to take, and one of the two wounds would come
+    /// out free. Offset by one they alternate, and each costs what it costs.</para>
+    ///
+    /// <para>A pure function of the tick and the wound, like the limp: no state
+    /// of its own, no stream of its own, and a replay reproduces every lost
+    /// action exactly.</para>
+    /// </summary>
+    private bool StunnedThisTick(CreatureState creature)
+    {
+        var period = creature.PartInjury(BodyPart.Head) switch
+        {
+            InjuryKind.Heavy => PrototypeTuning.HeadHeavyStunPeriod,
+            InjuryKind.Light => PrototypeTuning.HeadLightStunPeriod,
+            _ => 0,
+        };
+        return period > 0 && (CurrentTick + creature.Id + 1) % period == 0;
+    }
+
+    private static int WeaponWeight(CreatureState creature)
+    {
+        var full = creature.Might * PrototypeTuning.DamageMightWeight;
+        var percent = creature.PartInjury(BodyPart.Arm) switch
+        {
+            InjuryKind.Heavy => PrototypeTuning.ArmHeavyMightPercent,
+            InjuryKind.Light => PrototypeTuning.ArmLightMightPercent,
+            _ => 100,
+        };
+        return full * percent / 100;
+    }
+
+    /// <summary>
+    /// A blow finds a part of a body and leaves something on it.
+    ///
+    /// <para>This method is the whole of «следствие вместо вычитания числа»
+    /// (pitch 6.13) on the receiving side. Before Issue #409 the two call sites
+    /// above assigned one scalar; now they name a severity and this decides
+    /// <b>where</b>. Nothing else in the simulation writes a part, so the answer
+    /// to «how did this creature end up with a bad leg» is always one draw from
+    /// <see cref="_injuryRandom"/> and one sentence in the journal.</para>
+    ///
+    /// <para><b>A wound is never lost.</b> The draw picks a part by
+    /// <see cref="PrototypeTuning.InjuryPartWeights"/>; if that part already
+    /// carries at least this much, the walk continues through the parts in enum
+    /// order, wrapping, until one is found that carries less. Without that walk
+    /// a creature that had already been hurt in the torso would silently take a
+    /// second torso wound and the player would see a body get up unchanged from
+    /// a blow that put it on the floor. If every part already carries at least
+    /// this severity there is genuinely nothing to add, and the method says so
+    /// by writing nothing.</para>
+    /// </summary>
+    private void Wound(CreatureState creature, InjuryKind severity, int raiderId)
+    {
+        var drawn = DrawBodyPart();
+        for (var step = 0; step < BodyParts.Count; step++)
+        {
+            var part = (BodyPart)((drawn + step) % BodyParts.Count);
+            if (creature.PartInjury(part) >= severity)
+            {
+                continue;
+            }
+
+            creature.SetPartInjury(part, severity);
+            RecordDecision(
+                creature,
+                "injury_localised",
+                new Dictionary<string, int>
+                {
+                    ["part"] = (int)part,
+                    ["severity"] = (int)severity,
+                    ["raiderId"] = raiderId,
+                });
+            return;
+        }
+    }
+
+    /// <summary>
+    /// Which part this blow found, by the silhouette weights of
+    /// <see cref="PrototypeTuning.InjuryPartWeights"/>. Returns the index into
+    /// <see cref="BodyParts.All"/> rather than the enum value, because the
+    /// caller walks on from it.
+    /// </summary>
+    private int DrawBodyPart()
+    {
+        var weights = PrototypeTuning.InjuryPartWeights;
+        var total = 0;
+        foreach (var weight in weights)
+        {
+            total += weight;
+        }
+
+        var roll = _injuryRandom.NextInt32(total);
+        for (var index = 0; index < weights.Length; index++)
+        {
+            roll -= weights[index];
+            if (roll < 0)
+            {
+                return index;
+            }
+        }
+
+        return weights.Length - 1;
+    }
 
     private void DropRaiderMeals(RaiderState raider)
     {

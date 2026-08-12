@@ -344,7 +344,14 @@ public static class HudText
             or "verdict_punished_without_fault" or "verdict_ignored"
             or "combat_refused_grudge" => 3,
 
-        "combat_fled_morale" or "combat_downed" or "injury_tended" or "injury_mending"
+        // `injury_localised` sits with the other wounds and not above them
+        // (Issue #409). It is the sentence that gives a creature the thing the
+        // player will remember it by, but a blow to an arm is not a bigger fact
+        // about a party than being carried off the floor, and ranking it higher
+        // would push `combat_downed` off the story of the creature it happened
+        // to.
+        "combat_fled_morale" or "combat_downed" or "injury_localised"
+            or "injury_tended" or "injury_mending"
             or "injury_healed" => 2,
 
         "combat_joined" or "combat_returned" or "combat_raider_downed"
@@ -981,6 +988,78 @@ public static class HudText
         CreatureMode.Moving => "MOVE",
         _ => "READY",
     };
+
+    /// <summary>
+    /// What a body part is called where the player reads it. Russian, like the
+    /// returning raider's caption beside it and unlike the state tokens, because
+    /// these words are the ones the pitch itself uses in 6.13 — «голова, торс,
+    /// рука, нога» — and the whole promise is that the player can say afterwards
+    /// which one it was.
+    /// </summary>
+    public static string BodyPartName(BodyPart part) => part switch
+    {
+        BodyPart.Head => "голова",
+        BodyPart.Torso => "торс",
+        BodyPart.Arm => "рука",
+        BodyPart.Leg => "нога",
+        _ => part.ToString(),
+    };
+
+    /// <summary>
+    /// The mark a hurt creature carries over its head: the worst-hurt part, named,
+    /// with an exclamation mark when it is the bad kind. Empty for a whole
+    /// creature, and empty is the point — the mark is what makes one body
+    /// different from the eight beside it, so eight of them wearing one would say
+    /// nothing.
+    ///
+    /// <para><b>One part and not the list.</b> A creature may carry up to four, and
+    /// the panel names all of them; over the head there is room for one line
+    /// shared with a name and a state, and a label that grew with the wounds would
+    /// be longest exactly in the frame that has least room —
+    /// <see cref="WorldLabelLayout"/> drops a label it cannot place, so a longer
+    /// label is a label more likely not to be drawn at all. The worst part is the
+    /// one shown for the same reason <c>injury</c> is the worst of
+    /// <c>injuries</c>: it is the answer to «how bad is this one», asked of a
+    /// glance.</para>
+    ///
+    /// <para><b>Ties go to the pitch's own order</b> — голова, торс, рука, нога —
+    /// which is <see cref="BodyPart"/>'s order, so two equally bad wounds never
+    /// make the mark depend on which blow landed first.</para>
+    /// </summary>
+    public static string CreatureInjuryShort(PrototypeCreatureSnapshot creature)
+    {
+        ArgumentNullException.ThrowIfNull(creature);
+        var worst = creature.Injuries
+            .OrderByDescending(injury => injury.Severity)
+            .ThenBy(injury => injury.Part)
+            .FirstOrDefault();
+        return worst is null
+            ? string.Empty
+            : BodyPartName(worst.Part) + (worst.Severity == InjuryKind.Heavy ? "!" : string.Empty);
+    }
+
+    /// <summary>
+    /// Every hurt part of one creature, worst first then in the pitch's order, as
+    /// the panel prints them. «нога тяжело, рука легко» — the severity in words
+    /// because the panel has room for words and a glance does not.
+    /// </summary>
+    public static string CreatureInjuryLong(PrototypeCreatureSnapshot creature)
+    {
+        ArgumentNullException.ThrowIfNull(creature);
+        if (creature.Injuries.Count == 0)
+        {
+            return "цел";
+        }
+
+        return string.Join(
+            ", ",
+            creature.Injuries
+                .OrderByDescending(injury => injury.Severity)
+                .ThenBy(injury => injury.Part)
+                .Select(injury =>
+                    $"{BodyPartName(injury.Part)} " +
+                    (injury.Severity == InjuryKind.Heavy ? "тяжело" : "легко")));
+    }
 
     public static string CreatureLifeState(PrototypeCreatureSnapshot creature) => creature.Mode switch
     {

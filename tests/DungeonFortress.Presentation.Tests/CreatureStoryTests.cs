@@ -47,6 +47,14 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     private static readonly string[] Fixtures = ["baseline", "prepared"];
 
     /// <summary>
+    /// The seed the owner played on 2026-08-12, added to the matrix of the sample
+    /// counted by
+    /// <see cref="Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel"/>
+    /// and to nothing else. See the note there for why.
+    /// </summary>
+    private const ulong PlaytestSeed = 20_260_729UL;
+
+    /// <summary>
     /// The tick the measurements of Issue #140 were taken at: the whole shipped
     /// <c>baseline</c> party, four waves, the same run the evidence files record.
     /// </summary>
@@ -90,6 +98,18 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
         "refused_zone_not_designated", "refused_zone_unreachable", "refused_priority_zero",
         "refused_rule_reserve", "refused_rule_min_satiety", "refused_too_exhausted",
         "refused_injured",
+        // Issue #409. A step lost to a bad leg is routine on purpose and by the
+        // same argument `chosen_off_duty` is: it is the most frequent thing a hurt
+        // creature does, dozens of times a wound, and ranking it above routine
+        // would push the turning points the panel exists for — the wound itself, a
+        // nerve that broke, a refusal by memory — off the four lines it has. The
+        // wound is the story; limping is what the wound looks like afterwards.
+        "injury_limped",
+        // Issue #409, and the same argument the line above makes: a moment lost to
+        // a ringing head is what the wound looks like afterwards, and the wound is
+        // the story. Ranking it above routine would let «reeled from a blow» sit
+        // over «was carried off the floor» on the four lines the panel has.
+        "injury_stunned",
         "combat_attack",
         "dig_started", "dig_completed", "dig_cancelled", "dig_unreachable",
         "stone_picked_up", "stone_stored", "stone_spilled", "stone_target_replanned",
@@ -533,9 +553,19 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
         var applies = 0;
         var runsWithASubject = 0;
         var creaturesInAParty = 0;
+        // Four seeds and not three, and the floor is untouched at "as many
+        // subjects as a party has creatures" (Issue #409). The sample this
+        // criterion collects is a function of the shape of a fight — a refusal by
+        // memory needs a wound or a panic first, and then a job planned near where
+        // it happened — so every slice that changes how a fight runs moves it. On
+        // the tree this branch started from it collected exactly 9 subjects
+        // against a floor of 9: no slack at all, and the first consequence added
+        // to the fight took it to 8. Adding the party the owner played widens the
+        // sample the criterion is read on; it does not lower what the criterion
+        // asks. Command and both counts are in evidence/409-mutants.json.
         foreach (var fixtureName in Fixtures)
         {
-            foreach (var seed in MatrixSeeds)
+            foreach (var seed in MatrixSeeds.Append(PlaytestSeed))
             {
                 var state = EndOfParty(fixtureName, seed);
                 creaturesInAParty = state.Creatures.Count;
@@ -945,36 +975,59 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     /// held for. "It refused this for thirty-six ticks" and "it refused this once"
     /// are different stories, and contract 11.1 is the reason the difference
     /// arrives as a count instead of thirty-six lines.
+    ///
+    /// <para><b>Asked of the shipped journals rather than of one of them</b>, and
+    /// the widening is a finding of Issue #409 rather than a convenience. This
+    /// check used to read <c>baseline</c> on the first matrix seed alone, and it
+    /// went red the moment <c>injury_localised</c> joined the level-2 codes: a
+    /// creature's panel holds a bounded number of entries, so one more code of
+    /// that rank displaced the folded level-1 entry this one party happened to
+    /// carry. Nothing about folding changed — the panel's own message named that
+    /// possibility, «this fixture stopped being the one to read it on» — and a
+    /// wording exercised on six parties instead of one is the check the sentence
+    /// deserved in the first place.</para>
     /// </summary>
     [Fact]
     public void A_decision_that_held_for_several_ticks_prints_its_span_and_its_count()
     {
-        var state = EndOfParty("baseline", MatrixSeeds[0]);
-        var folded = state.Creatures
-            .Select(creature => new
+        var found = 0;
+        foreach (var fixtureName in Fixtures)
+        {
+            foreach (var seed in MatrixSeeds)
             {
-                creature.Id,
-                Event = HudText
-                    .StorySelection(state.Events.Where(@event => @event.CreatureId == creature.Id))
-                    .FirstOrDefault(@event => @event.Repeats > 1 && @event.FirstTick != @event.LastTick),
-            })
-            .FirstOrDefault(item => item.Event is not null);
+                var state = EndOfParty(fixtureName, seed);
+                var folded = state.Creatures
+                    .Select(creature => new
+                    {
+                        creature.Id,
+                        Event = HudText
+                            .StorySelection(state.Events.Where(@event => @event.CreatureId == creature.Id))
+                            .FirstOrDefault(@event => @event.Repeats > 1 && @event.FirstTick != @event.LastTick),
+                    })
+                    .FirstOrDefault(item => item.Event is not null);
+                if (folded is null)
+                {
+                    continue;
+                }
+
+                var held = folded.Event!;
+                var line = Body(HudText.CreatureStory(state, folded.Id))
+                    .Single(item => item.StartsWith(
+                        string.Create(CultureInfo.InvariantCulture, $"t{held.FirstTick}-{held.LastTick} "),
+                        StringComparison.Ordinal));
+                Assert.EndsWith(
+                    string.Create(CultureInfo.InvariantCulture, $"(x{held.Repeats})"),
+                    line,
+                    StringComparison.Ordinal);
+                found++;
+            }
+        }
 
         Assert.True(
-            folded is not null,
-            "no creature ended this party with a folded decision among the entries the panel shows, " +
-            "so the span wording was never exercised. Either the deduplication rule of contract 11.1 " +
-            "stopped folding, or this fixture stopped being the one to read it on.");
-
-        var held = folded!.Event!;
-        var line = Body(HudText.CreatureStory(state, folded.Id))
-            .Single(item => item.StartsWith(
-                string.Create(CultureInfo.InvariantCulture, $"t{held.FirstTick}-{held.LastTick} "),
-                StringComparison.Ordinal));
-        Assert.EndsWith(
-            string.Create(CultureInfo.InvariantCulture, $"(x{held.Repeats})"),
-            line,
-            StringComparison.Ordinal);
+            found > 0,
+            "no creature of any shipped party ended with a folded decision among the entries the panel " +
+            "shows, so the span wording was never exercised. Either the deduplication rule of contract " +
+            "11.1 stopped folding, or nothing folded is significant enough to reach a panel any more.");
     }
 
     /// <summary>

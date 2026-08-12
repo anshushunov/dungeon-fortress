@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "issue": 409,
+  "when": "2026-08-12",
+  "what": "Подстановки, показывающие, что следствие каждой локализации несущее, а не декоративное (критерий 2). Правило 9 требует красноты на каждую половину, поэтому мутант ставится на одну часть тела за раз и обязан оставить остальные проверки зелёными.",
+  "howAMutantIsRun": {
+    "tree": "feature/409-localised-injury, рабочая копия ../_wt-409-injury",
+    "rule": "Каждый прогон снят ПОСЛЕ коммита проверяемого состояния — откат мутанта по незакоммиченному файлу снёс бы саму правку (измерено на #147).",
+    "substitution": "sed -i \"s/public const int <ИМЯ> = <старое>;/public const int <ИМЯ> = <новое>;/\" src/DungeonFortress.Simulation/PrototypeTuning.cs",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~LocalisedInjury\" --logger \"console;verbosity=detailed\"",
+    "restore": "git checkout src/DungeonFortress.Simulation/PrototypeTuning.cs"
+  },
+  "baseline": {
+    "commit": "f921761",
+    "arm": "weaponPerMight hurt=2,88 whole=4,06",
+    "leg": "stepsLostPerCreatureTick hurt=0,05 whole=0 (hurtTicks=17717, wholeTicks=178843)",
+    "suite": "tests/DungeonFortress.Simulation.Tests — пройдено 372, не пройдено 0; tests/DungeonFortress.Presentation.Tests — пройдено 735, не пройдено 0"
+  },
+  "M-ARM": {
+    "part": "рука",
+    "substitution": "ArmLightMightPercent 50 -> 100 и ArmHeavyMightPercent 0 -> 100. Больше ничего.",
+    "meaning": "Раненая рука держит оружие как целая — следствие отключено целиком.",
+    "predictedBeforeTheRun": "вес оружия у раненой руки поднимается до уровня целой (около T.damage_might_weight = 4), проверка руки краснеет; нога не двигается",
+    "measured": {
+      "arm": "hurt=4,46 whole=4,08 — разрыв не просто закрылся, а сменил знак; A_hurt_arm_puts_less_of_its_own_strength_into_a_blow КРАСНАЯ",
+      "leg": "hurt=0,06 whole=0 — A_hurt_leg_loses_steps_and_a_whole_one_loses_none зелёная"
+    },
+    "verdict": "предсказание исполнено, изоляция подтверждена"
+  },
+  "M-LEG": {
+    "part": "нога",
+    "substitution": "LegLightLimpPeriod 3 -> 0 и LegHeavyLimpPeriod 2 -> 0. Ноль означает «никогда».",
+    "meaning": "Раненая нога ходит как целая — хромота отключена целиком.",
+    "predictedBeforeTheRun": "потерянных шагов становится ровно 0 на обеих сторонах, проверка ноги краснеет; рука не двигается",
+    "measured": {
+      "leg": "hurt=0 whole=0 при hurtTicks=17543 — то есть подопытных тиков столько же, а шагов не теряется ни одного; A_hurt_leg_loses_steps_and_a_whole_one_loses_none КРАСНАЯ",
+      "arm": "hurt=2,66 whole=4,08 — A_hurt_arm_puts_less_of_its_own_strength_into_a_blow зелёная"
+    },
+    "verdict": "предсказание исполнено, изоляция подтверждена"
+  },
+  "aMutantThatFailedAndWhatItCost": {
+    "when": "между коммитами f100e3b и 3ef63a4",
+    "what": "Первая проверка руки мерила сырой урон удара и утверждала «раненой рукой бьют слабее». M-ARM оставил её ЗЕЛЁНОЙ: 16,57 против 19,04 целой.",
+    "why": "Удар — это оружие + готовность/T.damage_readiness_divisor + разброс. Раненный в руку обычно ранен и где-то ещё, вторая рана стоит готовности, а готовность входит в тот же удар. Разрыв делал торс, а проверка приписывала его руке.",
+    "repair": "Мерить вес оружия отдельно: урон минус опубликованный член готовности, делённый на силу существа. Целая рука читает 4,08 — ровно константу; разброс равномерен на [-a,+a] и в среднем уходит.",
+    "whyItMatters": "Это ровно тот случай, ради которого правило 9 требует мутанта на каждую половину, а не на изменение целиком: проверка выглядела осмысленной, числа выглядели убедительно, и она не умела отличить своё следствие от чужого."
+  },
+  "notYetDone": {
+    "M-HEAD": "голова — следствие ещё не сделано (рубеж 2, часть третья)",
+    "M-TORSO": "торс — следствие ещё не сделано (рубеж 2, часть четвёртая)"
+  },
+  "M-HEAD": {
+    "part": "голова",
+    "commit": "c2b05d1 — снят после коммита головы, до торса",
+    "substitution": "HeadLightStunPeriod 5 -> 0 и HeadHeavyStunPeriod 3 -> 0. Больше ничего. Ноль означает «никогда».",
+    "meaning": "Раненая голова не теряет ни одного боевого действия — следствие отключено целиком.",
+    "predictedBeforeTheRun": "обе проверки головы краснеют; рука и нога не двигаются",
+    "measured": {
+      "head": "actionsLostPerCreatureTick hurt=0 whole=0 (было 0,13 против 0) — A_hurt_head_loses_whole_actions_and_a_whole_one_loses_none КРАСНАЯ; stunnedCreatureTicks=0 — A_stunned_creature_strikes_nobody_on_the_tick_it_is_stunned КРАСНАЯ",
+      "arm": "hurt=2,88 whole=4,06 — зелёная",
+      "leg": "hurt=0,05 whole=0 — зелёная",
+      "suite": "пройдено 8, не пройдено 2 в PrototypeLocalisedInjuryTests"
+    }
+  },
+  "M-TORSO": {
+    "part": "торс, следствие готовности",
+    "commit": "1ebbc03 — снят после коммита торса",
+    "substitution": "TorsoLightPenalty 15 -> 0 и TorsoHeavyPenalty 40 -> 0. Больше ничего.",
+    "meaning": "Раненое тело не теряет готовности — следствие торса отключено целиком.",
+    "predictedBeforeTheRun": "проверка торса краснеет; рука, нога и голова не двигаются",
+    "measured": {
+      "torso": "readiness hurt=57,20 whole=49,95 (было 31,16 против 49,85) — разрыв не просто закрылся, а сменил знак: раненые оказались ГОТОВЕЕ целых, потому что рану чаще получает тот, кто сыт и в строю. A_hurt_torso_brings_less_of_itself_to_everything КРАСНАЯ",
+      "arm": "hurt=2,29 whole=3,94 — зелёная",
+      "leg": "hurt=0,05 whole=0 — зелёная",
+      "head": "hurt=0,15 whole=0 — зелёная",
+      "threshold": "порог три четверти выбран между этими двумя замерами (0,63 с следствием и 1,15 без), а не назначен"
+    }
+  },
+  "M-GATE": {
+    "part": "торс, вторая половина: кого не пускают в бой",
+    "commit": "1ebbc03",
+    "substitution": "в UpdateCombatParticipation: creature.PartInjury(BodyPart.Torso) == InjuryKind.Heavy -> creature.Injury == InjuryKind.Heavy. Одна строка.",
+    "meaning": "Решение координатора откачено наполовину: тяжёлая конечность снова выбрасывает из боя.",
+    "predictedBeforeTheRun": "Only_a_ruined_body_is_kept_out_of_the_fight краснеет обеими клаузулами; остальные части не двигаются",
+    "measured": {
+      "muster": "refusedByWound=225, из них с ЦЕЛЫМ торсом 73 (было 0), боевых тиков с тяжёлой конечностью 0 (было 109) — КРАСНАЯ",
+      "others": "рука, нога, голова и готовность торса зелёные; пройдено 11, не пройдено 1",
+      "invariants": "этот же мутант краснит ОБА продуктовых инварианта — см. evidence/409-invariants.json, candidates.theTorsoGate"
+    }
+  }
+}
