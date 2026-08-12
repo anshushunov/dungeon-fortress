@@ -1,0 +1,13 @@
+{
+  "criterion": 5,
+  "text": "Мутант — на критерий 5 и только на него. Добавление нового нумерованного пункта обязано сделать счёт отличным от 40.",
+  "command": "rg -c '^\*\*[0-9]+\. ' docs/engineering/DEVELOPMENT_PACE.md",
+  "run_after_commit": "5457902",
+  "steps": [
+    { "step": "baseline on committed state (5457902)", "count": 40 },
+    { "step": "mutant: appended '**41. Мутант проверки счёта правил, временная строка.**' to end of file", "count": 41, "caught": true },
+    { "step": "mutant reverted (file restored from backup, git status clean)", "count": 40 }
+  ],
+  "result": "mutant caught: injecting a new numbered rule changes the count from 40 to 41, proving the criterion-5 check is sensitive to exactly the violation it guards against",
+  "scope_note": "mutant assigned only to criterion 5 per Issue #399; criteria 1, 2, 6, 7 have no assigned mutant, reason named in Issue: no mechanical cross-document consistency check exists in the project (known DEBT_LEDGER entry from 2026-08-07), and inventing one inside this task would expand scope"
+}
