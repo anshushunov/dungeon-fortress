@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "issue": 405,
+  "when": "2026-08-12, the day after the balance slice landed and the day the owner played it",
+  "what": "How much of the domain takes the field when a wave lands, measured on the tree before the balance slice and on the tree after it, over every shipped journal and the whole seed matrix. This is criterion 1 of Issue #405 — the number that says whether «не все бегут защищаться» is new.",
+  "theSentenceBeingChecked": {
+    "said": "«Ещё когда начинается атака не все бегут защищаться - возможно так и задумано, но это новое»",
+    "by": "owner, playtest of 2026-08-12",
+    "on": "main at 8977b0d, run-game.ps1 -Fixture baseline -Seed 20260729",
+    "twoClaimsInIt": [
+      "«не все» — a share, measured below per wave and per party",
+      "«это новое» — a comparison, measured below against 3b627bf, the parent of the slice"
+    ]
+  },
+  "tree": {
+    "branch": "fix/405-muster-participation",
+    "baseCommit": "8977b0d",
+    "measuredAt": "37bf0ad, the commit that adds the instrument",
+    "beforeTree": "3b627bf — the parent of 8977b0d, checked out into a throwaway worktree with the instrument file copied in and nothing else changed",
+    "baseStale": "scripts/check-base-stale.ps1 -> {\"status\":\"fresh\",\"behind\":0,\"ahead\":1,\"head\":\"37bf0ad\",\"remoteHead\":\"8977b0d\"}"
+  },
+  "howItWasMeasured": {
+    "harness": "tests/DungeonFortress.Simulation.Tests/PrototypeMusterParticipationTests.cs, added by this branch. It reads the canonical event log and GetSnapshot() only.",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_muster_participation\" --logger \"console;verbosity=detailed\"",
+    "commandForBefore": "git worktree add --detach ../_wt-405-before 8977b0d^ ; cp tests/DungeonFortress.Simulation.Tests/PrototypeMusterParticipationTests.cs ../_wt-405-before/tests/DungeonFortress.Simulation.Tests/ ; (cd ../_wt-405-before && dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_muster_participation\" --logger \"console;verbosity=detailed\")",
+    "whyTheSameFileRunsOnBothTrees": "It names no constant the slice renamed. The admission threshold is read out of the journal entry that carries it (`details.threshold` of combat_refused_starving), not out of PrototypeTuning, where it is CombatMinSatiety before the slice and CombatJoinSatiety after it.",
+    "repeatability": "The report was taken twice in a row on the after tree and the two outputs are byte-identical, sha256 7f52ecc299ace5e84c3c35abecc9c6e65f01664552d3b42bfa819090475f89e9. That is the checkpoint-1 property: the instrument re-takes the number with one command and gives the same number.",
+    "coverage": "12 parties — the three shipped journals (baseline, prepared, neglected) on four seeds: the matrix 20260726..20260728 plus 20260729, the seed the owner played."
+  },
+  "whatIsCounted": {
+    "denominator": "onFeet — every creature whose mode is not Downed on the tick the wave arrives. A body on the floor is visibly out of the fight and is counted apart, in onTheFloor.",
+    "numerator": "joined — creatures with a `combat_joined` entry carrying this wave's number, at any roll call of the wave. Joining late still counts as joining; lateness is reported separately as joinedLate.",
+    "share": "joined * 100 / onFeet, integer, per wave; pooled over waves and not as a mean of means.",
+    "absentBy": "the reason each absentee is absent for, taken from its LAST roll call of the wave — the refusal that still held when the wave ended. Counted once per creature per wave, not once per roll call.",
+    "whyTheJournalAndNotLastDecision": "The refusal is decided in phase 4 and the same creature goes on to eat, take a job and move in the phases after it, so LastDecision no longer holds the refusal by the end of the tick. The journal does."
+  },
+  "theAnswer": {
+    "isItNew": "BOTH, and the two halves must be said together or the answer misleads. Pooled over the whole matrix the share went UP after the slice — 84% before, 89% after — so the domain-wide muster did not get worse and «не все бегут» is not a new property of the game. On the party the owner actually played, baseline/20260729, it went DOWN — 94% before, 86% after, and on its third wave from 88% to 55%, four of nine standing aside. So what the owner saw IS new, on the seed he saw it on, and it is not a regression of the whole game.",
+    "whatCausedItOnHisSeed": "The admission threshold, and nothing else in the slice. Named creatures, all of them in the satiety band 20..29 — above the old threshold of 20 and below the new one of 30: wave 3 #1 Кремень (satiety 25), #2 Мотылёк (27), #6 Прель (26); wave 4 #5 Уголёк (22). Rolling the threshold back to 20 on the after tree and changing nothing else puts exactly those four back in the line and the party back to 97% (evidence/405-mutant.json, M1).",
+    "isThatDesigned": "Yes. See evidence/405-reasons.json for the decision behind each reason code."
+  },
+  "pooled": {
+    "before": {
+      "commit": "3b627bf",
+      "threshold": 20,
+      "waves": 32,
+      "onFeet": 288,
+      "joined": 243,
+      "share": "84%",
+      "absent": 45,
+      "absentBy": { "combat_absent_unreachable": 13, "combat_refused_injured": 23, "combat_refused_starving": 9 }
+    },
+    "after": {
+      "commit": "8977b0d",
+      "threshold": 30,
+      "waves": 32,
+      "onFeet": 288,
+      "joined": 257,
+      "share": "89%",
+      "absent": 31,
+      "absentBy": { "combat_absent_unreachable": 1, "combat_refused_injured": 18, "combat_refused_starving": 12 }
+    },
+    "whatMoved": "Starving refusals rose 9 -> 12, which is the threshold. Injured refusals fell 23 -> 18 and unreachable fell 13 -> 1, which is the rest of the slice. The three together net to +14 creature-slots in the line."
+  },
+  "perRun": [
+    { "run": "baseline/20260726", "beforeShare": "83%", "beforeJoined": "30/36", "afterShare": "86%", "afterJoined": "31/36" },
+    { "run": "baseline/20260727", "beforeShare": "88%", "beforeJoined": "32/36", "afterShare": "94%", "afterJoined": "34/36" },
+    { "run": "baseline/20260728", "beforeShare": "80%", "beforeJoined": "29/36", "afterShare": "97%", "afterJoined": "35/36" },
+    { "run": "prepared/20260726", "beforeShare": "88%", "beforeJoined": "32/36", "afterShare": "91%", "afterJoined": "33/36" },
+    { "run": "prepared/20260727", "beforeShare": "69%", "beforeJoined": "25/36", "afterShare": "91%", "afterJoined": "33/36" },
+    { "run": "prepared/20260728", "beforeShare": "83%", "beforeJoined": "30/36", "afterShare": "86%", "afterJoined": "31/36" },
+    { "run": "baseline/20260729", "beforeShare": "94%", "beforeJoined": "34/36", "afterShare": "86%", "afterJoined": "31/36", "note": "THE PARTY THE OWNER PLAYED. The only baseline run that got worse." },
+    { "run": "prepared/20260729", "beforeShare": "86%", "beforeJoined": "31/36", "afterShare": "80%", "afterJoined": "29/36" },
+    { "run": "neglected/20260726..29", "note": "falls before a wave ever lands, so it contributes no wave to either side and is listed to say so" }
+  ],
+  "theOwnersOwnParty": {
+    "run": "baseline/20260729",
+    "before": [
+      { "wave": 1, "onFeet": 9, "joined": 9, "share": "100%", "absent": [] },
+      { "wave": 2, "onFeet": 9, "joined": 9, "share": "100%", "absent": [] },
+      { "wave": 3, "onFeet": 9, "joined": 8, "share": "88%", "absent": ["#3 Смола combat_absent_unreachable x4 (distance=11)"] },
+      { "wave": 4, "onFeet": 9, "joined": 8, "share": "88%", "absent": ["#0 Брусок combat_absent_unreachable x4 (distance=11)"] }
+    ],
+    "after": [
+      { "wave": 1, "onFeet": 9, "joined": 9, "share": "100%", "absent": [] },
+      { "wave": 2, "onFeet": 9, "joined": 9, "share": "100%", "absent": [] },
+      { "wave": 3, "onFeet": 9, "joined": 5, "share": "55%", "absent": [
+        "#1 Кремень combat_absent_unreachable x3 (distance=13) then combat_refused_starving x2 (satiety=25, threshold=30)",
+        "#2 Мотылёк combat_absent_unreachable x4 (distance=12) then combat_refused_starving x1 (satiety=27, threshold=30)",
+        "#6 Прель combat_absent_unreachable x4 (distance=11) then combat_refused_starving x1 (satiety=26, threshold=30)",
+        "#8 Тишина combat_refused_injured x5 (injured=1)"
+      ] },
+      { "wave": 4, "onFeet": 9, "joined": 8, "share": "88%", "absent": [
+        "#5 Уголёк combat_absent_unreachable x3 (distance=11) then combat_refused_starving x2 (satiety=22, threshold=30)"
+      ] }
+    ],
+    "readingIt": "Three of the four new absentees were first turned away as unreachable while still fed, and only then fell under the threshold — they were walking to the muster and went hungry on the way. That is why the wave the owner remembers is the third one and not the first."
+  },
+  "afterTheFixOfThisBranch": {
+    "what": "The same command on the same twelve parties with the nearest-raider arm of contract 10.2 implemented (commit 3235803). No tuning number is touched: CombatJoinSatiety is still 30.",
+    "pooled": { "waves": 32, "onFeet": 288, "joined": 261, "share": "90%", "absent": 27, "absentBy": { "combat_refused_injured": 18, "combat_refused_starving": 9 } },
+    "ownersSeedBaseline20260729": { "share": "97% (35/36)", "wave3": "88% — only #8 Тишина, on a heavy wound", "wave4": "100%", "note": "the same recovery the threshold rollback of mutant M1 produced, reached without moving the threshold" },
+    "theContractIndicator": "0 on every one of the twelve parties, from 20",
+    "whatMovedAndWhy": "`combat_absent_unreachable` disappears as a final reason. `combat_refused_starving` falls from 12 to 9, and that is a consequence rather than a second change: three of the creatures the threshold used to catch were the ones being turned away on the approach and going hungry while they walked, so admitting them at the roll call they were near a raider at means they are in the line while still fed.",
+    "whatDidNotMove": "The three absentees that remain on the owner's party across the whole run are heavy wounds and hunger below 30 — both designed, both present before the slice.",
+    "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -> status ok, 10 of 10 stages, deterministicChecksum e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f"
+  },
+  "theContractIndicator": {
+    "what": "Roll calls at which `combat_absent_unreachable` was written while a raider stood within T.engage_radius (8) of the creature it turned away, Manhattan.",
+    "whyItIsHere": "Contract 10.2 admits a creature that is within the engage radius of the nearest RAIDER **or** of the nearest larder tile. UpdateCombatParticipation measures the distance to PrototypeMap.LarderTiles[0] and to nothing else, so a creature with a raider two tiles away and the larder twelve tiles away is turned away by the code and admitted by the contract.",
+    "before": { "pooled": 30, "onTheOwnersSeed": 7 },
+    "after": { "pooled": 20, "onTheOwnersSeed": 14 },
+    "worstSingleReading": "baseline/20260729 t2020, the second roll call of wave 3: five creatures turned away as unreachable with raiders 2, 5, 5, 6 and 6 tiles from them — #0 Брусок at toRaider=2 while toLarder=12.",
+    "isItNew": "No. The line is identical on both trees; the slice does not touch it. Pooled it bites LESS often after the slice, not more. It bites twice as often on the owner's own seed.",
+    "isItDesigned": "No — the published contract says otherwise. This is the one finding of Issue #405 that is not «так задумано», and it is what this branch fixes.",
+    "approximations": "Manhattan and not a walk, so a small reading does not prove a short walk; and it is read off the end-of-tick snapshot, one phase after the roll call, so the raider may have stepped since. Both are why the indicator is reported and never asserted on."
+  }
+}

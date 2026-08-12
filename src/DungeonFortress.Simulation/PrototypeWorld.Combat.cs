@@ -114,7 +114,7 @@ public sealed partial class PrototypeWorld
                 continue;
             }
 
-            var distance = _map.Distance(creature.Position, PrototypeMap.LarderTiles[0], _zones[ZoneKind.Forbidden]);
+            var distance = DistanceToTheFight(creature);
             if (!creature.IsMustering && distance is > PrototypeTuning.EngageRadius)
             {
                 RecordDecision(creature, "combat_absent_unreachable", new Dictionary<string, int> { ["distance"] = distance ?? -1, ["wave"] = wave.Number });
@@ -131,6 +131,75 @@ public sealed partial class PrototypeWorld
             creature.Mode = CreatureMode.Fighting;
             RecordDecision(creature, "combat_joined", new Dictionary<string, int> { ["readiness"] = ComputeReadiness(creature), ["wave"] = wave.Number });
         }
+    }
+
+    /// <summary>
+    /// How far this creature is from the fight — the distance the admission rule
+    /// of contract 10.2 compares against <see cref="PrototypeTuning.EngageRadius"/>.
+    ///
+    /// <para>The contract's sentence has two arms joined by «или»: «расстояние от
+    /// самого существа до ближайшего налётчика <b>или</b> до ближайшего тайла
+    /// кладовой не превышает T.engage_radius». Only the larder arm was ever
+    /// implemented — the distance was measured to
+    /// <see cref="PrototypeMap.LarderTiles"/>[0] and to nothing else — so a
+    /// creature with a raider two tiles away and the larder twelve tiles away was
+    /// refused by the code and admitted by the contract. It is the one cause of
+    /// «не все бегут защищаться» (Issue #405) that contradicts a decision instead
+    /// of following one, and it is older than the balance slice the owner noticed
+    /// it after: the line is identical on both sides of PR #402.</para>
+    ///
+    /// <para>What it cost, measured over the three shipped journals on seeds
+    /// 20260726..20260729 before this method existed: 20 roll calls turned a
+    /// creature away as unreachable while a raider stood within the engage radius
+    /// of it, and 30 did so on the tree before the slice. The worst single reading
+    /// is <c>baseline/20260729</c> at t2020 — the second roll call of wave 3, the
+    /// wave the owner is describing — where five of nine creatures were refused
+    /// with raiders 2, 5, 5, 6 and 6 tiles from them
+    /// (<c>evidence/405-before-after.json</c>).</para>
+    ///
+    /// <para><b>The larder arm is kept and not replaced.</b> It is what lets the
+    /// domain form a line before the first raider is anywhere near it, and taking
+    /// it out would trade one half of the contract's «или» for the other; the
+    /// check <c>A_creature_within_reach_of_the_larder_is_admitted_before_any_raider_is_near</c>
+    /// holds that half by itself.</para>
+    ///
+    /// <para><b>Which larder tile.</b> Still the first, and the difference is at
+    /// most one step: the map authors the larder as two adjacent tiles, so
+    /// «ближайшего тайла кладовой» and «LarderTiles[0]» can only disagree at a
+    /// distance of exactly 9, and nothing in the matrix does. It is left alone
+    /// deliberately — a change no measurement asks for is a change nothing
+    /// holds.</para>
+    /// </summary>
+    private int? DistanceToTheFight(CreatureState creature)
+    {
+        var forbidden = _zones[ZoneKind.Forbidden];
+        var nearest = _map.Distance(creature.Position, PrototypeMap.LarderTiles[0], forbidden);
+        if (nearest is <= PrototypeTuning.EngageRadius)
+        {
+            return nearest;
+        }
+
+        foreach (var raider in _raiders
+                     .Where(raider => raider.Mode == RaiderMode.Raiding)
+                     .OrderBy(raider => raider.Id))
+        {
+            // Manhattan never exceeds the walk, so a raider whose straight line
+            // already loses cannot win on the path. A short-circuit and not a
+            // rule: the answer is the same with it and without it, and it keeps a
+            // breadth-first search per raider per creature off every roll call.
+            if (Manhattan(creature.Position, raider.Position) >= (nearest ?? int.MaxValue))
+            {
+                continue;
+            }
+
+            if (_map.Distance(creature.Position, raider.Position, forbidden) is { } steps &&
+                steps < (nearest ?? int.MaxValue))
+            {
+                nearest = steps;
+            }
+        }
+
+        return nearest;
     }
 
     /// <summary>
