@@ -46,6 +46,15 @@ public static class InspectorText
                 $"CREATURE #{creature.Id} · {creature.Name}\n\n" +
                 $"satiety {creature.Satiety}   fatigue {creature.Fatigue}\n" +
                 $"martial form {creature.MartialForm}   readiness {creature.Readiness}\n" +
+                // Issue #409, criterion 7. The panel used to print Hp, mode and
+                // readiness and say nothing at all about where the creature was
+                // hurt, which made the slice's own question unanswerable: the
+                // player cannot recognise a creature by its wound if the wound
+                // cannot be read. Every hurt part is named here — the mark over
+                // the head shows only the worst — and «цел» is printed rather
+                // than the line being dropped, because "this one is whole" is an
+                // answer and a missing line is not.
+                $"wounds {HudText.CreatureInjuryLong(creature)}\n" +
                 $"mode {creature.Mode}\n" +
                 $"job {(job is null ? "none" : $"#{job.JobId} {job.Kind}")}\n" +
                 $"carrying {(creature.Carrying is null ? "nothing" : $"{creature.CarryAmount} {creature.Carrying}")}\n" +

@@ -1068,12 +1068,28 @@ public static class WorldLabels
     /// <see cref="CreatureNameLine"/>, handed to the layout as
     /// <see cref="WorldLabelRequest.Name"/>; the wording here has not
     /// changed.</para>
+    ///
+    /// <para><b>The mark of Issue #409 rides here and nowhere else.</b> The pitch
+    /// prices the whole of what a localised wound costs to show at «иконка над
+    /// головой и хромающая походка», and this line is the icon over the head: the
+    /// world label is what this projection draws above a body. A whole creature
+    /// reads exactly as it always did, so the ordinary frame does not change at
+    /// all; a hurt one reads «Кремень FIGHT · нога!».</para>
+    ///
+    /// <para>It rides on the full rung and not on <see cref="CreatureNameLine"/>
+    /// deliberately. The layout's ladder is «whole line → name only → nothing», so
+    /// in a frame too crowded to hold the line the mark is the first thing to go
+    /// and the name is the last. That is the right order: in a crowd the player
+    /// needs to know who that is before knowing what happened to them, and the
+    /// panel answers the second question at any time.</para>
     /// </summary>
     public static WorldLabelLine CreatureLine(PrototypeCreatureSnapshot creature)
     {
         ArgumentNullException.ThrowIfNull(creature);
+        var hurt = HudText.CreatureInjuryShort(creature);
+        var mark = hurt.Length == 0 ? string.Empty : $" · {hurt}";
         return new WorldLabelLine(
-            $"{creature.Name} {HudText.CreatureStateShort(creature)}",
+            $"{creature.Name} {HudText.CreatureStateShort(creature)}{mark}",
             WorldLabelLayout.CreatureNameTextRef);
     }
 

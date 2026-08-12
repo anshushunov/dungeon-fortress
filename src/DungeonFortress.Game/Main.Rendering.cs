@@ -257,6 +257,22 @@ public partial class Main
     private bool IsInScene(BodyRef body) =>
         _duelPair is not { } duel || body == duel.Attacker || body == duel.Target;
 
+    /// <summary>
+    /// Whether this body is drawn favouring a leg — «хромающая походка» of pitch
+    /// 6.13 (Issue #409). Read off the published snapshot and off nothing else,
+    /// so the gait is a projection of the domain rather than a state the view
+    /// keeps: a replay draws the same walk.
+    ///
+    /// <para>Raiders never limp, because raiders carry no localised wound in the
+    /// snapshot. That is the model's shape and not an omission here — a scar is
+    /// what a raider carries, and it is drawn as a caption.</para>
+    /// </summary>
+    private bool IsLimping(BodyRef body) =>
+        body.Kind == BodyKind.Creature &&
+        _state!.Creatures
+            .FirstOrDefault(creature => creature.Id == body.Id)
+            ?.Injuries.Any(injury => injury.Part == BodyPart.Leg) == true;
+
     private GridPoint? BodyPosition(BodyRef body) =>
         body.Kind == BodyKind.Creature
             ? _state!.Creatures
@@ -292,7 +308,8 @@ public partial class Main
         var phase = BodyPhase(body.Kind, body.Id);
         var bob = ScaleWorld((float)BodyMotion.BobOffsetRef(
             BodyMotion.PathCells(from, to, alpha),
-            from != to));
+            from != to,
+            IsLimping(body)));
         var axis = BlowAxis(body);
         _bodyFrame = new Transform2D(
             (float)BodyMotion.LeanRadians(to.X - from.X) + StrikeLean(phase, axis, beat),

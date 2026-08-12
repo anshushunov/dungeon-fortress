@@ -248,10 +248,70 @@ public static class BodyMotion
     /// </para>
     /// </summary>
     public static double BobOffsetRef(double pathCells, bool walking) =>
-        walking
-            ? -BobHeightRef *
-              (1.0 + Math.Cos(Math.Tau * pathCells / GaitPeriodCells)) / 2.0
-            : 0.0;
+        BobOffsetRef(pathCells, walking, limping: false);
+
+    /// <summary>
+    /// How much of its rise a limping body loses on the bad step, as a fraction.
+    ///
+    /// <para>Three fifths, and the number is bounded on both sides by what it has
+    /// to do. Below about a third the two steps read as one gait drawn slightly
+    /// unevenly; at one the bad step has no rise at all, which is a body with one
+    /// leg rather than a body favouring one. Three fifths leaves the bad step two
+    /// fifths of the good one — the same foot still leaves the ground, and it
+    /// visibly does not go as far.</para>
+    /// </summary>
+    public const double LimpDepth = 0.6;
+
+    /// <summary>
+    /// How many cells of path one limp cycle takes: twice
+    /// <see cref="GaitPeriodCells"/>, because a limp is the difference between two
+    /// consecutive steps, and a cycle that did not contain two of them would have
+    /// nothing to differ between.
+    /// </summary>
+    public const double LimpPeriodCells = GaitPeriodCells * 2.0;
+
+    /// <summary>
+    /// How far above its feet a body is drawn, having walked
+    /// <paramref name="pathCells"/>, when it may be favouring a leg.
+    ///
+    /// <para><b>«Хромающая походка» (pitch 6.13, Issue #409).</b> The pitch prices
+    /// the whole of showing a localised wound at «иконка над головой и хромающая
+    /// походка», and this is the second half of that sentence: a creature with a
+    /// hurt leg rises fully on one step and only two fifths as far on the next, so
+    /// the same walk reads as a limp without a second animation, a second sprite
+    /// or a state of its own.</para>
+    ///
+    /// <para><b>It is the gait multiplied and not a curve of its own.</b> The
+    /// unevenness is a slow envelope over the ordinary bob, so everything the bob
+    /// already guarantees survives untouched: a standing body still does not move
+    /// at all, the curve still never goes below the foot line, and the height is
+    /// still a pure function of how far the body has walked, so a replay draws the
+    /// same frame. A limp written as its own curve would have had to earn all
+    /// three again.</para>
+    ///
+    /// <para><b>The drawing limps and the simulation limps, and they are not the
+    /// same limp.</b> The simulation's limp takes a step away
+    /// (<c>PrototypeWorld.LimpsThisTick</c>) and is bounded to a fight; this one is
+    /// how a body carrying a hurt leg is drawn, anywhere and always. They are
+    /// deliberately not wired together: a drawing that limped only on the ticks the
+    /// rule fired would flicker between two gaits, and a rule that fired wherever
+    /// the drawing limps is the rule this slice already rejected by measurement for
+    /// moving the whole economy.</para>
+    /// </summary>
+    public static double BobOffsetRef(double pathCells, bool walking, bool limping)
+    {
+        if (!walking)
+        {
+            return 0.0;
+        }
+
+        var rise = (1.0 + Math.Cos(Math.Tau * pathCells / GaitPeriodCells)) / 2.0;
+        var evenness = limping
+            ? 1.0 - (LimpDepth *
+                (1.0 - Math.Cos(Math.Tau * pathCells / LimpPeriodCells)) / 2.0)
+            : 1.0;
+        return -BobHeightRef * rise * evenness;
+    }
 
     /// <summary>
     /// How far a body tips into the side it is walking to, in degrees.
