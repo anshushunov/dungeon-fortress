@@ -96,6 +96,15 @@
     ],
     "readingIt": "Three of the four new absentees were first turned away as unreachable while still fed, and only then fell under the threshold — they were walking to the muster and went hungry on the way. That is why the wave the owner remembers is the third one and not the first."
   },
+  "afterTheFixOfThisBranch": {
+    "what": "The same command on the same twelve parties with the nearest-raider arm of contract 10.2 implemented (commit 3235803). No tuning number is touched: CombatJoinSatiety is still 30.",
+    "pooled": { "waves": 32, "onFeet": 288, "joined": 261, "share": "90%", "absent": 27, "absentBy": { "combat_refused_injured": 18, "combat_refused_starving": 9 } },
+    "ownersSeedBaseline20260729": { "share": "97% (35/36)", "wave3": "88% — only #8 Тишина, on a heavy wound", "wave4": "100%", "note": "the same recovery the threshold rollback of mutant M1 produced, reached without moving the threshold" },
+    "theContractIndicator": "0 on every one of the twelve parties, from 20",
+    "whatMovedAndWhy": "`combat_absent_unreachable` disappears as a final reason. `combat_refused_starving` falls from 12 to 9, and that is a consequence rather than a second change: three of the creatures the threshold used to catch were the ones being turned away on the approach and going hungry while they walked, so admitting them at the roll call they were near a raider at means they are in the line while still fed.",
+    "whatDidNotMove": "The three absentees that remain on the owner's party across the whole run are heavy wounds and hunger below 30 — both designed, both present before the slice.",
+    "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -> status ok, 10 of 10 stages, deterministicChecksum e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f"
+  },
   "theContractIndicator": {
     "what": "Roll calls at which `combat_absent_unreachable` was written while a raider stood within T.engage_radius (8) of the creature it turned away, Manhattan.",
     "whyItIsHere": "Contract 10.2 admits a creature that is within the engage radius of the nearest RAIDER **or** of the nearest larder tile. UpdateCombatParticipation measures the distance to PrototypeMap.LarderTiles[0] and to nothing else, so a creature with a raider two tiles away and the larder twelve tiles away is turned away by the code and admitted by the contract.",
