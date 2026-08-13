@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "issue": 420,
+  "when": "2026-08-14",
+  "checkpoint": "1 — замер «до», снятый прежде всякой правки отрисовки",
+  "what": "Что показывает локализованную травму на рабочем зуме сегодня, и насколько. Без этого рубежа сравнивать «после» не с чем.",
+  "tree": {
+    "branch": "fix/420-injury-visual",
+    "worktree": "../_wt-420-injury-visual",
+    "base": "origin/main = 86537cf (merge PR #417)"
+  },
+  "limp": {
+    "claim": "Хромота не читается, и дело не в глубине: канал целиком меньше двадцатой доли тела.",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter \"FullyQualifiedName~InjuryVisibilityTests\" --logger \"console;verbosity=detailed\"",
+    "printedLine": "LIMP-SEPARATION tile=40 shipped=1,9636px at path=2,00 cells; ceiling(depth=1)=3,2727px; body=61,82px; shipped/body=3,18 %",
+    "measured": {
+      "tileSize": 40,
+      "maxSeparationWorldPx": 1.9636,
+      "atPathCells": 2.0,
+      "ceilingAtLimpDepth1WorldPx": 3.2727,
+      "bodyDrawnHeightWorldPx": 61.82,
+      "shareOfBody": "3,18 %"
+    },
+    "howItIsComputed": "Развёртка по пути с шагом 0,001 клетки на полном цикле хромоты (BodyMotion.LimpPeriodCells = 4 клетки); на каждой точке — модуль разности BodyMotion.BobOffsetRef(path, walking, limping: true) и той же величины при limping: false, умноженный на CameraView.WorldVisualScale(40) = 40/22.",
+    "verdict": [
+      "Расхождение траекторий максимально в пике плохого шага и равно 1,96 мировых пикселя — 3,2 % от 61,82 px, на которые рисуется тело.",
+      "Потолок канала — 3,27 px: хромота устроена как множитель на обычном покачивании (BobHeightRef = 1,8 опорных px), поэтому глубже 1,0 она не бывает по построению, а 1,0 — это «плохой шаг вовсе не отрывается от земли», что докстринг LimpDepth уже отвергает как «тело с одной ногой».",
+      "Хромота видна только пока тело идёт, и только как разница между двумя моментами цикла: кадр снимается при alpha 1, поэтому на кадре толпы её нет вовсе.",
+      "Вывод: хромота не читается, и увеличение LimpDepth этого не чинит. Пункт 5 критериев закрыт числом, LimpDepth не тронут."
+    ]
+  },
+  "captionsAreNotAlwaysOn": {
+    "claim": "Слово части тела в подписи над головой видно НЕ всегда, а только пока игрок наводит курсор на тело или держит его выбранным.",
+    "where": "src/DungeonFortress.Presentation/WorldLabelLayout.cs — WorldLabels.Requests пропускает существо, у которого RankOf вернул null, а RankOf отвечает только на focus.Hovered и focus.Selected (строки 904–922, 1014–1019).",
+    "consequence": "На кадре покоя — том самом кадре толпы, о котором говорит владелец, — у своих нет ни имени, ни слова части. Три текстовых канала из четырёх (подпись, панель, история) требуют действия игрока; четвёртый — журнал. Поэтому «визуала никакого нет» описывает состояние точно: без наведения травма не показана ничем.",
+    "evidence": "evidence/420-before-zoom1.png — девять своих на карте, пять из них ранены, подписей нет ни одной."
+  },
+  "frame": {
+    "path": "evidence/420-before-zoom1.png",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture prepared -Seed 20260729 -ScreenshotTicks 2280 -TileSize 40 -CameraZoom 1.0 -UiScale 1.0 -FrameSize 1280x720 -CameraPosition 830,180 -ScreenshotPath \"420/before-zoom1.png\"",
+    "checksum": "016f790b9970af03f27f6050219afd8992a32a57c0b404351e6042a2958e0c68",
+    "whyThisFixtureAndTick": "Единственная найденная партия, в которой на одном тике присутствуют все четыре локализации сразу и обе тяжести. Собственные подписи этого прогона (view.worldLabels): «Брусок ГОЛОВА», «Дёготь РУКА», «Уголёк НОГА», «Прель ТОРС», «Тишина ТОРС!» — то есть голова, рука, нога, торс лёгкий и торс тяжёлый.",
+    "howTheFixtureWasFound": "dotnet run --project tests/DungeonFortress.Scenarios -c Release -- --prototype --commands <fixture с подменённым seed> --ticks 2280 --snapshot .snap/<...>.json  # затем jq '[.creatures[]|select(.injuries|length>0)]' по трём фикстурам и трём seed (20260726, 20260729, 20260735). Замечание: сценарный прогон этой партии останавливается на тике 2160, движок доходит до 2280 — состав ран на кадре читается по view.worldLabels самого прогона, а не по снапшоту."
+  },
+  "partAnchors": {
+    "what": "Где на силуэте лежат пиксели каждой части рига — измерено по альфе поставляемых PNG, а не выбрано на глаз.",
+    "command": "python evidence/420-measure-part-anchors.py > evidence/420-part-anchors.json",
+    "referenceCentroidsRelativeToRenderCentre": {
+      "head": [0.4809, -12.9181],
+      "torso": [0.292, -2.6291],
+      "arm_near": [-7.732, -3.4187],
+      "leg_near": [-3.7601, 4.0302]
+    },
+    "note": "Опорные пиксели — та же система, которую Main.ScaleWorld умножает. Верх тела на -24,125, линия ступней на +9,167. Суставы (rest_position + pivot) для этого не годятся: сустав — это плечо или бедро, то есть край части, а не её масса; оба числа лежат рядом в 420-part-anchors.json."
+  }
+}
