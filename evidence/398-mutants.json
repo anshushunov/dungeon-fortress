@@ -1,0 +1,37 @@
+{
+  "issue": 398,
+  "purpose": "Mutant required on the assertion checkpoint 3 makes: the guard's pass/fail answer for a root branch switch is unconditional - no path exists (and none was added by this fix) that would let the coordination session's own branch switch through. Run AFTER 'git commit' of the checked-in state (e05ee62), per the Issue's instruction that reverting the mutant must not also revert the real fix.",
+  "verifiedStateCommit": "e05ee62",
+  "verifiedStateCommitFull": "fix(#398): правило 17 связывает координационную сессию тем же запретом, что и гард",
+  "rejectedDirectionUnderTest": "The mutant reproduces exactly the direction Issue #398 asked to weigh and reject: \"гард догоняет текст\" - a guard modified to pardon some case instead of checking unconditionally. If such a change were ever made without a real, trustworthy distinguishing signal (evidence/398-analysis.json found none exists), this mutant is the shape it would take: the branch check silently always passes.",
+  "mutation": {
+    "file": "scripts/check-root-on-main.ps1",
+    "originalLine90": "$onMain = [string]::Equals($headBranch, \"main\", [StringComparison]::Ordinal)",
+    "mutatedLine90": "$onMain = $true # MUTANT #398: simulates a guard that pardons any branch",
+    "appliedToWorkingTreeOnly": true,
+    "committed": false
+  },
+  "mutantRunAgainstFreshFixture": {
+    "description": "Ran the mutated guard directly against a fresh fixture root whose HEAD was switched off 'main' (same shape as evidence/398-two-states.json stateTwo), to see the mutant's direct effect before checking whether the test suite catches it.",
+    "guardCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-root-on-main.ps1 -RepoRoot <fixture>/root",
+    "fixtureHeadBranch": "docs/398-coordination-own-write",
+    "guardOutput": "{\"event\":\"root_on_main_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-398-rule17-guard\\\\.artifacts\\\\398-fixture-mutant\\\\root\",\"applicable\":true,\"headBranch\":\"docs/398-coordination-own-write\",\"status\":\"ok\"}",
+    "exitCode": 0,
+    "result": "The mutant flips the answer: a root branch switch that must fail per rule 17 is reported 'ok'."
+  },
+  "mutantCaughtByExistingRegressionSuite": {
+    "description": "scripts/test-check-root-on-main.ps1 is already wired into verify.ps1's 'scripts' stage (scripts/verify.ps1:379-381) and independently builds its own fixture covering the same off-main violation case. Ran it against the mutated guard.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-check-root-on-main.ps1",
+    "output": "Root copy with HEAD off 'main' was not reported as a violation. exit=0 output={\"event\":\"root_on_main_check\", ... \"headBranch\":\"agent/202-worktree-command\",\"status\":\"ok\"}",
+    "exitCode": 1,
+    "killed": true,
+    "verdict": "The mutant is killed: the existing fixture suite throws and exits non-zero the moment the off-main case stops being reported as a violation. A future weakening of the guard along the rejected 'pardon some case' direction would be caught here, in the 'scripts' stage of every verify.ps1 run, before any long stage starts."
+  },
+  "revert": {
+    "command": "git checkout -- scripts/check-root-on-main.ps1",
+    "verified": "rg -n '\\$onMain = ' scripts/check-root-on-main.ps1 -> line 90 shows the original [string]::Equals comparison, matching commit e05ee62 byte-for-byte (git status --short empty afterwards).",
+    "note": "Cleanup fixtures .artifacts/398-fixture, .artifacts/398-fixture-mutant and .artifacts/check-root-on-main-test-* removed; .artifacts/ is gitignored and none of this touched the real root at 'C:/gamedev/Dungeon fortress'."
+  },
+  "conclusion": "The unconditional pass/fail check is load-bearing and monitored: mutating it to pardon an off-main root branch (the shape the rejected 'guard learns to distinguish the coordination session' direction would have taken) is caught by the regression suite already wired into every verify.ps1 run, not just by this Issue's own evidence collection.",
+  "modelId": "claude-sonnet-5 (Claude Code CLI)"
+}
