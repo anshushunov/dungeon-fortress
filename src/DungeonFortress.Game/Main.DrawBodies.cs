@@ -562,6 +562,7 @@ public partial class Main
             center + ScaleWorld(7, -7),
             ScaleWorld(2.25f),
             CreatureStateColor(creature));
+        DrawInjuryMarks(center, creature, new BodyRef(BodyKind.Creature, creature.Id));
 
         // The ring round the body the inspector is pointed at. Whether it is drawn
         // at all, and every number in it, is WorldSelectionMark's answer; the
@@ -633,6 +634,62 @@ public partial class Main
         }
 
         DrawBlowDamage(center, new BodyRef(BodyKind.Raider, raider.Id));
+    }
+
+    /// <summary>
+    /// The wound itself, on the part that carries it (Issue #420).
+    ///
+    /// <para>
+    /// <b>In the body's own frame, because a wound is on the body.</b> The mark is
+    /// pushed through <see cref="PushBodyPose"/> exactly like the sprite, the side
+    /// outline and the blow flash, so it inherits the flip, the lean, the walking
+    /// bob and the recoil of a blow. Drawn in world space beside the body instead —
+    /// which is what the HP bar and the state dot do, and rightly, because those
+    /// stand <em>next to</em> a body — it would sit still while the limb it names
+    /// moved up to 3.3 px away from it.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Every number comes from <see cref="InjuryMarks"/>.</b> Where each part is
+    /// on the silhouette, how large the disc is, its colour and the colour of its
+    /// rim are decisions with cases, and a decision with cases belongs where the
+    /// "Pure .NET" job can check it (ADR 0011). This routine multiplies by the tile
+    /// scale and calls the engine, and that is the whole of it.
+    /// </para>
+    ///
+    /// <para>
+    /// Own bodies only. A raider carries no localised wound in the snapshot — what
+    /// a raider carries is a scar, and that is drawn as a caption
+    /// (<see cref="ReturningHeroLabel"/>) — so <see cref="DrawRaiderInformation"/>
+    /// has nothing to ask for here. That is the model's shape and not an omission.
+    /// </para>
+    /// </summary>
+    private void DrawInjuryMarks(
+        Vector2 center,
+        PrototypeCreatureSnapshot creature,
+        BodyRef body)
+    {
+        var marks = InjuryMarks.Of(creature);
+        if (marks.Count == 0)
+        {
+            return;
+        }
+
+        PushBodyPose(center, body);
+        var radius = ScaleWorld((float)InjuryMarks.RadiusRef);
+        var rim = ScaleWorld((float)InjuryMarks.RimWidthRef);
+        foreach (var mark in marks)
+        {
+            var at = BodyLocalCenter() +
+                ScaleWorld((float)mark.OffsetRef.X, (float)mark.OffsetRef.Y);
+            DrawCircle(at, radius, new Color(mark.Color));
+            // The rim after the fill, on the fill's own edge: a wound lands on
+            // green skin, on a teal tunic and on a brown boot, and without it the
+            // same mark reads as three different marks.
+            DrawCircle(at, radius, new Color(InjuryMarks.RimColor), false, rim);
+        }
+
+        ClearBodyPose();
     }
 
     private void DrawDownedMark(Vector2 center)

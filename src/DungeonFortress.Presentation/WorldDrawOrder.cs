@@ -161,6 +161,13 @@ public static class WorldDrawOrder
         new("DrawBlowStreaks", WorldDrawPass.Informational, OverlayMark.BlowFeedback),
         new("DrawBlowDamage", WorldDrawPass.Informational, OverlayMark.BlowFeedback),
         new("DrawDownedMark", WorldDrawPass.Informational, OverlayMark.BodyState),
+        // Issue #420. The localised wound, drawn on the part that carries it. It
+        // is BodyState and not a mark of its own for the reason the downed cross
+        // is: a wound is what this body is now, it stays until the part heals, and
+        // it is read off the same snapshot at the same moment as the HP bar beside
+        // it. BlowFeedback is the other reading and deliberately not this one —
+        // that is what has just happened, drawn for one tick and gone.
+        new("DrawInjuryMarks", WorldDrawPass.Informational, OverlayMark.BodyState),
         new("DrawHpBar", WorldDrawPass.Informational, OverlayMark.BodyState),
         new("DrawRoomLabels", WorldDrawPass.Informational, OverlayMark.RoomLabel),
         new("DrawRoomLabel", WorldDrawPass.Informational, OverlayMark.RoomLabel),

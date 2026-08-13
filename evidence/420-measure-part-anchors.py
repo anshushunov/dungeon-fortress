@@ -144,6 +144,10 @@ def main() -> int:
             "reference": {
                 "centroid": to_reference(geometry["centroid"]),
                 "joint": to_reference(joint),
+                # x0, y0, x1, y1 — the same opaque box, in the space a mark's
+                # offset is stated in. This is what says "the mark landed on the
+                # part" without anybody looking at a picture.
+                "bbox": to_reference(geometry["bbox"][:2]) + to_reference(geometry["bbox"][2:]),
             },
         }
 
