@@ -1,0 +1,34 @@
+{
+  "issue": 423,
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/verify.ps1\"",
+  "runContext": "Foreground, single run, on the final commit of fix/423-rule17-echo in worktree C:/gamedev/_wt-423-rule17-echo (правило 22: полный verify.ps1 зелёный один раз на финальном состоянии).",
+  "scope": "full (10 of 10 stages)",
+  "result": {
+    "status": "ok",
+    "stagesExecuted": ["scripts", "build", "tests", "mcp", "sim", "load", "godot", "ui", "screenshots", "token-budget"],
+    "stagesNotRun": [],
+    "stageElapsedSeconds": {
+      "scripts": 91.9,
+      "build": 34.5,
+      "tests": 165.5,
+      "mcp": 3.8,
+      "sim": 0.4,
+      "load": 0.6,
+      "godot": 34.4,
+      "ui": 4.1,
+      "screenshots": 13.2,
+      "token-budget": 104.7
+    },
+    "godotExitCode": 0,
+    "godotControlsExitCode": 0,
+    "godotCameraExitCode": 0,
+    "hudGuardRegressionExitCode": 1,
+    "hudReadabilityRegressionExitCode": 1,
+    "cameraTransformRegressionExitCode": 1,
+    "godotRaidExitCode": 0,
+    "momentOfTruthExitCode": 0,
+    "screenshotRepeatable": true
+  },
+  "note": "Мутант по этой задаче не назначен (правило 21, документация) - роль проверки играет полнота поиска из evidence/423-inventory.json, а не regression-инжекторы гарда HUD/камеры, которые прогоняются как часть штатной стадии godot и краснеют по своему собственному, не связанному с этой задачей назначению (exit 1 у *RegressionExitCode - ожидаемый отрицательный результат внутренних инжекторов регрессии, не сбой стадии; сама стадия godot вернула status ok).",
+  "modelId": "claude-sonnet-5 (Claude Code CLI)"
+}
