@@ -261,6 +261,70 @@ public sealed class LegendCompletenessTests
     /// Mutant: deleting the state-dot tuple removes "fighting" and "fled"
     /// from every caption, and both assertions fail.
     /// </summary>
+    /// <summary>
+    /// Issue #420. The wound mark is a new mark on the body, and rule «легенда
+    /// полна» — the one Issue #222 established — says a mark on the map is named
+    /// in the legend or it is a colour the player has to guess.
+    ///
+    /// <para>Two claims, because the mark carries two readings: that it is a
+    /// wound at all, and that its intensity is the severity. Deleting either
+    /// clause from <c>CreateLegend</c> reddens this, and that is the whole
+    /// purpose — the mark itself would go on being drawn, silently unexplained,
+    /// which is exactly the state the amber ring of Issue #52 was in.</para>
+    ///
+    /// <para>The row count above is deliberately untouched. Eight rows is a
+    /// measurement (evidence/222-crowd-frame.json), not a preference, so the
+    /// wound is named by clauses that moved between existing rows rather than by
+    /// a ninth row — see the comment beside them in <c>CreateLegend</c>.</para>
+    /// </summary>
+    [Fact]
+    public void The_wound_mark_on_a_body_is_named_in_legend()
+    {
+        var captions = LegendRowCaptions();
+
+        Assert.Contains(
+            captions,
+            caption => caption.Contains("wound", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            captions,
+            caption => caption.Contains("heavy", StringComparison.OrdinalIgnoreCase));
+
+        // And the two are in one row, so the reader is not asked to join a mark
+        // named on one line with a severity named on another.
+        Assert.Contains(
+            captions,
+            caption => caption.Contains("wound", StringComparison.OrdinalIgnoreCase) &&
+                caption.Contains("heavy", StringComparison.OrdinalIgnoreCase));
+
+        // Every clause the legend used to carry is still carried. The wound was
+        // fitted by moving a clause between rows, and a move that quietly dropped
+        // one would otherwise look exactly like a move that did not.
+        foreach (var clause in new[]
+                 {
+                     "dig mark",
+                     "dig progress",
+                     "teal outline",
+                     "red outline",
+                     "bar = HP",
+                     "white X = downed",
+                     "amber ring",
+                     "diggable rock",
+                     "map edge",
+                     "unreachable",
+                     "new floor",
+                     "loose stone",
+                     "material cell",
+                     "carried stone",
+                     "filled pip",
+                     "hollow blue pip",
+                 })
+        {
+            Assert.Contains(
+                captions,
+                caption => caption.Contains(clause, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
     [Fact]
     public void State_dot_colors_are_named_in_legend()
     {
