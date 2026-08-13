@@ -65,7 +65,194 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
     /// slice.</para>
     /// </summary>
     private static readonly ulong[] ObservabilitySeeds =
-        [20_260_726UL, 20_260_727UL, 20_260_728UL];
+        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL];
+
+    /// <summary>
+    /// Issue #418, the diagnosis. Where along the chain from "a place is written"
+    /// to "a refusal is recorded" does the party stop, seed by seed?
+    ///
+    /// Every stage below is a strict subset of the one above it, so the first
+    /// stage that reads zero on a silent seed and non-zero on a loud one is the
+    /// cause. Printed rather than asserted: it is a measurement, and the
+    /// assertion that matters is
+    /// <see cref="A_remembered_place_changes_what_the_creature_does_next"/>.
+    /// </summary>
+    [Theory]
+    [InlineData("baseline")]
+    [InlineData("prepared")]
+    public void Report_where_the_chain_from_a_written_place_to_a_refusal_stops(string fixtureName)
+    {
+        var report = new StringBuilder();
+        foreach (var seed in ObservabilitySeeds)
+        {
+            var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
+            var written = new HashSet<(int Creature, int X, int Y)>();
+            var withMemory = 0;
+            var live = 0;
+            var fed = 0;
+            var free = 0;
+            var jobInReach = 0;
+            var refusals = 0;
+            var firstWriteTick = int.MaxValue;
+            var lastLiveTick = -1;
+            var modesWhileLive = new SortedDictionary<string, int>(StringComparer.Ordinal);
+
+            while (!world.IsComplete)
+            {
+                world.Step();
+                var state = world.GetSnapshot();
+                var tick = state.Tick;
+                foreach (var creature in state.Creatures)
+                {
+                    foreach (var place in creature.RememberedPlaces)
+                    {
+                        if (written.Add((creature.Id, place.Place.X, place.Place.Y)))
+                        {
+                            firstWriteTick = Math.Min(firstWriteTick, place.Tick);
+                        }
+                    }
+
+                    if (creature.RememberedPlaces.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    withMemory++;
+                    var livePlaces = creature.RememberedPlaces
+                        .Where(place => tick - place.Tick <= PrototypeTuning.MemoryAvoidTicks)
+                        .ToArray();
+                    if (livePlaces.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    live++;
+                    lastLiveTick = Math.Max(lastLiveTick, tick);
+                    var mode = creature.Mode.ToString();
+                    modesWhileLive[mode] = modesWhileLive.GetValueOrDefault(mode) + 1;
+                    if (creature.Satiety < PrototypeTuning.MemoryYieldsSatiety)
+                    {
+                        continue;
+                    }
+
+                    fed++;
+                    if (creature.CurrentJobId is not null ||
+                        creature.IsMustering ||
+                        creature.Mode is CreatureMode.Eating or CreatureMode.Fighting
+                            or CreatureMode.Fled or CreatureMode.Downed)
+                    {
+                        continue;
+                    }
+
+                    free++;
+                    // Any unreserved job of a kind other than Rest whose target
+                    // tile is inside the reach of a live memory. The target here is
+                    // the job's own tile rather than the matching's initial target,
+                    // so this is an upper bound on the pairs the memory arm can see.
+                    var reachable = state.Jobs.Any(job =>
+                        job.Kind != JobKind.Rest &&
+                        (job.ReservedBy is null || job.ReservedBy == creature.Id) &&
+                        livePlaces.Any(place =>
+                            Manhattan(place.Place, job.Target) <= PrototypeTuning.MemoryAvoidRadius ||
+                            Manhattan(place.Place, job.Origin) <= PrototypeTuning.MemoryAvoidRadius));
+                    if (reachable)
+                    {
+                        jobInReach++;
+                    }
+                }
+
+                var acted = state.Tick - 1;
+                refusals += state.Events.Count(@event =>
+                    @event.LastTick == acted &&
+                    @event.ReasonCode is "refused_place_of_panic" or "refused_place_of_wound");
+            }
+
+            var final = world.GetSnapshot();
+            report.AppendLine(CultureInfo.InvariantCulture,
+                $"{fixtureName}/{seed}: places {written.Count} (first written t" +
+                $"{(firstWriteTick == int.MaxValue ? -1 : firstWriteTick)}), " +
+                $"creature-ticks withMemory {withMemory}, live {live} (last t{lastLiveTick}), " +
+                $"fed {fed}, freeToMatch {free}, jobInReach {jobInReach}, refusals {refusals}; " +
+                $"party ended t{final.Tick}");
+            report.AppendLine(
+                "    modes while a memory was live: " +
+                string.Join(", ", modesWhileLive.Select(pair => $"{pair.Key} {pair.Value}")));
+        }
+
+        output.WriteLine(report.ToString());
+    }
+
+    /// <summary>
+    /// Issue #418, the geometry behind the diagnosis: where the places are
+    /// written and where the work the creature then takes actually starts.
+    /// Distances are Manhattan, and the rule reaches
+    /// <see cref="PrototypeTuning.MemoryAvoidRadius"/>.
+    /// </summary>
+    [Theory]
+    [InlineData("baseline")]
+    [InlineData("prepared")]
+    public void Report_how_far_the_remembered_places_are_from_the_work_that_is_taken(string fixtureName)
+    {
+        var report = new StringBuilder();
+        foreach (var seed in ObservabilitySeeds)
+        {
+            var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
+            var histogram = new SortedDictionary<int, int>();
+            var takenTargets = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            var placesSeen = new SortedDictionary<string, string>(StringComparer.Ordinal);
+            var pairs = 0;
+
+            while (!world.IsComplete)
+            {
+                world.Step();
+                var state = world.GetSnapshot();
+                var acted = state.Tick - 1;
+                foreach (var creature in state.Creatures)
+                {
+                    foreach (var place in creature.RememberedPlaces)
+                    {
+                        placesSeen[$"{creature.Id}:{place.Place.X},{place.Place.Y}"] =
+                            $"{creature.Name} ({place.Place.X},{place.Place.Y}) t{place.Tick} {place.Cause}";
+                    }
+
+                    if (creature.LastDecision.Tick != acted ||
+                        !creature.LastDecision.ReasonCode.StartsWith("chosen_", StringComparison.Ordinal) ||
+                        creature.LastDecision.Target is not { } target ||
+                        creature.LastDecision.JobKind == JobKind.Rest)
+                    {
+                        continue;
+                    }
+
+                    takenTargets[$"({target.X},{target.Y})"] =
+                        takenTargets.GetValueOrDefault($"({target.X},{target.Y})") + 1;
+                    var livePlaces = creature.RememberedPlaces
+                        .Where(place => state.Tick - place.Tick <= PrototypeTuning.MemoryAvoidTicks)
+                        .ToArray();
+                    if (livePlaces.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    pairs++;
+                    var nearest = livePlaces.Min(place => Manhattan(place.Place, target));
+                    histogram[nearest] = histogram.GetValueOrDefault(nearest) + 1;
+                }
+            }
+
+            report.AppendLine(CultureInfo.InvariantCulture,
+                $"{fixtureName}/{seed}: {pairs} jobs taken by a creature holding a live memory");
+            report.AppendLine(
+                "    distance from the work taken to the nearest live memory: " +
+                string.Join(", ", histogram.Select(pair => $"d{pair.Key}={pair.Value}")));
+            report.AppendLine(
+                "    places: " + string.Join(" | ", placesSeen.Values));
+            report.AppendLine(
+                "    non-rest work started on: " +
+                string.Join(", ", takenTargets.Select(pair => $"{pair.Key}x{pair.Value}")));
+        }
+
+        output.WriteLine(report.ToString());
+    }
 
     /// <summary>
     /// The writing half. Over the matrix, creatures come out of a party with
