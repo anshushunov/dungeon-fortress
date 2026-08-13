@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "issue": "#403",
+  "what": "Coordinator asked why this branch's measurement (56 / 24) disagrees with the number Issue #403 is anchored on (69 / 21). This file isolates the answer: the tool is faithful (it reproduces 69/21 exactly on the commit the Issue names), and the shift is a genuine mechanical change in the simulation between that commit and `86537cf`, not a difference in method.",
+
+  "method": "CombatHoldReachabilityTests.cs (uncommitted copy, never committed at either historical commit) was built and run in throwaway `git worktree add` checkouts, one per commit under test. Each worktree was removed after its number was read; neither checkout ever touched this branch or any tracked commit.",
+
+  "commits": {
+    "8977b0d": {
+      "what": "PR #402 merge — the commit Issue #403's body itself names as the merged mechanic ('Меняем. Достижимость перемеряется на смерженной механике (8977b0d)').",
+      "setup": "git worktree add ../_scratch-403-hist 8977b0d && cp tests/DungeonFortress.Simulation.Tests/CombatHoldReachabilityTests.cs into it && dotnet build DungeonFortress.sln -c Debug && dotnet test tests/DungeonFortress.Simulation.Tests --filter FullyQualifiedName~CombatHoldReachabilityTests --no-build -c Debug",
+      "result": {
+        "prepared/20260726": { "longestSpellInLine": 69, "lowestSatietyWhileFighting": 21 },
+        "prepared/20260727": { "longestSpellInLine": 37, "lowestSatietyWhileFighting": 31 },
+        "prepared/20260728": { "longestSpellInLine": 63, "lowestSatietyWhileFighting": 31 },
+        "baseline/20260726": { "longestSpellInLine": 31, "lowestSatietyWhileFighting": 28 },
+        "baseline/20260727": { "longestSpellInLine": 46, "lowestSatietyWhileFighting": 28 },
+        "baseline/20260728": { "longestSpellInLine": 33, "lowestSatietyWhileFighting": 30 }
+      },
+      "matchesTheIssueSourceExactly": "evidence/333-starving-reachability.json, key theHoldRuleArithmeticAtThirty.longestSpellInLine and .lowestSatietyWhileFighting, same six numbers in the same six cells (31/46/33 baseline, 69/37/63 prepared; 28/28/30 baseline, 21/31/31 prepared). This is the proof the tool's definition of 'continuous spell in the line' and 'lowest satiety while fighting' matches the deleted probe's definition exactly — the discrepancy is not a methodology difference."
+    },
+    "0998b18": {
+      "what": "fix(#405) / PR #408 — the first of the two commits between 8977b0d and 86537cf that touch src/DungeonFortress.Simulation. Fixed contract 10.2's engage-radius admission check to measure distance to the nearer of (nearest raider, nearest larder tile) instead of only the larder tile.",
+      "setup": "git worktree add ../_scratch-403-hist2 0998b18 && cp tests/DungeonFortress.Simulation.Tests/CombatHoldReachabilityTests.cs into it && dotnet build DungeonFortress.sln -c Debug && dotnet test tests/DungeonFortress.Simulation.Tests --filter FullyQualifiedName~CombatHoldReachabilityTests --no-build -c Debug",
+      "result": {
+        "prepared/20260726": { "longestSpellInLine": 69, "lowestSatietyWhileFighting": 21 },
+        "baseline/20260728": { "longestSpellInLine": 33, "lowestSatietyWhileFighting": 29 }
+      },
+      "reading": "prepared/20260726 (the cell the Issue's 69/21 comes from) is UNCHANGED at 69/21. One unrelated cell (baseline/20260728) moved by a single point of satiety (30 -> 29) and one tick of end time — noise from the admission-distance fix touching which tick a creature joins, not a directional shift in hold reachability. #405's fix does not explain the 69 -> 56 move."
+    },
+    "86537cf": {
+      "what": "feat(#409) / PR #417 — injury localisation. The second and last commit between 8977b0d and 86537cf that touches src/DungeonFortress.Simulation. This is the current tip of the branch this PR is measured on (evidence/403-reachability.json).",
+      "result": {
+        "prepared/20260726": { "longestSpellInLine": 56, "lowestSatietyWhileFighting": 24 }
+      },
+      "reading": "The only commit between the Issue's named base and this branch's measurement commit that moves prepared/20260726 at all. By elimination (0998b18 leaves it at 69/21, 86537cf moves it to 56/24), this commit is where the discrepancy comes from."
+    }
+  },
+
+  "whatIn86537cfPlausiblyExplainsIt": {
+    "note": "86537cf is a single squashed commit on main (one parent, no merge) carrying a whole slice described in its own message as seven staged sub-changes; the pre-squash branch history is not reachable from main, so isolating which of the four combat-relevant sub-changes below dominates the 69->56 shift would need the original feature branch (not located; not pursued further given the budget for this PR). The commit message names, verbatim (git show 86537cf):",
+    "fourCombatRelevantSubChanges": [
+      "'рука — выпавшее оружие, а не вычтенное число': a heavy-injured arm halves or zeroes the weapon weight behind a blow, so exchanges that used to end an opponent in N blows now take longer.",
+      "'нога — хромота в бою, шаг за шагом': a limping leg costs a movement step during Fighting/Fled/muster, changing how creatures reach or leave the line.",
+      "'голова — оглушение': a heavy-injured head loses its combat action entirely for the tick, changing how many defenders act each tick.",
+      "'торс — готовность как его следствие, и раненые снова в строй' — the load-bearing one by its own text: 'тяжёлая конечность перестаёт выбрасывать существо из боя. Тяжёлый торс исключает — и теперь он единственный, кто исключает', against 'старый гард не пускал в строй никого с тяжёлой раной' before it. Before 86537cf, ANY heavy injury ejected a creature from CreatureMode.Fighting; after it, only a heavy torso does, and torso injury instead costs readiness (31.16 vs 49.85 measured in that commit's own evidence). Creatures that used to be ejected on a heavy arm/leg/head wound now stay in the line — which, other things equal, should lengthen spells, not shorten them, so the net -13-tick, -3-satiety shift on prepared/20260726 is the combined result of the four changes interacting (fewer ejections but weaker, slower fighters and stunned ticks), not a single obviously-signed cause."
+    ]
+  },
+
+  "conclusion": "The 56/24 measured on 86537cf and the 69/21 the Issue is anchored on are BOTH correct, for different commits. The tool reproduces the Issue's own number exactly when pointed at the Issue's own named commit (8977b0d), which rules out a methodology or matrix-definition explanation for the gap. The gap is a real, isolated, dated mechanical drift introduced by 86537cf (#409), which the Issue's base commit predates. This is itself worth naming to the owner: the ground the Issue was opened on (69 vs 55) no longer describes even the commit named in the Issue's own 'Меняем' clause once #409 landed on top of it — a second instance of the same pattern the Issue itself is about (a decision resting on a number a later merged commit moved)."
+}
