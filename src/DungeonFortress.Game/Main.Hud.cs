@@ -1247,7 +1247,31 @@ public partial class Main
                      ("room = own floor + outline + caption; amber ring = object with no room", HudFontSizes.LegendFontSize, "#fcd34d"),
                      ("light warm block = diggable rock / dark = map edge", HudFontSizes.LegendFontSize, "#d6d3d1"),
                      ("red X = unreachable / pale tile = new floor / gray dot = loose stone", HudFontSizes.LegendFontSize, "#fca5a5"),
-                     ("[M] stockpile: cornered square = material cell / grey box on a crew = carried stone", HudFontSizes.LegendFontSize, "#e2e8f0"),
+                     // Issue #420. The wound mark is named here, at the head of
+                     // the one row that already wraps, and that placement is a
+                     // measurement rather than a preference.
+                     //
+                     // Measured at viewport (2048, 1440), UI scale 2 — the frame
+                     // Issue #222's own note names — the legend labels are 287
+                     // logical px wide and a row holds about 72 characters: rows
+                     // of 72 and below take one line, a row of 75 takes two, and
+                     // this row at 83 already took two before this Issue. The
+                     // legend is therefore nine lines and not eight, the column
+                     // has room for nine, and the tenth is what overflows the
+                     // feed's worst-case story ("needs 10 lines but only 9 fit") —
+                     // reproduced on this branch before the wording below was
+                     // chosen, and recorded in evidence/420-legend-fit.json.
+                     //
+                     // Eight rows of 72 characters cannot hold this legend plus a
+                     // wound clause at all: the clauses come to 553 characters and
+                     // eight such rows hold 576, which no packing of clauses that
+                     // size reaches. Adding the wound to the row that is already
+                     // two lines spends the room that already exists and changes
+                     // no other word of the legend — the alternative was cutting
+                     // «on a crew» or «material cell» out of the stockpile clauses
+                     // to buy a line, i.e. paying for the new mark with an old
+                     // one's meaning.
+                     ("red mark on a body = wound, bright = heavy / [M] stockpile: cornered square = material cell / grey box on a crew = carried stone", HudFontSizes.LegendFontSize, "#e2e8f0"),
                      ("filled pip = stored / hollow blue pip = booked by a carrier on the way", HudFontSizes.LegendFontSize, "#7dd3fc"),
                  })
         {

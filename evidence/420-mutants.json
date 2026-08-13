@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "issue": 420,
+  "when": "2026-08-14",
+  "what": "Подстановки, показывающие, что метка на теле несущая, а не декоративная (критерий 2). Правило 9 требует красноты на каждую половину: одна половина — метка вообще есть и её рисуют; вторая — метка стоит на своей части, а не на чужой. Мутант «убрать отрисовку целиком» не засчитывается и здесь не ставился.",
+  "howAMutantIsRun": {
+    "tree": "fix/420-injury-visual, рабочая копия ../_wt-420-injury-visual",
+    "rule": "Каждый прогон снят ПОСЛЕ коммита проверяемого состояния (4f9f026) — откат мутанта по незакоммиченному файлу снёс бы саму правку (измерено на #147). Перед каждым прогоном дерево пересобирается: прогон с --no-build поверх откаченного мутанта дал бы чистый исходник и грязные бинарники, то есть ложное измерение.",
+    "apply": "python .artifacts/420/mutate.py <ИМЯ>   # текст подстановки — в самом скрипте, по одной паре «было/стало» на мутанта",
+    "build": "dotnet build DungeonFortress.sln -c Release",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --no-build --filter \"FullyQualifiedName~InjuryMark|FullyQualifiedName~InjuryVisibility\"",
+    "restore": "git checkout -- src/   (и пересборка перед следующим мутантом)"
+  },
+  "baseline": {
+    "commit": "4f9f026",
+    "suite": "tests/DungeonFortress.Presentation.Tests — пройдено 747, не пройдено 0",
+    "filtered": "7 из 7 зелёных на фильтре InjuryMark|InjuryVisibility"
+  },
+  "M-SWAP-HEAD-LEG": {
+    "half": "метка стоит на своей части",
+    "substitution": "В таблице InjuryMarks.Anchors местами меняются якоря головы и ноги. Больше ничего.",
+    "meaning": "Метка головы уезжает на ногу, метка ноги — на голову. Ровно тот случай, который просит критерий 2: «смена части у метки краснит её же на другой части».",
+    "predictedBeforeTheRun": "Every_mark_lands_inside_the_part_it_names краснеет на голове и на ноге, торс и рука остаются зелёными; Every_anchor_is_the_measured_centre_of_mass_of_its_part краснеет вместе с ней, потому что якорь перестал быть измеренным центром масс своей части.",
+    "measured": {
+      "failed": [
+        "InjuryMarkTests.Every_anchor_is_the_measured_centre_of_mass_of_its_part",
+        "InjuryMarkTests.Every_mark_lands_inside_the_part_it_names"
+      ],
+      "counts": "не пройдено 2, пройдено 5 из 7",
+      "message": "the mark for Head sits at y=4,0302, and the drawn pixels of head run from y=-20,58333333333333 to y=-4,265909090909087."
+    },
+    "verdict": "предсказание исполнено"
+  },
+  "M-SWAP-TORSO-ARM": {
+    "half": "метка стоит на своей части",
+    "substitution": "В той же таблице местами меняются якоря торса и руки.",
+    "meaning": "Вторая пара, чтобы «краснеет на другой части» было показано на двух разных парах, а не на одной удачной.",
+    "predictedBeforeTheRun": "те же две проверки краснеют, но сообщение указывает на руку и торс, а не на голову и ногу",
+    "measured": {
+      "failed": [
+        "InjuryMarkTests.Every_anchor_is_the_measured_centre_of_mass_of_its_part",
+        "InjuryMarkTests.Every_mark_lands_inside_the_part_it_names"
+      ],
+      "counts": "не пройдено 2, пройдено 5 из 7",
+      "message": "the mark for Arm sits at x=0,292, and the drawn pixels of arm_near run from x=-10,18712121212121 to x=-4,6878787878787875."
+    },
+    "verdict": "предсказание исполнено; сообщение указывает на другую пару, изоляция подтверждена"
+  },
+  "M-EMPTY": {
+    "half": "метка вообще есть",
+    "substitution": "InjuryMarks.Of обходит пустой список частей вместо BodyParts.All: у всякого существа ноль меток.",
+    "meaning": "Раненые перестают носить метку. Отрисовка при этом на месте — вызов, рамка тела и оба круга не тронуты, — поэтому краснеть обязана проверка ответа, а не проверка адаптера.",
+    "predictedBeforeTheRun": "A_hurt_body_wears_one_mark_per_hurt_part_and_a_whole_one_wears_none краснеет; The_adapter_draws_the_mark... остаётся зелёной, потому что исходник адаптера не тронут",
+    "measured": {
+      "failed": [
+        "InjuryMarkTests.A_hurt_body_wears_one_mark_per_hurt_part_and_a_whole_one_wears_none"
+      ],
+      "counts": "не пройдено 1, пройдено 6 из 7",
+      "message": "Assert.Equal() Failure: Values differ. Expected: 1  Actual: 0"
+    },
+    "verdict": "предсказание исполнено; две половины действительно проверяются разными проверками"
+  },
+  "M-NOCALL": {
+    "half": "метка вообще есть — на экране, а не только в ответе",
+    "substitution": "Из DrawCreatureInformation убран единственный вызов DrawInjuryMarks. InjuryMarks и сама подпрограмма отрисовки не тронуты.",
+    "meaning": "Ровно тот дефект, который чистый слой поймать не может: ответ считается правильно и не рисуется никогда.",
+    "predictedBeforeTheRun": "The_adapter_draws_the_mark_on_the_body_and_takes_every_number_from_the_policy краснеет; все чистые проверки остаются зелёными",
+    "measured": {
+      "failed": [
+        "InjuryMarkTests.The_adapter_draws_the_mark_on_the_body_and_takes_every_number_from_the_policy"
+      ],
+      "counts": "не пройдено 1, пройдено 6 из 7",
+      "message": "Assert.NotEmpty() Failure: Collection was empty"
+    },
+    "verdict": "предсказание исполнено"
+  },
+  "M-NORIM": {
+    "half": "метка вообще есть — и видна на любой подложке",
+    "substitution": "Из DrawInjuryMarks убран второй круг — тёмный обод. Заливка остаётся.",
+    "meaning": "Обод — это то, чем метка остаётся одной меткой на зелёной коже, на бирюзовой рубахе и на коричневом сапоге. Его потеря делает картинку тише, а не краснее, если её ничто не держит.",
+    "predictedBeforeTheRun": "та же проверка адаптера краснеет — либо на отсутствии InjuryMarks.RimColor в теле, либо на счёте вызовов DrawCircle",
+    "measured": {
+      "failed": [
+        "InjuryMarkTests.The_adapter_draws_the_mark_on_the_body_and_takes_every_number_from_the_policy"
+      ],
+      "counts": "не пройдено 1, пройдено 6 из 7",
+      "message": "Assert.Contains() Failure: Sub-string not found — в теле DrawInjuryMarks не осталось InjuryMarks.RimColor"
+    },
+    "verdict": "предсказание исполнено"
+  },
+  "M-FLAT-SEVERITY": {
+    "half": "тяжесть отличима от лёгкой (критерий 3)",
+    "substitution": "InjuryMarks.ColorOf отдаёт тяжёлой и лёгкой один и тот же #dc2626.",
+    "meaning": "Тяжесть перестаёт различаться насыщенностью и метка становится одной на обе тяжести.",
+    "predictedBeforeTheRun": "A_heavy_wound_is_the_same_colour_with_more_of_it краснеет на сравнении насыщенностей; всё остальное зелено",
+    "measured": {
+      "failed": [
+        "InjuryMarkTests.A_heavy_wound_is_the_same_colour_with_more_of_it"
+      ],
+      "counts": "не пройдено 1, пройдено 6 из 7",
+      "message": "a heavy wound is drawn at saturation 0,7222222222222223 and a light one at 0,7222222222222223; severity is supposed to be the difference between them."
+    },
+    "verdict": "предсказание исполнено"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "issue": 420,
+  "when": "2026-08-14",
+  "what": "Почему строка легенды про рану встала именно туда, куда встала. Критерий 4 требует полноты легенды, правило #222 запрещает девятую СТРОКУ, и между этими двумя есть ровно один зазор — его пришлось измерить, а не угадать.",
+  "theFrameThatDecides": {
+    "viewport": [2048, 1440],
+    "uiScale": 2,
+    "logicalViewport": [1024, 720],
+    "why": "Кадр, который называет собственный комментарий #222 в CreateLegend: на нём столбец панели самый узкий из проверяемых, а логическая высота 720 — минимальная из семи кадров HudFitFrames.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture prepared -ScreenshotTicks 1318 -TileSize 40 -CameraZoom 1.0 -UiScale 2.0 -FrameSize 2048x1440 -CameraPosition 560,320 -ScreenshotPath \"420/legend-fit-1318.png\"",
+    "readWhere": "view.labelFit.labels в событии godot_graybox_screenshot"
+  },
+  "measured": {
+    "legendLabelWidthLogicalPx": 287,
+    "legendFontSizeLogicalPx": 8,
+    "rowsThatTakeOneLine": {
+      "50": "light warm block = diggable rock / dark = map edge",
+      "55": "LEGEND — amber X = dig mark / yellow bar = dig progress",
+      "65": "dot: blue=idle amber=fighting pink=fled green=working gray=downed",
+      "68": "red X = unreachable / pale tile = new floor / gray dot = loose stone",
+      "70": "room = own floor + outline + caption; amber ring = object with no room",
+      "72": "teal outline = crew / red outline = raider / bar = HP / white X = downed"
+    },
+    "rowsThatTakeTwo": {
+      "75": "light warm block = diggable rock / dark = map edge / gray dot = loose stone — проба, снята и выброшена",
+      "83": "[M] stockpile: cornered square = material cell / grey box on a crew = carried stone — эта строка занимала две ДО этой задачи"
+    },
+    "conclusion": "Строка держит около 72 символов. Легенда сегодня — восемь строк и ДЕВЯТЬ линий: шестая переносится. Столбец вмещает девять; десятая ломает не легенду, а ленту событий."
+  },
+  "whatWasTriedAndFailed": {
+    "attempt": "Клаузула «gray dot = loose stone» перенесена в тёплую строку (75 символов), а «red mark = wound, bright = heavy» дописана к красной (78).",
+    "result": "Обе строки перенеслись, легенда стала одиннадцатью линиями, и прогон упал: «The HUD loses text in 1 place(s): the story of 'widest padded story' needs 10 lines but only 9 fit at viewport (2048, 1440), UI scale 2».",
+    "controlRun": "Тот же прогон на неизменённой легенде проходит и отдаёт кадр — то есть падение вызвано правкой, а не базой.",
+    "lesson": "Всякая клаузула, добавленная в строку длиннее ~72 символов, стоит целую линию столбца, а не свои символы."
+  },
+  "whyEightRowsCannotHoldIt": {
+    "clauseCharacters": 553,
+    "capacityAtEightRows": 576,
+    "clauseSizes": "от 8 до 47 символов",
+    "conclusion": "Запас 23 символа на восемь строк при зерне клаузулы 8–47 символов: упаковки, при которой каждая строка укладывается в 72 символа, не существует. Легенда работает сегодня ровно потому, что одна строка переносится."
+  },
+  "chosen": {
+    "row": "legend[6]",
+    "text": "red mark on a body = wound, bright = heavy / [M] stockpile: cornered square = material cell / grey box on a crew = carried stone",
+    "length": 126,
+    "linesAfter": 2,
+    "why": "Это единственная строка, у которой вторая линия уже есть и наполовину пуста. Клаузула про рану стоит первой, потому что новая метка — то, что читатель ищет; ни одно слово прежней легенды не тронуто.",
+    "rejected": "Сократить «grey box on a crew» до «grey box» или «material cell» до «cell», чтобы шестая строка стала одной линией и место освободилось где-то ещё: это плата за новую метку смыслом старой.",
+    "verified": "На том же кадре после правки: legend[0..5] и legend[7] — одна линия, legend[6] — две, ленте событий хватает, кадр снят (godot_graybox_screenshot status ok)."
+  },
+  "guardAdded": {
+    "test": "LegendCompletenessTests.The_wound_mark_on_a_body_is_named_in_legend",
+    "holds": "Легенда называет метку («wound») и её тяжесть («heavy»), причём в одной строке; и все шестнадцать прежних клаузул на месте — перенос клаузулы между строками и её потеря выглядят одинаково, если этого не проверять.",
+    "command": "dotnet test tests/DungeonFortress.Presentation.Tests -c Release --filter \"FullyQualifiedName~LegendCompleteness\""
+  }
+}
