@@ -1,0 +1,55 @@
+{
+  "issue": 398,
+  "purpose": "Rule 17 checkpoint 1 (\"разбор\"): name the discrepancy between the guard and both copies of rule-17 text by file:line, weigh the two directions the Issue names, and record the decision before any file is edited.",
+  "discrepancy": {
+    "guard": {
+      "file": "scripts/check-root-on-main.ps1",
+      "lines": "86-108",
+      "quote": "$onMain = [string]::Equals($headBranch, \"main\", [StringComparison]::Ordinal) ... if (-not $onMain) { ... exit 1 }",
+      "reading": "Once the checkout is identified as the main one (git-dir == git-common-dir, lines 56-58), the script fails unconditionally whenever HEAD != 'main'. Nothing in the script branches on who or what is running it - there is no parameter, environment variable, or git-state check anywhere in the file (verified by reading all 109 lines) that could exempt any actor, including the coordination session itself."
+    },
+    "agentsMd": {
+      "file": "AGENTS.md",
+      "lines": "130-132",
+      "quote": "**Корневая рабочая копия принадлежит координационной сессии.** Записывающий агент — любого инструмента, включая Codex и генерацию ассетов — не переключает в ней ветку и не коммитит из неё.",
+      "reading": "Grammatically restricts the prohibition to 'записывающий агент' (a records-writing agent). By omission, the coordination session - named as owner in the same sentence - reads as not bound by the prohibition it states."
+    },
+    "developmentPaceMd": {
+      "file": "docs/engineering/DEVELOPMENT_PACE.md",
+      "lines": "285-287",
+      "quote": "Записывающий агент любого инструмента, включая Codex, работает в своём worktree и не переключает ветку в корне.",
+      "reading": "Same restriction, same omission, independently duplicated in the rule-17 entry of the pace ledger."
+    },
+    "conflict": "The guard enforces HEAD=='main' in the root checkout against everyone who runs it there, with no actor exception. Both texts state the prohibition as binding only 'записывающий агент', which by the plain contrapositive licenses the coordination session to switch the root's branch. A reader who takes either text literally predicts the guard will let a coordination-session branch switch pass; it does not."
+  },
+  "measuredConsequence": {
+    "description": "2026-08-11: coordinator created branch docs/396-coordination-2026-08-11 in the root working copy, relying on the literal text ('Записывающий агент ... не переключает'). Full verify.ps1 failed stage 'scripts'.",
+    "evidenceQuoted": "{\"event\":\"root_on_main_check\",\"headBranch\":\"docs/396-coordination-2026-08-11\",\"status\":\"fail\"}",
+    "source": "PR #397 body, section \"Отдельная находка\"; independently confirmed by PR #397 review finding F2 (gh pr view 397 --json body)",
+    "cost": "One full verify.ps1 run (~9 minutes) plus moving the branch into a worktree, per Issue #398 body."
+  },
+  "directionsConsidered": [
+    {
+      "name": "text catches up to guard",
+      "description": "Rule 17 binds everyone, including the coordination session: its own records-writing work also goes into its own worktree. This matches what already happens in practice - the guard has enforced this unconditionally since #253, and the 2026-08-11 incident is the guard doing exactly that against the coordination session's own branch.",
+      "verdict": "selected"
+    },
+    {
+      "name": "guard catches up to text",
+      "description": "Teach the guard to skip the check when the root working copy belongs to the coordination session, so the coordination session (but not a delegated recording agent) may switch branch in root.",
+      "evaluatedAgainst": "Whether a signal exists in git state that distinguishes 'the coordination session switched this branch itself' from 'a records-writing agent switched this branch in the root it should not have touched'.",
+      "finding": "None found. The guard's only two observable facts are (a) git-dir == git-common-dir (main checkout vs linked worktree - already used, lines 44-58) and (b) the HEAD branch name (lines 74-87). Neither carries actor identity. A session id, PID, or environment variable could be forged or simply unset by exactly the process rule 17 exists to catch (an agent working directly in root without going through take-task.ps1), so it would not be a trustworthy signal even if implemented - it is a claim by the process, not a fact about the repository, and rule 8 in AGENTS.md requires facts about the repository, not process self-reports.",
+      "secondReason": "Even a hypothetical reliable signal would defeat the rule's own stated purpose, quoted verbatim in both texts: 'независимый review чужого PR обнаружил копию не на той ветке и не мог отличить это от постороннего вмешательства ... цена не в неудобстве, а в том, что проверяющий перестаёт доверять дереву, которое проверяет' (AGENTS.md:143-145; docs/engineering/DEVELOPMENT_PACE.md:288-290, paraphrased). A guard that lets the coordination session's own branch switches through recreates exactly the ambiguity the rule was written to remove: a reviewer inspecting the root afterwards still cannot tell an authorized coordination-session switch from an unauthorized agent one, because the trace in git is identical either way.",
+      "verdict": "rejected - no distinguishing signal exists, and even a hypothetical one would undermine the rule's purpose, not serve it"
+    }
+  ],
+  "decision": "Bring AGENTS.md and docs/engineering/DEVELOPMENT_PACE.md into agreement with the guard's already-unconditional behaviour: rule 17 binds the coordination session's own records-writing work the same way it binds a delegated recording agent. Ownership of the root working copy (the substantive part of rule 17, out of scope per Issue #398 non-goals) is unchanged - the root still belongs to the coordination session as the reference 'main' checkout; only who may write to it is clarified to match what the guard already checks.",
+  "scriptChangeScope": "No functional change to scripts/check-root-on-main.ps1 - its check (lines 86-108) already implements the selected direction. Only its own comment block (lines 13-24) and printed error message (lines 97-106) are reworded so the guard's own text agrees with the corrected AGENTS.md/DEVELOPMENT_PACE.md wording, per criterion 3's requirement that guard behaviour and text give the same answer.",
+  "commandsUsed": [
+    "gh issue view 398",
+    "gh pr view 397 --json body -q .body",
+    "rg -n \"равило 17\" docs/engineering/DEVELOPMENT_PACE.md",
+    "rg -n \"равило 17|Корневая рабочая копия|check-root-on-main\" AGENTS.md"
+  ],
+  "modelId": "claude-sonnet-5 (Claude Code CLI)"
+}

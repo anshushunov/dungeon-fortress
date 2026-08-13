@@ -1,0 +1,42 @@
+{
+  "issue": 398,
+  "question": "После правки текста рулa 17 (AGENTS.md, docs/engineering/DEVELOPMENT_PACE.md) даёт ли гард scripts/check-root-on-main.ps1 тот же ответ на вопрос \"может ли координационная сессия переключить ветку в корне\", что и буквальное чтение текста - на обоих состояниях: корень на 'main' и корень на любой другой ветке?",
+  "mechanism": "scripts/check-root-on-main.ps1, committed at e05ee62 (fix(#398)) before this evidence was collected. Ran against a disposable fixture git repository under .artifacts/398-fixture (never the real root at 'C:/gamedev/Dungeon fortress'), removed afterwards - .artifacts/ is gitignored.",
+  "textAnswerAfterFix": "No - AGENTS.md:130-134 and docs/engineering/DEVELOPMENT_PACE.md:284-289 now state the prohibition binds 'никто ... ни записывающий агент любого инструмента ... ни сама координационная сессия'.",
+  "fixtureSetup": [
+    "git init -q -b main <fixture>/root",
+    "git -C <fixture>/root config user.email test@example.com / user.name Test / commit.gpgsign false",
+    "printf 'one\\n' > <fixture>/root/a.txt && git -C <fixture>/root add a.txt && git -C <fixture>/root commit -q -m one"
+  ],
+  "stateOne_rootOnMain": {
+    "description": "Legitimate state - the shape every clean root working copy is in when no one has switched it, including the coordination session's own idle state between tasks.",
+    "command": "git -C <fixture>/root branch --show-current",
+    "output": "main",
+    "guardCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-root-on-main.ps1 -RepoRoot <fixture>/root",
+    "guardOutput": "{\"event\":\"root_on_main_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-398-rule17-guard\\\\.artifacts\\\\398-fixture\\\\root\",\"applicable\":true,\"headBranch\":\"main\",\"status\":\"ok\"}",
+    "exitCode": 0,
+    "guardAnswer": "ok - a branch switch has not happened, nothing to flag."
+  },
+  "stateTwo_rootOnOtherBranch": {
+    "description": "Reproduces the exact shape of the 2026-08-11 incident named in Issue #398: the branch is not a delegated recording agent's - it is named as if the coordination session itself created it for its own records-writing work (docs/398-coordination-own-write, mirroring the real docs/396-coordination-2026-08-11).",
+    "command": "git -C <fixture>/root checkout -q -b docs/398-coordination-own-write",
+    "verifiedSwitch": {
+      "command": "git -C <fixture>/root branch --show-current",
+      "output": "docs/398-coordination-own-write"
+    },
+    "guardCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-root-on-main.ps1 -RepoRoot <fixture>/root",
+    "guardOutput": "{\"event\":\"root_on_main_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-398-rule17-guard\\\\.artifacts\\\\398-fixture\\\\root\",\"applicable\":true,\"headBranch\":\"docs/398-coordination-own-write\",\"status\":\"fail\"}",
+    "guardStderrMessage": "The root working copy's HEAD is on 'docs/398-coordination-own-write', not 'main'. Rule 17 (AGENTS.md, 'Работа нескольких агентов') reserves the root working copy for the coordination session; nobody switches its branch or commits from it - not a records-writing agent, and not the coordination session itself for its own records-writing work. Fix: 'git -C <root> checkout main' from the coordination session, after making sure no uncommitted work on 'docs/398-coordination-own-write' is lost - it belongs in its own worktree instead ('git worktree add ../_wt-<slug> -b <branch> origin/main').",
+    "exitCode": 1,
+    "guardAnswer": "fail - the guard treats a coordination-session branch switch exactly like any other, no pardon."
+  },
+  "existingFixtureRegressionSuite": {
+    "description": "scripts/test-check-root-on-main.ps1 (already wired into verify.ps1's 'scripts' stage) covers the same two states plus a restored-to-main case and a linked-worktree not-applicable case on its own fixture, unmodified by this Issue's edits (comment/error-text only, no logic change).",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-check-root-on-main.ps1",
+    "output": "{\"event\":\"check_root_on_main_test\",\"status\":\"ok\",\"legitimateStateOk\":true,\"violationDetected\":true,\"restoredStateOk\":true,\"linkedWorktreeNotApplicable\":true}",
+    "exitCode": 0
+  },
+  "conclusion": "Both states agree between text and guard: on 'main' the guard says ok and the text permits no one to have switched it (nothing to permit); off 'main' - even on a branch shaped like the coordination session's own records-writing branch from the 2026-08-11 incident - the guard says fail and the corrected text says the same switch is not permitted to anyone, including the coordination session. The reading gap named in Issue #398 is closed: a reader of either text now predicts exactly this guard behaviour instead of learning it from a red verify.ps1 run.",
+  "cleanup": "rm -rf .artifacts/398-fixture after the run; .artifacts/ is gitignored and the fixture never touched the real repository's git state or the real root at 'C:/gamedev/Dungeon fortress'.",
+  "modelId": "claude-sonnet-5 (Claude Code CLI)"
+}

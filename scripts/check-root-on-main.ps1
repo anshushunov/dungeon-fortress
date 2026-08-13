@@ -11,8 +11,11 @@ if (-not $RepoRoot) {
 }
 
 # Issue #253. Rule 17 (AGENTS.md, "Работа нескольких агентов") says the root
-# working copy belongs to the coordination session and a records-writing
-# agent must not switch its branch or commit from it. Two of the three
+# working copy belongs to the coordination session and nobody switches its
+# branch or commits from it - a records-writing agent of any tool, and the
+# coordination session itself for its own records-writing work (Issue #398
+# closed the earlier reading gap where the text bound only the former). Two
+# of the three
 # measured violations were exactly that: 2026-08-01 (an art task switched the
 # root's HEAD to its own branch twice while coordination was live) and
 # 2026-08-03 (#202 was committed straight onto the root copy on branch
@@ -98,10 +101,12 @@ if (-not $onMain) {
     Write-Host (
         "The root working copy's HEAD is on '$headBranch', not 'main'. Rule 17 " +
         "(AGENTS.md, 'Работа нескольких агентов') reserves the root working copy " +
-        "for the coordination session; a records-writing agent must not switch " +
-        "its branch or commit from it. Fix: 'git -C <root> checkout main' from " +
-        "the coordination session, after making sure no uncommitted work on " +
-        "'$headBranch' is lost - it belongs in its own worktree instead " +
+        "for the coordination session; nobody switches its branch or commits " +
+        "from it - not a records-writing agent, and not the coordination " +
+        "session itself for its own records-writing work. Fix: " +
+        "'git -C <root> checkout main' from the coordination session, after " +
+        "making sure no uncommitted work on '$headBranch' is lost - it belongs " +
+        "in its own worktree instead " +
         "('git worktree add ../_wt-<slug> -b <branch> origin/main')."
     )
     exit 1
