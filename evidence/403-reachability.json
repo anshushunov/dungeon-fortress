@@ -1,0 +1,155 @@
+{
+  "SchemaVersion": 1,
+  "Issue": "#403",
+  "Command": "dotnet test tests/DungeonFortress.Simulation.Tests --filter FullyQualifiedName~CombatHoldReachabilityTests.Reachability_of_the_removed_hold_rule_is_measured_and_recorded",
+  "What": "Tick-by-tick re-measurement of whether the join-to-hold fall the removed CombatHoldSatiety rule needed is reachable on the merged balance slice (PR #402), superseding the deleted scratch probes evidence/333-hold-reachability.json and evidence/333-starving-reachability.json.",
+  "MeasuredOnSimulationCommit": "86537cf",
+  "CombatJoinSatiety": 30,
+  "SatietyDecayPeriod": 5,
+  "RemovedHoldThreshold": 20,
+  "NeededUnbrokenTicks": 55,
+  "SessionTicks": 2700,
+  "MatrixFixtures": [
+    "baseline",
+    "prepared",
+    "neglected",
+    "prepared-ration-zero",
+    "prepared-watch-zero"
+  ],
+  "MatrixSeeds": [
+    20260726,
+    20260727,
+    20260728
+  ],
+  "Cells": [
+    {
+      "Fixture": "baseline",
+      "Seed": 20260726,
+      "EverFought": true,
+      "LongestSpellInLine": 31,
+      "LowestSatietyWhileFighting": 27,
+      "EndTick": 2444
+    },
+    {
+      "Fixture": "baseline",
+      "Seed": 20260727,
+      "EverFought": true,
+      "LongestSpellInLine": 43,
+      "LowestSatietyWhileFighting": 29,
+      "EndTick": 2443
+    },
+    {
+      "Fixture": "baseline",
+      "Seed": 20260728,
+      "EverFought": true,
+      "LongestSpellInLine": 37,
+      "LowestSatietyWhileFighting": 29,
+      "EndTick": 2444
+    },
+    {
+      "Fixture": "neglected",
+      "Seed": 20260726,
+      "EverFought": false,
+      "LongestSpellInLine": 0,
+      "LowestSatietyWhileFighting": null,
+      "EndTick": 595
+    },
+    {
+      "Fixture": "neglected",
+      "Seed": 20260727,
+      "EverFought": false,
+      "LongestSpellInLine": 0,
+      "LowestSatietyWhileFighting": null,
+      "EndTick": 580
+    },
+    {
+      "Fixture": "neglected",
+      "Seed": 20260728,
+      "EverFought": false,
+      "LongestSpellInLine": 0,
+      "LowestSatietyWhileFighting": null,
+      "EndTick": 565
+    },
+    {
+      "Fixture": "prepared",
+      "Seed": 20260726,
+      "EverFought": true,
+      "LongestSpellInLine": 56,
+      "LowestSatietyWhileFighting": 24,
+      "EndTick": 2428
+    },
+    {
+      "Fixture": "prepared",
+      "Seed": 20260727,
+      "EverFought": true,
+      "LongestSpellInLine": 35,
+      "LowestSatietyWhileFighting": 31,
+      "EndTick": 2439
+    },
+    {
+      "Fixture": "prepared",
+      "Seed": 20260728,
+      "EverFought": true,
+      "LongestSpellInLine": 41,
+      "LowestSatietyWhileFighting": 32,
+      "EndTick": 2443
+    },
+    {
+      "Fixture": "prepared-ration-zero",
+      "Seed": 20260726,
+      "EverFought": true,
+      "LongestSpellInLine": 56,
+      "LowestSatietyWhileFighting": 24,
+      "EndTick": 2432
+    },
+    {
+      "Fixture": "prepared-ration-zero",
+      "Seed": 20260727,
+      "EverFought": true,
+      "LongestSpellInLine": 35,
+      "LowestSatietyWhileFighting": 31,
+      "EndTick": 2440
+    },
+    {
+      "Fixture": "prepared-ration-zero",
+      "Seed": 20260728,
+      "EverFought": true,
+      "LongestSpellInLine": 41,
+      "LowestSatietyWhileFighting": 32,
+      "EndTick": 2442
+    },
+    {
+      "Fixture": "prepared-watch-zero",
+      "Seed": 20260726,
+      "EverFought": true,
+      "LongestSpellInLine": 53,
+      "LowestSatietyWhileFighting": 32,
+      "EndTick": 2451
+    },
+    {
+      "Fixture": "prepared-watch-zero",
+      "Seed": 20260727,
+      "EverFought": true,
+      "LongestSpellInLine": 41,
+      "LowestSatietyWhileFighting": 26,
+      "EndTick": 2446
+    },
+    {
+      "Fixture": "prepared-watch-zero",
+      "Seed": 20260728,
+      "EverFought": true,
+      "LongestSpellInLine": 31,
+      "LowestSatietyWhileFighting": 32,
+      "EndTick": 2423
+    }
+  ],
+  "Aggregate": {
+    "LongestSpellInLine": 56,
+    "LongestSpellCell": "prepared/20260726",
+    "LowestSatietyWhileFighting": 24,
+    "LowestSatietyCell": "prepared/20260726",
+    "ArithmeticReachable": true,
+    "ObservedReachable": false
+  },
+  "Verdict": "UNREACHABLE: no fighting creature was observed at or below the removed hold threshold (20) on any measured cell. The removal stands confirmed against the merged mechanic rather than the one it was decided on."
+}

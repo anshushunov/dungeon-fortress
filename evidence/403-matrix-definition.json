@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "issue": "#403",
+  "what": "Coordinator asked to name, with a file:line quote, which definition of 'матрица' this PR's tool uses, because evidence/409-localisation.json (PR #417) counts it differently ('три поставляемых журнала × четыре seed'). This file quotes every definition found in the tree verbatim, states which one CombatHoldReachabilityTests.cs uses and why, and names the terminological looseness as a finding rather than silently picking a side.",
+
+  "theCanonicalDefinition": {
+    "source": "docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md:2974-2976 (§13.4)",
+    "quote": "Все коридоры таблицы измерены на трёх seed матрицы Issue #12 и являются свойством этих прогонов, а не дизайна. Матрица — три числа, а не пространство seed: коридор, который на ней держится, вне её может не держаться, и это измерено.",
+    "reading": "§13.4 defines 'матрица' as exactly THREE NUMBERS — the three seeds {20260726, 20260727, 20260728} — and says nothing there about which fixtures the seeds are combined with. Fixture choice is left to whatever the specific measurement needs."
+  },
+
+  "localExtensionA_the15CellConvention": {
+    "source": "docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md:767-769 (memory-of-place radius section, citing §13.4)",
+    "quote": "Все счётные величины памяти о месте в этом разделе сняты на этих шести партиях, а не на матрице из пятнадцати ячеек (три фикстуры × три seed плюс две причинные пары × три, 13.4).",
+    "reading": "This is 3 fixtures (baseline, prepared, neglected) × the 3 canonical seeds of §13.4, PLUS the 2 causal-pair fixtures (prepared-ration-zero, prepared-watch-zero) × the same 3 seeds: 9 + 6 = 15 cells. Algebraically this is the same set as '5 fixtures × 3 seeds' — the 5 fixtures being every shipped combat-relevant journal, and the 3 seeds being §13.4's canonical three. This is the definition CombatHoldReachabilityTests.cs uses (MatrixFixtures × MatrixSeeds in the test), because Issue #403 criterion 1 asks for BOTH 'все поставляемые журналы' (all shipped journals) AND 'вся матрица seed' (the whole seed matrix) together, and this is the established name in the tree for exactly that combination — already cited back to §13.4 by the paragraph that coined it."
+  },
+
+  "localExtensionB_theFourSeedWidening": {
+    "source": "evidence/409-localisation.json:55, :177, :208 (PR #417)",
+    "howRead": "cat evidence/409-localisation.json | sed -n '55p;177p;208p' — each line quoted below matches this output character for character.",
+    "quote55": "\"note\": \"три поставляемых журнала × четыре seed (20260726..20260729)\"",
+    "quote177": "CreatureStoryTests.Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel — матрица выборки расширена четвёртым seed. Пол «столько субъектов, сколько существ в партии» не тронут; на дереве, с которого взята ветка, эта проверка собирала ровно 9 при поле 9, то есть шла без запаса",
+    "quote208": "PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next — проверка наблюдаемости возвращена на три seed, против которых правило выбиралось в #333. Четвёртый seed добавлен ранее на этой же ветке ради ДРУГОЙ проверки того же файла, чья нужда — пол выборки; правило же вида «в каждой партии» от расширения матрицы становится строже, и этого никто не решал. Порог не тронут",
+    "reading": "3 fixtures (baseline/prepared/neglected) × 4 seeds (adding 20260729) = 12 cells. Two different checks in PR #417 are affected by the same 4th-seed widening, and each names it independently: line 177 is CreatureStoryTests.Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel, noting the sample floor ('столько субъектов, сколько существ в партии') was untouched and that the pre-branch tree already collected exactly 9 at a floor of 9, i.e. with no margin. Line 208 is a DIFFERENT test, PrototypeMemoryTests.A_remembered_place_changes_what_the_creature_does_next, which was returned to the three seeds the rule was originally chosen against in #333, and separately notes that the 4th seed had already been added earlier on the same branch for line 177's check, and that widening it also made the 'every party' form of this rule stricter — 'этого никто не решал' (nobody decided this). Both quotes support the same conclusion — the 4-seed widening was ad hoc and undecided, not a redefinition of 'матрица' — but they are two separate lines about two separate tests, not one quote."
+  },
+
+  "whatThisPRUsesAndWhy": {
+    "chosen": "5 fixtures (baseline, prepared, neglected, prepared-ration-zero, prepared-watch-zero) × 3 canonical seeds (20260726/27/28) = 15 cells — extension A above.",
+    "why": "Issue #403 criterion 1 literally asks for two things together: 'покрыты все поставляемые журналы' AND 'вся матрица seed'. §13.4 fixes only the seed half (three numbers); extension A is the tree's own established name, already tied back to §13.4, for combining that seed half with every shipped fixture that can carry combat. Using it means this measurement is a superset of the original hold-reachability probes' own denominator (2 fixtures × 3 seeds = 6, see evidence/403-commit-comparison.json), not a narrower or differently-scoped one.",
+    "notChosen": "The 4-seed widening (extension B) was not used: its own source PR names it an undecided ad hoc widening for an unrelated check, not a matrix definition, and Issue #403 does not ask for a 4th seed."
+  },
+
+  "finding": "'Матрица' is used with at least three different denominators across the tree's own evidence trail: 3 seeds only (§13.4, literal); 5 fixtures × 3 seeds = 15 cells (line 767-769, self-attributed to §13.4 but not §13.4's literal wording); 3 fixtures × 4 seeds = 12 cells (evidence/409-localisation.json, self-flagged as undecided). Only the first is the actual contract-level definition; the other two are locally-scoped extensions for unrelated purposes, one of which admits in its own text that it was never decided. This is real terminological looseness worth flagging to the owner/coordinator, though it does not rise to a live contradiction inside §13.4 itself — §13.4's own sentence is unambiguous once read in full ('Матрица — три числа')."
+}
