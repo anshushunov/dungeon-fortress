@@ -1,0 +1,47 @@
+{
+  "issue": 423,
+  "question": "После правки двух узких пересказов правила 17 (docs/engineering/ENVIRONMENT_SETUP.md:666-670, docs/engineering/MULTI_AGENT_WORKFLOW.md:1057-1059) даёт ли гард scripts/check-root-on-main.ps1 (не изменён этой задачей) тот же ответ, что буквальное чтение каждого из четырёх мест правила 17 (AGENTS.md, DEVELOPMENT_PACE.md, и двух пересказов), на обоих состояниях: корень на 'main' и корень на другой ветке?",
+  "mechanism": "scripts/check-root-on-main.ps1, не изменён этой задачей (партиция #423 не включает scripts/**). Прогон на одноразовом fixture-репозитории под .artifacts/423-fixture (не настоящий root 'C:/gamedev/Dungeon fortress'), удалён после прогона; .artifacts/ в .gitignore.",
+  "fixtureSetup": [
+    "rm -rf .artifacts/423-fixture",
+    "git init -q -b main .artifacts/423-fixture/root",
+    "git -C .artifacts/423-fixture/root config user.email test@example.com / user.name Test / commit.gpgsign false",
+    "printf 'one\\n' > .artifacts/423-fixture/root/a.txt && git -C .artifacts/423-fixture/root add a.txt && git -C .artifacts/423-fixture/root commit -q -m one"
+  ],
+  "stateOne_rootOnMain": {
+    "description": "Легитимное состояние - корень чист, никто ветку не переключал.",
+    "command": "git -C .artifacts/423-fixture/root branch --show-current",
+    "output": "main",
+    "guardCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-root-on-main.ps1 -RepoRoot .artifacts/423-fixture/root",
+    "guardOutput": "{\"event\":\"root_on_main_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-423-rule17-echo\\\\.artifacts\\\\423-fixture\\\\root\",\"applicable\":true,\"headBranch\":\"main\",\"status\":\"ok\"}",
+    "exitCode": 0,
+    "textReadingAgreement": {
+      "AGENTS.md:130-134": "разрешает - переключения не было",
+      "DEVELOPMENT_PACE.md:284-289": "разрешает - переключения не было",
+      "ENVIRONMENT_SETUP.md:666-670 (правлено)": "разрешает - переключения не было",
+      "MULTI_AGENT_WORKFLOW.md:1057-1059 (правлено)": "разрешает - переключения не было"
+    }
+  },
+  "stateTwo_rootOnOtherBranch": {
+    "description": "Ветка названа так, будто её создала сама координационная сессия для своей записывающей работы - воспроизводит форму инцидента 2026-08-11 (docs/398-coordination-own-write), а не форму делегированного агента.",
+    "command": "git -C .artifacts/423-fixture/root checkout -q -b docs/423-coordination-own-write",
+    "verifiedSwitch": {
+      "command": "git -C .artifacts/423-fixture/root branch --show-current",
+      "output": "docs/423-coordination-own-write"
+    },
+    "guardCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-root-on-main.ps1 -RepoRoot .artifacts/423-fixture/root",
+    "guardOutput": "{\"event\":\"root_on_main_check\",\"repoRoot\":\"C:\\\\gamedev\\\\_wt-423-rule17-echo\\\\.artifacts\\\\423-fixture\\\\root\",\"applicable\":true,\"headBranch\":\"docs/423-coordination-own-write\",\"status\":\"fail\"}",
+    "exitCode": 1,
+    "guardStderrNote": "Сообщение гарда читаемо по содержанию (текст на английском не искажён); Cyrillic-цитата названия раздела AGENTS.md внутри сообщения выходит искажённой в этом прогоне из-за консольной кодировки PowerShell при редиректе в этой bash-сессии (наблюдалось и с UTF8 OutputEncoding, и без него) - это артефакт кодовой страницы терминала, не дефект скрипта (scripts/check-root-on-main.ps1 не тронут этой задачей, партиция его исключает) и не влияет на JSON stdout, exit code или семантику, по которым проверяется согласие.",
+    "textReadingAgreement": {
+      "AGENTS.md:130-134": "запрещает - 'ни сама координационная сессия' переключать ветку в корне для своей записывающей работы",
+      "DEVELOPMENT_PACE.md:284-289": "запрещает - 'сама координационная сессия для своей же записывающей работы'",
+      "ENVIRONMENT_SETUP.md:666-670 (правлено)": "запрещает - 'ни сама координационная сессия для своей же записывающей работы'",
+      "MULTI_AGENT_WORKFLOW.md:1057-1059 (правлено)": "запрещает - 'ни сама координационная сессия для своей же записывающей работы'"
+    }
+  },
+  "conclusion": "На обоих состояниях гард и буквальное чтение всех четырёх мест (двух канонических из PR #421 и двух пересказов, поправленных этой задачей) дают один и тот же ответ: на 'main' - ok/разрешено, на любой другой ветке, включая названную как собственная запись координационной сессии, - fail/запрещено, без исключения для координационной сессии. До правки #423 пересказы в ENVIRONMENT_SETUP.md и MULTI_AGENT_WORKFLOW.md на состоянии два расходились бы с гардом по контрапозиции узкой грамматики ('записывающий агент не переключает' не значит явно, что координационной сессии тоже нельзя).",
+  "cleanup": "rm -rf .artifacts/423-fixture и вспомогательные .artifacts/423-guard-*.txt после прогона; .artifacts/ в .gitignore, реальный root 'C:/gamedev/Dungeon fortress' не тронут.",
+  "reusedRecipeFrom": "evidence/398-two-states.json",
+  "modelId": "claude-sonnet-5 (Claude Code CLI)"
+}

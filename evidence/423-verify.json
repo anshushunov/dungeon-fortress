@@ -1,0 +1,65 @@
+{
+  "issue": 423,
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/verify.ps1\"",
+  "runContext": "Foreground, single run, on the final commit of fix/423-rule17-echo in worktree C:/gamedev/_wt-423-rule17-echo (правило 22: полный verify.ps1 зелёный один раз на финальном состоянии).",
+  "scope": "full (10 of 10 stages)",
+  "result": {
+    "status": "ok",
+    "stagesExecuted": ["scripts", "build", "tests", "mcp", "sim", "load", "godot", "ui", "screenshots", "token-budget"],
+    "stagesNotRun": [],
+    "stageElapsedSeconds": {
+      "scripts": 91.9,
+      "build": 34.5,
+      "tests": 165.5,
+      "mcp": 3.8,
+      "sim": 0.4,
+      "load": 0.6,
+      "godot": 34.4,
+      "ui": 4.1,
+      "screenshots": 13.2,
+      "token-budget": 104.7
+    },
+    "godotExitCode": 0,
+    "godotControlsExitCode": 0,
+    "godotCameraExitCode": 0,
+    "hudGuardRegressionExitCode": 1,
+    "hudReadabilityRegressionExitCode": 1,
+    "cameraTransformRegressionExitCode": 1,
+    "godotRaidExitCode": 0,
+    "momentOfTruthExitCode": 0,
+    "screenshotRepeatable": true
+  },
+  "note": "Мутант по этой задаче не назначен (правило 21, документация) - роль проверки играет полнота поиска из evidence/423-inventory.json, а не regression-инжекторы гарда HUD/камеры, которые прогоняются как часть штатной стадии godot и краснеют по своему собственному, не связанному с этой задачей назначению (exit 1 у *RegressionExitCode - ожидаемый отрицательный результат внутренних инжекторов регрессии, не сбой стадии; сама стадия godot вернула status ok).",
+  "checksumsAddendum": {
+    "findingFromReviewCircle": "Тело PR #425 утверждало значения deterministicChecksum/changedSeedChecksum/loadChecksum/viewInvariantChecksum, но ни одно из четырёх полей не было записано в этот файл при первом прогоне - verify.ps1 печатает итоговый JSON только в stdout и в finally-блоке (scripts/verify.ps1:1469-1482) безусловно удаляет свой временный $verifyRoot (включая stage-output.log) по завершении, поэтому задним числом восстановить те конкретные числа из файла на диске было нельзя - только из памяти сессии, что запрещено. Решение: не подставлять число по памяти, а сделать второй прогон в форграунде специально для того, чтобы зафиксировать числа в этом evidence-файле с командой, коммитом и сверкой.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& { & './scripts/verify.ps1' 2>&1 | Tee-Object -FilePath '.artifacts/423-verify-rerun.log' } \"",
+    "commit": "4d697a57355e95c563dcc4ba032163cef71b47b3",
+    "commitNote": "Тот же коммит, на котором стоял PR #425 до этой правки - код игры этой правкой не тронут (меняется только evidence/423-verify.json), поэтому результат прогона относится к тому же дереву исходников, что и исходный прогон, зафиксированный выше в этом файле.",
+    "runMode": "foreground, не в фоне харнесса - на машине параллельно шли ещё две задачи, полный прогон занял отдельный вызов и дождался завершения в том же вызове",
+    "values": {
+      "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+      "changedSeedChecksum": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
+      "loadChecksum": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+      "viewInvariantChecksum": "c32c48fa7cf1c15f4149bed17c598e9b8ed1866b5cbd0298aac500b77ca7781b"
+    },
+    "rerunResultOtherwiseIdentical": {
+      "status": "ok",
+      "stagesExecuted": ["scripts", "build", "tests", "mcp", "sim", "load", "godot", "ui", "screenshots", "token-budget"],
+      "stagesNotRun": [],
+      "godotExitCode": 0,
+      "godotRaidExitCode": 0,
+      "momentOfTruthExitCode": 0,
+      "screenshotRepeatable": true
+    },
+    "comparisonWithPR421": {
+      "source": "evidence/398-verify.json (committed on main by PR #421)",
+      "deterministicChecksum": { "here": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f", "pr421": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f", "match": true },
+      "changedSeedChecksum": { "here": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2", "pr421": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2", "match": true },
+      "loadChecksum": { "here": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045", "pr421": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045", "match": true },
+      "viewInvariantChecksum": { "here": "c32c48fa7cf1c15f4149bed17c598e9b8ed1866b5cbd0298aac500b77ca7781b", "pr421": "c32c48fa7cf1c15f4149bed17c598e9b8ed1866b5cbd0298aac500b77ca7781b", "match": true },
+      "conclusion": "Все четыре контрольные суммы совпадают побайтово с прогоном PR #421 - ожидаемо, задача #423 не меняет код игры, только текст двух документов."
+    },
+    "localLogFile": ".artifacts/423-verify-rerun.log (не коммитится - .artifacts/ в .gitignore; полный stdout прогона, из которого взяты значения выше, включая некомпресированную verification_result-строку)"
+  },
+  "modelId": "claude-sonnet-5 (Claude Code CLI)"
+}
