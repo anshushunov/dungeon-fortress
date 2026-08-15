@@ -287,10 +287,19 @@ public static class PrototypeCanonical
             // What a wounded creature decided at the roll call (Issue #431).
             // Additive, like every section added since v2: a new field on an
             // existing section, nothing renamed, removed, retyped or re-pointed,
-            // so the schema version does not move. No frame before the first wave
-            // moves either, because the field is null until a wave asks somebody
-            // with a wound — which is the same shape `raiders[].rememberedPlace`
-            // already has.
+            // so the schema version does not move — which is the same shape
+            // `raiders[].rememberedPlace` already has.
+            //
+            // <b>Additive is not the same as invisible, and the difference is
+            // worth stating where the bytes are written.</b> The null is
+            // serialised explicitly a few lines below rather than omitted, so the
+            // key is present on every creature from tick 0 and the checksum of
+            // <em>every</em> canonical frame moves, including frames from before
+            // the first wave — when no creature can possibly carry an intent. The
+            // three golden UI frames of the repository (t190, t336, t950) are all
+            // pre-wave and all three were regenerated for exactly this reason.
+            // A reader looking for the cause of a checksum shift should stop here
+            // rather than at the roll call.
             //
             // Canonical rather than presentational: the panel is forbidden to
             // read this off `lastDecision` (the roll call runs before job

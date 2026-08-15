@@ -1863,22 +1863,39 @@ raiderMight = T.raider_might_base + renown / T.renown_per_raider_might
 
 - `injuries[torso].severity != heavy` — **разрушенный торс, и только он, не пускает в бой**. Тяжёлая рука, нога или голова с волны 2026-08-12 из боя не исключают: питч 6.13 называет следствия ран внутри боя, а существо, которого тяжёлая рука в бой не пускает, оружия в бою не роняет никогда. Решение координатора, запись 1 [#415](https://github.com/anshushunov/dungeon-fortress/issues/415);
 - `satiety >= T.combat_join_satiety` (30);
+- `выпущенная обида × T.loyalty_refuse_grudge_weight <= удерживающее`, где
+  удерживающее = `выгода + страх перед владением + grit × T.loyalty_refuse_grit_weight`
+  (срез 3, `SLICE_03_MOMENT_OF_TRUTH.md` §1.6; правая часть читает страх **перед
+  владением**, а не общий, — решение владельца 2026-08-15, запись 37 в
+  [#415](https://github.com/anshushunov/dungeon-fortress/issues/415));
 - расстояние **от самого существа** до ближайшего налётчика **или** до
   ближайшего тайла кладовой не превышает `T.engage_radius` = 8 тиков хода, и
   путь существует.
 
-Иначе выдаётся один из reason codes: `combat_refused_starving`,
-`combat_refused_injured`, `combat_absent_unreachable`. В `details` кода
-`combat_absent_unreachable` указывается фактическое расстояние.
+Иначе выдаётся один из reason codes: `combat_refused_injured`,
+`combat_refused_starving`, `combat_refused_grudge`, `combat_absent_unreachable`.
+В `details` кода `combat_absent_unreachable` указывается фактическое расстояние,
+в `details` кода `combat_refused_grudge` — обида и сумма удерживающего.
 
 Если одновременно нарушено несколько условий, код выбирается в фиксированном
 порядке: `combat_refused_injured → combat_refused_starving →
-combat_absent_unreachable`. Остальные нарушенные условия сохраняются в
-`details.failedConditions[]`, но не порождают отдельные решения.
+combat_refused_grudge → combat_absent_unreachable`. **Остальные нарушенные
+условия нигде не сохраняются, и это обещание контракта, которое код не
+выполняет.** До 2026-08-15 здесь стояло «остальные нарушенные условия сохраняются
+в `details.failedConditions[]`»; такого ключа нет ни в одной ветке
+`UpdateCombatParticipation` — проверено поиском по `src/`, ноль вхождений.
+Проверка выходит из цикла первым же нарушенным условием, поэтому `details` несут
+слагаемые ровно того сравнения, которое сработало. Реализация `failedConditions[]`
+здесь **не** делается: это отдельная работа со своей ценой, а не побочный эффект
+слайса #431, который нашёл расхождение. Долг назван, чтобы следующий не считал
+ключ существующим.
 
 **Правило (состязание раненого, Issue #431).** Существо с **непустой травмой**,
 пережившее все четыре отказа выше, решает само, беречься ему или лезть. Целое
 существо в состязание не входит вовсе и идёт прежним путём `combat_joined`.
+Состязание стоит **пятым и последним**, после проверки достижимости, — полный
+порядок: `combat_refused_injured → combat_refused_starving →
+combat_refused_grudge → combat_absent_unreachable → состязание раненого`.
 
 ```
 беречься = T.combat_spare_wound_weight × Σ тяжестей повреждённых частей
@@ -2866,6 +2883,7 @@ reason code не отрисовывается «как похожий»: ада�
 | `combat_joined` | существо вступило в бой; `details.wave` называет волну |
 | `combat_refused_starving` | сытость ниже `T.combat_join_satiety`; `details.satiety` и `details.threshold` называют обе стороны сравнения, `details.wave` — волну |
 | `combat_refused_injured` | тяжёлый **торс** до боя; `details.wave` называет волну |
+| `combat_refused_grudge` | выпущенная обида перевесила удерживающее (10.2, третий отказ); `details.grudge` и `details.holding` называют обе стороны сравнения, `details.wave` — волну |
 | `combat_absent_unreachable` | налётчик недостижим или слишком далеко; `details.wave` называет волну |
 | `combat_spared_wound` | раненое существо решило беречься и вышло из сбора (10.2, состязание раненого); `details` несут `spare`, `press`, `part`, `severity`, `verdictDecided` и `wave` |
 | `combat_pressed_wound` | раненое существо вышло в строй, и причиной был страх перед владением: без него «беречься» перевесило бы. Начисляет `grudge_pressed_wounded`; `details` несут `spare`, `press`, `part`, `grudge` и `wave` |
