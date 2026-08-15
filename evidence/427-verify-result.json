@@ -83,15 +83,47 @@
     }
   },
   "criterion5_fullRunGreenOnce": {
-    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/verify.ps1\"",
-    "processExitCode": 0,
-    "scope": "full (10 of 10 stages)",
-    "stageElapsedSeconds": {
-      "scripts": 102.4, "build": 34.7, "tests": 169.5, "mcp": 4.3,
-      "sim": 0.3, "load": 0.6, "godot": 35, "ui": 4.3, "screenshots": 11, "token-budget": 99.9
+    "note": "Two full runs exist in this session's history: the first (superseded) ran on commit ff35fe7, before review round 2's isolation fix; rule 22 requires the run on the *final* state, which is the second one below, run on commit 1168138 (round 2's fix + its evidence, before this update).",
+    "supersededFirstRun": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/verify.ps1\"",
+      "commit": "ff35fe7985227dd6f89f56e647c3e2553e13734e",
+      "processExitCode": 0,
+      "stageElapsedSeconds": {
+        "scripts": 102.4, "build": 34.7, "tests": 169.5, "mcp": 4.3,
+        "sim": 0.3, "load": 0.6, "godot": 35, "ui": 4.3, "screenshots": 11, "token-budget": 99.9
+      }
     },
-    "sideEffectFoundAndReverted": "The `tests` stage's dotnet test run touched evidence/403-reachability.json (CRLF-only, foreign to this Issue's partition - same effect already seen on #428/#429). `git checkout -- evidence/403-reachability.json` before committing anything from this run; confirmed clean with `git status --porcelain` afterward.",
-    "resultFileAfterThisRun": ".artifacts/verify-results/verify-result.json, matches the stdout verification_result line byte for byte (see criterion1/2 above for the read command and values)"
+    "finalRunOnReviewRound2State": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/verify.ps1\"",
+      "commit": "1168138 (HEAD at the time this run started - round 2's Publish-VerificationResult fix and its evidence, before this update commit)",
+      "processExitCode": 0,
+      "scope": "full (10 of 10 stages)",
+      "stageElapsedSeconds": {
+        "scripts": 117.4, "build": 6.2, "tests": 158.9, "mcp": 3.8,
+        "sim": 0.3, "load": 0.6, "godot": 35.2, "ui": 4.6, "screenshots": 11, "token-budget": 93.5
+      },
+      "temporaryRoot": "C:\\gamedev\\df-verify-04cf010b (confirmed removed after the run: ls -d returned 'No such file or directory')",
+      "stdoutFinalLines": [
+        "{\"event\":\"verification_result_file\",\"status\":\"ok\",\"path\":\"C:\\\\gamedev\\\\_wt-427-verify-result\\\\.artifacts\\\\verify-results\\\\verify-result.json\"}",
+        "{\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"full\",\"stagesExecuted\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\",\"token-budget\"],\"stagesNotRun\":[],...,\"deterministicChecksum\":\"e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f\",\"changedSeedChecksum\":\"cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2\",\"loadChecksum\":\"7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045\",...,\"viewInvariantChecksum\":\"c32c48fa7cf1c15f4149bed17c598e9b8ed1866b5cbd0298aac500b77ca7781b\",...}"
+      ],
+      "readBackFromPersistedFileWithOwnCommand": {
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"(Get-Content .artifacts/verify-results/verify-result.json | ConvertFrom-Json) | Select-Object deterministicChecksum, changedSeedChecksum, loadChecksum, viewInvariantChecksum | Format-List\"",
+        "output": {
+          "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+          "changedSeedChecksum": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
+          "loadChecksum": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+          "viewInvariantChecksum": "c32c48fa7cf1c15f4149bed17c598e9b8ed1866b5cbd0298aac500b77ca7781b"
+        },
+        "note": "Identical to the earlier run's values (evidence/423-verify.json cross-check still holds) and to what the coordinator independently reported after inspecting the same file - confirmed here with my own command, not by repeating the coordinator's report, per rule 8."
+      },
+      "verifyResultsDirAfterRun": {
+        "command": "ls .artifacts/verify-results/",
+        "output": ["verify-result.json"],
+        "note": "Only the JSON - no stage-output.log, confirming the green-run decision (nothing kept) and that the stale log from an earlier red demonstration in this session was already removed by the intervening green -Stage scripts run."
+      },
+      "sideEffectFoundAndReverted": "The `tests` stage's dotnet test run touched evidence/403-reachability.json again (CRLF-only, foreign to this Issue's partition - same effect already seen on #428/#429, and on the first full run above). `git checkout -- evidence/403-reachability.json`; confirmed clean with `git status --porcelain` afterward."
+    }
   },
   "stageOutputLogDecision": {
     "decision": "Not kept on a green run (nothing in it a green run's own verification_result doesn't already say); copied out of the temporary $verifyRoot to .artifacts/verify-results/stage-output.log on a red run, before `finally` deletes the source; a subsequent green run removes any such stale copy.",
