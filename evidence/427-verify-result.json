@@ -77,6 +77,8 @@
     "preExistingUnrelatedObservations": {
       "note": "Found during this session, not caused by this change, out of Issue #427's partition, reported here for the record rather than silently fixed.",
       "danglingDfVerifyDirs": "151 df-verify-<...> directories already sat next to the repository (C:/gamedev/df-verify-*) before and independent of this session's four runs - accumulated debt from other agents' historical sessions across weeks (one is literally named df-verify-306before, an Issue #306 evidence fixture). Not touched.",
+      "danglingDfVerifyDirsCommand": "ls -d /c/gamedev/df-verify-* 2>/dev/null | wc -l",
+      "danglingDfVerifyDirsCommandOutput": "151",
       "testVerifyStagesOwnSandboxLeftover": "scripts/test-verify-stages.ps1's own $sandbox (.artifacts/verify-stage-guard-<guid>) was left behind, empty, after both a run this session triggered directly and after the full run's own `scripts` stage - a pre-existing quirk in that script's cleanup, unrelated to scripts/VerifyResult.ps1. Manually removed (rm -rf) after confirming empty, for hygiene; not part of this Issue's fix."
     }
   },

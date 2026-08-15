@@ -431,9 +431,11 @@ $stageCatalog = [ordered]@{
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $evidenceToolsTestScript
             )
-            # Issue #427. Save-VerificationResult (scripts/VerifyResult.ps1) is
-            # what keeps verification_result on disk after `finally` deletes
-            # $verifyRoot; this is its dependency-free behavioural test.
+            # Issue #427. Publish-VerificationResult/Save-VerificationResult
+            # (scripts/VerifyResult.ps1) are what keep verification_result on
+            # disk after `finally` deletes $verifyRoot, without letting a save
+            # failure cost the run its own stdout; this is their
+            # dependency-free behavioural test.
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $verifyResultPersistenceTestScript
             )
@@ -1417,20 +1419,19 @@ try {
     # deletes unconditionally. A green run has no stage-output.log worth
     # keeping (every checksum it produced is already in the JSON below), so
     # none is passed here - see scripts/VerifyResult.ps1 for the decision.
-    # $summary is serialised twice, deliberately: the save below must not
-    # touch the exact `$summary | ConvertTo-Json -Compress | Write-Host` line
-    # further down, which scripts/test-verify-stages.ps1 pins by literal text
-    # (Issue #284) as the guarantee that a run's checksums always reach
-    # stdout, independent of whether saving them to a file also succeeds.
-    Save-VerificationResult `
+    # $summary is serialised twice, deliberately: Publish-VerificationResult
+    # must not touch the exact `$summary | ConvertTo-Json -Compress | Write-Host`
+    # line further down, which scripts/test-verify-stages.ps1 pins by literal
+    # text (Issue #284) as the guarantee that a run's checksums always reach
+    # stdout. That guarantee is not just this call sitting before the pinned
+    # line textually - Publish-VerificationResult never throws (it catches
+    # and reports its own save failures, see scripts/VerifyResult.ps1), so
+    # nothing here can skip the line below the way a propagating save error
+    # did in an earlier version of this change (review round 2).
+    Publish-VerificationResult `
         -ResultPath $verifyResultPath `
         -StageLogPath $verifyResultStageLogPath `
         -Json ($summary | ConvertTo-Json -Compress)
-    [ordered]@{
-        event = "verification_result_file"
-        status = "ok"
-        path = $verifyResultPath
-    } | ConvertTo-Json -Compress | Write-Host
     $summary | ConvertTo-Json -Compress | Write-Host
 }
 catch {
@@ -1501,17 +1502,16 @@ catch {
     # otherwise be needed to reproduce, so its stage-output.log is copied out
     # of $verifyRoot (still intact here - `finally` has not run yet) before
     # cleanup deletes it, alongside the same verification_result JSON a
-    # green run gets.
-    Save-VerificationResult `
+    # green run gets. Publish-VerificationResult never throws (see its own
+    # comment in scripts/VerifyResult.ps1), so a save failure here cannot
+    # skip the `Write-Host` below or the `throw` after it - a run that is
+    # already failing must not lose its own structured error report to an
+    # unrelated disk problem.
+    Publish-VerificationResult `
         -ResultPath $verifyResultPath `
         -StageLogPath $verifyResultStageLogPath `
         -Json $errorSummaryJson `
         -SourceStageLogPath $stageLogPath
-    [ordered]@{
-        event = "verification_result_file"
-        status = "ok"
-        path = $verifyResultPath
-    } | ConvertTo-Json -Compress | Write-Host
     Write-Host $errorSummaryJson
 
     throw

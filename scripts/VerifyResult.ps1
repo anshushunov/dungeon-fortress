@@ -27,10 +27,21 @@ Set-StrictMode -Version Latest
 # checksum a green run produces is already in verification_result itself -
 # so it is not kept. A red run's log is exactly the thing a second full run
 # would otherwise be needed to reproduce, so it is copied out before the
-# temporary directory that held it is removed. verify.ps1 calls this
-# function at most once per run - from the `try` block on success, or from
-# the `catch` block on failure - and only the failure call passes
-# -SourceStageLogPath.
+# temporary directory that held it is removed.
+#
+# Publish-VerificationResult (below Save-VerificationResult) is what
+# verify.ps1 actually calls, once per run - from the `try` block on success,
+# or from the `catch` block on failure, the latter passing
+# -SourceStageLogPath. It exists because Save-VerificationResult can throw
+# (a full disk, a locked file, a permissions problem), and a save failure
+# must never cost a run the one thing this whole Issue is about: its
+# checksums reaching stdout. Publish-VerificationResult catches that
+# failure itself and reports it truthfully as its own
+# verification_result_file event (status:error, with a reason) instead of
+# either propagating the exception or claiming status:ok - both of which
+# review round 2 found true of an earlier version of this file, where
+# verify.ps1 called Save-VerificationResult directly and printed a
+# hardcoded status:ok event regardless of what happened.
 
 function Save-VerificationResult {
     [CmdletBinding()]
@@ -69,4 +80,50 @@ function Save-VerificationResult {
     if ([IO.File]::Exists($StageLogPath)) {
         [IO.File]::Delete($StageLogPath)
     }
+}
+
+function Publish-VerificationResult {
+    [CmdletBinding()]
+    [OutputType([void])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ResultPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$StageLogPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Json,
+
+        [string]$SourceStageLogPath
+    )
+
+    # Deliberately broad: whatever Save-VerificationResult throws - a full
+    # disk, a locked file, a missing/unwritable parent - is this function's
+    # to catch, not its caller's. The alternative is the exact defect review
+    # round 2 found: a save failure propagating out of this call site would
+    # skip verify.ps1's own final `Write-Host` of the checksums (success
+    # path) or of the structured error report (failure path), because both
+    # sit textually after this call.
+    $reason = $null
+    try {
+        Save-VerificationResult `
+            -ResultPath $ResultPath `
+            -StageLogPath $StageLogPath `
+            -Json $Json `
+            -SourceStageLogPath $SourceStageLogPath
+    }
+    catch {
+        $reason = $_.Exception.Message
+    }
+
+    $fileEvent = [ordered]@{
+        event = "verification_result_file"
+        status = if ($null -eq $reason) { "ok" } else { "error" }
+        path = $ResultPath
+    }
+    if ($null -ne $reason) {
+        $fileEvent["reason"] = $reason
+    }
+    $fileEvent | ConvertTo-Json -Compress | Write-Host
 }

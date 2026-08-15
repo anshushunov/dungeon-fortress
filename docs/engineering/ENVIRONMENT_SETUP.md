@@ -677,6 +677,25 @@ Issue #427. Итоговая строка `verification_result` — четыре
 {"event":"verification_result_file","status":"ok","path":"C:\\gamedev\\_wt-427\\.artifacts\\verify-results\\verify-result.json"}
 ```
 
+**Сохранение изолировано от печати (review round 2, Issue #427).** Запись на
+диск может упасть сама по себе — переполненный диск, заблокированный файл,
+нет прав — и такой отказ не имеет права стоить прогону то, ради чего задача
+заведена: сами контрольные суммы в stdout. `Publish-VerificationResult`
+(`scripts/VerifyResult.ps1`) перехватывает отказ `Save-VerificationResult`,
+и строка `$summary | ConvertTo-Json -Compress | Write-Host` (Issue #284,
+неизменный текст, проверяется дословно в `test-verify-stages.ps1`) печатается
+**всегда**, независимо от исхода записи. На неудачной записи
+`verification_result_file` честно называет это, а не молчит и не врёт
+`"status":"ok"`:
+
+```json
+{"event":"verification_result_file","status":"error","path":"C:\\gamedev\\_wt-427\\.artifacts\\verify-results\\verify-result.json","reason":"Access to the path '...' is denied."}
+```
+
+Сам итог прогона (зелёный/красный) от этого не зависит — неудачная запись на
+диск не превращает прошедшие проверки в проваленные, тем же best-effort
+рассуждением, что и уборка временного каталога выше.
+
 **Что делает `verify.ps1` со `stage-output.log` — решено явно (Issue #427,
 scope item 2), а не оставлено умолчанием.** На зелёном прогоне лог не
 сохраняется: всё, что зелёный прогон производит, уже есть в
@@ -686,7 +705,7 @@ scope item 2), а не оставлено умолчанием.** На зелё�
 **до** того, как `finally` удалит исходный каталог — это ровно тот файл,
 из-за отсутствия которого PR #425 понадобился второй прогон. Зелёный прогон,
 следующий за красным в том же worktree, удаляет чужой оставшийся лог: файл
-`stage-output.json` рядом с `"status":"ok"` иначе выглядел бы как
+`stage-output.log` рядом с `"status":"ok"` иначе выглядел бы как
 свидетельство провала, которого не было.
 
 Место — `.artifacts/`, уже покрытое строкой `.artifacts/` в `.gitignore`, та

@@ -195,16 +195,23 @@ $allowedOutsideStages = @(
     # do not need this entry at all, because those functions are themselves
     # reachable from a stage body and so is everything they call.
     "Write-VerifyDiagnostic",
-    # Issue #427. Defined in VerifyResult.ps1: writes the already-decided
-    # verification_result JSON (and, on a failed run, the already-decided
-    # stage-output.log) to a durable path outside $verifyRoot. Like
-    # Write-VerifyDiagnostic above, it never decides whether the repository
-    # is healthy - the pass/fail decision above it is unchanged, this only
-    # decides where a result that was already computed ends up - so it is
-    # plumbing by the same reasoning, called once from the `try` block (on
-    # success) and once from the `catch` block (on failure), both outside
-    # every stage.
-    "Save-VerificationResult"
+    # Issue #427. Publish-VerificationResult, defined in VerifyResult.ps1, is
+    # what verify.ps1 itself calls - once from the `try` block on success,
+    # once from the `catch` block on failure, both outside every stage - to
+    # write the already-decided verification_result JSON (and, on a failed
+    # run, the already-decided stage-output.log) to a durable path outside
+    # $verifyRoot. Like Write-VerifyDiagnostic above, it never decides
+    # whether the repository is healthy - the pass/fail decision above it is
+    # unchanged, this only decides where a result that was already computed
+    # ends up, and it never lets that decision propagate as an exception
+    # (review round 2: a save failure must not cost a run its own stdout) -
+    # so it is plumbing by the same reasoning. Save-VerificationResult, the
+    # primitive Publish-VerificationResult wraps and the one call that can
+    # actually throw, is not listed here at all: it is reachable only from
+    # inside Publish-VerificationResult's own body, so it joins the run-setup
+    # closure by reachability, the same way Assert-ProbeInvariant would (see
+    # the exit described at the top of this file).
+    "Publish-VerificationResult"
 )
 
 # Plumbing the run-setup bodies above may use on top of $allowedOutsideStages.
