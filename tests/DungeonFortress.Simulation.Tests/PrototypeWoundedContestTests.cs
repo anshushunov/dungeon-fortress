@@ -5,6 +5,7 @@ using System.Text.Json;
 using DungeonFortress.Simulation;
 
 using Xunit;
+using Xunit.Abstractions;
 
 namespace DungeonFortress.Simulation.Tests;
 
@@ -24,7 +25,7 @@ namespace DungeonFortress.Simulation.Tests;
 /// how its fights went, and a check pinned to one seed has to be re-pointed by
 /// hand every time the balance moves.</para>
 /// </summary>
-public sealed class PrototypeWoundedContestTests
+public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
 {
     private static readonly string[] Fixtures = ["baseline", "prepared"];
 
@@ -210,54 +211,234 @@ public sealed class PrototypeWoundedContestTests
 
     /// <summary>
     /// The contest stands <b>after</b> the reachability test, so a creature that
-    /// both could not have got there and would have spared itself is reported as
-    /// unreachable. Checked by construction rather than by hoping the matrix
-    /// contains the coincidence: no creature ever carries a decision about its
-    /// wound on a tick on which it was refused as unreachable.
+    /// both could not have got there <b>and would have spared itself</b> is
+    /// reported as unreachable.
+    ///
+    /// <para><b>The witness has to satisfy all three conditions at once, and the
+    /// first version of this test did not require that.</b> Independent review of
+    /// PR #436 walked straight through it: counting any
+    /// <c>combat_absent_unreachable</c> and checking that no fresh
+    /// <c>woundIntent</c> exists stays green when every unreachable creature is
+    /// whole, or is wounded but would have taken the field anyway. Neither case
+    /// says anything about the order of the two refusals — a contest placed
+    /// <em>before</em> the distance test would pass that check as easily.</para>
+    ///
+    /// <para>So a witness is required, and it is required to be one creature on
+    /// one roll call that is <b>wounded</b>, <b>turned away as unreachable</b>,
+    /// and <b>would have spared itself</b> — the last computed from the published
+    /// snapshot by the formula of §3.1 rather than by calling the simulation's own
+    /// private method, so the check cannot agree with the code by sharing it. On
+    /// that roll call the creature must carry the unreachable code, no
+    /// <c>combat_spared_wound</c> of its own and no intent stamped with that
+    /// tick.</para>
+    ///
+    /// <para>The magnitudes are read on the snapshot taken <b>before</b> the tick,
+    /// because that is what the roll call inside the tick weighed; the class-wide
+    /// check that no creature is ever both at once is kept beside the witness,
+    /// because the witness proves the order is exercised and the class proves it
+    /// holds everywhere.</para>
+    ///
+    /// <para><b>The witness is not in the slice's matrix, and that is measured
+    /// rather than assumed.</b> Over the six parties of the matrix the roll call
+    /// turns 19 creatures away as unreachable, 10 of them carrying a wound, and
+    /// <b>none</b> of those ten would have spared itself: a wound light enough to
+    /// leave a creature at work far from the fight is usually light enough for the
+    /// pressing side to win. So the coincidence was searched for — both fixtures
+    /// over seeds 20260710–20260760, 102 parties — and it exists twice, both times
+    /// on the same creature: <c>baseline/20260716</c> t2350 and
+    /// <c>baseline/20260738</c> t2370, Прель (#6), five points of severity against
+    /// grit 4. The first of the two is named here as a single extra party. It is a
+    /// <b>witness cell</b> and not a widened matrix: every other check in this file
+    /// still reads the three matrix seeds, and this one party exists because
+    /// without it the assertion below has no subject.</para>
     /// </summary>
     [Fact]
-    public void A_creature_that_cannot_reach_the_fight_is_reported_unreachable_and_not_sparing()
+    public void A_wounded_creature_that_would_have_spared_itself_is_still_turned_away_as_unreachable()
     {
         var collisions = new List<string>();
+        var witnesses = new List<string>();
         var unreachables = 0;
-        foreach (var fixtureName in Fixtures)
+        var woundedUnreachables = 0;
+        foreach (var (fixtureName, seed) in EveryPartyAndTheWitnessCell())
         {
-            foreach (var seed in MatrixSeeds)
             {
                 var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
-                var seen = new Dictionary<int, int>();
+                var before = world.GetSnapshot();
+                var absencesSoFar = new Dictionary<int, int>();
+                var sparingsSoFar = new Dictionary<int, int>();
                 while (!world.IsComplete)
                 {
                     world.Step();
                     var state = world.GetSnapshot();
                     foreach (var creature in state.Creatures)
                     {
-                        var absences = state.Events
-                            .Where(item => item.CreatureId == creature.Id &&
-                                item.ReasonCode == "combat_absent_unreachable")
-                            .Sum(item => item.Repeats);
-                        var known = seen.GetValueOrDefault(creature.Id);
-                        seen[creature.Id] = absences;
+                        var sparings = Count(state, creature.Id, "combat_spared_wound");
+                        var knownSparings = sparingsSoFar.GetValueOrDefault(creature.Id);
+                        sparingsSoFar[creature.Id] = sparings;
+
+                        var absences = Count(state, creature.Id, "combat_absent_unreachable");
+                        var known = absencesSoFar.GetValueOrDefault(creature.Id);
+                        absencesSoFar[creature.Id] = absences;
                         if (absences <= known)
                         {
                             continue;
                         }
 
                         unreachables++;
-                        if (creature.WoundIntent is { } intent && intent.Tick == world.CurrentTick - 1)
+                        var intent = creature.WoundIntent;
+                        if (intent is not null && intent.Tick == state.Tick - 1)
                         {
                             collisions.Add(
                                 $"{fixtureName}/{seed} t{intent.Tick}: {creature.Name} is both " +
                                 $"`combat_absent_unreachable` and `{intent.Code}` on one roll call.");
                         }
+
+                        // The state the roll call weighed: the snapshot at the
+                        // start of the tick it ran in.
+                        var asItStood = before.Creatures.SingleOrDefault(item => item.Id == creature.Id);
+                        if (asItStood is null || asItStood.Injury == InjuryKind.None)
+                        {
+                            continue;
+                        }
+
+                        woundedUnreachables++;
+                        var (spare, press) = WeighAsThePublishedNumbersSay(asItStood);
+                        if (spare <= press)
+                        {
+                            continue;
+                        }
+
+                        // All three at once. Now the two things the order has to
+                        // produce, asserted here rather than counted.
+                        Assert.True(
+                            sparings == knownSparings,
+                            $"{fixtureName}/{seed} t{state.Tick - 1}: {creature.Name} was turned " +
+                            "away as unreachable and wrote `combat_spared_wound` on the same roll " +
+                            "call. The contest stands after the distance test, so the creature " +
+                            "that could not have got there is reported as unable to get there.");
+                        Assert.True(
+                            intent is null || intent.Tick != state.Tick - 1,
+                            $"{fixtureName}/{seed} t{state.Tick - 1}: {creature.Name} was turned " +
+                            "away as unreachable and still carries an intent stamped with that " +
+                            "roll call.");
+                        witnesses.Add(
+                            $"{fixtureName}/{seed} t{state.Tick - 1} #{creature.Id} " +
+                            $"{creature.Name}: {asItStood.Injury} wound, spare {spare} > press " +
+                            $"{press}, reported `combat_absent_unreachable`");
                     }
+
+                    before = state;
                 }
             }
         }
 
-        Assert.True(unreachables > 0, "the matrix never turned anybody away as unreachable, so the order was not exercised.");
+        output.WriteLine(
+            $"unreachable refusals {unreachables}, of them wounded {woundedUnreachables}, " +
+            $"of them would have spared themselves {witnesses.Count}:");
+        foreach (var witness in witnesses)
+        {
+            output.WriteLine("  " + witness);
+        }
+
+        Assert.True(
+            unreachables > 0,
+            "the matrix never turned anybody away as unreachable, so the order was not exercised.");
         Assert.True(collisions.Count == 0, string.Join(Environment.NewLine, collisions));
+        Assert.True(
+            witnesses.Count > 0,
+            $"{unreachables} creature(s) were turned away as unreachable, {woundedUnreachables} " +
+            "of them wounded, and not one of those would have spared itself by the formula of " +
+            "§3.1. Without such a creature this check cannot tell a contest placed after the " +
+            "distance test from one placed before it, and its green means nothing. The witness " +
+            "cell named in this file has stopped producing one — do not widen the seed range to " +
+            "get it back: re-measure, name the new cell, and say in the PR that the old one " +
+            "moved.");
+
+        File.WriteAllText(
+            Path.Combine(FindRepositoryRoot(), "evidence", "431-order.json"),
+            JsonSerializer.Serialize(
+                new
+                {
+                    schemaVersion = 1,
+                    issue = "#431",
+                    checkpoint = "2 — порядок отказов: состязание последним, после недосягаемости",
+                    command =
+                        "dotnet test tests/DungeonFortress.Simulation.Tests --filter " +
+                        "FullyQualifiedName~A_wounded_creature_that_would_have_spared_itself_is_still_turned_away_as_unreachable",
+                    what =
+                        "Свидетель, у которого три условия выполняются ОДНОВРЕМЕННО: ранен, " +
+                        "отвергнут как недосягаемый и по формуле §3.1 выбрал бы «беречься». " +
+                        "Без него проверка порядка зелена и при состязании, поставленном ПЕРЕД " +
+                        "проверкой достижимости, — находка 3 независимого review PR #436.",
+                    onTheMatrix = new
+                    {
+                        unreachableRefusals = unreachables,
+                        ofThemWounded = woundedUnreachables,
+                        why =
+                            "На шести партиях матрицы свидетеля НЕТ, и это измерение, а не " +
+                            "догадка: рана, достаточно лёгкая, чтобы оставить существо за " +
+                            "работой вдали от боя, обычно достаточно лёгкая и для того, чтобы " +
+                            "сторона «лезть» выиграла.",
+                    },
+                    theSearch =
+                        "Обе фикстуры, seed 20260710–20260760, 102 партии. Совпадение найдено " +
+                        "дважды и оба раза на одном существе: baseline/20260716 t2350 и " +
+                        "baseline/20260738 t2370, Прель (#6). Первая названа ячейкой-свидетелем; " +
+                        "остальные проверки файла по-прежнему читают три seed матрицы.",
+                    witnesses,
+                    formula =
+                        "spare и press пересчитаны в тесте из ОПУБЛИКОВАННОГО снапшота, а не " +
+                        "вызовом приватного метода мира: иначе проверка соглашалась бы с кодом, " +
+                        "разделяя его.",
+                },
+                new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                }) + "\n",
+            new UTF8Encoding(false));
     }
+
+    /// <summary>
+    /// The six parties of the matrix plus the one named witness cell of the order
+    /// check. Kept apart from <see cref="EveryParty"/> on purpose: everything
+    /// about the contest itself is measured on the matrix and nowhere else, and
+    /// this list exists for exactly one assertion.
+    /// </summary>
+    private static IEnumerable<(string Fixture, ulong Seed)> EveryPartyAndTheWitnessCell()
+    {
+        foreach (var fixtureName in Fixtures)
+        {
+            foreach (var seed in MatrixSeeds)
+            {
+                yield return (fixtureName, seed);
+            }
+        }
+
+        yield return ("baseline", 20_260_716UL);
+    }
+
+    /// <summary>
+    /// The contest of §3.1 recomputed from the <b>published</b> snapshot, so that
+    /// the check about the order does not agree with the code by calling it. It is
+    /// deliberately a second implementation of the same four lines: if the two
+    /// ever disagree, the witness stops being a witness and this test says so by
+    /// finding none.
+    /// </summary>
+    private static (int Spare, int Press) WeighAsThePublishedNumbersSay(PrototypeCreatureSnapshot creature)
+    {
+        var severity = creature.Injuries.Sum(injury => (int)injury.Severity);
+        var spare = severity * PrototypeTuning.CombatSpareWoundWeight +
+            creature.Loyalty.Benefit / PrototypeTuning.CombatSpareBenefitDivisor;
+        var press = creature.Loyalty.FearOfTheDomain / PrototypeTuning.CombatPressDomainFearDivisor +
+            creature.Grit * PrototypeTuning.CombatPressGritWeight;
+        return (spare, press);
+    }
+
+    private static int Count(PrototypeSnapshot state, int creatureId, string reasonCode) =>
+        state.Events
+            .Where(item => item.CreatureId == creatureId && item.ReasonCode == reasonCode)
+            .Sum(item => item.Repeats);
 
     // ------------------------------------------------------------------
     // The evidence file: criterion 3's base reading and criterion 4's matrix.
