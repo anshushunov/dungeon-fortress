@@ -43,29 +43,248 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
     /// and the one
     /// <see cref="A_remembered_place_changes_what_the_creature_does_next"/> reads.
     ///
-    /// <para><b>Why this check keeps three seeds while the rest of the file has
-    /// four.</b> The fourth seed was added earlier on this same branch for the
-    /// check below it, whose need is a <i>sample floor</i>: more parties can only
-    /// help a rule of the form "this branch must be reached at least once". The
-    /// observability rule is of the opposite form — <i>every</i> party of the
-    /// matrix must show memory of place at work — so widening the matrix silently
-    /// made a promise stricter than the one #333 wrote down and
-    /// <c>evidence/333-memory-floor.json</c> recorded the alternatives for.
-    /// Nobody decided that, and it is undone here rather than carried.</para>
+    /// <para><b>Four seeds, the same as the rest of the file, and Issue #418 is
+    /// why.</b> Issue #409 narrowed this one check back to three on the argument
+    /// that a rule of the form «every party of the matrix» becomes stricter when
+    /// the matrix grows, and that nobody decided that. The argument is sound and
+    /// the outcome was not: the fourth party is <c>baseline/20260729</c>, the one
+    /// the owner plays, and on it the promise of ADR 0018 was not observable at
+    /// all. A promise that holds on the parties nobody runs is not a promise.</para>
     ///
-    /// <para><b>What it does not hide.</b> On the party that seed plays,
-    /// <c>baseline</c> now shows no refusal by memory at all, and that is a real
-    /// consequence of this slice rather than a coincidence: it reads zero at every
-    /// one of the five stun periods swept over it (4, 5, 6, 7 and 8), so no tuning
-    /// of this slice restores it. The cause is the torso decision — creatures who
-    /// used to sit a wave out on a heavy limb now take the field, are carried off
-    /// more often, and spend the window between waves in bunks instead of walking
-    /// past the places they remember. It is written up as a finding in the pull
-    /// request body and belongs to whoever owns Issue #171, not to this
-    /// slice.</para>
+    /// <para><b>The paragraph that used to stand here was wrong about why.</b> It
+    /// said the cause was the torso decision — creatures who used to sit a wave
+    /// out on a heavy limb now take the field, are carried off more often and
+    /// spend the window between waves in bunks instead of walking past the places
+    /// they remember. Measured, that is refuted twice over: reverting the torso
+    /// gate leaves <c>baseline/20260729</c> unchanged in every stage count and
+    /// still at zero refusals, and creature-ticks spent resting with a live memory
+    /// barely moved across the slice (738 before, 841 after). The cause is spatial
+    /// and it is recorded in <c>evidence/418-cause.json</c>:
+    /// <see cref="Report_how_far_the_work_a_creature_is_offered_is_from_what_it_remembers"/>
+    /// finds that the nearest work ever offered to a creature holding a live
+    /// memory on that party started <b>nine</b> tiles from the nearest thing that
+    /// creature remembered, and the rule reaches four.</para>
     /// </summary>
     private static readonly ulong[] ObservabilitySeeds =
-        [20_260_726UL, 20_260_727UL, 20_260_728UL];
+        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL];
+
+    /// <summary>
+    /// Issue #418, the diagnosis. Where along the chain from "a place is written"
+    /// to "a refusal is recorded" does the party stop, seed by seed?
+    ///
+    /// Every stage below is a strict subset of the one above it, so the first
+    /// stage that reads zero on a silent seed and non-zero on a loud one is the
+    /// cause. Printed rather than asserted: it is a measurement, and the
+    /// assertion that matters is
+    /// <see cref="A_remembered_place_changes_what_the_creature_does_next"/>.
+    /// </summary>
+    [Theory]
+    [InlineData("baseline")]
+    [InlineData("prepared")]
+    public void Report_where_the_chain_from_a_written_place_to_a_refusal_stops(string fixtureName)
+    {
+        var report = new StringBuilder();
+        foreach (var seed in ObservabilitySeeds)
+        {
+            var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed });
+            var written = new HashSet<(int Creature, int X, int Y)>();
+            var withMemory = 0;
+            var live = 0;
+            var fed = 0;
+            var free = 0;
+            var jobInReach = 0;
+            var refusals = 0;
+            var firstWriteTick = int.MaxValue;
+            var lastLiveTick = -1;
+            var modesWhileLive = new SortedDictionary<string, int>(StringComparer.Ordinal);
+
+            while (!world.IsComplete)
+            {
+                world.Step();
+                var state = world.GetSnapshot();
+                var tick = state.Tick;
+                foreach (var creature in state.Creatures)
+                {
+                    foreach (var place in creature.RememberedPlaces)
+                    {
+                        if (written.Add((creature.Id, place.Place.X, place.Place.Y)))
+                        {
+                            firstWriteTick = Math.Min(firstWriteTick, place.Tick);
+                        }
+                    }
+
+                    if (creature.RememberedPlaces.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    withMemory++;
+                    var livePlaces = creature.RememberedPlaces
+                        .Where(place => tick - place.Tick <= PrototypeTuning.MemoryAvoidTicks)
+                        .ToArray();
+                    if (livePlaces.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    live++;
+                    lastLiveTick = Math.Max(lastLiveTick, tick);
+                    var mode = creature.Mode.ToString();
+                    modesWhileLive[mode] = modesWhileLive.GetValueOrDefault(mode) + 1;
+                    if (creature.Satiety < PrototypeTuning.MemoryYieldsSatiety)
+                    {
+                        continue;
+                    }
+
+                    fed++;
+                    if (creature.CurrentJobId is not null ||
+                        creature.IsMustering ||
+                        creature.Mode is CreatureMode.Eating or CreatureMode.Fighting
+                            or CreatureMode.Fled or CreatureMode.Downed)
+                    {
+                        continue;
+                    }
+
+                    free++;
+                    // Any unreserved job of a kind other than Rest whose target
+                    // tile is inside the reach of a live memory. The target here is
+                    // the job's own tile rather than the matching's initial target,
+                    // so this is an upper bound on the pairs the memory arm can see.
+                    var reachable = state.Jobs.Any(job =>
+                        job.Kind != JobKind.Rest &&
+                        (job.ReservedBy is null || job.ReservedBy == creature.Id) &&
+                        livePlaces.Any(place =>
+                            Manhattan(place.Place, job.Target) <= PrototypeTuning.MemoryAvoidRadius ||
+                            Manhattan(place.Place, job.Origin) <= PrototypeTuning.MemoryAvoidRadius));
+                    if (reachable)
+                    {
+                        jobInReach++;
+                    }
+                }
+
+                var acted = state.Tick - 1;
+                refusals += state.Events.Count(@event =>
+                    @event.LastTick == acted &&
+                    @event.ReasonCode is "refused_place_of_panic" or "refused_place_of_wound");
+            }
+
+            var final = world.GetSnapshot();
+            report.AppendLine(CultureInfo.InvariantCulture,
+                $"{fixtureName}/{seed}: places {written.Count} (first written t" +
+                $"{(firstWriteTick == int.MaxValue ? -1 : firstWriteTick)}), " +
+                $"creature-ticks withMemory {withMemory}, live {live} (last t{lastLiveTick}), " +
+                $"fed {fed}, freeToMatch {free}, jobInReach {jobInReach}, refusals {refusals}; " +
+                $"party ended t{final.Tick}");
+            report.AppendLine(
+                "    modes while a memory was live: " +
+                string.Join(", ", modesWhileLive.Select(pair => $"{pair.Key} {pair.Value}")));
+        }
+
+        output.WriteLine(report.ToString());
+    }
+
+    /// <summary>
+    /// Issue #418, the cause. <b>How far is the work a creature is actually
+    /// offered from the nearest place that same creature remembers?</b>
+    ///
+    /// <para>The counterfactual probe of Issue #125 already answers, tick by tick,
+    /// what each creature would have put first had memory of place not existed.
+    /// That is exactly the pair the memory arm has to be able to reach: a refusal
+    /// is only recorded when memory took away the work the creature would
+    /// otherwise have put first. So the distance between that work and the
+    /// creature's nearest live memory, histogrammed over the party, <b>is</b> the
+    /// reach question — and it needs nothing from inside the matching, which is
+    /// why it can stay in the repository instead of living in a patch.</para>
+    ///
+    /// <para>Read against <see cref="PrototypeTuning.MemoryAvoidRadius"/>:
+    /// everything at or below it is a pair memory could have taken away.
+    /// The places themselves are printed beside it, because the reason for the
+    /// distance is where the fighting stopped.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("baseline")]
+    [InlineData("prepared")]
+    public void Report_how_far_the_work_a_creature_is_offered_is_from_what_it_remembers(string fixtureName)
+    {
+        var report = new StringBuilder();
+        foreach (var seed in ObservabilitySeeds)
+        {
+            var world = new PrototypeWorld(LoadFixture(fixtureName) with { Seed = seed })
+            {
+                TrackMemoryFreeMatching = true,
+            };
+            var histogram = new SortedDictionary<int, int>();
+            var placesSeen = new SortedDictionary<string, string>(StringComparer.Ordinal);
+            var offered = 0;
+            // The state as the matching saw it. A memory written later in the same
+            // tick — by the fighting, which happens after the matching — is not one
+            // the arm could have consulted, and counting it would report reach the
+            // rule never had.
+            var before = world.GetSnapshot();
+
+            while (!world.IsComplete)
+            {
+                var tick = world.CurrentTick;
+                world.Step();
+                var state = world.GetSnapshot();
+                foreach (var creature in state.Creatures)
+                {
+                    foreach (var place in creature.RememberedPlaces)
+                    {
+                        placesSeen[$"{creature.Id}:{place.Place.X},{place.Place.Y}"] =
+                            $"{creature.Name} ({place.Place.X},{place.Place.Y}) t{place.Tick} {place.Cause}";
+                    }
+                }
+
+                foreach (var probe in world.MemoryProbes)
+                {
+                    // Lying down is exempt from the arm, so an offer of a bunk is
+                    // not an offer memory was ever allowed to take away.
+                    if (probe.MemoryFreeTarget is not { } target ||
+                        probe.MemoryFreeKind == JobKind.Rest)
+                    {
+                        continue;
+                    }
+
+                    var asMatched = before.Creatures.Single(item => item.Id == probe.CreatureId);
+                    // Both of the conditions AvoidedPlace applies before it looks at
+                    // any distance at all, so that what is left in the histogram is
+                    // the reach question and nothing else.
+                    if (asMatched.Satiety < PrototypeTuning.MemoryYieldsSatiety)
+                    {
+                        continue;
+                    }
+
+                    var livePlaces = asMatched.RememberedPlaces
+                        .Where(place => tick - place.Tick <= PrototypeTuning.MemoryAvoidTicks)
+                        .ToArray();
+                    if (livePlaces.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    offered++;
+                    var nearest = livePlaces.Min(place => Manhattan(place.Place, target));
+                    histogram[nearest] = histogram.GetValueOrDefault(nearest) + 1;
+                }
+
+                before = state;
+            }
+
+            var inReach = histogram
+                .Where(pair => pair.Key <= PrototypeTuning.MemoryAvoidRadius)
+                .Sum(pair => pair.Value);
+            report.AppendLine(CultureInfo.InvariantCulture,
+                $"{fixtureName}/{seed}: {offered} offers to a creature holding a live memory, " +
+                $"{inReach} of them within the radius of {PrototypeTuning.MemoryAvoidRadius}");
+            report.AppendLine(
+                "    distance from the work offered to the nearest live memory: " +
+                string.Join(", ", histogram.Select(pair => $"d{pair.Key}={pair.Value}")));
+            report.AppendLine("    places: " + string.Join(" | ", placesSeen.Values));
+        }
+
+        output.WriteLine(report.ToString());
+    }
 
     /// <summary>
     /// The writing half. Over the matrix, creatures come out of a party with
