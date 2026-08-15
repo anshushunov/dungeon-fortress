@@ -194,7 +194,17 @@ $allowedOutsideStages = @(
     # inside Invoke-Checked, Invoke-Scenario, Invoke-GodotChecked and friends
     # do not need this entry at all, because those functions are themselves
     # reachable from a stage body and so is everything they call.
-    "Write-VerifyDiagnostic"
+    "Write-VerifyDiagnostic",
+    # Issue #427. Defined in VerifyResult.ps1: writes the already-decided
+    # verification_result JSON (and, on a failed run, the already-decided
+    # stage-output.log) to a durable path outside $verifyRoot. Like
+    # Write-VerifyDiagnostic above, it never decides whether the repository
+    # is healthy - the pass/fail decision above it is unchanged, this only
+    # decides where a result that was already computed ends up - so it is
+    # plumbing by the same reasoning, called once from the `try` block (on
+    # success) and once from the `catch` block (on failure), both outside
+    # every stage.
+    "Save-VerificationResult"
 )
 
 # Plumbing the run-setup bodies above may use on top of $allowedOutsideStages.
@@ -227,6 +237,7 @@ $allowedDynamicInvocations = @(
     '. (Join-Path $PSScriptRoot "GodotTools.ps1")',
     '. (Join-Path $PSScriptRoot "HudVerification.ps1")',
     '. (Join-Path $PSScriptRoot "TemporaryRoot.ps1")',
+    '. (Join-Path $PSScriptRoot "VerifyResult.ps1")',
     '. $stageBody',
     # Run setup asks the engine for its own version. The executable is only
     # known at run time, so this one cannot be spelled as a literal.
