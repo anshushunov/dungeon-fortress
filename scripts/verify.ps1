@@ -1413,18 +1413,25 @@ try {
         $summary["goldenUiFrames"] = @($goldenUiResult)
     }
 
-    $summaryJson = $summary | ConvertTo-Json -Compress
     # Issue #427: the numbers below outlive $verifyRoot, which `finally`
     # deletes unconditionally. A green run has no stage-output.log worth
-    # keeping (every checksum it produced is already in $summaryJson), so
+    # keeping (every checksum it produced is already in the JSON below), so
     # none is passed here - see scripts/VerifyResult.ps1 for the decision.
-    Save-VerificationResult -ResultPath $verifyResultPath -StageLogPath $verifyResultStageLogPath -Json $summaryJson
+    # $summary is serialised twice, deliberately: the save below must not
+    # touch the exact `$summary | ConvertTo-Json -Compress | Write-Host` line
+    # further down, which scripts/test-verify-stages.ps1 pins by literal text
+    # (Issue #284) as the guarantee that a run's checksums always reach
+    # stdout, independent of whether saving them to a file also succeeds.
+    Save-VerificationResult `
+        -ResultPath $verifyResultPath `
+        -StageLogPath $verifyResultStageLogPath `
+        -Json ($summary | ConvertTo-Json -Compress)
     [ordered]@{
         event = "verification_result_file"
         status = "ok"
         path = $verifyResultPath
     } | ConvertTo-Json -Compress | Write-Host
-    Write-Host $summaryJson
+    $summary | ConvertTo-Json -Compress | Write-Host
 }
 catch {
     # Issue #284: the raw per-line dump moved into $stageLogPath, which keeps
