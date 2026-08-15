@@ -6,6 +6,7 @@ using System.Text.Json;
 using DungeonFortress.Simulation;
 
 using Xunit;
+using Xunit.Abstractions;
 
 namespace DungeonFortress.Simulation.Tests;
 
@@ -18,19 +19,23 @@ namespace DungeonFortress.Simulation.Tests;
 /// fear of the domain <b>was the reason</b> a wounded creature took the field —
 /// §3.4. Credited on every entry it would stop meaning unfairness and start
 /// meaning participation;</description></item>
-/// <item><description>the loop closes through the mechanism that is already
-/// there: the resentment surfaces as the fear hiding it fades, and
-/// <c>combat_refused_grudge</c> takes the creature out of the line a wave or two
-/// later. One case is enough, and it has to be named by seed, creature and
-/// ticks;</description></item>
+/// <item><description>the grudge the coercion feeds takes creatures out of the
+/// line through the mechanism that is already there: the resentment surfaces as
+/// the fear hiding it fades, and <c>combat_refused_grudge</c> refuses the line.
+/// The closure <em>through this slice's own term</em> is a rare event accepted
+/// by the owner on 2026-08-15 (record 38 of Issue #415) — what is asserted and
+/// what is only recorded is set out on the test
+/// itself;</description></item>
 /// <item><description>§3.6 and the seventh amendment of the second review
 /// round: a creature that mends its last part mid-wave <b>bypasses</b> the
 /// contest at the next re-check, takes the existing <c>combat_joined</c> path,
 /// and has its intent field cleared.</description></item>
 /// </list>
 /// </summary>
-public sealed class PrototypePressedWoundedTests
+public sealed class PrototypePressedWoundedTests(ITestOutputHelper output)
 {
+    private readonly ITestOutputHelper _output = output;
+
     private static readonly string[] Fixtures = ["baseline", "prepared"];
 
     private static readonly ulong[] MatrixSeeds = [20_260_726UL, 20_260_727UL, 20_260_728UL];
@@ -152,30 +157,74 @@ public sealed class PrototypePressedWoundedTests
     /// payable — and the sparing side of the contest only grows that high once a
     /// creature has accumulated enough hurt parts, which happens late.</para>
     ///
+    /// <para><b>The second fork, and how the owner closed it (record 38 of Issue
+    /// #415, 2026-08-15).</b> The state above was put to the owner with its
+    /// numbers and <b>accepted as it stands</b>: the price of coercion remains a
+    /// rare event, the slice goes to playtest, and the criterion is closed by an
+    /// honest sentence rather than by a green test about nothing. Three ways round
+    /// were named and refused with their cost — charging for every fight taken
+    /// wounded would make the loop frequent and stop the grudge meaning
+    /// unfairness; widening the window by weights would disturb a balance only
+    /// just measured and confirmed by two mutants; charging by the severity of the
+    /// wound is a new rule that is in neither the pitch nor the specification. The
+    /// condition for revisiting it is a playtest at which the owner says
+    /// punishment has no consequence he can feel.</para>
+    ///
+    /// <para><b>What this test therefore asserts, and what it deliberately does
+    /// not.</b> It asserts the two halves that are true and load-bearing: the
+    /// price of coercion is charged somewhere in the matrix, and the grudge does
+    /// take creatures out of the line — the promise of pitch 6.3 is kept in the
+    /// game, on the account of <c>grudge_punished_unfairly</c> rather than of
+    /// <c>grudge_pressed_wounded</c>. It does <b>not</b> assert that the two never
+    /// meet: a closure appearing later is the outcome the owner would want, not a
+    /// regression, and a test that went red on it would be forbidding the thing it
+    /// was written to want. The count of closures is published in
+    /// <c>evidence/431-loop.json</c> instead, where the next measurement can read
+    /// it.</para>
+    ///
     /// <para>Numbers with their command, party by party, in
     /// <c>evidence/431-loop.json</c> (<c>census</c>) and
     /// <c>evidence/431-mutants.json</c> (M6).</para>
     /// </summary>
-    [Fact(Skip =
-        "Criterion 6 is NOT met and the fork is with the coordinator a second time. The " +
-        "structural cause named by the owner's decision of 2026-08-15 is fixed, and three of " +
-        "the ten refusals of the line by grudge over the matrix would not have fired under the " +
-        "old reading. What blocks the loop now is the rate of the charge, not the refusal: " +
-        "`grudge_pressed_wounded` is credited exactly once over the whole matrix, in wave 4 of " +
-        "4, so no roll call follows it, and that creature ends the party Downed. Numbers, the " +
-        "counterfactual for every refusal and the mutant in evidence/431-loop.json and " +
-        "evidence/431-mutants.json. Unskip only after the fork is answered; do not reach for a " +
-        "weight — three ways round were already disproved by measurement and are listed in " +
-        "evidence/431-handoff.md.")]
-    public void The_loop_closes_a_pressed_wounded_creature_later_refuses_the_line()
+    [Fact]
+    public void The_price_of_coercion_is_charged_and_the_grudge_does_take_creatures_out_of_the_line()
     {
+        var census = Census();
+        var charges = census.Sum(party => party.ChargesOfPressedWounded);
+        var refusals = census.Sum(party => party.RefusalsByGrudge);
+        var parties = census.Count(party => party.RefusalsByGrudge > 0);
+        var paidForAnUnfairPunishment = census
+            .SelectMany(party => party.Refusals)
+            .Where(refusal => refusal.GrudgeFromAnUnfairPunishment > 0)
+            .ToArray();
         var closures = FindClosures();
+
         Assert.True(
-            closures.Count > 0,
-            "nowhere in the matrix did a creature charged `grudge_pressed_wounded` later refuse " +
-            "the line by `combat_refused_grudge`, so the delayed price of coercion is credited " +
-            "and never acted on. §3.4 promises the loop closes through the existing mechanism." +
-            Environment.NewLine + NearMissReport());
+            charges > 0,
+            "the price of coercion was never charged anywhere in the matrix, so §3.4 has no " +
+            "mechanic at all rather than a rare one." + Environment.NewLine + NearMissReport());
+
+        Assert.True(
+            refusals > 0 && parties > 0,
+            $"the line was refused by grudge {refusals} time(s) in {parties} part(y/ies) of the " +
+            "matrix. With none, the second half of pitch 6.3 — «принуждение копит обиду, и обида " +
+            "возвращается» — would be unreachable in the game by any term, and the acceptance of " +
+            "record 38 of #415 rested on it being reachable by one.");
+
+        Assert.True(
+            paidForAnUnfairPunishment.Length > 0,
+            "not one refusal of the line anywhere in the matrix was paid out of a grudge the " +
+            "player's own verdict wrote. Record 38 accepts the rarity of " +
+            "`grudge_pressed_wounded` precisely because the player's verdict still comes back at " +
+            "him through `grudge_punished_unfairly`; without that this is not a rare channel but " +
+            "an absent one.");
+
+        // Recorded and not asserted, for the reason set out above.
+        _output.WriteLine(
+            $"charges {charges}; refusals {refusals} in {parties} part(y/ies), of which " +
+            $"{paidForAnUnfairPunishment.Length} paid out of an unfair punishment; closures of " +
+            $"the loop through `grudge_pressed_wounded` {closures.Count} " +
+            "(rare by record 38 of #415, not forbidden by this test).");
     }
 
     /// <summary>
@@ -227,6 +276,12 @@ public sealed class PrototypePressedWoundedTests
                             "mechanism that was already in the tree; this slice only feeds it.",
                         count = closures.Count,
                         cases = closures,
+                        ownersDecision =
+                            "Запись 38 в Issue #415, 2026-08-15: цена принуждения принимается " +
+                            "редким событием как есть, слайс идёт на playtest. Число ниже " +
+                            "публикуется и НЕ утверждается тестом — его рост это желаемый исход, " +
+                            "а не регресс. Условие пересмотра — playtest, на котором владелец " +
+                            "скажет, что наказание не имеет ощутимых последствий.",
                     },
                     nearMisses = new
                     {
@@ -270,9 +325,12 @@ public sealed class PrototypePressedWoundedTests
                 }) + "\n",
             new UTF8Encoding(false));
 
-        // `closures` is deliberately NOT asserted non-empty: on the shipped matrix
-        // it is empty, and that is the finding this file escalates rather than
-        // hides. The file records it with its numbers so the fork is answerable.
+        // `closures` is deliberately NOT asserted non-empty. It was the finding
+        // this file escalated twice; the owner answered it on 2026-08-15
+        // (record 38 of #415) by accepting the rarity as it stands. The number
+        // stays published rather than asserted, so that the playtest the decision
+        // hangs on has something to read and so that a closure appearing later
+        // reads as the outcome the owner wants rather than as a red test.
         Assert.NotEmpty(mendings);
     }
 
@@ -323,7 +381,9 @@ public sealed class PrototypePressedWoundedTests
         int FearOfTheDomain,
         int Benefit,
         int Grit,
-        int HoldingIfTheTotalFearWereRead);
+        int HoldingIfTheTotalFearWereRead,
+        int GrudgeFromAnUnfairPunishment,
+        int GrudgeFromCoercion);
 
     private sealed record PartyCensus(
         string Cell,
@@ -395,7 +455,17 @@ public sealed class PrototypePressedWoundedTests
                         creature.Loyalty.FearOfTheDomain,
                         creature.Loyalty.Benefit,
                         creature.Grit,
-                        creature.Loyalty.Benefit + creature.Loyalty.Fear + grit));
+                        creature.Loyalty.Benefit + creature.Loyalty.Fear + grit,
+                        // Which term of the ledger the refusal is actually being
+                        // paid out of. The owner's decision of 2026-08-15
+                        // (record 38 of #415) turns on this: coercion accumulates
+                        // a grudge and the grudge comes back — pitch 6.3 — is
+                        // happening in the game, but on the account of «наказан
+                        // несправедливо» and not of «загнан в бой раненым».
+                        creature.Loyalty.GrudgeTerms
+                            .FirstOrDefault(term => term.Code == "grudge_punished_unfairly")?.Amount ?? 0,
+                        creature.Loyalty.GrudgeTerms
+                            .FirstOrDefault(term => term.Code == "grudge_pressed_wounded")?.Amount ?? 0));
                 }
             }
 

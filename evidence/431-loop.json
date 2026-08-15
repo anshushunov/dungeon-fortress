@@ -7,7 +7,8 @@
   "loop": {
     "what": "Cases in which a creature charged `grudge_pressed_wounded` later refused the line by `combat_refused_grudge`. The refusal is the mechanism that was already in the tree; this slice only feeds it.",
     "count": 0,
-    "cases": []
+    "cases": [],
+    "ownersDecision": "Запись 38 в Issue #415, 2026-08-15: цена принуждения принимается редким событием как есть, слайс идёт на playtest. Число ниже публикуется и НЕ утверждается тестом — его рост это желаемый исход, а не регресс. Условие пересмотра — playtest, на котором владелец скажет, что наказание не имеет ощутимых последствий."
   },
   "nearMisses": {
     "what": "For every creature charged `grudge_pressed_wounded`, the closest the refusal `ReleasedGrudge x T.loyalty_refuse_grudge_weight > benefit + fearOfTheDomain + grit x T.loyalty_refuse_grit_weight` ever came to being true afterwards. A negative gap means the condition WAS true and the roll call still never asked — because the creature was Fighting at that moment. The holding side reads the fear of the domain from the owner's decision of 2026-08-15 (record 37 of #415) onwards; before it, the total fear.",
@@ -58,7 +59,9 @@
             "FearOfTheDomain": 4,
             "Benefit": 2,
             "Grit": 2,
-            "HoldingIfTheTotalFearWereRead": 18
+            "HoldingIfTheTotalFearWereRead": 18,
+            "GrudgeFromAnUnfairPunishment": 14,
+            "GrudgeFromCoercion": 0
           },
           {
             "CreatureId": 1,
@@ -70,7 +73,9 @@
             "FearOfTheDomain": 9,
             "Benefit": 1,
             "Grit": 4,
-            "HoldingIfTheTotalFearWereRead": 26
+            "HoldingIfTheTotalFearWereRead": 26,
+            "GrudgeFromAnUnfairPunishment": 28,
+            "GrudgeFromCoercion": 0
           },
           {
             "CreatureId": 7,
@@ -82,7 +87,9 @@
             "FearOfTheDomain": 9,
             "Benefit": 0,
             "Grit": 2,
-            "HoldingIfTheTotalFearWereRead": 21
+            "HoldingIfTheTotalFearWereRead": 21,
+            "GrudgeFromAnUnfairPunishment": 28,
+            "GrudgeFromCoercion": 0
           },
           {
             "CreatureId": 1,
@@ -94,7 +101,9 @@
             "FearOfTheDomain": 9,
             "Benefit": 0,
             "Grit": 4,
-            "HoldingIfTheTotalFearWereRead": 25
+            "HoldingIfTheTotalFearWereRead": 25,
+            "GrudgeFromAnUnfairPunishment": 28,
+            "GrudgeFromCoercion": 0
           },
           {
             "CreatureId": 7,
@@ -106,7 +115,9 @@
             "FearOfTheDomain": 3,
             "Benefit": 0,
             "Grit": 2,
-            "HoldingIfTheTotalFearWereRead": 21
+            "HoldingIfTheTotalFearWereRead": 21,
+            "GrudgeFromAnUnfairPunishment": 28,
+            "GrudgeFromCoercion": 0
           }
         ]
       },
@@ -143,7 +154,9 @@
             "FearOfTheDomain": 5,
             "Benefit": 0,
             "Grit": 3,
-            "HoldingIfTheTotalFearWereRead": 17
+            "HoldingIfTheTotalFearWereRead": 17,
+            "GrudgeFromAnUnfairPunishment": 14,
+            "GrudgeFromCoercion": 0
           },
           {
             "CreatureId": 6,
@@ -155,7 +168,9 @@
             "FearOfTheDomain": 5,
             "Benefit": 0,
             "Grit": 4,
-            "HoldingIfTheTotalFearWereRead": 21
+            "HoldingIfTheTotalFearWereRead": 21,
+            "GrudgeFromAnUnfairPunishment": 14,
+            "GrudgeFromCoercion": 0
           },
           {
             "CreatureId": 7,
@@ -167,7 +182,9 @@
             "FearOfTheDomain": 5,
             "Benefit": 0,
             "Grit": 2,
-            "HoldingIfTheTotalFearWereRead": 13
+            "HoldingIfTheTotalFearWereRead": 13,
+            "GrudgeFromAnUnfairPunishment": 14,
+            "GrudgeFromCoercion": 0
           }
         ]
       },
@@ -204,7 +221,9 @@
             "FearOfTheDomain": 5,
             "Benefit": 0,
             "Grit": 3,
-            "HoldingIfTheTotalFearWereRead": 20
+            "HoldingIfTheTotalFearWereRead": 20,
+            "GrudgeFromAnUnfairPunishment": 14,
+            "GrudgeFromCoercion": 0
           }
         ]
       },
@@ -265,7 +284,9 @@
             "FearOfTheDomain": 5,
             "Benefit": 0,
             "Grit": 3,
-            "HoldingIfTheTotalFearWereRead": 20
+            "HoldingIfTheTotalFearWereRead": 20,
+            "GrudgeFromAnUnfairPunishment": 14,
+            "GrudgeFromCoercion": 0
           }
         ]
       },
