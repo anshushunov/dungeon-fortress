@@ -123,11 +123,18 @@ public sealed class VerdictWoundedReachabilityTests
                 "non-empty wound at a later roll call -> the insertion point of the contest " +
                 "reached (all four existing refusals survived). Counted separately for reward " +
                 "and for punish. Zero on either is a legitimate outcome that stops the slice.",
-            // The commit the simulation last changed at, not the commit this file
-            // is checked in on: the same convention CombatHoldReachabilityTests and
-            // PrototypeEvaluation use. Checkpoint 0 runs before the slice touches
-            // behaviour, so this is origin/main as handed to the worktree.
-            MeasuredOnSimulationCommit: "1503af5",
+            // <b>This file is re-measured by every run and therefore reports the
+            // tree it ran on, not the gate.</b> The gate of checkpoint 0 — the
+            // numbers that decided the slice could start, taken before the slice
+            // touched behaviour — is frozen beside it in
+            // `evidence/431-reachability-checkpoint0.json` at `1503af5`. Naming a
+            // commit here would have been a label that stops being true the first
+            // time the slice moves a trajectory, and it did: the refusal of the
+            // line began reading the fear of the domain at checkpoint 3-bis
+            // (owner's decision of 2026-08-15) and the chains moved 12/6 -> 11/6.
+            MeasuredOnSimulationCommit:
+                "the working tree this run was made on; the gate is the frozen copy " +
+                "evidence/431-reachability-checkpoint0.json, measured at 1503af5",
             RelevantTerms: new RelevantTerms("benefit_rewarded", "fear_punished"),
             MatrixFixtures: MatrixFixtures,
             MatrixSeeds: MatrixSeeds,

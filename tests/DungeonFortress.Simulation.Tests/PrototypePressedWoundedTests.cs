@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -128,16 +129,44 @@ public sealed class PrototypePressedWoundedTests
     /// <para>One case is enough, and the failure message prints every case found
     /// so that «the loop closed» is a fact with a seed, a creature and two ticks
     /// beside it rather than an aggregate.</para>
+    ///
+    /// <para><b>The first fork, and how it was answered.</b> On the first
+    /// measurement of the shipped matrix the closures were zero and the cause was
+    /// structural rather than a constant: <c>HoldingTheLine</c> read the
+    /// <b>total</b> fear, three of whose four sources are the fight, so the more
+    /// frightening the raid the tighter it held a resentful creature in the line.
+    /// The owner's decision of 2026-08-15 (record 37 of Issue #415) is that the
+    /// refusal reads the fear of the domain instead, and it is in the tree.</para>
+    ///
+    /// <para><b>The refusal now works and the loop still does not close, and the
+    /// two are separate facts.</b> The line is refused by grudge ten times over
+    /// the matrix, and three of those ten the old reading of the formula would
+    /// have held: the counterfactual is published for every refusal as
+    /// <c>HoldingIfTheTotalFearWereRead</c>. What is left is the <b>other</b>
+    /// half — the charge. Over the whole
+    /// matrix <c>grudge_pressed_wounded</c> is credited exactly once, and that
+    /// once falls in wave 4 of 4, so there is no later roll call for it to be paid
+    /// at; the creature ends the party <c>Downed</c>. Refusals happen at the
+    /// opening roll call of a wave, when the quiet between waves has let the fear
+    /// fade below the grudge, so a charge has to land in wave 3 or earlier to be
+    /// payable — and the sparing side of the contest only grows that high once a
+    /// creature has accumulated enough hurt parts, which happens late.</para>
+    ///
+    /// <para>Numbers with their command, party by party, in
+    /// <c>evidence/431-loop.json</c> (<c>census</c>) and
+    /// <c>evidence/431-mutants.json</c> (M6).</para>
     /// </summary>
     [Fact(Skip =
-        "Criterion 6 is NOT met and the fork is with the coordinator, not with this test. " +
-        "Measured on the shipped matrix: the refusal condition of ResentmentOutweighsTheLine " +
-        "does become true for a coerced creature, and it becomes true on the very tick the " +
-        "creature enters the fight — at which point the roll call no longer asks it, because " +
-        "it is Fighting. By the next roll call the fight has raised its fear back above its " +
-        "grudge. That is the same structural shape independent review of PR #328 found for " +
-        "`combat_left_grudge`. Numbers, the alternative tuning that was tried and what it did, " +
-        "in evidence/431-loop.json. Unskip only after the fork is answered.")]
+        "Criterion 6 is NOT met and the fork is with the coordinator a second time. The " +
+        "structural cause named by the owner's decision of 2026-08-15 is fixed, and three of " +
+        "the ten refusals of the line by grudge over the matrix would not have fired under the " +
+        "old reading. What blocks the loop now is the rate of the charge, not the refusal: " +
+        "`grudge_pressed_wounded` is credited exactly once over the whole matrix, in wave 4 of " +
+        "4, so no roll call follows it, and that creature ends the party Downed. Numbers, the " +
+        "counterfactual for every refusal and the mutant in evidence/431-loop.json and " +
+        "evidence/431-mutants.json. Unskip only after the fork is answered; do not reach for a " +
+        "weight — three ways round were already disproved by measurement and are listed in " +
+        "evidence/431-handoff.md.")]
     public void The_loop_closes_a_pressed_wounded_creature_later_refuses_the_line()
     {
         var closures = FindClosures();
@@ -145,7 +174,8 @@ public sealed class PrototypePressedWoundedTests
             closures.Count > 0,
             "nowhere in the matrix did a creature charged `grudge_pressed_wounded` later refuse " +
             "the line by `combat_refused_grudge`, so the delayed price of coercion is credited " +
-            "and never acted on. §3.4 promises the loop closes through the existing mechanism.");
+            "and never acted on. §3.4 promises the loop closes through the existing mechanism." +
+            Environment.NewLine + NearMissReport());
     }
 
     /// <summary>
@@ -203,11 +233,25 @@ public sealed class PrototypePressedWoundedTests
                         what =
                             "For every creature charged `grudge_pressed_wounded`, the closest " +
                             "the refusal `ReleasedGrudge x T.loyalty_refuse_grudge_weight > " +
-                            "benefit + fear + grit x T.loyalty_refuse_grit_weight` ever came to " +
-                            "being true afterwards. A negative gap means the condition WAS true " +
-                            "and the roll call still never asked — because the creature was " +
-                            "Fighting at that moment.",
+                            "benefit + fearOfTheDomain + grit x T.loyalty_refuse_grit_weight` " +
+                            "ever came to being true afterwards. A negative gap means the " +
+                            "condition WAS true and the roll call still never asked — because " +
+                            "the creature was Fighting at that moment. The holding side reads " +
+                            "the fear of the domain from the owner's decision of 2026-08-15 " +
+                            "(record 37 of #415) onwards; before it, the total fear.",
                         cases = NearMisses(),
+                    },
+                    census = new
+                    {
+                        what =
+                            "Per party of the matrix: how often the line was refused by grudge " +
+                            "at all, and every charge of `grudge_pressed_wounded` with the wave " +
+                            "it landed in and how many roll calls of this party were still to " +
+                            "come after it. `rollCallsLeft` is what decides whether the loop " +
+                            "COULD close in that party, and is measured rather than assumed.",
+                        waveCount = PrototypeTuning.WaveCount,
+                        combatJoinRecheck = PrototypeTuning.CombatJoinRecheck,
+                        cases = Census(),
                     },
                     mendedMidWave = new
                     {
@@ -247,7 +291,146 @@ public sealed class PrototypePressedWoundedTests
         int RefusedInWave,
         int GrudgeAtRefusal,
         int FearAtRefusal,
+        int FearOfTheDomainAtRefusal,
         int HoldingAtRefusal);
+
+    private sealed record ChargeCase(
+        int CreatureId,
+        string Name,
+        int Tick,
+        int Wave,
+        int AskedByTheRollCallAfterwards,
+        string ModeAtEndOfParty);
+
+    /// <summary>
+    /// One refusal of the line by grudge, with both readings of the holding side
+    /// beside it. <c>GrudgeAtDecision</c> and <c>HoldingAtDecision</c> are the
+    /// numbers the refusal itself published — the snapshot a tick later has
+    /// already had <c>SpendGrudge</c> applied to it, so reading the grudge off it
+    /// says something else.
+    ///
+    /// <para><c>HoldingIfTheTotalFearWereRead</c> is the counterfactual the mutant
+    /// of this checkpoint actually runs: what would have held this creature had
+    /// <c>HoldingTheLine</c> kept reading the total fear.</para>
+    /// </summary>
+    private sealed record RefusalCase(
+        int CreatureId,
+        string Name,
+        int Tick,
+        int GrudgeAtDecision,
+        int HoldingAtDecision,
+        int Fear,
+        int FearOfTheDomain,
+        int Benefit,
+        int Grit,
+        int HoldingIfTheTotalFearWereRead);
+
+    private sealed record PartyCensus(
+        string Cell,
+        int EndTick,
+        int RefusalsByGrudge,
+        int ChargesOfPressedWounded,
+        IReadOnlyList<ChargeCase> Charges,
+        IReadOnlyList<RefusalCase> Refusals);
+
+    /// <summary>
+    /// What the matrix holds of both halves of the loop, party by party: how
+    /// often the line was refused by grudge at all, and every charge of
+    /// <c>grudge_pressed_wounded</c> with the wave it landed in and how many more
+    /// times the roll call asked that creature afterwards.
+    ///
+    /// <para><c>AskedByTheRollCallAfterwards</c> counts the creature's own
+    /// <c>combat_*</c> entries after the charge, which is the observable form of
+    /// «была ли ещё перекличка, на которой оно могло отказаться». A charge in the
+    /// last wave has nowhere to be paid, and that has to be a measured number
+    /// rather than an inference from the wave count.</para>
+    /// </summary>
+    private static List<PartyCensus> Census()
+    {
+        var census = new List<PartyCensus>();
+        foreach (var (cell, log) in EveryParty())
+        {
+            var world = new PrototypeWorld(log);
+            var charged = new Dictionary<int, int>();
+            var pressed = new Dictionary<int, (int Tick, int Wave)>();
+            var refusedSoFar = new Dictionary<int, int>();
+            var refusals = new List<RefusalCase>();
+            while (!world.IsComplete)
+            {
+                world.Step();
+                var tick = world.GetSnapshot();
+                foreach (var creature in tick.Creatures)
+                {
+                    var now = creature.Loyalty.GrudgeTerms
+                        .FirstOrDefault(term => term.Code == "grudge_pressed_wounded")?.Amount ?? 0;
+                    if (now > charged.GetValueOrDefault(creature.Id) &&
+                        creature.WoundIntent is { } intent)
+                    {
+                        pressed[creature.Id] = (intent.Tick, intent.Wave);
+                    }
+
+                    charged[creature.Id] = now;
+
+                    var refused = tick.Events
+                        .Where(item => item.CreatureId == creature.Id &&
+                            item.ReasonCode == "combat_refused_grudge")
+                        .Sum(item => item.Repeats);
+                    if (refused <= refusedSoFar.GetValueOrDefault(creature.Id))
+                    {
+                        continue;
+                    }
+
+                    refusedSoFar[creature.Id] = refused;
+                    var decision = tick.Events
+                        .Last(item => item.CreatureId == creature.Id &&
+                            item.ReasonCode == "combat_refused_grudge");
+                    var grit = creature.Grit * PrototypeTuning.LoyaltyRefuseGritWeight;
+                    refusals.Add(new RefusalCase(
+                        creature.Id,
+                        creature.Name,
+                        tick.Tick,
+                        decision.Details.GetValueOrDefault("grudge"),
+                        decision.Details.GetValueOrDefault("holding"),
+                        creature.Loyalty.Fear,
+                        creature.Loyalty.FearOfTheDomain,
+                        creature.Loyalty.Benefit,
+                        creature.Grit,
+                        creature.Loyalty.Benefit + creature.Loyalty.Fear + grit));
+                }
+            }
+
+            var state = world.GetSnapshot();
+            var charges = pressed
+                .OrderBy(entry => entry.Key)
+                .Select(entry =>
+                {
+                    var creature = state.Creatures.Single(item => item.Id == entry.Key);
+                    return new ChargeCase(
+                        entry.Key,
+                        creature.Name,
+                        entry.Value.Tick,
+                        entry.Value.Wave,
+                        state.Events.Count(item =>
+                            item.CreatureId == entry.Key &&
+                            item.ReasonCode.StartsWith("combat_", StringComparison.Ordinal) &&
+                            item.LastTick > entry.Value.Tick),
+                        creature.Mode.ToString());
+                })
+                .ToList();
+
+            census.Add(new PartyCensus(
+                cell,
+                state.Tick,
+                state.Events
+                    .Where(item => item.ReasonCode == "combat_refused_grudge")
+                    .Sum(item => item.Repeats),
+                charges.Count,
+                charges,
+                refusals));
+        }
+
+        return census;
+    }
 
     private sealed record Mending(
         string Cell,
@@ -271,7 +454,25 @@ public sealed class PrototypePressedWoundedTests
         int Holding,
         int Gap,
         int Grudge,
-        int Fear);
+        int Fear,
+        int FearOfTheDomain);
+
+    /// <summary>
+    /// The near misses rendered for a failure message, so that «the loop never
+    /// closed» arrives with the distance beside it rather than on its own.
+    /// </summary>
+    private static string NearMissReport()
+    {
+        var misses = NearMisses();
+        return misses.Count == 0
+            ? "Nobody in the matrix was ever charged `grudge_pressed_wounded` at all."
+            : "Closest the refusal ever came, per charged creature: " + string.Join(
+                "; ",
+                misses.Select(miss => string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{miss.Cell} #{miss.CreatureId} {miss.Name} t{miss.Tick} ({miss.ModeThen}) " +
+                    $"released x weight {miss.ReleasedTimesWeight} against holding {miss.Holding}")));
+    }
 
     /// <summary>
     /// How close the loop came. For each creature that was ever charged, the tick
@@ -299,7 +500,13 @@ public sealed class PrototypePressedWoundedTests
 
                     var released = Math.Max(0, creature.Loyalty.Grudge - creature.Loyalty.Fear) *
                         PrototypeTuning.LoyaltyRefuseGrudgeWeight;
-                    var holding = creature.Loyalty.Benefit + creature.Loyalty.Fear +
+
+                    // The holding side reads the fear of the domain and not the
+                    // total — owner's decision of 2026-08-15, record 37 of #415.
+                    // Recomputed here exactly as `HoldingTheLine` compares it,
+                    // because a near miss measured against a different formula
+                    // would report a distance nothing in the world walks.
+                    var holding = creature.Loyalty.Benefit + creature.Loyalty.FearOfTheDomain +
                         creature.Grit * PrototypeTuning.LoyaltyRefuseGritWeight;
                     var miss = new NearMiss(
                         cell,
@@ -312,7 +519,8 @@ public sealed class PrototypePressedWoundedTests
                         holding,
                         holding - released,
                         creature.Loyalty.Grudge,
-                        creature.Loyalty.Fear);
+                        creature.Loyalty.Fear,
+                        creature.Loyalty.FearOfTheDomain);
                     if (!best.TryGetValue(creature.Id, out var known) || miss.Gap < known.Gap)
                     {
                         best[creature.Id] = miss;
@@ -376,6 +584,7 @@ public sealed class PrototypePressedWoundedTests
                         refusal.Details.GetValueOrDefault("wave"),
                         refusal.Details.GetValueOrDefault("grudge"),
                         creature.Loyalty.Fear,
+                        creature.Loyalty.FearOfTheDomain,
                         refusal.Details.GetValueOrDefault("holding")));
                 }
             }

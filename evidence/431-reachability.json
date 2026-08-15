@@ -4,7 +4,7 @@
   "Checkpoint": "0 — достижимость канала, до всякой правки поведения",
   "Command": "dotnet test tests/DungeonFortress.Simulation.Tests --filter FullyQualifiedName~VerdictWoundedReachabilityTests",
   "What": "End-to-end chain, followed by a single creatureId: wound -> card about that creature -> a verdict of a named sign -> a non-zero relevant term and a non-empty wound at a later roll call -> the insertion point of the contest reached (all four existing refusals survived). Counted separately for reward and for punish. Zero on either is a legitimate outcome that stops the slice.",
-  "MeasuredOnSimulationCommit": "1503af5",
+  "MeasuredOnSimulationCommit": "the working tree this run was made on; the gate is the frozen copy evidence/431-reachability-checkpoint0.json, measured at 1503af5",
   "RelevantTerms": {
     "Reward": "benefit_rewarded",
     "Punish": "fear_punished"
@@ -89,12 +89,12 @@
         "t1334 #3 reward (wounded)",
         "t1334 #5 punish",
         "t1334 #6 reward",
-        "t1744 #5 reward (wounded)",
-        "t1744 #7 punish",
-        "t1744 #1 reward (wounded)",
-        "t2092 #1 reward (wounded)",
-        "t2092 #3 punish",
-        "t2092 #6 reward (wounded)"
+        "t1736 #7 reward",
+        "t1736 #4 punish",
+        "t1736 #6 reward (wounded)",
+        "t2094 #1 reward (wounded)",
+        "t2094 #3 punish",
+        "t2094 #5 reward (wounded)"
       ],
       "RewardChains": [
         {
@@ -106,15 +106,15 @@
           "RollCallTick": 2000,
           "WoundAtTheRollCall": "Leg:Light",
           "TermCode": "benefit_rewarded",
-          "TermAmount": 12
+          "TermAmount": 24
         },
         {
           "CreatureId": 5,
           "Name": "Уголёк",
           "Sign": "reward",
-          "VerdictTick": 1744,
+          "VerdictTick": 2094,
           "WoundedAtTheCard": true,
-          "RollCallTick": 2020,
+          "RollCallTick": 2370,
           "WoundAtTheRollCall": "Head:Light",
           "TermCode": "benefit_rewarded",
           "TermAmount": 12
@@ -123,12 +123,12 @@
           "CreatureId": 1,
           "Name": "Кремень",
           "Sign": "reward",
-          "VerdictTick": 1744,
+          "VerdictTick": 2094,
           "WoundedAtTheCard": true,
           "RollCallTick": 2410,
           "WoundAtTheRollCall": "Leg:Light",
           "TermCode": "benefit_rewarded",
-          "TermAmount": 24
+          "TermAmount": 12
         }
       ],
       "PunishChains": [
@@ -206,33 +206,22 @@
         "t1336 #2 reward (wounded)",
         "t1336 #0 punish",
         "t1336 #1 reward",
-        "t1742 #7 reward",
-        "t1742 #6 punish (wounded)",
-        "t1742 #0 reward",
-        "t2100 #3 reward (wounded)",
-        "t2100 #5 punish",
-        "t2100 #6 reward (wounded)"
+        "t1745 #7 reward",
+        "t1745 #6 punish (wounded)",
+        "t1745 #8 reward (wounded)",
+        "t2093 #6 reward (wounded)",
+        "t2093 #4 punish (wounded)",
+        "t2093 #3 reward (wounded)"
       ],
       "RewardChains": [
         {
-          "CreatureId": 3,
-          "Name": "Смола",
+          "CreatureId": 8,
+          "Name": "Тишина",
           "Sign": "reward",
-          "VerdictTick": 2100,
+          "VerdictTick": 1745,
           "WoundedAtTheCard": true,
-          "RollCallTick": 2350,
-          "WoundAtTheRollCall": "Torso:Light+Leg:Light",
-          "TermCode": "benefit_rewarded",
-          "TermAmount": 12
-        },
-        {
-          "CreatureId": 6,
-          "Name": "Прель",
-          "Sign": "reward",
-          "VerdictTick": 2100,
-          "WoundedAtTheCard": true,
-          "RollCallTick": 2350,
-          "WoundAtTheRollCall": "Arm:Heavy+Leg:Heavy",
+          "RollCallTick": 2000,
+          "WoundAtTheRollCall": "Head:Heavy+Arm:Light+Leg:Heavy",
           "TermCode": "benefit_rewarded",
           "TermAmount": 12
         }
@@ -242,7 +231,7 @@
           "CreatureId": 6,
           "Name": "Прель",
           "Sign": "punish",
-          "VerdictTick": 1742,
+          "VerdictTick": 1745,
           "WoundedAtTheCard": true,
           "RollCallTick": 2000,
           "WoundAtTheRollCall": "Leg:Heavy",
@@ -377,9 +366,9 @@
     }
   ],
   "Aggregate": {
-    "RewardChains": 12,
+    "RewardChains": 11,
     "PunishChains": 6,
-    "RewardChainsWoundedAlreadyAtTheCard": 10,
+    "RewardChainsWoundedAlreadyAtTheCard": 9,
     "PunishChainsWoundedAlreadyAtTheCard": 5
   },
   "Verdict": "REACHABLE: both signs complete the chain. The channel has something to act on, and the slice may proceed to checkpoint 1."

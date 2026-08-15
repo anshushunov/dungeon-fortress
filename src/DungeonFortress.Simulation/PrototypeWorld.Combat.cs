@@ -434,8 +434,43 @@ public sealed partial class PrototypeWorld
         ReleasedGrudge(creature) * PrototypeTuning.LoyaltyRefuseGrudgeWeight >
         HoldingTheLine(creature);
 
+    /// <summary>
+    /// Everything that holds a creature in the line: what the domain has given
+    /// it, what it is afraid of <b>the domain</b>, and its own steadiness.
+    ///
+    /// <para><b>The fear read here is the fear of the domain and not the total,
+    /// and that is a decision of the owner of 2026-08-15 (record 37 of Issue
+    /// #415) rather than a tidying-up.</b> The total was measured to make the
+    /// promise of §3.4 of <c>VERDICT_AND_THE_WOUNDED.md</c> unreachable: three
+    /// of the four sources of <c>fear</c> are the fight itself, so the more
+    /// frightening the raid around a resentful creature, the tighter that same
+    /// raid held it in the line. The delayed price of coercion was credited and
+    /// never acted on — zero closures over the whole matrix, with the refusal
+    /// condition turning true on the very tick the creature entered the fight,
+    /// after which the roll call no longer asks it (<c>evidence/431-loop.json</c>,
+    /// and the same structural shape independent review of PR #328 found for
+    /// <c>combat_left_grudge</c>).</para>
+    ///
+    /// <para>So the comparison is now between what a creature resents in the
+    /// player and what it owes the player: benefit and the fear of the domain.
+    /// The one who walks out is the one angry at the owner, not the one who
+    /// happens not to be frightened. Two alternatives were rejected by the owner
+    /// with their price named: leaving it as it is (the grudge keeps working in
+    /// the willingness to take up work, but «через волну он откажется» never
+    /// happens in play) and asking the people already fighting (which restores
+    /// the second pass PR #328 removed as unreachable and makes a fight come
+    /// apart in the middle).</para>
+    ///
+    /// <para><b>What this costs, named where the code is.</b> The subtrahend is
+    /// smaller, so refusals get more frequent — which is why the re-measurement
+    /// of the two product invariants at the end of the slice is a real check and
+    /// not a formality. <c>ReleasedGrudge</c> is deliberately left reading the
+    /// total: «пока страх высок, обида не видна» is about the creature's own
+    /// fright, whatever its source, and that half of §6.3 is not what the
+    /// measurement contradicted.</para>
+    /// </summary>
     private static int HoldingTheLine(CreatureState creature) =>
-        creature.Loyalty.Benefit + creature.Loyalty.Fear +
+        creature.Loyalty.Benefit + creature.Loyalty.DomainFear +
         creature.Grit * PrototypeTuning.LoyaltyRefuseGritWeight;
 
     private void ActCombatant(CreatureState creature)

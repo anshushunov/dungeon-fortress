@@ -1039,9 +1039,15 @@ public sealed class PrototypeMomentOfTruthTests
             {
                 creature.Name,
                 Released = Math.Max(0, creature.Loyalty.Grudge - creature.Loyalty.Fear),
-                Holding = creature.Loyalty.Benefit + creature.Loyalty.Fear +
+
+                // The holding side reads the fear of the domain and not the
+                // total (owner's decision of 2026-08-15, record 37 of #415).
+                // This is recomputed only to say how far off a failure was, so
+                // it has to be recomputed the way the code compares it.
+                Holding = creature.Loyalty.Benefit + creature.Loyalty.FearOfTheDomain +
                     creature.Grit * PrototypeTuning.LoyaltyRefuseGritWeight,
                 creature.Loyalty.Fear,
+                creature.Loyalty.FearOfTheDomain,
                 creature.Loyalty.Grudge,
             })
             .OrderByDescending(item => item.Released * PrototypeTuning.LoyaltyRefuseGrudgeWeight - item.Holding)
@@ -1050,7 +1056,8 @@ public sealed class PrototypeMomentOfTruthTests
             CultureInfo.InvariantCulture,
             $"{best.Name} released {best.Released} x{PrototypeTuning.LoyaltyRefuseGrudgeWeight} " +
             $"= {best.Released * PrototypeTuning.LoyaltyRefuseGrudgeWeight} against holding " +
-            $"{best.Holding} (fear {best.Fear}, grudge {best.Grudge}) at the end of the party");
+            $"{best.Holding} (fear {best.Fear}, of the domain {best.FearOfTheDomain}, " +
+            $"grudge {best.Grudge}) at the end of the party");
     }
 
     /// <summary>
