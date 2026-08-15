@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "issue": "#431",
+  "checkpoint": "4 — подача: лента, панель, карточка",
+  "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter FullyQualifiedName~WoundedIntentReadableTests",
+  "what": "Три канала подачи §4, каждый прочитан там, где он живёт: строка ленты — из события настоящей партии, строка панели — из опубликованного `woundIntent` на тике, где `lastDecision` уже другое, разбор карточки — на контролируемой карточке, потому что попадание существа в тройку заметнейших не гарантировано.",
+  "feed": {
+    "cell": "prepared/20260728",
+    "spared": {
+      "tick": 2350,
+      "creature": "Дёготь",
+      "sentence": "Дёготь would not stand for wave 4: sparing a hurt arm (6 against 4).",
+      "count": 1,
+      "verdictNamed": false,
+      "benefitOfTheWitness": {
+        "total": 5,
+        "benefit_fed": 16,
+        "benefit_tended": 12,
+        "benefit_rewarded": 0
+      },
+      "why": "Партия без единого вердикта, и выгода свидетеля набрана именно едой и уходом — оба терма положительны, терма награды нет вовсе. Правило причинности §3.5 запрещает называть вердикт причиной, и подача его не называет."
+    },
+    "pressed": {
+      "sentence": "stood for wave 3 on a hurt leg: it fears you more than the wound (6 against 5); 9 grudge for it.",
+      "from": "details, не из партии",
+      "why": "`combat_pressed_wound` пишется только там, где страх перед владением и был причиной, а это, по записи 38 журнала #415, редкое событие: одно начисление на всю матрицу. Строка ленты наследует эту редкость. Общий случай «раненый полез» несёт панель, а не лента."
+    }
+  },
+  "panel": {
+    "cell": "probe-verdicts/20260726",
+    "tick": 1650,
+    "creature": "Смола",
+    "line": "INTENT t1650 wave 2 · standing on a hurt leg · 8 v 2\n",
+    "source": "creatures[].woundIntent",
+    "notFrom": "lastDecision — перекличка идёт до GenerateJobs/MatchJobs"
+  },
+  "frame": {
+    "cell": "prepared/20260728",
+    "creatureId": 4,
+    "creature": "Дёготь",
+    "decidedAtTick": 2350,
+    "stillStandingAtTick": 2370,
+    "line": "INTENT t2350 wave 4 · sparing a hurt arm · 6 v 4\n",
+    "file": "evidence/431-panel-intent.png",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 -Fixture prepared -Seed 20260728 -ScreenshotTicks 2360 -SelectCreature 4 -CameraZoom 1.0 -UiScale 1.0 -FrameSize 1280x720 -ScreenshotPath \"431/panel-intent.png\"",
+    "checksum": "23328b665264529962c47603e381d2d10b004223bd00bfd9153291c7ea3d4ebf",
+    "readability": "hudReadability.readable = true, violations = [], пол 12 px; проверено на 12 кадрах от 1280x720 до 3840x2160.",
+    "labelFit": "inspector: neededLines 13, visibleLines 13, hardLines 13 — ни одна строка не перенеслась. Запас панели измерен отдельно: временная набивка строки INTENT до 71 символа дала neededLines 14 / visibleLines 14, и гард остался зелёным на всех семи проверяемых кадрах, то есть строка с пометкой о вердикте — которую нельзя сфотографировать, потому что в поставляемых журналах нет вердиктов, — панель не ломает.",
+    "why": "Кадр критерия 8 снимается на этой партии, потому что её умеет scripts/run-game.ps1: поставляемая фикстура с подменой seed (probe-verdicts скрипт не принимает, а -Fixture у него закрытый набор). Окно, в котором строка стоит, измерено здесь, а не выбрано на глаз."
+  },
+  "card": {
+    "line": "Дёготь · is holding something against you · grudge 9 (+6 sent into the line hurt, +3 punished for nothing) [showing]",
+    "controlled": true,
+    "why": "Отбор трёх заметнейших не гарантирует попадания конкретного существа (PrototypeWorld.MomentOfTruth.cs), поэтому карточка задана, а не найдена."
+  }
+}

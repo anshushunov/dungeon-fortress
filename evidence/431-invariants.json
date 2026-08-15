@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "issue": "#431",
+  "when": "2026-08-15",
+  "checkpoint": "5 — переизмерение двух продуктовых инвариантов, последним",
+  "what": "Критерий 9 требует не «инварианты зелёные», а «переизмерено, что именно их держит», по каждому кандидату и без предположения, что держит то же, что держало раньше. Здесь три исторических кандидата (#409, #333, #402) перемерены на готовом дереве слайса, и к ним добавлены семь рычагов, которых до слайса не существовало.",
+  "why": "Рубеж поставлен последним намеренно (калибровочная поправка F8 review PR #417): переизмерение посреди последовательности мерит дерево, которое потом сдвинется. Условие остановки, названное постановкой: невосстановимый инвариант → возврат координатору с числами, расширять диапазон и изобретать третий путь запрещено.",
+  "tree": {
+    "branch": "feature/431-verdict-wounded",
+    "commit": "43c0650 — проверяемое состояние закоммичено ДО первого мутанта",
+    "worktree": "C:/gamedev/_wt-431-slice"
+  },
+  "howAMutantIsRun": {
+    "substitution": "одна строка в src/DungeonFortress.Simulation/PrototypeTuning.cs либо в src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests --configuration Release --filter \"FullyQualifiedName~Deliberately_losing_creatures_and_stock_never_scores_better|FullyQualifiedName~Preparation_changes_the_deterministic_party_without_direct_orders\"",
+    "noNoBuild": "Каждый прогон БЕЗ --no-build: после отката исходник чист, а бинарник нет.",
+    "restore": "git checkout -- <файл>, затем rg -n \"MUTANT\" src/ tests/ и git status",
+    "numbersCommand": "dotnet run --project tests/DungeonFortress.Scenarios -c Release -- --prototype --commands scenarios/prototype1/<fixture>.commands.v2.json --ticks 2700 --snapshot <файл>; средняя creatures[].readinessAtRaid и sessionResult.raidersDowned читаются из снапшота"
+  },
+  "baseline_noMutant": {
+    "Deliberately_losing_creatures_and_stock_never_scores_better": "зелёная",
+    "Preparation_changes_the_deterministic_party_without_direct_orders": "зелёная",
+    "numbers": {
+      "prepared": { "raidersDowned": 10, "avgReadinessAtRaid": 52.4444, "score": 780 },
+      "baseline": { "raidersDowned": 7, "avgReadinessAtRaid": 45.1111, "score": 670 },
+      "margin": "Запас второго инварианта — 7.33 очка средней readinessAtRaid и три налётчика. Это число названо, потому что без него «зелёная» ничего не говорит о том, насколько близко к красной."
+    }
+  },
+  "historicalCandidates": {
+    "what": "Кандидаты, о которых уже есть запись: держат ли они инварианты ПОСЛЕ слайса. Ни один вывод предыдущих слайсов не принят на веру.",
+    "I1_HpRecoveryStep": {
+      "substitution": "8 -> 1",
+      "Deliberately_losing…": "КРАСНАЯ",
+      "Preparation_changes…": "КРАСНАЯ",
+      "reading": "Держит оба, как и на дереве #409. Вывод PR #402 и M13 из evidence/333-mutants.json пережил и слайс травмы, и этот слайс."
+    },
+    "I2_DamageReadinessDivisor": {
+      "substitution": "6 -> 1",
+      "Deliberately_losing…": "КРАСНАЯ",
+      "Preparation_changes…": "зелёная",
+      "reading": "Держит первый и не держит второй — ровно то же расхождение с записью #402, которое назвал слайс #409 (evidence/409-invariants.json). Расхождение воспроизвелось, а не рассосалось: подстановка здесь крайняя, и утверждение остаётся «на 1 краснеет», а не «#402 ошибся»."
+    },
+    "I3_theTorsoGate": {
+      "substitution": "creature.PartInjury(BodyPart.Torso) == Heavy -> creature.Injury == Heavy (откат решения координатора, запись 1 #415)",
+      "Deliberately_losing…": "КРАСНАЯ",
+      "Preparation_changes…": "КРАСНАЯ",
+      "reading": "По-прежнему держит оба. Состязание раненого встало ПОСЛЕ этого гарда и его не подменило: раненый торс всё так же не пускает в бой, и на этом стоят оба инварианта."
+    }
+  },
+  "newCandidates": {
+    "what": "Рычаги, которых до слайса не существовало. Это и есть та часть критерия 9, ради которой он написан: инвариант мог начать опираться на механику, которой вчера не было.",
+    "I4_CombatSpareWoundWeight_down": {
+      "substitution": "2 -> 0 (травма перестаёт весить на стороне «беречься» — состязание почти всегда решается «лезть»)",
+      "Deliberately_losing…": "зелёная",
+      "Preparation_changes…": "зелёная",
+      "reading": "Инварианты не опираются на само существование состязания: сделай его инертным — обе зелёные."
+    },
+    "I5_CombatPressGritWeight": {
+      "substitution": "2 -> 0 (сторона «лезть» теряет стойкость — раненые берегутся гораздо чаще)",
+      "Deliberately_losing…": "зелёная",
+      "Preparation_changes…": "КРАСНАЯ",
+      "assertion": "PrototypeScenarioTests.cs:638 — средняя creatures[].readinessAtRaid у prepared перестаёт превышать baseline",
+      "numbers": {
+        "prepared": { "raidersDowned": 11, "avgReadinessAtRaid": 34.2222 },
+        "baseline": { "raidersDowned": 7, "avgReadinessAtRaid": 45.1111 },
+        "reading": "prepared падает с 52.44 до 34.22, baseline не двигается вовсе (45.1111 в обоих прогонах) — на своём seed baseline не доводит до переклички ни одного раненого. Первая половина проверки (налётчиков положено больше) при этом остаётся истинной: 11 против 7."
+      }
+    },
+    "I9_CombatSpareWoundWeight_up": {
+      "substitution": "2 -> 20 (раненые берегутся почти всегда)",
+      "Deliberately_losing…": "зелёная",
+      "Preparation_changes…": "КРАСНАЯ",
+      "numbers": {
+        "prepared": { "raidersDowned": 11, "avgReadinessAtRaid": 34.2222 },
+        "baseline": { "raidersDowned": 7, "avgReadinessAtRaid": 45.1111 },
+        "reading": "Числа СОВПАДАЮТ с I5 до знака после запятой, хотя рычаг другой. Оба мутанта загоняют мир в одно и то же состояние «раненый берётся беречься всегда», и дефект — свойство этого состояния, а не конкретной константы."
+      }
+    },
+    "I6_CombatSpareBenefitDivisor": {
+      "substitution": "3 -> 1 (выгода входит в сторону «беречься» втрое сильнее)",
+      "Deliberately_losing…": "зелёная",
+      "Preparation_changes…": "зелёная",
+      "reading": "Неожиданно на фоне I5/I9: сдвиг в ту же сторону, а инвариант держится. Причина в величинах — выгода у раненых на этих партиях мала, поэтому втрое большая доля малого числа состязаний не переворачивает."
+    },
+    "I7_CombatPressDomainFearDivisor": {
+      "substitution": "2 -> 1 (страх перед владением входит вдвое сильнее)",
+      "Deliberately_losing…": "зелёная",
+      "Preparation_changes…": "зелёная",
+      "reading": "Совпадает с тем, что уже опровергнуто замером на рубеже 3: этот делитель — слабый рычаг, он не двигает ни число начислений, ни инварианты."
+    },
+    "I8_HoldingTheLine_backToTotalFear": {
+      "substitution": "creature.Loyalty.DomainFear -> creature.Loyalty.Fear (откат правки рубежа 3-бис, тот же мутант, что M6)",
+      "Deliberately_losing…": "зелёная",
+      "Preparation_changes…": "зелёная",
+      "reading": "Прямой ответ на риск, названный владельцем ДО работы: «отказы участятся → подготовка делает набег дешевле». Ни в одну сторону: правка 3-бис инвариантов не держит и не ломает. На чистом дереве обе зелёные, при откате правки обе зелёные."
+    },
+    "I10_LoyaltyGrudgePressedWounded": {
+      "substitution": "6 -> 0 (цена принуждения не начисляется вовсе)",
+      "Deliberately_losing…": "зелёная",
+      "Preparation_changes…": "зелёная",
+      "reading": "Ожидаемо и всё равно измерено: начисление одно на всю матрицу (запись 38 в #415), и одно начисление не может держать продуктовый инвариант."
+    }
+  },
+  "conclusion": {
+    "verdict": "Оба инварианта зелёные, и переизмерено, ЧТО их держит.",
+    "first": "«Проигрывать нарочно не должно окупаться» держится там же, где держалось: HpRecoveryStep, DamageReadinessDivisor и торсовый гард. Ни один рычаг слайса его не двигает — ни в одну сторону, ни в другую.",
+    "second": "«Подготовка меняет партию без прямых приказов» ПЕРЕСТАЛ держаться только на прежнем: к трём историческим держателям добавилось состязание раненого. Два разных рычага (I5 и I9), сдвигающих состязание в сторону «беречься», роняют его одинаково и одними и теми же числами.",
+    "whatThisMeans": "Найдено то, ради чего критерий 9 запрещает предполагать. Это НЕ невосстановимый инвариант и НЕ повод для остановки: на выставленных числах обе проверки зелёные, запас второго — 7.33 очка средней readinessAtRaid. Но балансная поверхность изменилась: у второго инварианта появился новый несущий элемент, и следующая правка весов состязания обязана перемерить его, а не считать, что его держит только отдых и готовность.",
+    "notDone": "Диапазон не расширялся, третий путь не изобретался, веса состязания не трогались — постановка это прямо запрещает, а запись 38 в #415 закрепила нынешние числа."
+  }
+}

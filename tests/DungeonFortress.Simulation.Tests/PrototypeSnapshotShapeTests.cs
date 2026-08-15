@@ -68,36 +68,60 @@ public sealed class PrototypeSnapshotShapeTests
     /// rather than assumed: a section no sample reaches any more fails the test
     /// instead of quietly dropping out of the inventory.
     /// </summary>
-    private static readonly (string Name, string Fixture, int Ticks, bool AtMomentOfTruth)[] Samples =
+    /// <summary>
+    /// How a sample decides where to stop. Two of the three states the snapshot
+    /// can only be photographed in are emergent — the tick a wave ends on and the
+    /// tick a wounded creature is first asked whether it will stand — so they are
+    /// named by the state and never by a tick number: a balance change would move
+    /// the number and the section would go silently unrecorded.
+    /// </summary>
+    private enum StopAt
+    {
+        Tick,
+        MomentOfTruth,
+        WoundIntent,
+    }
+
+    private static readonly (string Name, string Fixture, int Ticks, StopAt Stop)[] Samples =
     [
         // Nothing applied yet, so the whole log is still pending.
-        ("build-demo @ 0", "build-demo", 0, false),
+        ("build-demo @ 0", "build-demo", 0, StopAt.Tick),
         // Five dig designations, three of them reserved with a work tile.
-        ("dig-demo @ 5", "dig-demo", 5, false),
+        ("dig-demo @ 5", "dig-demo", 5, StopAt.Tick),
         // Two stockpile cells and loose stone still waiting for a carrier.
-        ("stone-haul-demo @ 210", "stone-haul-demo", 210, false),
+        ("stone-haul-demo @ 210", "stone-haul-demo", 210, StopAt.Tick),
         // A blueprint that nothing has been delivered to yet.
-        ("build-demo @ 1001", "build-demo", 1001, false),
+        ("build-demo @ 1001", "build-demo", 1001, StopAt.Tick),
         // The first wave has landed, so there are raiders inside the domain.
-        ("prepared @ first raid + 5", "prepared", PrototypeTuning.FirstRaidTick + 5, false),
+        ("prepared @ first raid + 5", "prepared", PrototypeTuning.FirstRaidTick + 5, StopAt.Tick),
         // A party that ended: the only state in which the score exists.
-        ("neglected @ session end", "neglected", PrototypeTuning.SessionTicks, false),
+        ("neglected @ session end", "neglected", PrototypeTuning.SessionTicks, StopAt.Tick),
         // Far enough past the first wave that somebody has broken or been put
         // down, which is the only way a creature carries a remembered place
         // (Issue #117). Without it the array is present but never populated, and
         // the composition of its elements would go unrecorded.
-        ("baseline @ after the first wave", "baseline", PrototypeTuning.FirstRaidTick + 200, false),
+        ("baseline @ after the first wave", "baseline", PrototypeTuning.FirstRaidTick + 200, StopAt.Tick),
         // The party standing still between two waves, which is the only state in
         // which the cards of the moment of truth exist (Issue #312). It is
         // defined by the state it stops in and not by a tick number, because the
         // tick a wave ends on is emergent and a balance change would move it.
-        ("baseline @ the moment of truth", "baseline", 0, true),
+        ("baseline @ the moment of truth", "baseline", 0, StopAt.MomentOfTruth),
         // A whole party of baseline, which is the only sample that reaches the
         // returning raider (Issue #358): `survivors` is empty until somebody walks
         // out of the gate alive, and `raiders[].rememberedPlace` stays null until
         // one of them walks back in carrying a scar. `neglected @ session end`
         // does not reach it — that domain falls before the first wave is resolved.
-        ("baseline @ session end", "baseline", PrototypeTuning.SessionTicks, false),
+        ("baseline @ session end", "baseline", PrototypeTuning.SessionTicks, StopAt.Tick),
+        // The first roll call at which somebody carrying a wound is asked whether
+        // it will stand (Issue #431), which is the only state in which
+        // `creatures[].woundIntent` is anything but null. Named by the state for
+        // the same reason as the moment of truth above: the tick is emergent —
+        // nobody carries a wound until a wave has been fought and the domain has
+        // picked its people up off the floor. `prepared` and not `baseline`,
+        // because on `baseline`'s own seed nobody carrying a wound survives to a
+        // roll call at all — measured, not assumed: the contest is first reached
+        // at t1651 on prepared/20260726 and never on baseline/20260726.
+        ("prepared @ the contest of the wounded", "prepared", 0, StopAt.WoundIntent),
     ];
 
     /// <summary>
@@ -121,16 +145,24 @@ public sealed class PrototypeSnapshotShapeTests
         // family of `moveCount` and `blockedTicks` — counters nothing in the
         // simulation reads, published so that a consequence can be measured as a
         // rate instead of inferred.
-        "$.creatures[] -> actionsLostToStun, affinities, blockedTicks, carryAmount, carrying, currentJobId, fatigue, grit, hp, id, injuries, injury, isMustering, lastDecision, lastMoveTick, lastYieldTick, loyalty, martialForm, maxHp, mealReserved, mealTarget, mealTicksRemaining, might, mode, moveCount, musterNeedsRation, musterTarget, name, position, readiness, readinessAtRaid, recoveryTicks, rememberedPlaces, satiety, stepsLostToLimp, watchTicks, workTicks, yieldCount",
+        // Issue #431. Additive: `woundIntent` is what a wounded creature decided
+        // at the roll call, and null — like `raiders[].rememberedPlace` — until a
+        // wave asks somebody who is carrying a wound.
+        "$.creatures[] -> actionsLostToStun, affinities, blockedTicks, carryAmount, carrying, currentJobId, fatigue, grit, hp, id, injuries, injury, isMustering, lastDecision, lastMoveTick, lastYieldTick, loyalty, martialForm, maxHp, mealReserved, mealTarget, mealTicksRemaining, might, mode, moveCount, musterNeedsRation, musterTarget, name, position, readiness, readinessAtRaid, recoveryTicks, rememberedPlaces, satiety, stepsLostToLimp, watchTicks, workTicks, woundIntent, yieldCount",
         // Issue #409. Additive: a new array beside `injury`, which stays and is
         // its worst entry.
         "$.creatures[].injuries[] -> part, severity",
         "$.creatures[].lastDecision -> details, jobKind, reasonCode, target, tick",
-        "$.creatures[].loyalty -> benefit, benefitTerms, fear, fearTerms, grudge, grudgeReleased, grudgeTerms",
+        // Issue #431. Additive: `fearOfTheDomain` is the part of `fear` that is
+        // about the player rather than about the fight, carried beside the three
+        // totals because it is a magnitude with a fade of its own and not a term
+        // of any of the three ledgers.
+        "$.creatures[].loyalty -> benefit, benefitTerms, fear, fearOfTheDomain, fearTerms, grudge, grudgeReleased, grudgeTerms",
         "$.creatures[].loyalty.benefitTerms[] -> amount, code",
         "$.creatures[].loyalty.fearTerms[] -> amount, code",
         "$.creatures[].loyalty.grudgeTerms[] -> amount, code",
         "$.creatures[].rememberedPlaces[] -> cause, place, tick",
+        "$.creatures[].woundIntent -> code, part, press, severity, spare, tick, verdictDecided, wave",
         "$.digDesignations[] -> jobId, progressTicks, reachable, requiredTicks, reservedBy, statusCode, tile, workTile",
         "$.domain -> downedCreatures, injuredCreatures, livingCreatures, peakMeals, renown, renownAtPreviousWave, strength, strengthAtPreviousWave, waveCount, wavesArrived, wavesResolved",
         "$.economy -> buildsCompleted, cookBatchesCompleted, digsCompleted, harvestsCompleted, mealHaulsCompleted, mealsEaten, mealsProduced, rawHaulsCompleted, stoneConsumed, stoneDelivered, stoneHaulsCompleted, stoneProduced, stoneSpilled, stoneStored",
@@ -164,11 +196,14 @@ public sealed class PrototypeSnapshotShapeTests
         var problems = new List<string>();
         var observed = new List<(string Name, bool PartyEnded, SnapshotShape Shape)>();
 
-        foreach (var (name, fixture, ticks, atMomentOfTruth) in Samples)
+        foreach (var (name, fixture, ticks, stop) in Samples)
         {
-            var run = atMomentOfTruth
-                ? RunToMomentOfTruth(fixture)
-                : PrototypeScenario.Run(LoadFixture(fixture), ticks);
+            var run = stop switch
+            {
+                StopAt.MomentOfTruth => RunToMomentOfTruth(fixture),
+                StopAt.WoundIntent => RunToTheContestOfTheWounded(fixture),
+                _ => PrototypeScenario.Run(LoadFixture(fixture), ticks),
+            };
             using var document = JsonDocument.Parse(run.CanonicalJson);
             var root = document.RootElement;
 
@@ -266,6 +301,29 @@ public sealed class PrototypeSnapshotShapeTests
             $"{fixture} played a whole party without ever stopping between two waves, so the " +
             "cards of the moment of truth were never recorded by any sample.");
         return PrototypeScenario.Capture(world);
+    }
+
+    /// <summary>
+    /// The first tick on which some creature carries a decision about its own
+    /// wound (Issue #431). Photographed on the tick the contest wrote it, because
+    /// the intent is cleared again when the wave it was about resolves.
+    /// </summary>
+    private static PrototypeRunResult RunToTheContestOfTheWounded(string fixture)
+    {
+        var world = new PrototypeWorld(LoadFixture(fixture));
+        while (!world.IsComplete &&
+               !world.GetSnapshot().Creatures.Any(creature => creature.WoundIntent is not null))
+        {
+            world.Step();
+        }
+
+        var capture = PrototypeScenario.Capture(world);
+        Assert.True(
+            capture.State.Creatures.Any(creature => creature.WoundIntent is not null),
+            $"{fixture} played a whole party without one wounded creature ever being asked " +
+            "whether it would stand, so the composition of `woundIntent` was never recorded " +
+            "by any sample.");
+        return capture;
     }
 
     /// <summary>

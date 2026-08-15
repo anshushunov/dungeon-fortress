@@ -219,6 +219,41 @@ public static class PrototypeTuning
     public const int CombatJoinRecheck = 20;
     public const int EngageRadius = 8;
 
+    // ------------------------------------------------------------------
+    // The contest of the wounded at the roll call (Issue #431). Design contract:
+    // docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md §10.2 and
+    // docs/design/VERDICT_AND_THE_WOUNDED.md §3.1. Tuning by ADR 0010.
+    //
+    //     spare = wound_weight x sum of severities + benefit / benefit_divisor
+    //     press = fear_of_the_domain / fear_divisor + grit x grit_weight
+    //
+    // and the creature stays out of the line only when spare is strictly greater,
+    // so a tie leaves the party exactly as it was before this mechanic.
+    //
+    // What the four numbers were chosen against, and it is a boundary rather than
+    // a taste. Issue #409 took the wound out of the admission rule on purpose —
+    // a heavy wound was the largest single cause of absence, 18 of 27 over the
+    // matrix (PR #408), and the four consequences of a wound inside a fight would
+    // have been written for a creature that is never in one. So the default of
+    // this contest has to be «the wounded still take the field», and what moves
+    // it has to be the verdict rather than the wound. At grit 2..5 the pressing
+    // side is 4..10 before a verdict is spoken, and:
+    //
+    // - one light part on an ordinary well-fed creature weighs 2 + about 1 and
+    //   loses to every grit;
+    // - one heavy part weighs 4 + about 1 and takes only the least steady out;
+    // - a reward (twelve benefit at a stroke) adds four to the sparing side and
+    //   takes most of the wounded out of the line;
+    // - a punishment (ten of fear of the domain) adds five to the pressing side
+    //   and puts back in a creature that two heavy parts would have kept out.
+    //
+    // Neither sign settles anything on its own, which is the executable half of
+    // «ни одно значение не делает ни одно поведение неизбежным» (ADR 0019).
+    public const int CombatSpareWoundWeight = 2;
+    public const int CombatSpareBenefitDivisor = 3;
+    public const int CombatPressDomainFearDivisor = 2;
+    public const int CombatPressGritWeight = 2;
+
     // Reach is a property of the attack, not a constant of combat resolution.
     // Everything today is a brawler at one tile; raising this number is the only
     // edit a bow would need on this side of the seam.
@@ -586,6 +621,25 @@ public static class PrototypeTuning
     public const int LoyaltyGrudgeRefusedPlacePeriod = 100;
     public const int LoyaltyGrudgeRefusedPlace = 1;
 
+    // What being sent into a fight wounded costs the domain later (Issue #431,
+    // docs/design/VERDICT_AND_THE_WOUNDED.md §3.4). Credited only where the fear
+    // of the domain <b>was the reason</b> — the creature took the field and would
+    // have spared itself without that term — because otherwise «выпускать» would
+    // become a punishment for any wounded creature ever being in a fight, and the
+    // magnitude would stop meaning unfairness.
+    //
+    // Six, which is exactly LoyaltyGrudgeDischarge below: one coercion buys the
+    // domain precisely what one refusal spends, so a domain that presses once and
+    // is refused once is square, and only one that keeps pressing without ever
+    // being refused accumulates. It is charged at most once per creature per wave
+    // without a rule saying so — a creature that takes the field is `Fighting`,
+    // and the roll call does not ask anybody who is already in it.
+    //
+    // <b>It does not close the loop of §3.4 on the shipped matrix, and that is a
+    // measured finding rather than a number waiting to be raised</b> — see
+    // evidence/431-loop.json and the escalation in the body of the pull request.
+    public const int LoyaltyGrudgePressedWounded = 6;
+
     // How much resentment is spent when it is finally acted on. Less than a
     // punishment costs, so one refusal does not clear the whole account.
     public const int LoyaltyGrudgeDischarge = 6;
@@ -599,6 +653,28 @@ public static class PrototypeTuning
     public const int LoyaltyVerdictPunishFear = 10;
     public const int LoyaltyVerdictPunishUnfairGrudge = 14;
     public const int LoyaltyGrudgeIgnored = 2;
+
+    // Ticks that buy back one point of <b>fear of the domain</b> — the derived
+    // magnitude of Issue #431, the part of a creature's fright that is about the
+    // player rather than about the fight
+    // (docs/design/VERDICT_AND_THE_WOUNDED.md §3.3).
+    //
+    // The same rate as LoyaltyFearFadePeriod above, and deliberately a constant
+    // of its own rather than a reuse of it: the two clocks do not measure the
+    // same thing. Fear of the fight fades only in quiet, and a wound or a fallen
+    // ally restarts its count; fear of the domain has nothing to do with either,
+    // so its clock runs whatever the fight is doing. That difference is the whole
+    // of the third of the three checks §3.3 requires — after the term of the fade
+    // the magnitude is nought again however much combat fear was accumulated
+    // beside it — and it would be unstatable if the two shared a counter.
+    //
+    // What the number buys, at LoyaltyVerdictPunishFear = 10: a single punishment
+    // is remembered for 600 ticks, which is one wave interval
+    // (WaveIntervalTicks = 350) and most of a second. That is the «через
+    // волну-две» of pitch 6.3 read as a number — the wave after the verdict feels
+    // it nearly whole, the one after that feels what is left, and the third does
+    // not know it happened.
+    public const int LoyaltyDomainFearFadePeriod = 60;
 
     // How loyalty moves the choice of work. The cap is below one step of
     // affinity (30) and far below one step of priority (100), so loyalty can

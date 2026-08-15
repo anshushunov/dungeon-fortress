@@ -1,0 +1,485 @@
+{
+  "schemaVersion": 1,
+  "issue": "#431",
+  "checkpoint": "3 — grudge_pressed_wounded, замыкание петли и «залечился посреди волны»",
+  "command": "dotnet test tests/DungeonFortress.Simulation.Tests --filter FullyQualifiedName~PrototypePressedWoundedTests",
+  "loyaltyGrudgePressedWounded": 6,
+  "loop": {
+    "what": "Cases in which a creature charged `grudge_pressed_wounded` later refused the line by `combat_refused_grudge`. The refusal is the mechanism that was already in the tree; this slice only feeds it.",
+    "count": 0,
+    "cases": [],
+    "ownersDecision": "Запись 38 в Issue #415, 2026-08-15: цена принуждения принимается редким событием как есть, слайс идёт на playtest. Число ниже публикуется и НЕ утверждается тестом — его рост это желаемый исход, а не регресс. Условие пересмотра — playtest, на котором владелец скажет, что наказание не имеет ощутимых последствий."
+  },
+  "nearMisses": {
+    "what": "For every creature charged `grudge_pressed_wounded`, the closest the refusal `ReleasedGrudge x T.loyalty_refuse_grudge_weight > benefit + fearOfTheDomain + grit x T.loyalty_refuse_grit_weight` ever came to being true afterwards. A negative gap means the condition WAS true and the roll call still never asked — because the creature was Fighting at that moment. The holding side reads the fear of the domain from the owner's decision of 2026-08-15 (record 37 of #415) onwards; before it, the total fear.",
+    "cases": [
+      {
+        "Cell": "prepared/20260728 every-punish",
+        "CreatureId": 4,
+        "Name": "Дёготь",
+        "Charged": 6,
+        "Tick": 2411,
+        "ModeThen": "Downed",
+        "ReleasedTimesWeight": 0,
+        "Holding": 17,
+        "Gap": 17,
+        "Grudge": 20,
+        "Fear": 40,
+        "FearOfTheDomain": 5
+      }
+    ]
+  },
+  "census": {
+    "what": "Per party of the matrix: how often the line was refused by grudge at all, and every charge of `grudge_pressed_wounded` with the wave it landed in and how many roll calls of this party were still to come after it. `rollCallsLeft` is what decides whether the loop COULD close in that party, and is measured rather than assumed.",
+    "waveCount": 4,
+    "combatJoinRecheck": 20,
+    "cases": [
+      {
+        "Cell": "baseline/20260726 silent",
+        "EndTick": 2444,
+        "RefusalsByGrudge": 0,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": []
+      },
+      {
+        "Cell": "baseline/20260726 every-punish",
+        "EndTick": 2438,
+        "RefusalsByGrudge": 5,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": [
+          {
+            "CreatureId": 7,
+            "Name": "Обух",
+            "Tick": 1691,
+            "GrudgeAtDecision": 16,
+            "HoldingAtDecision": 14,
+            "Fear": 8,
+            "FearOfTheDomain": 4,
+            "Benefit": 2,
+            "Grit": 2,
+            "HoldingIfTheTotalFearWereRead": 18,
+            "GrudgeFromAnUnfairPunishment": 14,
+            "GrudgeFromCoercion": 0
+          },
+          {
+            "CreatureId": 1,
+            "Name": "Кремень",
+            "Tick": 2001,
+            "GrudgeAtDecision": 30,
+            "HoldingAtDecision": 26,
+            "Fear": 9,
+            "FearOfTheDomain": 9,
+            "Benefit": 1,
+            "Grit": 4,
+            "HoldingIfTheTotalFearWereRead": 26,
+            "GrudgeFromAnUnfairPunishment": 28,
+            "GrudgeFromCoercion": 0
+          },
+          {
+            "CreatureId": 7,
+            "Name": "Обух",
+            "Tick": 2001,
+            "GrudgeAtDecision": 24,
+            "HoldingAtDecision": 17,
+            "Fear": 13,
+            "FearOfTheDomain": 9,
+            "Benefit": 0,
+            "Grit": 2,
+            "HoldingIfTheTotalFearWereRead": 21,
+            "GrudgeFromAnUnfairPunishment": 28,
+            "GrudgeFromCoercion": 0
+          },
+          {
+            "CreatureId": 1,
+            "Name": "Кремень",
+            "Tick": 2021,
+            "GrudgeAtDecision": 24,
+            "HoldingAtDecision": 25,
+            "Fear": 9,
+            "FearOfTheDomain": 9,
+            "Benefit": 0,
+            "Grit": 4,
+            "HoldingIfTheTotalFearWereRead": 25,
+            "GrudgeFromAnUnfairPunishment": 28,
+            "GrudgeFromCoercion": 0
+          },
+          {
+            "CreatureId": 7,
+            "Name": "Обух",
+            "Tick": 2351,
+            "GrudgeAtDecision": 18,
+            "HoldingAtDecision": 11,
+            "Fear": 13,
+            "FearOfTheDomain": 3,
+            "Benefit": 0,
+            "Grit": 2,
+            "HoldingIfTheTotalFearWereRead": 21,
+            "GrudgeFromAnUnfairPunishment": 28,
+            "GrudgeFromCoercion": 0
+          }
+        ]
+      },
+      {
+        "Cell": "baseline/20260726 every-reward",
+        "EndTick": 2454,
+        "RefusalsByGrudge": 0,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": []
+      },
+      {
+        "Cell": "baseline/20260727 silent",
+        "EndTick": 2443,
+        "RefusalsByGrudge": 0,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": []
+      },
+      {
+        "Cell": "baseline/20260727 every-punish",
+        "EndTick": 2433,
+        "RefusalsByGrudge": 3,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": [
+          {
+            "CreatureId": 0,
+            "Name": "Брусок",
+            "Tick": 1651,
+            "GrudgeAtDecision": 14,
+            "HoldingAtDecision": 17,
+            "Fear": 5,
+            "FearOfTheDomain": 5,
+            "Benefit": 0,
+            "Grit": 3,
+            "HoldingIfTheTotalFearWereRead": 17,
+            "GrudgeFromAnUnfairPunishment": 14,
+            "GrudgeFromCoercion": 0
+          },
+          {
+            "CreatureId": 6,
+            "Name": "Прель",
+            "Tick": 1651,
+            "GrudgeAtDecision": 14,
+            "HoldingAtDecision": 21,
+            "Fear": 5,
+            "FearOfTheDomain": 5,
+            "Benefit": 0,
+            "Grit": 4,
+            "HoldingIfTheTotalFearWereRead": 21,
+            "GrudgeFromAnUnfairPunishment": 14,
+            "GrudgeFromCoercion": 0
+          },
+          {
+            "CreatureId": 7,
+            "Name": "Обух",
+            "Tick": 1651,
+            "GrudgeAtDecision": 14,
+            "HoldingAtDecision": 13,
+            "Fear": 5,
+            "FearOfTheDomain": 5,
+            "Benefit": 0,
+            "Grit": 2,
+            "HoldingIfTheTotalFearWereRead": 13,
+            "GrudgeFromAnUnfairPunishment": 14,
+            "GrudgeFromCoercion": 0
+          }
+        ]
+      },
+      {
+        "Cell": "baseline/20260727 every-reward",
+        "EndTick": 2444,
+        "RefusalsByGrudge": 0,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": []
+      },
+      {
+        "Cell": "baseline/20260728 silent",
+        "EndTick": 2444,
+        "RefusalsByGrudge": 0,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": []
+      },
+      {
+        "Cell": "baseline/20260728 every-punish",
+        "EndTick": 2438,
+        "RefusalsByGrudge": 1,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": [
+          {
+            "CreatureId": 5,
+            "Name": "Уголёк",
+            "Tick": 1651,
+            "GrudgeAtDecision": 14,
+            "HoldingAtDecision": 17,
+            "Fear": 8,
+            "FearOfTheDomain": 5,
+            "Benefit": 0,
+            "Grit": 3,
+            "HoldingIfTheTotalFearWereRead": 20,
+            "GrudgeFromAnUnfairPunishment": 14,
+            "GrudgeFromCoercion": 0
+          }
+        ]
+      },
+      {
+        "Cell": "baseline/20260728 every-reward",
+        "EndTick": 2444,
+        "RefusalsByGrudge": 0,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": []
+      },
+      {
+        "Cell": "prepared/20260726 silent",
+        "EndTick": 2428,
+        "RefusalsByGrudge": 0,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": []
+      },
+      {
+        "Cell": "prepared/20260726 every-punish",
+        "EndTick": 2428,
+        "RefusalsByGrudge": 0,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": []
+      },
+      {
+        "Cell": "prepared/20260726 every-reward",
+        "EndTick": 2442,
+        "RefusalsByGrudge": 0,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": []
+      },
+      {
+        "Cell": "prepared/20260727 silent",
+        "EndTick": 2439,
+        "RefusalsByGrudge": 0,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": []
+      },
+      {
+        "Cell": "prepared/20260727 every-punish",
+        "EndTick": 2431,
+        "RefusalsByGrudge": 1,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": [
+          {
+            "CreatureId": 0,
+            "Name": "Брусок",
+            "Tick": 1651,
+            "GrudgeAtDecision": 14,
+            "HoldingAtDecision": 17,
+            "Fear": 8,
+            "FearOfTheDomain": 5,
+            "Benefit": 0,
+            "Grit": 3,
+            "HoldingIfTheTotalFearWereRead": 20,
+            "GrudgeFromAnUnfairPunishment": 14,
+            "GrudgeFromCoercion": 0
+          }
+        ]
+      },
+      {
+        "Cell": "prepared/20260727 every-reward",
+        "EndTick": 2436,
+        "RefusalsByGrudge": 0,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": []
+      },
+      {
+        "Cell": "prepared/20260728 silent",
+        "EndTick": 2449,
+        "RefusalsByGrudge": 0,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": []
+      },
+      {
+        "Cell": "prepared/20260728 every-punish",
+        "EndTick": 2443,
+        "RefusalsByGrudge": 0,
+        "ChargesOfPressedWounded": 1,
+        "Charges": [
+          {
+            "CreatureId": 4,
+            "Name": "Дёготь",
+            "Tick": 2350,
+            "Wave": 4,
+            "AskedByTheRollCallAfterwards": 4,
+            "ModeAtEndOfParty": "Downed"
+          }
+        ],
+        "Refusals": []
+      },
+      {
+        "Cell": "prepared/20260728 every-reward",
+        "EndTick": 2442,
+        "RefusalsByGrudge": 0,
+        "ChargesOfPressedWounded": 0,
+        "Charges": [],
+        "Refusals": []
+      }
+    ]
+  },
+  "mendedMidWave": {
+    "what": "Cases in which a creature that had already been asked about its wound came back to a later roll call whole. §3.6: it bypasses the contest, takes the `combat_joined` path and its intent is cleared.",
+    "count": 13,
+    "cases": [
+      {
+        "Cell": "baseline/20260728 every-punish",
+        "CreatureId": 5,
+        "Name": "Уголёк",
+        "AskedAtTick": 2000,
+        "AskedOutcome": "pressed",
+        "WoundThen": "Head:Light",
+        "JoinedWholeAtTick": 2370,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "baseline/20260728 every-reward",
+        "CreatureId": 5,
+        "Name": "Уголёк",
+        "AskedAtTick": 2060,
+        "AskedOutcome": "spared",
+        "WoundThen": "Head:Light",
+        "JoinedWholeAtTick": 2080,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "baseline/20260728 every-reward",
+        "CreatureId": 6,
+        "Name": "Прель",
+        "AskedAtTick": 2000,
+        "AskedOutcome": "pressed",
+        "WoundThen": "Leg:Light",
+        "JoinedWholeAtTick": 2390,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260726 silent",
+        "CreatureId": 0,
+        "Name": "Брусок",
+        "AskedAtTick": 2000,
+        "AskedOutcome": "pressed",
+        "WoundThen": "Torso:Light",
+        "JoinedWholeAtTick": 2350,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260726 every-punish",
+        "CreatureId": 0,
+        "Name": "Брусок",
+        "AskedAtTick": 2000,
+        "AskedOutcome": "pressed",
+        "WoundThen": "Torso:Light",
+        "JoinedWholeAtTick": 2350,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260726 every-reward",
+        "CreatureId": 5,
+        "Name": "Уголёк",
+        "AskedAtTick": 2020,
+        "AskedOutcome": "spared",
+        "WoundThen": "Torso:Light",
+        "JoinedWholeAtTick": 2040,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260726 every-reward",
+        "CreatureId": 0,
+        "Name": "Брусок",
+        "AskedAtTick": 2000,
+        "AskedOutcome": "pressed",
+        "WoundThen": "Torso:Light",
+        "JoinedWholeAtTick": 2350,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260726 every-reward",
+        "CreatureId": 1,
+        "Name": "Кремень",
+        "AskedAtTick": 2080,
+        "AskedOutcome": "spared",
+        "WoundThen": "Leg:Light",
+        "JoinedWholeAtTick": 2350,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260726 every-reward",
+        "CreatureId": 3,
+        "Name": "Смола",
+        "AskedAtTick": 2080,
+        "AskedOutcome": "spared",
+        "WoundThen": "Leg:Light",
+        "JoinedWholeAtTick": 2350,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260727 silent",
+        "CreatureId": 5,
+        "Name": "Уголёк",
+        "AskedAtTick": 1650,
+        "AskedOutcome": "pressed",
+        "WoundThen": "Arm:Light",
+        "JoinedWholeAtTick": 2000,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260727 every-reward",
+        "CreatureId": 5,
+        "Name": "Уголёк",
+        "AskedAtTick": 1650,
+        "AskedOutcome": "pressed",
+        "WoundThen": "Arm:Light",
+        "JoinedWholeAtTick": 2000,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260727 every-reward",
+        "CreatureId": 3,
+        "Name": "Смола",
+        "AskedAtTick": 2390,
+        "AskedOutcome": "spared",
+        "WoundThen": "Leg:Light",
+        "JoinedWholeAtTick": 2410,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260728 every-reward",
+        "CreatureId": 4,
+        "Name": "Дёготь",
+        "AskedAtTick": 2080,
+        "AskedOutcome": "spared",
+        "WoundThen": "Arm:Light",
+        "JoinedWholeAtTick": 2350,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      }
+    ]
+  }
+}

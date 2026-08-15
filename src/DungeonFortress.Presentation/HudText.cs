@@ -339,10 +339,18 @@ public static class HudText
         // with, are the same kind of fact as a refusal by memory of place — the
         // creature's past changing what it does next — except that here the past
         // is something the player did, which is the whole claim of slice 3.
+        // The contest of the wounded joins them (Issue #431). Both codes are the
+        // same kind of fact for the same reason `combat_refused_grudge` is: what
+        // has already happened to a creature — a wound, and what the player said
+        // about it — deciding what it does next. Ranking them level 1 with
+        // `combat_joined` would put the decision of the slice below the fact of
+        // being in the line, which is the ranking the feed already refuses for a
+        // refusal by memory of place.
         "refused_place_of_panic" or "refused_place_of_wound"
             or "verdict_rewarded" or "verdict_punished"
             or "verdict_punished_without_fault" or "verdict_ignored"
-            or "combat_refused_grudge" => 3,
+            or "combat_refused_grudge"
+            or "combat_spared_wound" or "combat_pressed_wound" => 3,
 
         // `injury_localised` sits with the other wounds and not above them
         // (Issue #409). It is the sentence that gives a creature the thing the
@@ -583,6 +591,12 @@ public static class HudText
         "grudge_hunger" => "hungry with a full larder",
         "grudge_refused_place" => "sent back where it broke",
         "grudge_punished_unfairly" => "punished for nothing",
+        // Issue #431, §4, the third channel. The price of coercion is a term of
+        // the grudge ledger like any other, so the card that reports a grudge
+        // breaks it down like any other — and without a wording here the card
+        // would not be rendered at all: `TermName` refuses an unknown code
+        // rather than printing it raw.
+        "grudge_pressed_wounded" => "sent into the line hurt",
         "grudge_ignored" => "ignored",
         "grudge_spent" => "spent",
         _ => throw new ArgumentOutOfRangeException(

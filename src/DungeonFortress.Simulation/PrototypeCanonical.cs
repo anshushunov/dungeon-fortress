@@ -245,6 +245,18 @@ public static class PrototypeCanonical
             WriteLoyaltyTerms(writer, "fearTerms", creature.Loyalty.FearTerms);
             WriteLoyaltyTerms(writer, "benefitTerms", creature.Loyalty.BenefitTerms);
             WriteLoyaltyTerms(writer, "grudgeTerms", creature.Loyalty.GrudgeTerms);
+
+            // Fear of the domain (Issue #431). Additive, like every section added
+            // since v2: a new field inside an existing object, nothing renamed,
+            // removed, retyped or re-pointed, so the schema version does not move.
+            // Every frame's checksum does move, because the field is present on
+            // every creature from tick 0 — and that is what a golden regeneration
+            // is for.
+            //
+            // It sits beside the three totals rather than inside `fearTerms`
+            // because it is not a term: it is a magnitude with a fade of its own,
+            // and the ledger it would have to add up to does not exist.
+            writer.WriteNumber("fearOfTheDomain", creature.Loyalty.FearOfTheDomain);
             writer.WriteEndObject();
 
             // Localised injury (Issue #409). Additive, like `rememberedPlaces`
@@ -271,6 +283,46 @@ public static class PrototypeCanonical
             writer.WriteEndArray();
             writer.WriteNumber("stepsLostToLimp", creature.StepsLostToLimp);
             writer.WriteNumber("actionsLostToStun", creature.ActionsLostToStun);
+
+            // What a wounded creature decided at the roll call (Issue #431).
+            // Additive, like every section added since v2: a new field on an
+            // existing section, nothing renamed, removed, retyped or re-pointed,
+            // so the schema version does not move — which is the same shape
+            // `raiders[].rememberedPlace` already has.
+            //
+            // <b>Additive is not the same as invisible, and the difference is
+            // worth stating where the bytes are written.</b> The null is
+            // serialised explicitly a few lines below rather than omitted, so the
+            // key is present on every creature from tick 0 and the checksum of
+            // <em>every</em> canonical frame moves, including frames from before
+            // the first wave — when no creature can possibly carry an intent. The
+            // three golden UI frames of the repository (t190, t336, t950) are all
+            // pre-wave and all three were regenerated for exactly this reason.
+            // A reader looking for the cause of a checksum shift should stop here
+            // rather than at the roll call.
+            //
+            // Canonical rather than presentational: the panel is forbidden to
+            // read this off `lastDecision` (the roll call runs before job
+            // generation, so the decision is overwritten inside its own tick), so
+            // a replay has to be able to reproduce the intent exactly.
+            if (creature.WoundIntent is { } intent)
+            {
+                writer.WriteStartObject("woundIntent");
+                writer.WriteString("code", intent.Code);
+                writer.WriteNumber("tick", intent.Tick);
+                writer.WriteNumber("wave", intent.Wave);
+                writer.WriteNumber("spare", intent.Spare);
+                writer.WriteNumber("press", intent.Press);
+                writer.WriteString("part", ToJson(intent.Part));
+                writer.WriteString("severity", ToJson(intent.Severity));
+                writer.WriteBoolean("verdictDecided", intent.VerdictDecided);
+                writer.WriteEndObject();
+            }
+            else
+            {
+                writer.WriteNull("woundIntent");
+            }
+
             writer.WriteEndObject();
         }
 

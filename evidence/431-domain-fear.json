@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "issue": "#431",
+  "checkpoint": "1 — производная величина «страх перед владением»",
+  "command": "dotnet test tests/DungeonFortress.Simulation.Tests --filter FullyQualifiedName~PrototypeDomainFearTests",
+  "what": "The fade curve of the derived magnitude on prepared/20260726 after a single punishment, sampled every T.loyalty_domain_fear_fade_period ticks, with the combat fear of the same creature beside it. The two columns are what check 3 of §3.3 compares: the derived magnitude walks to nought on its own clock while `fear` does whatever the fight makes it do.",
+  "fixture": "prepared",
+  "seed": 20260726,
+  "subject": 1,
+  "verdictTick": 1334,
+  "verdict": "punish",
+  "loyaltyVerdictPunishFear": 10,
+  "loyaltyDomainFearFadePeriod": 60,
+  "termOfTheFade": 600,
+  "samples": [
+    {
+      "tick": 1334,
+      "sinceVerdict": 0,
+      "fearOfTheDomain": 10,
+      "fear": 13,
+      "fearTerms": {
+        "fear_ally_downed": 3,
+        "fear_punished": 10
+      }
+    },
+    {
+      "tick": 1394,
+      "sinceVerdict": 60,
+      "fearOfTheDomain": 9,
+      "fear": 12,
+      "fearTerms": {
+        "fear_ally_downed": 3,
+        "fear_faded": -1,
+        "fear_punished": 10
+      }
+    },
+    {
+      "tick": 1454,
+      "sinceVerdict": 120,
+      "fearOfTheDomain": 8,
+      "fear": 11,
+      "fearTerms": {
+        "fear_ally_downed": 3,
+        "fear_faded": -2,
+        "fear_punished": 10
+      }
+    },
+    {
+      "tick": 1514,
+      "sinceVerdict": 180,
+      "fearOfTheDomain": 7,
+      "fear": 10,
+      "fearTerms": {
+        "fear_ally_downed": 3,
+        "fear_faded": -3,
+        "fear_punished": 10
+      }
+    },
+    {
+      "tick": 1574,
+      "sinceVerdict": 240,
+      "fearOfTheDomain": 6,
+      "fear": 9,
+      "fearTerms": {
+        "fear_ally_downed": 3,
+        "fear_faded": -4,
+        "fear_punished": 10
+      }
+    },
+    {
+      "tick": 1634,
+      "sinceVerdict": 300,
+      "fearOfTheDomain": 5,
+      "fear": 8,
+      "fearTerms": {
+        "fear_ally_downed": 3,
+        "fear_faded": -5,
+        "fear_punished": 10
+      }
+    },
+    {
+      "tick": 1694,
+      "sinceVerdict": 360,
+      "fearOfTheDomain": 4,
+      "fear": 11,
+      "fearTerms": {
+        "fear_ally_downed": 6,
+        "fear_faded": -5,
+        "fear_punished": 10
+      }
+    },
+    {
+      "tick": 1754,
+      "sinceVerdict": 420,
+      "fearOfTheDomain": 3,
+      "fear": 19,
+      "fearTerms": {
+        "fear_ally_downed": 6,
+        "fear_faded": -5,
+        "fear_punished": 10,
+        "fear_wound": 8
+      }
+    },
+    {
+      "tick": 1814,
+      "sinceVerdict": 480,
+      "fearOfTheDomain": 2,
+      "fear": 18,
+      "fearTerms": {
+        "fear_ally_downed": 6,
+        "fear_faded": -6,
+        "fear_punished": 10,
+        "fear_wound": 8
+      }
+    },
+    {
+      "tick": 1874,
+      "sinceVerdict": 540,
+      "fearOfTheDomain": 1,
+      "fear": 17,
+      "fearTerms": {
+        "fear_ally_downed": 6,
+        "fear_faded": -7,
+        "fear_punished": 10,
+        "fear_wound": 8
+      }
+    },
+    {
+      "tick": 1934,
+      "sinceVerdict": 600,
+      "fearOfTheDomain": 0,
+      "fear": 16,
+      "fearTerms": {
+        "fear_ally_downed": 6,
+        "fear_faded": -8,
+        "fear_punished": 10,
+        "fear_wound": 8
+      }
+    }
+  ]
+}

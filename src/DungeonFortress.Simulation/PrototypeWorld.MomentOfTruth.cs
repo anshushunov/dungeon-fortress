@@ -254,6 +254,15 @@ public sealed partial class PrototypeWorld
                     LoyaltyAxis.Fear,
                     "fear_punished",
                     PrototypeTuning.LoyaltyVerdictPunishFear);
+                // The same amount, credited a second time to the derived
+                // magnitude that carries only what the player did (Issue #431,
+                // §3.3). It is not a second punishment: `fear` still moves by
+                // exactly LoyaltyVerdictPunishFear and everything that read the
+                // total reads what it always did. What is new is that the share
+                // of that total which is about the domain can now be asked for
+                // separately, which is the whole reason a contest about a wound
+                // can read fear at all without reading the wound back.
+                creature.Loyalty.DomainFear += PrototypeTuning.LoyaltyVerdictPunishFear;
                 // A punishment that lands on somebody who did not break is the
                 // textbook coercion of pitch 6.3: it works now and is paid for
                 // later. "Fault" is the one thing this prototype can observe a

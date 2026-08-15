@@ -47,6 +47,38 @@ public sealed partial class PrototypeWorld
 
         public SortedDictionary<string, int> GrudgeTerms { get; } = new(StringComparer.Ordinal);
 
+        /// <summary>
+        /// <b>Fear of the domain</b> — how much of this creature's fright is
+        /// about the player rather than about the fight (Issue #431,
+        /// <c>docs/design/VERDICT_AND_THE_WOUNDED.md</c> §3.3).
+        ///
+        /// <para><b>Why it cannot be a sum of terms.</b> Of the four sources of
+        /// <see cref="Fear"/>, three are the fight — <c>fear_wound</c>,
+        /// <c>fear_panic</c>, <c>fear_ally_downed</c> — and one is the player,
+        /// <c>fear_punished</c>. Reading the total would say «a wound pushes the
+        /// wounded into the line», because <c>fear_wound</c> is credited to
+        /// exactly the creature the contest is asking about. Reading the single
+        /// term instead does not work either, and that is what the first
+        /// revision of the specification got wrong: the fade is itself a term,
+        /// <c>fear_faded</c>, credited without naming which source it took from
+        /// (<see cref="FadeFear"/>). Counting it in gives a negative fear of the
+        /// domain to a creature nobody ever punished; leaving it out means a
+        /// punishment is never forgotten.</para>
+        ///
+        /// <para>So the magnitude is carried, with a fade of its own that owes
+        /// nothing to the quiet the combat fear's fade waits for. It is
+        /// canonical state — nothing else in the world can reconstruct it — and
+        /// is published beside the three totals.</para>
+        /// </summary>
+        public int DomainFear { get; set; }
+
+        /// <summary>
+        /// Ticks since the last point of <see cref="DomainFear"/> was forgotten.
+        /// A live counter of the same family as <see cref="QuietFearTicks"/>
+        /// beside it, and deliberately not published: the magnitude is.
+        /// </summary>
+        public int DomainFearTicks { get; set; }
+
         // What this creature was on the previous tick. The sweep is a function of
         // deltas of published facts, so it needs the previous reading of each of
         // them and nothing else.
@@ -224,6 +256,7 @@ public sealed partial class PrototypeWorld
             AccrueGrudge(creature);
             FadeFear(creature, frightened);
             FadeBenefit(creature, gained);
+            FadeDomainFear(creature);
         }
 
         foreach (var creature in _creatures)
@@ -419,6 +452,44 @@ public sealed partial class PrototypeWorld
     }
 
     /// <summary>
+    /// Fear of the domain fades too, one point per
+    /// <see cref="PrototypeTuning.LoyaltyDomainFearFadePeriod"/> ticks — and
+    /// <b>not</b> only in quiet, which is the one thing that distinguishes this
+    /// fade from <see cref="FadeFear"/> above.
+    ///
+    /// <para>The distinction is the mechanic and not a detail. What a creature
+    /// remembers about a punishment is not undone by a raider hitting it: if this
+    /// fade waited for quiet the way the combat one does, a domain under attack
+    /// would keep its people afraid of <em>it</em> for as long as the attack
+    /// lasted, and the third check of §3.3 — «after the term of the fade it is
+    /// nought again however much combat fear was accumulated at the same time» —
+    /// would be false by construction.</para>
+    ///
+    /// <para>Unlike the three ledgers this is not written as a term, because
+    /// there is no ledger for it to add up to: the magnitude <b>is</b> the
+    /// number. That is exactly why it had to be carried rather than derived —
+    /// see <see cref="LoyaltyState.DomainFear"/>.</para>
+    /// </summary>
+    private static void FadeDomainFear(CreatureState creature)
+    {
+        var ledger = creature.Loyalty;
+        if (ledger.DomainFear <= 0)
+        {
+            ledger.DomainFearTicks = 0;
+            return;
+        }
+
+        ledger.DomainFearTicks++;
+        if (ledger.DomainFearTicks < PrototypeTuning.LoyaltyDomainFearFadePeriod)
+        {
+            return;
+        }
+
+        ledger.DomainFearTicks = 0;
+        ledger.DomainFear--;
+    }
+
+    /// <summary>
     /// Gratitude fades the same way and for the same reason, one point at a
     /// time. It is what makes the effect of every verdict reversible by ordinary
     /// play — the fifth condition of admissibility of a <c>verdict</c> value
@@ -536,7 +607,8 @@ public sealed partial class PrototypeWorld
             ToTerms(ledger.FearTerms),
             ToTerms(ledger.BenefitTerms),
             ToTerms(ledger.GrudgeTerms),
-            released);
+            released,
+            ledger.DomainFear);
 
     private static IReadOnlyList<PrototypeLoyaltyTerm> ToTerms(
         SortedDictionary<string, int> terms) =>

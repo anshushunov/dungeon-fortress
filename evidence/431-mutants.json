@@ -1,0 +1,530 @@
+{
+  "schemaVersion": 1,
+  "issue": "#431",
+  "criterion": "3 — состязание несущее, а не декоративное: мутант на каждую половину",
+  "measuredOnCommit": "aa526aa",
+  "command": "dotnet test tests/DungeonFortress.Simulation.Tests --filter FullyQualifiedName~PrototypeWoundedContestTests",
+  "procedure": [
+    "Проверяемое состояние закоммичено (aa526aa) ДО постановки первого мутанта.",
+    "Каждый мутант — текстовая подстановка в src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs, метод WeighTheWound; подстановка приведена ниже дословно.",
+    "Каждый прогон идёт БЕЗ --no-build. После отката мутанта исходник чист, а бинарники нет, и --no-build дал бы ложное измерение — этот дефект review проекта ловил дважды.",
+    "Между мутантами дерево возвращается в чистое состояние `git checkout -- <файл>`, и отсутствие маркеров проверяется поиском MUTANT по src/ и tests/.",
+    "После обоих мутантов чистое дерево прогнано заново и воспроизвело исходные числа — это и есть доказательство, что все три замера сняты на одном дереве.",
+    "Первый заход этих мутантов был оборван ошибкой API на середине; ни одно его число не перенесено сюда — замер снят с начала."
+  ],
+  "metric": {
+    "what": "Каждое состязание раненого на перекличке по baseline и prepared × seed 20260726/27/28 в пяти режимах ответа на карточки.",
+    "pressedShare": "доля раненых в строю = pressed / contests",
+    "regimes": [
+      "silent",
+      "every-reward",
+      "every-punish",
+      "first-reward",
+      "first-punish"
+    ]
+  },
+  "clean": {
+    "totals": {
+      "contests": 247,
+      "spared": 56,
+      "pressed": 191,
+      "verdictDecided": 47,
+      "sparedOutOfAnActiveMuster": 13
+    },
+    "pressedShare": 0.7733,
+    "byRegime": {
+      "silent": {
+        "spared": 5,
+        "pressed": 38,
+        "verdictDecided": 0
+      },
+      "every-reward": {
+        "spared": 37,
+        "pressed": 26,
+        "verdictDecided": 37
+      },
+      "every-punish": {
+        "spared": 0,
+        "pressed": 43,
+        "verdictDecided": 1
+      },
+      "first-reward": {
+        "spared": 9,
+        "pressed": 41,
+        "verdictDecided": 9
+      },
+      "first-punish": {
+        "spared": 5,
+        "pressed": 43,
+        "verdictDecided": 0
+      }
+    },
+    "bySign": {
+      "reward": {
+        "spared": 46,
+        "pressed": 27,
+        "verdictDecided": 46
+      },
+      "punish": {
+        "spared": 5,
+        "pressed": 39,
+        "verdictDecided": 1
+      },
+      "unanswered": {
+        "spared": 5,
+        "pressed": 125,
+        "verdictDecided": 0
+      }
+    }
+  },
+  "mutants": [
+    {
+      "id": "M1",
+      "name": "страх перед владением снят со стороны «лезть»",
+      "substitution": {
+        "file": "src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs",
+        "method": "WeighTheWound",
+        "from": "var dread = creature.Loyalty.DomainFear / PrototypeTuning.CombatPressDomainFearDivisor;",
+        "to": "var dread = 0; // MUTANT M1: the fear of the domain removed from the pressing side."
+      },
+      "predictionMadeBeforeTheRun": {
+        "direction": "доля раненых в строю ПАДАЕТ. Слагаемое снимается со стороны «лезть», решение — строгое `spare > press`, поэтому снижение press может перевести исход только из `pressed` в `spared` и никогда обратно.",
+        "howTheMagnitudeWasDerived": "Арифметикой из чистого evidence, а не угадыванием. У каждого решения press = dread + grit×2, grit существа фиксирован, значит dread = Press − grit×2 читается прямо из записи. Ненулевой dread несут 18 решений режима every-punish, 1 решение режима first-punish и НИ ОДНОГО в silent, every-reward и first-reward.",
+        "exactMagnitude": "Условие переворота `Spare > grit×2` выполняется ровно у ОДНОГО решения матрицы: prepared/20260728, every-punish, t2350, Дёготь (#4), 6 против 7, press становится 4. Волна 4 приходит на t2350, перепроверка идёт каждые 20 тиков, а сберёгшее себя существо остаётся в перекличке (в отличие от вступившего в бой) — поэтому предсказано: every-punish 0 → 5 решений `spared` на тиках 2350, 2370, 2390, 2410, 2430 и 43 → 42 `pressed`; ЧЕТЫРЕ остальных режима не меняются ни на одно решение; строка `punish` verdictDecided 1 → 0.",
+        "predictedTotals": {
+          "contests": 251,
+          "spared": 61,
+          "pressed": 190
+        }
+      },
+      "observed": {
+        "totals": {
+          "contests": 251,
+          "spared": 61,
+          "pressed": 190,
+          "verdictDecided": 46,
+          "sparedOutOfAnActiveMuster": 14
+        },
+        "pressedShare": 0.757,
+        "byRegime": {
+          "silent": {
+            "spared": 5,
+            "pressed": 38,
+            "verdictDecided": 0
+          },
+          "every-reward": {
+            "spared": 37,
+            "pressed": 26,
+            "verdictDecided": 37
+          },
+          "every-punish": {
+            "spared": 5,
+            "pressed": 42,
+            "verdictDecided": 0
+          },
+          "first-reward": {
+            "spared": 9,
+            "pressed": 41,
+            "verdictDecided": 9
+          },
+          "first-punish": {
+            "spared": 5,
+            "pressed": 43,
+            "verdictDecided": 0
+          }
+        },
+        "bySign": {
+          "reward": {
+            "spared": 46,
+            "pressed": 27,
+            "verdictDecided": 46
+          },
+          "punish": {
+            "spared": 10,
+            "pressed": 38,
+            "verdictDecided": 0
+          },
+          "unanswered": {
+            "spared": 5,
+            "pressed": 125,
+            "verdictDecided": 0
+          }
+        }
+      },
+      "shift": {
+        "spared": 5,
+        "pressed": -1,
+        "pressedShare": -0.0163
+      },
+      "predictionHeld": true,
+      "redTest": "PrototypeWoundedContestTests.The_verdict_is_named_the_cause_only_when_removing_its_term_flips_the_contest — «not one contest in the whole matrix was decided by `punish`»",
+      "conclusion": "Предсказание сбылось дословно, включая четыре режима, обязанные не сдвинуться: every-reward 37/26, first-reward 9/41, first-punish 5/43 и silent 5/38 — без единого изменения, every-punish 0/43 → 5/42. Слагаемое страха перед владением несущее: без него единственное состязание матрицы, которое решало наказание, перестаёт решаться, и наказанный раненый, обязанный встать, садится."
+    },
+    {
+      "id": "M2",
+      "name": "benefit_rewarded снят со стороны «беречься»",
+      "whyThisAndNotTheWholeBenefitSide": "Поправка 4 второго круга ревью спеки: сторону «беречься» растят ещё benefit_fed и benefit_tended, поэтому мутант на всю выгоду мог бы краснеть за их счёт, а награда осталась бы декоративной. Снимается ровно терм награды.",
+      "substitution": {
+        "file": "src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs",
+        "method": "WeighTheWound",
+        "from": "var benefit = creature.Loyalty.Benefit / PrototypeTuning.CombatSpareBenefitDivisor;",
+        "to": "// MUTANT M2: benefit_rewarded removed from the sparing side.\nvar benefit = (creature.Loyalty.Benefit - creature.Loyalty.BenefitTerms.GetValueOrDefault(\"benefit_rewarded\")) / PrototypeTuning.CombatSpareBenefitDivisor;"
+      },
+      "predictionMadeBeforeTheRun": {
+        "direction": "доля раненых в строю РАСТЁТ — противоположно M1. Слагаемое снимается со стороны «беречься», поэтому исход может перейти только из `spared` в `pressed`.",
+        "howTheMagnitudeWasDerived": "Награда стоит 12 выгоды при делителе 3, то есть ровно 4 очка стороны «беречься». В чистом дереве ВСЕ 46 решений `spared` о награждённом существе помечены verdictDecided = true, а для награждённого без наказания verdictDecided означает буквально «spare − rewarded/3 ≤ press».",
+        "exactMagnitude": "Каждое из 46 сбережений чистого пути исчезает на своём первом вычислении: every-reward и first-reward идут к нулю `spared`, три режима без единой награды (silent, every-punish, first-punish) не меняются ни на одно решение, строка `reward` verdictDecided 46 → 0. Общее число состязаний падает: в строю больше народу, значит больше выбывших и меньше поздних перекличек.",
+        "predictedTotals": {
+          "contests": "меньше 247",
+          "spared": "10 на первом расхождении — только 5+5 сбережений режимов без награды",
+          "pressed": "больше 191"
+        }
+      },
+      "observed": {
+        "totals": {
+          "contests": 220,
+          "spared": 16,
+          "pressed": 204,
+          "verdictDecided": 1,
+          "sparedOutOfAnActiveMuster": 4
+        },
+        "pressedShare": 0.9273,
+        "byRegime": {
+          "silent": {
+            "spared": 5,
+            "pressed": 38,
+            "verdictDecided": 0
+          },
+          "every-reward": {
+            "spared": 3,
+            "pressed": 38,
+            "verdictDecided": 0
+          },
+          "every-punish": {
+            "spared": 0,
+            "pressed": 43,
+            "verdictDecided": 1
+          },
+          "first-reward": {
+            "spared": 3,
+            "pressed": 42,
+            "verdictDecided": 0
+          },
+          "first-punish": {
+            "spared": 5,
+            "pressed": 43,
+            "verdictDecided": 0
+          }
+        },
+        "bySign": {
+          "reward": {
+            "spared": 6,
+            "pressed": 43,
+            "verdictDecided": 0
+          },
+          "punish": {
+            "spared": 5,
+            "pressed": 39,
+            "verdictDecided": 1
+          },
+          "unanswered": {
+            "spared": 5,
+            "pressed": 122,
+            "verdictDecided": 0
+          }
+        }
+      },
+      "shift": {
+        "spared": -40,
+        "pressed": 13,
+        "pressedShare": 0.154
+      },
+      "predictionHeld": true,
+      "residual": {
+        "what": "every-reward и first-reward показали не 0, а 3 и 3 сбережения. Проверено поимённо, а не списано на шум: НИ ОДНО из шести не существует на чистом пути.",
+        "cases": [
+          "prepared/20260728 every-reward t2350 #4 Дёготь Arm:Light 5 против 4 — на чистом пути такого решения нет",
+          "prepared/20260728 every-reward t2370 #4 Дёготь Arm:Light 5 против 4 — на чистом пути такого решения нет",
+          "prepared/20260728 every-reward t2390 #4 Дёготь Arm:Light 5 против 4 — на чистом пути такого решения нет",
+          "prepared/20260728 first-reward t2350 #4 Дёготь Arm:Light 5 против 4 — на чистом пути такого решения нет",
+          "prepared/20260728 first-reward t2370 #4 Дёготь Arm:Light 5 против 4 — на чистом пути такого решения нет",
+          "prepared/20260728 first-reward t2390 #4 Дёготь Arm:Light 5 против 4 — на чистом пути такого решения нет"
+        ],
+        "meaning": "Предсказание «каждое сбережение чистого пути исчезает» выполнено полностью и без исключений. Остаток — новые решения разошедшегося мира, где существо бережёт себя на выгоде, набранной едой и уходом, без всякого терма награды: это ровно случай §3.2, и подача вердикт причиной там не называет (verdictDecided = 0 в обоих режимах)."
+      },
+      "redTest": "PrototypeWoundedContestTests.The_verdict_is_named_the_cause_only_when_removing_its_term_flips_the_contest — «not one contest in the whole matrix was decided by `reward`»",
+      "conclusion": "Предсказание сбылось: три режима без награды не сдвинулись ни на одно решение, а награда потеряла все свои сбережения — every-reward 37/26 → 3/38, first-reward 9/41 → 3/42. Терм награды несущий сам по себе, а не за счёт benefit_fed и benefit_tended."
+    }
+  ],
+  "remeasuredAtCheckpoint3bis": {
+    "why": "Правка рубежа 3-бис (`HoldingTheLine` читает `fearOfTheDomain`, решение владельца 2026-08-15) сдвинула траектории партий, поэтому блок `clean` выше, снятый на `aa526aa`, перестал описывать дерево. Числа выше НЕ переписаны: они остаются записью первого круга на своём коммите. Здесь — второй круг, снятый заново на `a309b36`, плюс мутант самой правки 3-бис.",
+    "measuredOnCommit": "a309b36",
+    "procedure": [
+      "Проверяемое состояние закоммичено (a309b36) ДО постановки любого мутанта этого круга.",
+      "Каждый прогон — БЕЗ --no-build; между мутантами дерево возвращается `git checkout -- <файл>`, и отсутствие маркеров проверяется `rg -n \"MUTANT\" src/ tests/`.",
+      "Порядок круга: чистый замер → M1 → M2 → чистый замер заново. Последний воспроизвёл первый дословно (248 / 56 / 192 / 47), что и доказывает, что все четыре замера сняты на одном дереве."
+    ],
+    "clean": {
+      "command": "dotnet test tests/DungeonFortress.Simulation.Tests --filter FullyQualifiedName~PrototypeWoundedContestTests",
+      "totals": {
+        "contests": 248,
+        "spared": 56,
+        "pressed": 192,
+        "verdictDecided": 47,
+        "sparedOutOfAnActiveMuster": 13
+      },
+      "pressedShare": 0.7742,
+      "byRegime": {
+        "silent": {
+          "spared": 5,
+          "pressed": 38,
+          "verdictDecided": 0
+        },
+        "every-reward": {
+          "spared": 37,
+          "pressed": 26,
+          "verdictDecided": 37
+        },
+        "every-punish": {
+          "spared": 0,
+          "pressed": 47,
+          "verdictDecided": 1
+        },
+        "first-reward": {
+          "spared": 9,
+          "pressed": 41,
+          "verdictDecided": 9
+        },
+        "first-punish": {
+          "spared": 5,
+          "pressed": 40,
+          "verdictDecided": 0
+        }
+      },
+      "bySign": {
+        "reward": {
+          "spared": 46,
+          "pressed": 27,
+          "verdictDecided": 46
+        },
+        "punish": {
+          "spared": 5,
+          "pressed": 40,
+          "verdictDecided": 1
+        },
+        "unanswered": {
+          "spared": 5,
+          "pressed": 125,
+          "verdictDecided": 0
+        }
+      },
+      "whatMovedAgainstAa526aa": "every-punish 43 → 47 в строю, first-punish 43 → 40, всего состязаний 247 → 248. Сдвиг ожидаемый и односторонний: отказ по обиде стоит ВЫШЕ состязания, поэтому участившиеся отказы меняют, кто до состязания доходит, и меняют это только в режимах с наказанием. Три режима без наказания — silent 5/38, every-reward 37/26, first-reward 9/41 — не сдвинулись ни на одно решение."
+    },
+    "mutants": [
+      {
+        "id": "M1",
+        "name": "страх перед владением снят со стороны «лезть» (повтор на a309b36)",
+        "substitution": {
+          "file": "src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs",
+          "method": "WeighTheWound",
+          "from": "var dread = creature.Loyalty.DomainFear / PrototypeTuning.CombatPressDomainFearDivisor;",
+          "to": "var dread = 0; // MUTANT M1: the fear of the domain removed from the pressing side."
+        },
+        "predictionMadeBeforeTheRun": {
+          "direction": "доля раненых в строю ПАДАЕТ; переходы возможны только `pressed` → `spared`, потому что слагаемое снимается со стороны «лезть», а решение — строгое `spare > press`.",
+          "exactMagnitude": "Единственное решение матрицы, у которого удаление страха перед владением переворачивает исход, — prepared/20260728 every-punish t2350 Дёготь, 6 против 7 (press падает до 4): это ровно то решение, что помечено verdictDecided в чистом блоке. Сбережённое существо, в отличие от вступившего в бой, остаётся в перекличке и спрашивается снова каждые 20 тиков, поэтому один переворот размножается на оставшиеся перепроверки волны 4: ожидается every-punish 0/47 → около 5 сбережений при примерно 46 в строю, состязаний +4. Режимы silent 5/38, every-reward 37/26, first-reward 9/41 и first-punish 5/40 обязаны не сдвинуться НИ НА ОДНО решение. Строка `punish` verdictDecided 1 → 0.",
+          "predictedRedTest": "PrototypeWoundedContestTests.The_verdict_is_named_the_cause_only_when_removing_its_term_flips_the_contest"
+        },
+        "observed": {
+          "totals": {
+            "contests": 252,
+            "spared": 61,
+            "pressed": 191,
+            "verdictDecided": 46,
+            "sparedOutOfAnActiveMuster": 14
+          },
+          "pressedShare": 0.7579,
+          "byRegime": {
+            "silent": {
+              "spared": 5,
+              "pressed": 38,
+              "verdictDecided": 0
+            },
+            "every-reward": {
+              "spared": 37,
+              "pressed": 26,
+              "verdictDecided": 37
+            },
+            "every-punish": {
+              "spared": 5,
+              "pressed": 46,
+              "verdictDecided": 0
+            },
+            "first-reward": {
+              "spared": 9,
+              "pressed": 41,
+              "verdictDecided": 9
+            },
+            "first-punish": {
+              "spared": 5,
+              "pressed": 40,
+              "verdictDecided": 0
+            }
+          },
+          "bySign": {
+            "reward": {
+              "spared": 46,
+              "pressed": 27,
+              "verdictDecided": 46
+            },
+            "punish": {
+              "spared": 10,
+              "pressed": 39,
+              "verdictDecided": 0
+            },
+            "unanswered": {
+              "spared": 5,
+              "pressed": 125,
+              "verdictDecided": 0
+            }
+          }
+        },
+        "shift": {
+          "spared": 5,
+          "pressed": -1,
+          "contests": 4,
+          "pressedShare": -0.0163
+        },
+        "predictionHeld": true,
+        "redTest": "PrototypeWoundedContestTests.The_verdict_is_named_the_cause_only_when_removing_its_term_flips_the_contest — «not one contest in the whole matrix was decided by `punish`»",
+        "conclusion": "Сбылось дословно, включая четыре режима, обязанные не двинуться. Вывод первого круга подтверждён на дереве после правки 3-бис: слагаемое страха перед владением на стороне «лезть» несущее."
+      },
+      {
+        "id": "M2",
+        "name": "benefit_rewarded снят со стороны «беречься» (повтор на a309b36)",
+        "substitution": {
+          "file": "src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs",
+          "method": "WeighTheWound",
+          "from": "var benefit = creature.Loyalty.Benefit / PrototypeTuning.CombatSpareBenefitDivisor;",
+          "to": "// MUTANT M2: benefit_rewarded removed from the sparing side.\nvar benefit = (creature.Loyalty.Benefit - creature.Loyalty.BenefitTerms.GetValueOrDefault(\"benefit_rewarded\")) / PrototypeTuning.CombatSpareBenefitDivisor;"
+        },
+        "predictionMadeBeforeTheRun": {
+          "direction": "доля раненых в строю РАСТЁТ — противоположно M1; переходы возможны только `spared` → `pressed`.",
+          "exactMagnitude": "Все 46 сбережений со знаком `reward` помечены verdictDecided, то есть для каждого «spare − rewarded/3 ≤ press», и каждое исчезает на своём первом вычислении: every-reward 37/26 → около 3/38, first-reward 9/41 → около 3/42 (остаток — новые решения разошедшегося мира, а не уцелевшие старые). Режимы без награды — silent 5/38, every-punish 0/47, first-punish 5/40 — обязаны не сдвинуться ни на одно решение. Состязаний становится меньше, около 222: в строю больше народу, значит больше выбывших и меньше поздних перекличек. Строка `reward` verdictDecided 46 → 0.",
+          "predictedRedTest": "PrototypeWoundedContestTests.The_verdict_is_named_the_cause_only_when_removing_its_term_flips_the_contest"
+        },
+        "observed": {
+          "totals": {
+            "contests": 221,
+            "spared": 16,
+            "pressed": 205,
+            "verdictDecided": 1,
+            "sparedOutOfAnActiveMuster": 4
+          },
+          "pressedShare": 0.9276,
+          "byRegime": {
+            "silent": {
+              "spared": 5,
+              "pressed": 38,
+              "verdictDecided": 0
+            },
+            "every-reward": {
+              "spared": 3,
+              "pressed": 38,
+              "verdictDecided": 0
+            },
+            "every-punish": {
+              "spared": 0,
+              "pressed": 47,
+              "verdictDecided": 1
+            },
+            "first-reward": {
+              "spared": 3,
+              "pressed": 42,
+              "verdictDecided": 0
+            },
+            "first-punish": {
+              "spared": 5,
+              "pressed": 40,
+              "verdictDecided": 0
+            }
+          },
+          "bySign": {
+            "reward": {
+              "spared": 6,
+              "pressed": 43,
+              "verdictDecided": 0
+            },
+            "punish": {
+              "spared": 5,
+              "pressed": 40,
+              "verdictDecided": 1
+            },
+            "unanswered": {
+              "spared": 5,
+              "pressed": 122,
+              "verdictDecided": 0
+            }
+          }
+        },
+        "shift": {
+          "spared": -40,
+          "pressed": 13,
+          "contests": -27,
+          "pressedShare": 0.1534
+        },
+        "predictionHeld": true,
+        "residual": {
+          "what": "every-reward и first-reward показали 3 и 3 сбережения, как и в первом круге. Проверено поимённо: все шесть — prepared/20260728 #4 Дёготь Arm:Light, 5 против 4, на тиках t2350/t2370/t2390, и ни одного из них нет на чистом пути.",
+          "meaning": "Остаток — новые решения разошедшегося мира, где существо бережёт себя на выгоде от еды и ухода без всякого терма награды (§3.2), и подача вердикт причиной там не называет: verdictDecided = 0 в обоих режимах."
+        },
+        "redTest": "PrototypeWoundedContestTests.The_verdict_is_named_the_cause_only_when_removing_its_term_flips_the_contest — «not one contest in the whole matrix was decided by `reward`»",
+        "conclusion": "Сбылось. Вывод первого круга подтверждён на дереве после правки 3-бис: терм награды несущий сам по себе, а не за счёт benefit_fed и benefit_tended."
+      },
+      {
+        "id": "M6",
+        "name": "удержание в строю возвращено к общему страху — мутант самой правки 3-бис",
+        "criterion": "6 — замыкание петли принуждения; мутант обязан показать, что правка по решению владельца 2026-08-15 несущая",
+        "command": "dotnet test tests/DungeonFortress.Simulation.Tests --filter FullyQualifiedName~The_loop_and_the_mending_are_recorded",
+        "substitution": {
+          "file": "src/DungeonFortress.Simulation/PrototypeWorld.Combat.cs",
+          "method": "HoldingTheLine",
+          "from": "creature.Loyalty.Benefit + creature.Loyalty.DomainFear +",
+          "to": "creature.Loyalty.Benefit + creature.Loyalty.Fear + // MUTANT M6: back to the total fear."
+        },
+        "predictionMadeBeforeTheRun": {
+          "direction": "отказов по обиде становится МЕНЬШЕ: сторона удержания растёт ровно на `Fear − fearOfTheDomain`, а условие отказа — строгое `released × 3 > holding`, поэтому мутант может только отнимать отказы, не добавлять.",
+          "howTheMagnitudeWasDerived": "Не оценкой, а прямым счётом по контрфакту, опубликованному у каждого отказа: `HoldingIfTheTotalFearWereRead` в `evidence/431-loop.json`. Ровно у трёх из десяти отказов `released × 3` не перебивает удержание со старым чтением.",
+          "exactMagnitude": "Отказов 10 → 7. Исчезают поимённо три: baseline/20260726 every-punish #7 Обух t2351 (15 против 21), baseline/20260728 every-punish #5 Уголёк t1651 (18 против 20), prepared/20260727 every-punish #0 Брусок t1651 (18 против 20). Партий с отказами 4 → 2: baseline/20260728 и prepared/20260727 обнуляются целиком. Начислений `grudge_pressed_wounded` остаётся 1, то же существо и тот же тик — prepared/20260728 every-punish, Дёготь (#4), t2350, волна 4: в этой партии отказов нет ни при одном чтении, поэтому её траектория совпадает бит в бит. Замыканий 0 в обе стороны.",
+          "namedCaveat": "7 — нижняя граница первого порядка, а не гарантия равенства: в baseline/20260728 и prepared/20260727 исчезающий отказ приходится на t1651, рано, и существо вместо отказа встаёт в строй, поэтому дальше партия расходится и новый отказ позже не исключён. Проверяемая насмерть часть предсказания — исчезновение трёх названных отказов на их названных тиках и неподвижность начисления."
+        },
+        "observed": {
+          "refusalsByGrudge": 7,
+          "partiesWithAnyRefusal": 2,
+          "chargesOfPressedWounded": 1,
+          "closures": 0,
+          "byParty": {
+            "baseline/20260726 every-punish": "5 → 4 (ушёл Обух t2351; Обух t1691, Кремень t2001, Обух t2001 и Кремень t2021 остались на своих тиках)",
+            "baseline/20260727 every-punish": "3 → 3 (Брусок, Прель, Обух, все t1651 — без изменений)",
+            "baseline/20260728 every-punish": "1 → 0",
+            "prepared/20260727 every-punish": "1 → 0",
+            "prepared/20260728 every-punish": "0 → 0; начисление Дёготь t2350, волна 4, на месте"
+          }
+        },
+        "predictionHeld": true,
+        "unpredictedSideEffect": "«Залечился посреди волны» 13 → 14. Механизм понятен задним числом и заранее назван не был: отменённый отказ возвращает существо в строй, и оно доживает до поздней переклички уже целым. Записано как непредсказанное, а не задним числом объявлено ожидаемым.",
+        "conclusion": "Правка несущая, и это измерено, а не заявлено: три отказа существуют только благодаря ей. Но критерий 6 ею НЕ закрывается — замыканий ноль при обоих чтениях, и узкое место сменилось. Разбор — в `evidence/431-loop.json` (`census`) и в теле PR."
+      }
+    ],
+    "criterionVerdict": {
+      "criterion3": "Подтверждён на дереве после правки 3-бис. Два мутанта на две половины состязания разводят долю раненых в строю в противоположные стороны — M1 0.7742 → 0.7579, M2 0.7742 → 0.9276 — каждый роняет названный тест, каждое предсказание точное.",
+      "criterion6": "НЕ выполнен. Структурная причина, названная владельцем, устранена, и устранение измерено (M6), но замыканий по-прежнему ноль. Новое узкое место — не удержание, а редкость начисления: `grudge_pressed_wounded` начисляется один раз на всю матрицу (и один раз на 30 партий пяти режимов), в волне 4 из 4, и это существо заканчивает партию Downed. Развилка возвращается координатору; подкрутка веса запрещена постановкой."
+    }
+  },
+  "notRun": {
+    "id": "M0",
+    "name": "отключить состязание целиком",
+    "why": "Правилом 9 не засчитывается: такой мутант краснеет от того, что механики нет, а не от того, что слагаемое несущее."
+  },
+  "criterionVerdict": "Выполнен. Два мутанта на две половины состязания сдвигают долю раненых в строю в ПРОТИВОПОЛОЖНЫЕ стороны — M1 с 0.7733 до 0.7570, M2 с 0.7733 до 0.9273 — каждый роняет названный тест, и каждое предсказание было точным (направление, механизм и величина), а не дизъюнктивным. ВНИМАНИЕ: эти числа сняты на `aa526aa`, и после правки рубежа 3-бис дерево их больше не воспроизводит. Действующий замер критерия 3 — блок `remeasuredAtCheckpoint3bis` на `a309b36`, где вывод подтверждён заново: 0.7742 → 0.7579 и 0.7742 → 0.9276."
+}
