@@ -245,6 +245,18 @@ public static class PrototypeCanonical
             WriteLoyaltyTerms(writer, "fearTerms", creature.Loyalty.FearTerms);
             WriteLoyaltyTerms(writer, "benefitTerms", creature.Loyalty.BenefitTerms);
             WriteLoyaltyTerms(writer, "grudgeTerms", creature.Loyalty.GrudgeTerms);
+
+            // Fear of the domain (Issue #431). Additive, like every section added
+            // since v2: a new field inside an existing object, nothing renamed,
+            // removed, retyped or re-pointed, so the schema version does not move.
+            // Every frame's checksum does move, because the field is present on
+            // every creature from tick 0 — and that is what a golden regeneration
+            // is for.
+            //
+            // It sits beside the three totals rather than inside `fearTerms`
+            // because it is not a term: it is a magnitude with a fade of its own,
+            // and the ledger it would have to add up to does not exist.
+            writer.WriteNumber("fearOfTheDomain", creature.Loyalty.FearOfTheDomain);
             writer.WriteEndObject();
 
             // Localised injury (Issue #409). Additive, like `rememberedPlaces`

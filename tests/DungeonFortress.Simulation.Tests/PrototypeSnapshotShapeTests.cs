@@ -126,7 +126,11 @@ public sealed class PrototypeSnapshotShapeTests
         // its worst entry.
         "$.creatures[].injuries[] -> part, severity",
         "$.creatures[].lastDecision -> details, jobKind, reasonCode, target, tick",
-        "$.creatures[].loyalty -> benefit, benefitTerms, fear, fearTerms, grudge, grudgeReleased, grudgeTerms",
+        // Issue #431. Additive: `fearOfTheDomain` is the part of `fear` that is
+        // about the player rather than about the fight, carried beside the three
+        // totals because it is a magnitude with a fade of its own and not a term
+        // of any of the three ledgers.
+        "$.creatures[].loyalty -> benefit, benefitTerms, fear, fearOfTheDomain, fearTerms, grudge, grudgeReleased, grudgeTerms",
         "$.creatures[].loyalty.benefitTerms[] -> amount, code",
         "$.creatures[].loyalty.fearTerms[] -> amount, code",
         "$.creatures[].loyalty.grudgeTerms[] -> amount, code",

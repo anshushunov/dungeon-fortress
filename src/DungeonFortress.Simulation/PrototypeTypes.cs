@@ -176,6 +176,14 @@ public sealed record PrototypeLoyaltyTerm(string Code, int Amount);
 /// of fear: it accumulates while fear is high and surfaces when fear falls, so
 /// "how much" and "is it showing" are two different questions and both are
 /// published.
+///
+/// <see cref="FearOfTheDomain"/> is appended for the same reason every section
+/// added since v2 is appended: a new field at the end of the record cannot move
+/// the meaning of anything before it. It is the part of <see cref="Fear"/> that
+/// is about the player rather than about the fight (Issue #431), and it is
+/// carried rather than derived because the fade of <see cref="Fear"/> is a term
+/// that does not name which source it took from — see
+/// <c>PrototypeWorld.Loyalty.cs</c>, <c>LoyaltyState.DomainFear</c>.
 /// </summary>
 public sealed record PrototypeLoyaltySnapshot(
     int Fear,
@@ -184,7 +192,8 @@ public sealed record PrototypeLoyaltySnapshot(
     IReadOnlyList<PrototypeLoyaltyTerm> FearTerms,
     IReadOnlyList<PrototypeLoyaltyTerm> BenefitTerms,
     IReadOnlyList<PrototypeLoyaltyTerm> GrudgeTerms,
-    bool GrudgeReleased);
+    bool GrudgeReleased,
+    int FearOfTheDomain);
 
 /// <summary>
 /// One card of the moment of truth: a creature the domain reports on after a

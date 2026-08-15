@@ -600,6 +600,28 @@ public static class PrototypeTuning
     public const int LoyaltyVerdictPunishUnfairGrudge = 14;
     public const int LoyaltyGrudgeIgnored = 2;
 
+    // Ticks that buy back one point of <b>fear of the domain</b> — the derived
+    // magnitude of Issue #431, the part of a creature's fright that is about the
+    // player rather than about the fight
+    // (docs/design/VERDICT_AND_THE_WOUNDED.md §3.3).
+    //
+    // The same rate as LoyaltyFearFadePeriod above, and deliberately a constant
+    // of its own rather than a reuse of it: the two clocks do not measure the
+    // same thing. Fear of the fight fades only in quiet, and a wound or a fallen
+    // ally restarts its count; fear of the domain has nothing to do with either,
+    // so its clock runs whatever the fight is doing. That difference is the whole
+    // of the third of the three checks §3.3 requires — after the term of the fade
+    // the magnitude is nought again however much combat fear was accumulated
+    // beside it — and it would be unstatable if the two shared a counter.
+    //
+    // What the number buys, at LoyaltyVerdictPunishFear = 10: a single punishment
+    // is remembered for 600 ticks, which is one wave interval
+    // (WaveIntervalTicks = 350) and most of a second. That is the «через
+    // волну-две» of pitch 6.3 read as a number — the wave after the verdict feels
+    // it nearly whole, the one after that feels what is left, and the third does
+    // not know it happened.
+    public const int LoyaltyDomainFearFadePeriod = 60;
+
     // How loyalty moves the choice of work. The cap is below one step of
     // affinity (30) and far below one step of priority (100), so loyalty can
     // decide between two comparable jobs and can never override what the player
