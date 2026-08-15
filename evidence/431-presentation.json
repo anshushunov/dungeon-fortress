@@ -8,10 +8,17 @@
     "cell": "prepared/20260728",
     "spared": {
       "tick": 2350,
+      "creature": "Дёготь",
       "sentence": "Дёготь would not stand for wave 4: sparing a hurt arm (6 against 4).",
       "count": 1,
       "verdictNamed": false,
-      "why": "Партия без единого вердикта: выгода набрана `benefit_fed` и `benefit_tended`, и правило причинности §3.5 запрещает называть вердикт причиной."
+      "benefitOfTheWitness": {
+        "total": 5,
+        "benefit_fed": 16,
+        "benefit_tended": 12,
+        "benefit_rewarded": 0
+      },
+      "why": "Партия без единого вердикта, и выгода свидетеля набрана именно едой и уходом — оба терма положительны, терма награды нет вовсе. Правило причинности §3.5 запрещает называть вердикт причиной, и подача его не называет."
     },
     "pressed": {
       "sentence": "stood for wave 3 on a hurt leg: it fears you more than the wound (6 against 5); 9 grudge for it.",

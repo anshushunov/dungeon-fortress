@@ -126,9 +126,21 @@ public sealed class WoundedIntentReadableTests(ITestOutputHelper output)
 
     /// <summary>
     /// The case criterion 5 names literally, asked of the world rather than of a
-    /// dictionary: a party in which no card was ever answered still has wounded
-    /// creatures sparing themselves, on benefit earned by being fed and tended,
-    /// and not one line of the feed credits the player with it.
+    /// dictionary: a creature that spared itself on benefit it <b>earned by being
+    /// fed and tended</b> rather than benefit it was given, and a feed that does
+    /// not credit the player with it.
+    ///
+    /// <para><b>The witness is required to carry both earning terms, and that is
+    /// the whole difference from the first version of this test.</b> Independent
+    /// review of PR #436 walked straight through it: taking any <c>spared</c>
+    /// outcome from a party with no verdicts and checking only that nobody in the
+    /// party carries <c>benefit_rewarded</c> leaves the check green on a creature
+    /// that spared itself purely on the weight of its wound and had no benefit at
+    /// all — which is not the case the criterion is about. So the search walks the
+    /// matrix until it finds a creature with <c>benefit_fed &gt; 0</c>,
+    /// <c>benefit_tended &gt; 0</c> and no <c>benefit_rewarded</c>, read off
+    /// <b>that creature</b> at the snapshot of <b>that roll call</b>, and the
+    /// amounts are printed so the claim is a measurement and not a phrase.</para>
     ///
     /// <para>This is the half that a hand-built <c>details</c> cannot claim. The
     /// flag could be wired to something that happens to be false in a fixture and
@@ -138,36 +150,71 @@ public sealed class WoundedIntentReadableTests(ITestOutputHelper output)
     [Fact]
     public void A_domain_that_judged_nobody_is_never_named_as_the_cause()
     {
-        var found = FirstContest("spared", judged: false);
+        var found = FirstContest("spared", judged: false, EarnedItsBenefit);
         var state = found.State;
+        var witness = state.Creatures.Single(item => item.Id == found.CreatureId);
 
+        // The case, on the creature and at the roll call, and not on the party.
+        Assert.True(Term(witness, "benefit_fed") > 0);
+        Assert.True(Term(witness, "benefit_tended") > 0);
+        Assert.Equal(0, Term(witness, "benefit_rewarded"));
+        Assert.DoesNotContain(
+            witness.Loyalty.BenefitTerms,
+            term => term.Code == "benefit_rewarded");
+        Assert.False(witness.WoundIntent!.VerdictDecided);
+
+        var itsOwn = state.Events.Single(item =>
+            item.ReasonCode == "combat_spared_wound" &&
+            item.CreatureId == found.CreatureId &&
+            item.LastTick == found.IntentTick);
+        Assert.Equal(0, itsOwn.Details.GetValueOrDefault("verdictDecided"));
+        Assert.DoesNotContain(
+            "your reward",
+            EventNarration.Describe(state, itsOwn),
+            StringComparison.OrdinalIgnoreCase);
+
+        // And the class-wide form of the same claim, which the first version of
+        // this test carried and which stays: nobody was ever judged in this
+        // party, so no refusal of the wounded anywhere in it may credit a verdict.
         var spared = state.Events
             .Where(item => item.ReasonCode == "combat_spared_wound")
             .ToArray();
         Assert.NotEmpty(spared);
-
         foreach (var @event in spared)
         {
             Assert.Equal(0, @event.Details.GetValueOrDefault("verdictDecided"));
-            var sentence = EventNarration.Describe(state, @event);
-            Assert.DoesNotContain("your reward", sentence, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(
+                "your reward",
+                EventNarration.Describe(state, @event),
+                StringComparison.OrdinalIgnoreCase);
         }
 
-        // And the benefit really was earned rather than given, which is the
-        // wording of the criterion: nobody in this party carries the term a
-        // reward writes.
         Assert.DoesNotContain(
             state.Creatures.SelectMany(creature => creature.Loyalty.BenefitTerms),
             term => term.Code == "benefit_rewarded");
 
         output.WriteLine(
-            $"{found.Cell}: {spared.Length} refusal(s) of the wounded, none of them credited " +
-            "to a verdict.");
+            $"{found.Cell} t{found.IntentTick} #{found.CreatureId} {found.Name}: benefit " +
+            $"{witness.Loyalty.Benefit} = +{Term(witness, "benefit_fed")} fed " +
+            $"+{Term(witness, "benefit_tended")} tended, no benefit_rewarded; " +
+            $"{spared.Length} refusal(s) of the wounded in the party, none credited.");
         foreach (var @event in spared)
         {
             output.WriteLine("  " + EventNarration.Describe(state, @event));
         }
     }
+
+    /// <summary>
+    /// The literal case of criterion 5: benefit earned by food and care, none of
+    /// it given by a reward.
+    /// </summary>
+    private static bool EarnedItsBenefit(PrototypeCreatureSnapshot creature) =>
+        Term(creature, "benefit_fed") > 0 &&
+        Term(creature, "benefit_tended") > 0 &&
+        Term(creature, "benefit_rewarded") == 0;
+
+    private static int Term(PrototypeCreatureSnapshot creature, string code) =>
+        creature.Loyalty.BenefitTerms.FirstOrDefault(term => term.Code == code)?.Amount ?? 0;
 
     // ------------------------------------------------------------------
     // Channel 2 — the panel line, and the tick it has to survive.
@@ -314,9 +361,13 @@ public sealed class WoundedIntentReadableTests(ITestOutputHelper output)
     [Fact]
     public void The_three_channels_are_recorded()
     {
-        var refusal = FirstContest("spared", judged: false);
+        var refusal = FirstContest("spared", judged: false, EarnedItsBenefit);
         var refusalState = refusal.State;
-        var refusalEvent = refusalState.Events.First(item => item.ReasonCode == "combat_spared_wound");
+        var witness = refusalState.Creatures.Single(item => item.Id == refusal.CreatureId);
+        var refusalEvent = refusalState.Events.Single(item =>
+            item.ReasonCode == "combat_spared_wound" &&
+            item.CreatureId == refusal.CreatureId &&
+            item.LastTick == refusal.IntentTick);
 
         var standing = FirstContest("pressed", judged: true);
         var standingState = standing.State;
@@ -375,13 +426,25 @@ public sealed class WoundedIntentReadableTests(ITestOutputHelper output)
                 spared = new
                 {
                     tick = refusalEvent.FirstTick,
+                    creature = refusal.Name,
                     sentence = EventNarration.Describe(refusalState, refusalEvent),
                     count = refusalState.Events.Count(item => item.ReasonCode == "combat_spared_wound"),
                     verdictNamed = false,
+                    // Измеренные термы того самого существа на снимке той самой
+                    // переклички, а не утверждение о партии: находка 2
+                    // независимого review PR #436.
+                    benefitOfTheWitness = new
+                    {
+                        total = witness.Loyalty.Benefit,
+                        benefit_fed = Term(witness, "benefit_fed"),
+                        benefit_tended = Term(witness, "benefit_tended"),
+                        benefit_rewarded = Term(witness, "benefit_rewarded"),
+                    },
                     why =
-                        "Партия без единого вердикта: выгода набрана `benefit_fed` и " +
-                        "`benefit_tended`, и правило причинности §3.5 запрещает называть " +
-                        "вердикт причиной.",
+                        "Партия без единого вердикта, и выгода свидетеля набрана именно едой и " +
+                        "уходом — оба терма положительны, терма награды нет вовсе. Правило " +
+                        "причинности §3.5 запрещает называть вердикт причиной, и подача его не " +
+                        "называет.",
                 },
                 pressed = new
                 {
@@ -536,9 +599,15 @@ public sealed class WoundedIntentReadableTests(ITestOutputHelper output)
     /// <para><paramref name="judged"/> chooses between the two parties the checks
     /// need: a domain that answered no card at all — the case criterion 5 is
     /// about — and the shipped probe journal, which is the one journal that
-    /// carries verdicts of both signs.</para>
+    /// carries verdicts of both signs. <paramref name="also"/> narrows the search
+    /// to a witness that satisfies a further condition about the creature itself,
+    /// so that a check about a particular case cannot quietly settle for the first
+    /// case of any kind.</para>
     /// </summary>
-    private static Contest FirstContest(string code, bool judged)
+    private static Contest FirstContest(
+        string code,
+        bool judged,
+        Func<PrototypeCreatureSnapshot, bool>? also = null)
     {
         var cells = judged
             ? new[] { ("probe-verdicts", 20_260_726UL) }.Concat(Cells).ToArray()
@@ -548,22 +617,19 @@ public sealed class WoundedIntentReadableTests(ITestOutputHelper output)
         {
             var log = PresentationFixtures.LogOf(fixtureName) with { Seed = seed };
             var world = new PrototypeWorld(log);
-            var seen = 0;
+            var ofTheRightCode = 0;
             while (!world.IsComplete)
             {
                 world.Step();
                 var state = world.GetSnapshot();
-                var decided = state.Creatures.FirstOrDefault(creature =>
+                var atThisRollCall = state.Creatures.Where(creature =>
                     creature.WoundIntent is { } intent &&
                     intent.Tick == state.Tick - 1 &&
-                    intent.Code == code);
+                    intent.Code == code).ToArray();
+                ofTheRightCode += atThisRollCall.Length;
+                var decided = atThisRollCall.FirstOrDefault(creature => also is null || also(creature));
                 if (decided is null)
                 {
-                    if (state.Creatures.Any(creature => creature.WoundIntent is not null))
-                    {
-                        seen++;
-                    }
-
                     continue;
                 }
 
@@ -576,11 +642,14 @@ public sealed class WoundedIntentReadableTests(ITestOutputHelper output)
                     decided.WoundIntent!.Tick);
             }
 
-            walked.Add($"{fixtureName}/{seed} (ticks with some intent: {seen})");
+            walked.Add($"{fixtureName}/{seed}: {ofTheRightCode} decision(s) `{code}`, none matching");
         }
 
         throw new InvalidOperationException(
-            $"No party in the matrix reached a contest decided `{code}`, so the channel under " +
-            "test has no subject. Walked: " + string.Join("; ", walked));
+            $"No party in the matrix reached a contest decided `{code}`" +
+            (also is null ? string.Empty : " on a creature satisfying the case under test") +
+            ", so the check has no subject and proves nothing. That is a result rather than a " +
+            "failure of the search: report it and build a controlled case instead of widening " +
+            "the matrix. Walked: " + string.Join("; ", walked));
     }
 }
