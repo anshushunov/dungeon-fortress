@@ -28,10 +28,19 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "GodotTools.ps1")
 . (Join-Path $PSScriptRoot "HudVerification.ps1")
 . (Join-Path $PSScriptRoot "TemporaryRoot.ps1")
+. (Join-Path $PSScriptRoot "VerifyResult.ps1")
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $artifactsRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot ".artifacts"))
 $verifyRoot = Join-Path $artifactsRoot ("verify-" + [Guid]::NewGuid().ToString("N"))
+# Issue #427: unlike $verifyRoot above, this path is not part of the
+# temporary-run directory and is never passed to Remove-TemporaryItemBestEffort
+# - it is where the run's own verification_result JSON (and, on a failed run,
+# its stage-output.log) survive the cleanup in `finally`. Fixed and
+# GUID-free, so every run overwrites the same file rather than accumulating
+# one per run; see scripts/VerifyResult.ps1 for why that is safe.
+$verifyResultPath = Join-Path $artifactsRoot "verify-results\verify-result.json"
+$verifyResultStageLogPath = Join-Path $artifactsRoot "verify-results\stage-output.log"
 $solutionPath = Join-Path $repoRoot "DungeonFortress.sln"
 $scenarioProject = Join-Path $repoRoot "tests\DungeonFortress.Scenarios\DungeonFortress.Scenarios.csproj"
 $scenarioAssembly = Join-Path $repoRoot "tests\DungeonFortress.Scenarios\bin\Release\net8.0\DungeonFortress.Scenarios.dll"
@@ -48,6 +57,7 @@ $runGameTemporaryRootTestScript = Join-Path $repoRoot "scripts\test-run-game-tem
 $runGameCaptureParametersTestScript = Join-Path $repoRoot "scripts\test-run-game-capture-parameters.ps1"
 $screenshotOutputPathTestScript = Join-Path $repoRoot "scripts\test-screenshot-output-path.ps1"
 $evidenceToolsTestScript = Join-Path $repoRoot "scripts\test-evidence-tools.ps1"
+$verifyResultPersistenceTestScript = Join-Path $repoRoot "scripts\test-verify-result-persistence.ps1"
 $claimedSha256TestScript = Join-Path $repoRoot "scripts\test-check-claimed-sha256.ps1"
 $codexSessionsSearchTestScript = Join-Path $repoRoot "scripts\test-search-codex-sessions.ps1"
 $baseStaleTestScript = Join-Path $repoRoot "scripts\test-check-base-stale.ps1"
@@ -349,7 +359,7 @@ function Initialize-EngineRuntime {
 # agent can verify what it touched without paying for the rest.
 $stageCatalog = [ordered]@{
     scripts = [pscustomobject]@{
-        Summary = "Dependency-free script guards: stage selection, temporary directory (including run-game.ps1/update-golden-ui.ps1's own calls), Godot output, screenshot/evidence paths, GitHub auth diagnostics, Ivan and domain MCP config, take-task behavioural test."
+        Summary = "Dependency-free script guards: stage selection, temporary directory (including run-game.ps1/update-golden-ui.ps1's own calls), Godot output, screenshot/evidence/verification-result paths, GitHub auth diagnostics, Ivan and domain MCP config, take-task behavioural test."
         Body = {
             # Issue #253 (rule 17, AGENTS.md "Работа нескольких агентов"): the root
             # working copy belongs to the coordination session, and three measured
@@ -420,6 +430,14 @@ $stageCatalog = [ordered]@{
             )
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $evidenceToolsTestScript
+            )
+            # Issue #427. Publish-VerificationResult/Save-VerificationResult
+            # (scripts/VerifyResult.ps1) are what keep verification_result on
+            # disk after `finally` deletes $verifyRoot, without letting a save
+            # failure cost the run its own stdout; this is their
+            # dependency-free behavioural test.
+            Invoke-Checked -FilePath "powershell" -Arguments @(
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $verifyResultPersistenceTestScript
             )
             Invoke-Checked -FilePath "powershell" -Arguments @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $claimedSha256TestScript
@@ -1397,6 +1415,23 @@ try {
         $summary["goldenUiFrames"] = @($goldenUiResult)
     }
 
+    # Issue #427: the numbers below outlive $verifyRoot, which `finally`
+    # deletes unconditionally. A green run has no stage-output.log worth
+    # keeping (every checksum it produced is already in the JSON below), so
+    # none is passed here - see scripts/VerifyResult.ps1 for the decision.
+    # $summary is serialised twice, deliberately: Publish-VerificationResult
+    # must not touch the exact `$summary | ConvertTo-Json -Compress | Write-Host`
+    # line further down, which scripts/test-verify-stages.ps1 pins by literal
+    # text (Issue #284) as the guarantee that a run's checksums always reach
+    # stdout. That guarantee is not just this call sitting before the pinned
+    # line textually - Publish-VerificationResult never throws (it catches
+    # and reports its own save failures, see scripts/VerifyResult.ps1), so
+    # nothing here can skip the line below the way a propagating save error
+    # did in an earlier version of this change (review round 2).
+    Publish-VerificationResult `
+        -ResultPath $verifyResultPath `
+        -StageLogPath $verifyResultStageLogPath `
+        -Json ($summary | ConvertTo-Json -Compress)
     $summary | ConvertTo-Json -Compress | Write-Host
 }
 catch {
@@ -1453,7 +1488,7 @@ catch {
     # failed and everything that never ran. `failedPhase` separates "the machine
     # was never fit to run this" from "a check said no": a preflight failure has
     # no failed stage and nothing it could have executed.
-    [ordered]@{
+    $errorSummaryJson = [ordered]@{
         event = "verification_result"
         status = "error"
         scope = $scope
@@ -1462,7 +1497,22 @@ catch {
         stagesExecuted = @($executedStages)
         stagesNotRun = @($allStages | Where-Object { $_ -notin $executedStages })
         reason = $_.Exception.Message
-    } | ConvertTo-Json -Compress | Write-Host
+    } | ConvertTo-Json -Compress
+    # Issue #427: a red run is exactly the one a second full run would
+    # otherwise be needed to reproduce, so its stage-output.log is copied out
+    # of $verifyRoot (still intact here - `finally` has not run yet) before
+    # cleanup deletes it, alongside the same verification_result JSON a
+    # green run gets. Publish-VerificationResult never throws (see its own
+    # comment in scripts/VerifyResult.ps1), so a save failure here cannot
+    # skip the `Write-Host` below or the `throw` after it - a run that is
+    # already failing must not lose its own structured error report to an
+    # unrelated disk problem.
+    Publish-VerificationResult `
+        -ResultPath $verifyResultPath `
+        -StageLogPath $verifyResultStageLogPath `
+        -Json $errorSummaryJson `
+        -SourceStageLogPath $stageLogPath
+    Write-Host $errorSummaryJson
 
     throw
 }

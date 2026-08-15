@@ -1,0 +1,163 @@
+{
+  "issue": 427,
+  "commit": "ff35fe7985227dd6f89f56e647c3e2553e13734e",
+  "worktree": "C:/gamedev/_wt-427-verify-result (branch fix/427-verify-result)",
+  "criterion1_greenAndRedFileExists": {
+    "claim": "After a green run and after a red run, a file with the final verification_result JSON exists, and verify.ps1's own output names its path.",
+    "greenRun": {
+      "note": "Cheap: -Stage scripts needs no engine, no build.",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/verify.ps1\" -Stage scripts",
+      "stdoutTail": [
+        "{\"event\":\"verification_result_file\",\"status\":\"ok\",\"path\":\"C:\\\\gamedev\\\\_wt-427-verify-result\\\\.artifacts\\\\verify-results\\\\verify-result.json\"}",
+        "{\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"partial\",\"stagesExecuted\":[\"scripts\"],\"stagesNotRun\":[\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\",\"token-budget\"],\"prerequisites\":[],\"seed\":424242,\"temporaryRoot\":\"C:\\\\gamedev\\\\df-verify-2cb8aa12\",\"godotVersion\":null}"
+      ],
+      "fileOnDiskAfterRun": "matched stdout exactly, byte for byte"
+    },
+    "redRun": {
+      "note": "Cheap and deliberate: -Stage build (needs the engine) with a bogus -GodotPath fails in preflight, before any stage or build runs - a real red run without the cost of a real failing check.",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/verify.ps1\" -Stage build -GodotPath \"C:/gamedev/definitely-not-a-godot-binary-427.exe\"",
+      "processExitCode": 1,
+      "stdout": "{\"event\":\"verification_result_file\",\"status\":\"ok\",\"path\":\"C:\\\\gamedev\\\\_wt-427-verify-result\\\\.artifacts\\\\verify-results\\\\verify-result.json\"}\n{\"event\":\"verification_result\",\"status\":\"error\",\"scope\":\"partial\",\"failedPhase\":\"preflight\",\"failedStage\":null,\"stagesExecuted\":[],\"stagesNotRun\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\",\"token-budget\"],\"reason\":\"Stage(s) build require the Godot engine and it could not be resolved: Godot path from explicit -GodotPath override does not resolve to an executable: 'C:/gamedev/definitely-not-a-godot-binary-427.exe'.\"}",
+      "fileOnDiskAfterRun": "status:error, matched stdout exactly; stage-output.log also copied out (0 bytes, since the failure was in preflight before any stage log content existed)"
+    },
+    "rotationProvenLiveAfterward": {
+      "note": "A subsequent green -Stage scripts run removed the stale stage-output.log left by the red run above, leaving only verify-result.json.",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/verify.ps1\" -Stage scripts",
+      "verifyResultsDirAfter": ["verify-result.json"]
+    }
+  },
+  "criterion2_readChecksumsFromFile": {
+    "claim": "The four checksums are read from the file by a named command.",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"(Get-Content .artifacts/verify-results/verify-result.json | ConvertFrom-Json) | Select-Object deterministicChecksum, changedSeedChecksum, loadChecksum, viewInvariantChecksum | Format-List\"",
+    "output": {
+      "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+      "changedSeedChecksum": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
+      "loadChecksum": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+      "viewInvariantChecksum": "c32c48fa7cf1c15f4149bed17c598e9b8ed1866b5cbd0298aac500b77ca7781b"
+    },
+    "crossCheck": "All four match evidence/423-verify.json's checksumsAddendum.values byte for byte - expected, since this task does not touch src/** or tests/**, only scripts/ and docs/."
+  },
+  "criterion3_mutant": {
+    "claim": "A substitution that breaks saving the result must turn the named check red, applied after committing the reviewable state, reverted before the final rebuild.",
+    "committedStateBeforeMutant": "15e20da (guard fix commit, before docs commit ff35fe7 - mutant was applied and reverted against this state, working tree confirmed clean via git status before the edit)",
+    "mutantEdit": "scripts/VerifyResult.ps1: commented out `[IO.File]::WriteAllText($ResultPath, $Json)`, the single line that writes the persisted result - never committed",
+    "standaloneRun": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/test-verify-result-persistence.ps1\"",
+      "exitCode": 1,
+      "output": "Green result : 'C:\\gamedev\\_wt-427-verify-result\\.artifacts\\verify-result-persistence-test-<guid>\\nested\\verify-results\\verify-result.json' does not exist."
+    },
+    "wiredStageRun": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/verify.ps1\" -Stage scripts",
+      "exitCode": 1,
+      "note": "Stage 'scripts' failed because test-verify-result-persistence.ps1 (its own new check) failed inside it.",
+      "sideFindingUnderMutant": "verify.ps1 still printed {\"event\":\"verification_result_file\",\"status\":\"ok\",...} for this run, but .artifacts/verify-results/verify-result.json on disk was left unchanged (still held the previous green run's content) - the mutant broke the write silently, exactly the failure mode this check exists to catch."
+    },
+    "revert": "Edit reverted verbatim; `git diff` against scripts/VerifyResult.ps1 showed zero difference afterward.",
+    "confirmGreenAfterRevert": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/test-verify-result-persistence.ps1\"",
+      "exitCode": 0,
+      "output": "{\"event\":\"verify_result_persistence_test\",\"status\":\"ok\",\"resultsDirectoryCreated\":true,\"greenWritesNoLog\":true,\"redCopiesLogByteForByte\":true,\"greenAfterRedRemovesStale\":true}",
+      "note": "No --no-build involved anywhere in this class of check: scripts/VerifyResult.ps1 and its test are plain PowerShell, not compiled; the revert-then-rerun above is the full, honest rebuild for this class."
+    }
+  },
+  "criterion4_noFootprintBeyondNamedFile": {
+    "claim": "After a run, nothing beyond the named file remains in the environment; temporary-directory cleanup is not disabled.",
+    "gitStatusAfterEveryRunInThisSession": "clean (.artifacts/ is covered by the pre-existing .gitignore entry)",
+    "ownedTemporaryRootsThisSessionCreated": [
+      "df-verify-2cb8aa12", "df-verify-13dfe6ea", "df-verify-3acea9b2", "df-verify-41abe7a6"
+    ],
+    "confirmedRemovedAfterEachRun": "ls -d on all four returned 'No such file or directory' after their respective runs finished - Complete-VerificationTemporaryRoot's best-effort cleanup ran unmodified, including on the preflight-failure (red) run.",
+    "verifyRootGuidDirsUnderArtifacts": "none left under .artifacts/ after any run in this session (Remove-TemporaryItemBestEffort in `finally`, unmodified by this change)",
+    "onlyRemainingArtifactsContent": [
+      "domain-mcp-sessions/ (pre-existing, persists across runs by design)",
+      "dotnet-home/ (pre-existing, persists across runs by design - $env:DOTNET_CLI_HOME)",
+      "tool-profile/ (pre-existing, persists across runs by design - Godot NuGet tool profile)",
+      "verify-results/verify-result.json (the one new, named, overwritten-not-accumulated file this Issue adds)"
+    ],
+    "preExistingUnrelatedObservations": {
+      "note": "Found during this session, not caused by this change, out of Issue #427's partition, reported here for the record rather than silently fixed.",
+      "danglingDfVerifyDirs": "151 df-verify-<...> directories already sat next to the repository (C:/gamedev/df-verify-*) before and independent of this session's four runs - accumulated debt from other agents' historical sessions across weeks (one is literally named df-verify-306before, an Issue #306 evidence fixture). Not touched.",
+      "danglingDfVerifyDirsCommand": "ls -d /c/gamedev/df-verify-* 2>/dev/null | wc -l",
+      "danglingDfVerifyDirsCommandOutput": "151",
+      "testVerifyStagesOwnSandboxLeftover": "scripts/test-verify-stages.ps1's own $sandbox (.artifacts/verify-stage-guard-<guid>) was left behind, empty, after both a run this session triggered directly and after the full run's own `scripts` stage - a pre-existing quirk in that script's cleanup, unrelated to scripts/VerifyResult.ps1. Manually removed (rm -rf) after confirming empty, for hygiene; not part of this Issue's fix."
+    }
+  },
+  "criterion5_fullRunGreenOnce": {
+    "note": "Two full runs exist in this session's history: the first (superseded) ran on commit ff35fe7, before review round 2's isolation fix; rule 22 requires the run on the *final* state, which is the second one below, run on commit 1168138 (round 2's fix + its evidence, before this update).",
+    "supersededFirstRun": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/verify.ps1\"",
+      "commit": "ff35fe7985227dd6f89f56e647c3e2553e13734e",
+      "processExitCode": 0,
+      "stageElapsedSeconds": {
+        "scripts": 102.4, "build": 34.7, "tests": 169.5, "mcp": 4.3,
+        "sim": 0.3, "load": 0.6, "godot": 35, "ui": 4.3, "screenshots": 11, "token-budget": 99.9
+      }
+    },
+    "finalRunOnReviewRound2State": {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/verify.ps1\"",
+      "commit": "1168138 (HEAD at the time this run started - round 2's Publish-VerificationResult fix and its evidence, before this update commit)",
+      "processExitCode": 0,
+      "scope": "full (10 of 10 stages)",
+      "stageElapsedSeconds": {
+        "scripts": 117.4, "build": 6.2, "tests": 158.9, "mcp": 3.8,
+        "sim": 0.3, "load": 0.6, "godot": 35.2, "ui": 4.6, "screenshots": 11, "token-budget": 93.5
+      },
+      "temporaryRoot": "C:\\gamedev\\df-verify-04cf010b (confirmed removed after the run: ls -d returned 'No such file or directory')",
+      "stdoutFinalLines": [
+        "{\"event\":\"verification_result_file\",\"status\":\"ok\",\"path\":\"C:\\\\gamedev\\\\_wt-427-verify-result\\\\.artifacts\\\\verify-results\\\\verify-result.json\"}",
+        "{\"event\":\"verification_result\",\"status\":\"ok\",\"scope\":\"full\",\"stagesExecuted\":[\"scripts\",\"build\",\"tests\",\"mcp\",\"sim\",\"load\",\"godot\",\"ui\",\"screenshots\",\"token-budget\"],\"stagesNotRun\":[],...,\"deterministicChecksum\":\"e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f\",\"changedSeedChecksum\":\"cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2\",\"loadChecksum\":\"7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045\",...,\"viewInvariantChecksum\":\"c32c48fa7cf1c15f4149bed17c598e9b8ed1866b5cbd0298aac500b77ca7781b\",...}"
+      ],
+      "readBackFromPersistedFileWithOwnCommand": {
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"(Get-Content .artifacts/verify-results/verify-result.json | ConvertFrom-Json) | Select-Object deterministicChecksum, changedSeedChecksum, loadChecksum, viewInvariantChecksum | Format-List\"",
+        "output": {
+          "deterministicChecksum": "e65273aa102f4db01d2cf64ecc48b1556700544f5da0fe7c19378d1d089b6f6f",
+          "changedSeedChecksum": "cf6f51cc21481f8db9dfb28a0e34ed7cd6a03e12caa9c72a93a854b932afddd2",
+          "loadChecksum": "7ec0f2d64522e96e8fd80773d8a9e7e89ced643ab212aaa2741ea40081a85045",
+          "viewInvariantChecksum": "c32c48fa7cf1c15f4149bed17c598e9b8ed1866b5cbd0298aac500b77ca7781b"
+        },
+        "note": "Identical to the earlier run's values (evidence/423-verify.json cross-check still holds) and to what the coordinator independently reported after inspecting the same file - confirmed here with my own command, not by repeating the coordinator's report, per rule 8."
+      },
+      "verifyResultsDirAfterRun": {
+        "command": "ls .artifacts/verify-results/",
+        "output": ["verify-result.json"],
+        "note": "Only the JSON - no stage-output.log, confirming the green-run decision (nothing kept) and that the stale log from an earlier red demonstration in this session was already removed by the intervening green -Stage scripts run."
+      },
+      "sideEffectFoundAndReverted": "The `tests` stage's dotnet test run touched evidence/403-reachability.json again (CRLF-only, foreign to this Issue's partition - same effect already seen on #428/#429, and on the first full run above). `git checkout -- evidence/403-reachability.json`; confirmed clean with `git status --porcelain` afterward."
+    }
+  },
+  "stageOutputLogDecision": {
+    "decision": "Not kept on a green run (nothing in it a green run's own verification_result doesn't already say); copied out of the temporary $verifyRoot to .artifacts/verify-results/stage-output.log on a red run, before `finally` deletes the source; a subsequent green run removes any such stale copy.",
+    "rationale": "Matches the existing Issue #284 reasoning already in ENVIRONMENT_SETUP.md for why a green run's full stage dump is not worth opening; a red run's log is exactly the file PR #425 needed and could not get back."
+  },
+  "reviewRound2": {
+    "reviewer": "codex gpt-5.6-sol, independent review of PR #435",
+    "majorFinding": "Both verify.ps1 call sites called Save-VerificationResult before the final Write-Host of the checksums (try block) or the structured error report (catch block). A persistent save failure would propagate an exception past both, and the try-block header comment claimed the opposite guarantee without enforcing it.",
+    "fix": "Added Publish-VerificationResult (scripts/VerifyResult.ps1), which wraps Save-VerificationResult in a real try/catch, never itself throws, and prints its own verification_result_file event with status:error and a reason on failure instead of an unconditional status:ok. verify.ps1's two call sites now call this instead of Save-VerificationResult directly.",
+    "committedStateBeforeMutant": "027f283 (this round's fix commit, working tree confirmed clean via git status before the edit)",
+    "mutant": {
+      "edit": "scripts/VerifyResult.ps1: removed the try/catch inside Publish-VerificationResult, leaving a bare call to Save-VerificationResult - reproduces the exact pre-fix defect. Never committed.",
+      "run": {
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/test-verify-result-persistence.ps1\"",
+        "exitCode": 1,
+        "note": "Claim 6's spawned child process crashed (NativeCommandError, Save-VerificationResult's own CreateDirectory exception propagating out of the process) instead of completing with a status:error event - exactly the loss the fix exists to prevent, now reproduced and caught by the same test."
+      },
+      "revert": "Edit reverted verbatim via `git checkout -- scripts/VerifyResult.ps1`; `git diff --stat` showed zero difference afterward.",
+      "confirmGreenAfterRevert": {
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/test-verify-result-persistence.ps1\"",
+        "exitCode": 0,
+        "output": "{\"event\":\"verify_result_persistence_test\",\"status\":\"ok\",\"resultsDirectoryCreated\":true,\"greenWritesNoLog\":true,\"redCopiesLogByteForByte\":true,\"greenAfterRedRemovesStale\":true,\"rawSaveThrowsOnForcedFailure\":true,\"publishCatchesAndReportsError\":true}"
+      }
+    },
+    "targetedForcedFailureTest": "scripts/test-verify-result-persistence.ps1 claims 5-6: poisons the results directory with a file where a directory needs to be created (the same failure class as a full disk or a permissions problem), confirms Save-VerificationResult still throws for it (claim 5, so the fixture keeps meaning something), then confirms Publish-VerificationResult - invoked in a real spawned powershell.exe process the way verify.ps1 invokes it - never throws and reports status:error with a reason (claim 6). Both claims are green on the reverted (real) code; see the mutant block above for the red counterpart.",
+    "minorFindingsAddressed": [
+      "evidence/427-verify-result.json: added the command used to count the 151 dangling df-verify-* directories (danglingDfVerifyDirsCommand/-Output above), previously asserted without one.",
+      "docs/engineering/ENVIRONMENT_SETUP.md:689: fixed a stage-output.json typo (implementation and every other mention say stage-output.log)."
+    ],
+    "confirmedCorrectByReviewer_notRedone": [
+      "the 151 pre-existing df-verify-* directories were not cleaned up",
+      "scripts/test-verify-stages.ps1's own sandbox cleanup quirk was not fixed",
+      "both are out of Issue #427's partition; the reviewer confirmed this session's own four temporary roots were correctly removed and that expanding scope to fix either would have been wrong"
+    ]
+  },
+  "modelId": "claude-sonnet-5 (Claude Code CLI)"
+}
