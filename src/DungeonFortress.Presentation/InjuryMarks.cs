@@ -71,8 +71,15 @@ public static class InjuryMarks
     /// <em>edge</em> of the part, where it hangs off its parent. A mark placed
     /// there sits on the neck, not on the head, and on the hip, not on the leg.
     /// The two sets of numbers lie side by side in the evidence file: for the near
-    /// arm they are 4.4 reference px apart, which at the shipped tile is 8 world
-    /// px on a body drawn 61.8 tall.</para>
+    /// arm they are the Euclidean distance between <c>parts.arm_near.reference.
+    /// centroid</c> and <c>parts.arm_near.reference.joint</c> in
+    /// <c>evidence/420-part-anchors.json</c> — 4.848 reference px, which at the
+    /// shipped 40 px tile (<c>CameraView.WorldVisualScale</c>, reference tile 22)
+    /// is 8.815 world px on a body drawn 61.8 tall. Recomputed with:
+    /// <c>python -c "import json, math; d = json.load(open('evidence/420-part-anchors.json', encoding='utf-8'))['parts']['arm_near']['reference']; ref = math.dist(d['centroid'], d['joint']); print(f'{ref:.3f} reference px, {ref * 40 / 22:.3f} world px')"</c>.
+    /// This is the one place that states the number; other places name it by
+    /// pointing here instead of repeating the digits, so a stale copy cannot
+    /// survive a re-measurement unnoticed.</para>
     ///
     /// <para><b>The near limbs, because they are the ones drawn in front.</b> The
     /// goblin is drawn three-quarter, so it has a far arm and a near arm; the model
