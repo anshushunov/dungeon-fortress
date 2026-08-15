@@ -10,6 +10,10 @@ CLAUDE.local.md
 .claude/worktrees/
 docs/superpowers/
 
+# Матрица разрешений внешнего исполнителя: решение владельца 2026-08-16, см.
+# docs/engineering/EXTERNAL_DELEGATION.md, раздел «Где лежит конфигурация»
+opencode.json
+
 # .NET and Godot derived files
 **/bin/
 **/obj/
