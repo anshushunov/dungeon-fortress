@@ -55,6 +55,7 @@ public static class InspectorText
                 // than the line being dropped, because "this one is whole" is an
                 // answer and a missing line is not.
                 $"wounds {HudText.CreatureInjuryLong(creature)}\n" +
+                $"{DescribeWoundIntent(creature)}" +
                 $"mode {creature.Mode}\n" +
                 $"job {(job is null ? "none" : $"#{job.JobId} {job.Kind}")}\n" +
                 $"carrying {(creature.Carrying is null ? "nothing" : $"{creature.CarryAmount} {creature.Carrying}")}\n" +
@@ -345,6 +346,88 @@ public static class InspectorText
             .Select(place => $"({place.Place.X},{place.Place.Y}) t{place.Tick} {place.Cause}");
         return "AVOIDS " + string.Join(" · ", places) + "\n";
     }
+
+    /// <summary>
+    /// What a wounded creature decided at the roll call, and by how much
+    /// (Issue #431, §4, criterion 8).
+    ///
+    /// <para><b>The source is <c>woundIntent</c> and never
+    /// <c>LastDecision</c>.</b> The roll call runs before <c>GenerateJobs</c> and
+    /// <c>MatchJobs</c> (<c>PrototypeWorld.cs</c>), and every following
+    /// <c>RecordDecision</c> overwrites the last one
+    /// (<c>PrototypeWorld.Stores.cs</c>), which is what the <c>WHY</c> block
+    /// below is built from. A decision to spare itself would therefore be gone
+    /// from the panel on the very tick it was taken — the player would be looking
+    /// at a creature walking to a bunk and reading that it took a Rest job, which
+    /// is the <em>consequence</em> of the decision and not the decision. The
+    /// simulation publishes the intent as a field of the creature for exactly
+    /// this reason, and it lives until the next re-check overturns it or the wave
+    /// it was about is over (§3.6).</para>
+    ///
+    /// <para><b>Both outcomes get the line, not only the refusal.</b> The
+    /// question the playtest asks is whether a verdict changed how a creature
+    /// behaved with a wound, and «полез с разбитой ногой» is half of that answer.
+    /// The feed says so only where the fear of the domain was demonstrably the
+    /// cause (<c>combat_pressed_wound</c>); the panel says so about every wounded
+    /// creature that took the field, because here the player has asked about this
+    /// one creature and the numbers of its own contest are the answer.</para>
+    ///
+    /// <para><b>The verdict is named as the cause only under the rule of §3.5</b>
+    /// — the published <c>verdictDecided</c>, which is true only where replaying
+    /// the contest without the terms a verdict wrote flips the outcome. A domain
+    /// that feeds and tends its people spares its wounded with no verdict spoken,
+    /// and the panel may not credit the player with that.</para>
+    ///
+    /// <para>Empty for every whole creature, which is most of the crew for most
+    /// of a party, and for a wounded one before the first roll call that asked
+    /// it. One line, for the reason <see cref="DescribeMemory"/> is one line: the
+    /// panel is measured by the HUD overflow guard at every viewport the game
+    /// supports.</para>
+    /// </summary>
+    public static string DescribeWoundIntent(PrototypeCreatureSnapshot creature)
+    {
+        ArgumentNullException.ThrowIfNull(creature);
+        if (creature.WoundIntent is not { } intent)
+        {
+            return string.Empty;
+        }
+
+        var sparing = intent.Code == "spared";
+        var decided = intent.VerdictDecided ? " · your verdict decided it" : string.Empty;
+        var weighed = sparing
+            ? $"{intent.Spare} v {intent.Press}"
+            : $"{intent.Press} v {intent.Spare}";
+        return
+            $"INTENT t{intent.Tick} wave {intent.Wave} · " +
+            $"{(sparing ? "sparing" : "standing on")} {SeverityWord(intent.Severity)} " +
+            $"{PartWord(intent.Part)} · {weighed}{decided}\n";
+    }
+
+    /// <summary>
+    /// The part in the player's words. It switches over
+    /// <see cref="BodyPart"/> itself rather than over an index, so a fifth part
+    /// cannot exist in the simulation and be missing here.
+    /// </summary>
+    private static string PartWord(BodyPart part) => part switch
+    {
+        BodyPart.Head => "head",
+        BodyPart.Torso => "body",
+        BodyPart.Arm => "arm",
+        BodyPart.Leg => "leg",
+        _ => "body",
+    };
+
+    /// <summary>
+    /// How badly, in the two words the mark over the head already uses. A whole
+    /// part never reaches this method — a whole creature does not enter the
+    /// contest at all (§3.1) — and is reported as such rather than guessed at.
+    /// </summary>
+    private static string SeverityWord(InjuryKind severity) => severity switch
+    {
+        InjuryKind.Light => "a hurt",
+        InjuryKind.Heavy => "a ruined",
+        _ => "a whole",
+    };
 
     /// <summary>
     /// The carrier half of the chain: where this creature is taking the stone and

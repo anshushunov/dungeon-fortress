@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "issue": "#431",
+  "checkpoint": "4 — подача: лента, панель, карточка",
+  "command": "dotnet test tests/DungeonFortress.Presentation.Tests --filter FullyQualifiedName~WoundedIntentReadableTests",
+  "what": "Три канала подачи §4, каждый прочитан там, где он живёт: строка ленты — из события настоящей партии, строка панели — из опубликованного `woundIntent` на тике, где `lastDecision` уже другое, разбор карточки — на контролируемой карточке, потому что попадание существа в тройку заметнейших не гарантировано.",
+  "feed": {
+    "cell": "prepared/20260728",
+    "spared": {
+      "tick": 2350,
+      "sentence": "Дёготь would not stand for wave 4: sparing a hurt arm (6 against 4).",
+      "count": 1,
+      "verdictNamed": false,
+      "why": "Партия без единого вердикта: выгода набрана `benefit_fed` и `benefit_tended`, и правило причинности §3.5 запрещает называть вердикт причиной."
+    },
+    "pressed": {
+      "sentence": "stood for wave 3 on a hurt leg: it fears you more than the wound (6 against 5); 9 grudge for it.",
+      "from": "details, не из партии",
+      "why": "`combat_pressed_wound` пишется только там, где страх перед владением и был причиной, а это, по записи 38 журнала #415, редкое событие: одно начисление на всю матрицу. Строка ленты наследует эту редкость. Общий случай «раненый полез» несёт панель, а не лента."
+    }
+  },
+  "panel": {
+    "cell": "probe-verdicts/20260726",
+    "tick": 1650,
+    "creature": "Смола",
+    "line": "INTENT t1650 wave 2 · standing on a hurt leg · 8 v 2\n",
+    "source": "creatures[].woundIntent",
+    "notFrom": "lastDecision — перекличка идёт до GenerateJobs/MatchJobs"
+  },
+  "card": {
+    "line": "Дёготь · is holding something against you · grudge 9 (+6 sent into the line hurt, +3 punished for nothing) [showing]",
+    "controlled": true,
+    "why": "Отбор трёх заметнейших не гарантирует попадания конкретного существа (PrototypeWorld.MomentOfTruth.cs), поэтому карточка задана, а не найдена."
+  }
+}

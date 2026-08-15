@@ -144,6 +144,38 @@ public static class EventNarration
                 $"a grudge of {Number(details, "grudge", "?")} against " +
                 $"{Number(details, "holding", "?")} holding it.",
 
+            // <b>The contest of the wounded</b> (Issue #431, §4). Two sentences
+            // and not one, because "did not stand" is an effect visible only by
+            // absence: slice 3 twice took an `ADJUST` for a mechanic that was
+            // true and unreadable, and the answer both times was to name the
+            // cause at the moment it happened rather than to leave the player
+            // counting who is missing from the line.
+            //
+            // <b>The verdict is named as the cause only where it decided</b>
+            // (§3.5). For `combat_spared_wound` that is the published
+            // `verdictDecided`, which the simulation computes by replaying the
+            // contest without the two terms a verdict writes. The sign is not in
+            // the details and does not need to be: on a `spared` outcome only a
+            // reward can be what flipped it — removing the verdict's terms lowers
+            // both sides, so an outcome that stops being `spared` without them is
+            // one where the reward's own share of the benefit outweighed the fear
+            // of the domain it was weighed against.
+            //
+            // `combat_pressed_wound` carries no such flag because the simulation
+            // only writes that code where the fear of the domain <em>was</em> the
+            // reason: without it the sparing side would have won. So it may say
+            // so plainly, exactly as the two sentences of Issue #312 above may.
+            "combat_spared_wound" =>
+                $"would not stand for wave {Number(details, "wave", "?")}: " +
+                $"sparing a hurt {InjuredPartName(details)}" +
+                $"{(Number(details, "verdictDecided", "0") == "1" ? ", and your reward is what tipped it" : string.Empty)} " +
+                $"({Number(details, "spare", "?")} against {Number(details, "press", "?")}).",
+            "combat_pressed_wound" =>
+                $"stood for wave {Number(details, "wave", "?")} on a hurt " +
+                $"{InjuredPartName(details)}: it fears you more than the wound " +
+                $"({Number(details, "press", "?")} against {Number(details, "spare", "?")}); " +
+                $"{Number(details, "grudge", "?")} grudge for it.",
+
             // The moment of truth.
             "verdict_rewarded" =>
                 $"was rewarded for wave {Number(details, "wave", "?")}; " +
