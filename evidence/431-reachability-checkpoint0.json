@@ -1,0 +1,386 @@
+{
+  "SchemaVersion": 1,
+  "Issue": "#431",
+  "Checkpoint": "0 — достижимость канала, до всякой правки поведения",
+  "Command": "dotnet test tests/DungeonFortress.Simulation.Tests --filter FullyQualifiedName~VerdictWoundedReachabilityTests",
+  "What": "End-to-end chain, followed by a single creatureId: wound -> card about that creature -> a verdict of a named sign -> a non-zero relevant term and a non-empty wound at a later roll call -> the insertion point of the contest reached (all four existing refusals survived). Counted separately for reward and for punish. Zero on either is a legitimate outcome that stops the slice.",
+  "MeasuredOnSimulationCommit": "1503af5",
+  "RelevantTerms": {
+    "Reward": "benefit_rewarded",
+    "Punish": "fear_punished"
+  },
+  "MatrixFixtures": [
+    "baseline",
+    "prepared",
+    "neglected"
+  ],
+  "MatrixSeeds": [
+    20260726,
+    20260727,
+    20260728
+  ],
+  "ProbeJournal": "scenarios/prototype1/probe-verdicts.commands.v2.json",
+  "Cells": [
+    {
+      "Cell": "baseline/20260726",
+      "Seed": 20260726,
+      "CardsAnswered": 9,
+      "Answers": [
+        "t1329 #7 reward",
+        "t1329 #1 punish",
+        "t1329 #2 reward",
+        "t1746 #7 reward",
+        "t1746 #8 punish (wounded)",
+        "t1746 #0 reward",
+        "t2091 #3 reward (wounded)",
+        "t2091 #8 punish (wounded)",
+        "t2091 #1 reward (wounded)"
+      ],
+      "RewardChains": [],
+      "PunishChains": [
+        {
+          "CreatureId": 8,
+          "Name": "Тишина",
+          "Sign": "punish",
+          "VerdictTick": 1746,
+          "WoundedAtTheCard": true,
+          "RollCallTick": 2060,
+          "WoundAtTheRollCall": "Torso:Light+Leg:Light",
+          "TermCode": "fear_punished",
+          "TermAmount": 10
+        }
+      ]
+    },
+    {
+      "Cell": "baseline/20260727",
+      "Seed": 20260727,
+      "CardsAnswered": 9,
+      "Answers": [
+        "t1324 #0 reward",
+        "t1324 #6 punish",
+        "t1324 #7 reward",
+        "t1747 #8 reward (wounded)",
+        "t1747 #6 punish (wounded)",
+        "t1747 #0 reward (wounded)",
+        "t2085 #1 reward (wounded)",
+        "t2085 #6 punish",
+        "t2085 #0 reward (wounded)"
+      ],
+      "RewardChains": [
+        {
+          "CreatureId": 8,
+          "Name": "Тишина",
+          "Sign": "reward",
+          "VerdictTick": 1747,
+          "WoundedAtTheCard": true,
+          "RollCallTick": 2020,
+          "WoundAtTheRollCall": "Leg:Light",
+          "TermCode": "benefit_rewarded",
+          "TermAmount": 12
+        }
+      ],
+      "PunishChains": []
+    },
+    {
+      "Cell": "baseline/20260728",
+      "Seed": 20260728,
+      "CardsAnswered": 9,
+      "Answers": [
+        "t1334 #3 reward (wounded)",
+        "t1334 #5 punish",
+        "t1334 #6 reward",
+        "t1744 #5 reward (wounded)",
+        "t1744 #7 punish",
+        "t1744 #1 reward (wounded)",
+        "t2092 #1 reward (wounded)",
+        "t2092 #3 punish",
+        "t2092 #6 reward (wounded)"
+      ],
+      "RewardChains": [
+        {
+          "CreatureId": 6,
+          "Name": "Прель",
+          "Sign": "reward",
+          "VerdictTick": 1334,
+          "WoundedAtTheCard": false,
+          "RollCallTick": 2000,
+          "WoundAtTheRollCall": "Leg:Light",
+          "TermCode": "benefit_rewarded",
+          "TermAmount": 12
+        },
+        {
+          "CreatureId": 5,
+          "Name": "Уголёк",
+          "Sign": "reward",
+          "VerdictTick": 1744,
+          "WoundedAtTheCard": true,
+          "RollCallTick": 2020,
+          "WoundAtTheRollCall": "Head:Light",
+          "TermCode": "benefit_rewarded",
+          "TermAmount": 12
+        },
+        {
+          "CreatureId": 1,
+          "Name": "Кремень",
+          "Sign": "reward",
+          "VerdictTick": 1744,
+          "WoundedAtTheCard": true,
+          "RollCallTick": 2410,
+          "WoundAtTheRollCall": "Leg:Light",
+          "TermCode": "benefit_rewarded",
+          "TermAmount": 24
+        }
+      ],
+      "PunishChains": [
+        {
+          "CreatureId": 5,
+          "Name": "Уголёк",
+          "Sign": "punish",
+          "VerdictTick": 1334,
+          "WoundedAtTheCard": false,
+          "RollCallTick": 2020,
+          "WoundAtTheRollCall": "Head:Light",
+          "TermCode": "fear_punished",
+          "TermAmount": 10
+        }
+      ]
+    },
+    {
+      "Cell": "prepared/20260726",
+      "Seed": 20260726,
+      "CardsAnswered": 9,
+      "Answers": [
+        "t1334 #1 reward (wounded)",
+        "t1334 #3 punish (wounded)",
+        "t1334 #7 reward",
+        "t1759 #1 reward (wounded)",
+        "t1759 #3 punish (wounded)",
+        "t1759 #5 reward (wounded)",
+        "t2090 #6 reward (wounded)",
+        "t2090 #3 punish (wounded)",
+        "t2090 #5 reward (wounded)"
+      ],
+      "RewardChains": [
+        {
+          "CreatureId": 1,
+          "Name": "Кремень",
+          "Sign": "reward",
+          "VerdictTick": 1334,
+          "WoundedAtTheCard": true,
+          "RollCallTick": 2000,
+          "WoundAtTheRollCall": "Leg:Heavy",
+          "TermCode": "benefit_rewarded",
+          "TermAmount": 24
+        },
+        {
+          "CreatureId": 5,
+          "Name": "Уголёк",
+          "Sign": "reward",
+          "VerdictTick": 1759,
+          "WoundedAtTheCard": true,
+          "RollCallTick": 2000,
+          "WoundAtTheRollCall": "Torso:Light+Leg:Light",
+          "TermCode": "benefit_rewarded",
+          "TermAmount": 12
+        }
+      ],
+      "PunishChains": [
+        {
+          "CreatureId": 3,
+          "Name": "Смола",
+          "Sign": "punish",
+          "VerdictTick": 1334,
+          "WoundedAtTheCard": true,
+          "RollCallTick": 1650,
+          "WoundAtTheRollCall": "Leg:Light",
+          "TermCode": "fear_punished",
+          "TermAmount": 10
+        }
+      ]
+    },
+    {
+      "Cell": "prepared/20260727",
+      "Seed": 20260727,
+      "CardsAnswered": 9,
+      "Answers": [
+        "t1336 #2 reward (wounded)",
+        "t1336 #0 punish",
+        "t1336 #1 reward",
+        "t1742 #7 reward",
+        "t1742 #6 punish (wounded)",
+        "t1742 #0 reward",
+        "t2100 #3 reward (wounded)",
+        "t2100 #5 punish",
+        "t2100 #6 reward (wounded)"
+      ],
+      "RewardChains": [
+        {
+          "CreatureId": 3,
+          "Name": "Смола",
+          "Sign": "reward",
+          "VerdictTick": 2100,
+          "WoundedAtTheCard": true,
+          "RollCallTick": 2350,
+          "WoundAtTheRollCall": "Torso:Light+Leg:Light",
+          "TermCode": "benefit_rewarded",
+          "TermAmount": 12
+        },
+        {
+          "CreatureId": 6,
+          "Name": "Прель",
+          "Sign": "reward",
+          "VerdictTick": 2100,
+          "WoundedAtTheCard": true,
+          "RollCallTick": 2350,
+          "WoundAtTheRollCall": "Arm:Heavy+Leg:Heavy",
+          "TermCode": "benefit_rewarded",
+          "TermAmount": 12
+        }
+      ],
+      "PunishChains": [
+        {
+          "CreatureId": 6,
+          "Name": "Прель",
+          "Sign": "punish",
+          "VerdictTick": 1742,
+          "WoundedAtTheCard": true,
+          "RollCallTick": 2000,
+          "WoundAtTheRollCall": "Leg:Heavy",
+          "TermCode": "fear_punished",
+          "TermAmount": 10
+        }
+      ]
+    },
+    {
+      "Cell": "prepared/20260728",
+      "Seed": 20260728,
+      "CardsAnswered": 9,
+      "Answers": [
+        "t1331 #8 reward",
+        "t1331 #4 punish (wounded)",
+        "t1331 #0 reward",
+        "t1692 #7 reward",
+        "t1692 #5 punish",
+        "t1692 #8 reward (wounded)",
+        "t2093 #3 reward (wounded)",
+        "t2093 #7 punish",
+        "t2093 #4 reward (wounded)"
+      ],
+      "RewardChains": [
+        {
+          "CreatureId": 8,
+          "Name": "Тишина",
+          "Sign": "reward",
+          "VerdictTick": 1331,
+          "WoundedAtTheCard": false,
+          "RollCallTick": 2000,
+          "WoundAtTheRollCall": "Leg:Heavy",
+          "TermCode": "benefit_rewarded",
+          "TermAmount": 24
+        },
+        {
+          "CreatureId": 3,
+          "Name": "Смола",
+          "Sign": "reward",
+          "VerdictTick": 2093,
+          "WoundedAtTheCard": true,
+          "RollCallTick": 2350,
+          "WoundAtTheRollCall": "Leg:Light",
+          "TermCode": "benefit_rewarded",
+          "TermAmount": 12
+        },
+        {
+          "CreatureId": 4,
+          "Name": "Дёготь",
+          "Sign": "reward",
+          "VerdictTick": 2093,
+          "WoundedAtTheCard": true,
+          "RollCallTick": 2350,
+          "WoundAtTheRollCall": "Arm:Light+Leg:Light",
+          "TermCode": "benefit_rewarded",
+          "TermAmount": 12
+        }
+      ],
+      "PunishChains": [
+        {
+          "CreatureId": 4,
+          "Name": "Дёготь",
+          "Sign": "punish",
+          "VerdictTick": 1331,
+          "WoundedAtTheCard": true,
+          "RollCallTick": 2000,
+          "WoundAtTheRollCall": "Arm:Light",
+          "TermCode": "fear_punished",
+          "TermAmount": 10
+        }
+      ]
+    },
+    {
+      "Cell": "neglected/20260726",
+      "Seed": 20260726,
+      "CardsAnswered": 0,
+      "Answers": [],
+      "RewardChains": [],
+      "PunishChains": []
+    },
+    {
+      "Cell": "neglected/20260727",
+      "Seed": 20260727,
+      "CardsAnswered": 0,
+      "Answers": [],
+      "RewardChains": [],
+      "PunishChains": []
+    },
+    {
+      "Cell": "neglected/20260728",
+      "Seed": 20260728,
+      "CardsAnswered": 0,
+      "Answers": [],
+      "RewardChains": [],
+      "PunishChains": []
+    },
+    {
+      "Cell": "probe-verdicts (shipped)",
+      "Seed": 20260726,
+      "CardsAnswered": 3,
+      "Answers": [
+        "t1334 #1 reward (wounded)",
+        "t1334 #3 punish (wounded)",
+        "t1334 #7 reward"
+      ],
+      "RewardChains": [
+        {
+          "CreatureId": 1,
+          "Name": "Кремень",
+          "Sign": "reward",
+          "VerdictTick": 1334,
+          "WoundedAtTheCard": true,
+          "RollCallTick": 2000,
+          "WoundAtTheRollCall": "Leg:Heavy",
+          "TermCode": "benefit_rewarded",
+          "TermAmount": 12
+        }
+      ],
+      "PunishChains": [
+        {
+          "CreatureId": 3,
+          "Name": "Смола",
+          "Sign": "punish",
+          "VerdictTick": 1334,
+          "WoundedAtTheCard": true,
+          "RollCallTick": 1650,
+          "WoundAtTheRollCall": "Leg:Light",
+          "TermCode": "fear_punished",
+          "TermAmount": 10
+        }
+      ]
+    }
+  ],
+  "Aggregate": {
+    "RewardChains": 12,
+    "PunishChains": 6,
+    "RewardChainsWoundedAlreadyAtTheCard": 10,
+    "PunishChainsWoundedAlreadyAtTheCard": 5
+  },
+  "Verdict": "REACHABLE: both signs complete the chain. The channel has something to act on, and the slice may proceed to checkpoint 1."
+}
