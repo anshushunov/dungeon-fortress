@@ -97,5 +97,35 @@
     "decision": "Not kept on a green run (nothing in it a green run's own verification_result doesn't already say); copied out of the temporary $verifyRoot to .artifacts/verify-results/stage-output.log on a red run, before `finally` deletes the source; a subsequent green run removes any such stale copy.",
     "rationale": "Matches the existing Issue #284 reasoning already in ENVIRONMENT_SETUP.md for why a green run's full stage dump is not worth opening; a red run's log is exactly the file PR #425 needed and could not get back."
   },
+  "reviewRound2": {
+    "reviewer": "codex gpt-5.6-sol, independent review of PR #435",
+    "majorFinding": "Both verify.ps1 call sites called Save-VerificationResult before the final Write-Host of the checksums (try block) or the structured error report (catch block). A persistent save failure would propagate an exception past both, and the try-block header comment claimed the opposite guarantee without enforcing it.",
+    "fix": "Added Publish-VerificationResult (scripts/VerifyResult.ps1), which wraps Save-VerificationResult in a real try/catch, never itself throws, and prints its own verification_result_file event with status:error and a reason on failure instead of an unconditional status:ok. verify.ps1's two call sites now call this instead of Save-VerificationResult directly.",
+    "committedStateBeforeMutant": "027f283 (this round's fix commit, working tree confirmed clean via git status before the edit)",
+    "mutant": {
+      "edit": "scripts/VerifyResult.ps1: removed the try/catch inside Publish-VerificationResult, leaving a bare call to Save-VerificationResult - reproduces the exact pre-fix defect. Never committed.",
+      "run": {
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/test-verify-result-persistence.ps1\"",
+        "exitCode": 1,
+        "note": "Claim 6's spawned child process crashed (NativeCommandError, Save-VerificationResult's own CreateDirectory exception propagating out of the process) instead of completing with a status:error event - exactly the loss the fix exists to prevent, now reproduced and caught by the same test."
+      },
+      "revert": "Edit reverted verbatim via `git checkout -- scripts/VerifyResult.ps1`; `git diff --stat` showed zero difference afterward.",
+      "confirmGreenAfterRevert": {
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/test-verify-result-persistence.ps1\"",
+        "exitCode": 0,
+        "output": "{\"event\":\"verify_result_persistence_test\",\"status\":\"ok\",\"resultsDirectoryCreated\":true,\"greenWritesNoLog\":true,\"redCopiesLogByteForByte\":true,\"greenAfterRedRemovesStale\":true,\"rawSaveThrowsOnForcedFailure\":true,\"publishCatchesAndReportsError\":true}"
+      }
+    },
+    "targetedForcedFailureTest": "scripts/test-verify-result-persistence.ps1 claims 5-6: poisons the results directory with a file where a directory needs to be created (the same failure class as a full disk or a permissions problem), confirms Save-VerificationResult still throws for it (claim 5, so the fixture keeps meaning something), then confirms Publish-VerificationResult - invoked in a real spawned powershell.exe process the way verify.ps1 invokes it - never throws and reports status:error with a reason (claim 6). Both claims are green on the reverted (real) code; see the mutant block above for the red counterpart.",
+    "minorFindingsAddressed": [
+      "evidence/427-verify-result.json: added the command used to count the 151 dangling df-verify-* directories (danglingDfVerifyDirsCommand/-Output above), previously asserted without one.",
+      "docs/engineering/ENVIRONMENT_SETUP.md:689: fixed a stage-output.json typo (implementation and every other mention say stage-output.log)."
+    ],
+    "confirmedCorrectByReviewer_notRedone": [
+      "the 151 pre-existing df-verify-* directories were not cleaned up",
+      "scripts/test-verify-stages.ps1's own sandbox cleanup quirk was not fixed",
+      "both are out of Issue #427's partition; the reviewer confirmed this session's own four temporary roots were correctly removed and that expanding scope to fix either would have been wrong"
+    ]
+  },
   "modelId": "claude-sonnet-5 (Claude Code CLI)"
 }
