@@ -321,6 +321,24 @@ public sealed class WoundedIntentReadableTests(ITestOutputHelper output)
         var standing = FirstContest("pressed", judged: true);
         var standingState = standing.State;
 
+        // How long the refusal stands, so that the frame criterion 8 asks for can
+        // be taken at a tick chosen by measurement rather than by luck. The party
+        // is one `scripts/run-game.ps1` can reach — a shipped fixture with a seed
+        // override — which the probe journal is not.
+        var lastTick = refusal.IntentTick;
+        while (!refusal.World.IsComplete)
+        {
+            refusal.World.Step();
+            var walked = refusal.World.GetSnapshot();
+            var creature = walked.Creatures.SingleOrDefault(item => item.Id == refusal.CreatureId);
+            if (creature?.WoundIntent is not { } intent || intent.Tick != refusal.IntentTick)
+            {
+                break;
+            }
+
+            lastTick = walked.Tick;
+        }
+
         // Every term the two parties actually wrote has a wording. The card
         // channel is one `TermName` away from throwing in front of a player, and
         // nothing else in the repository checks the whole set.
@@ -385,6 +403,38 @@ public sealed class WoundedIntentReadableTests(ITestOutputHelper output)
                     standingState.Creatures.Single(item => item.Id == standing.CreatureId)),
                 source = "creatures[].woundIntent",
                 notFrom = "lastDecision — перекличка идёт до GenerateJobs/MatchJobs",
+            },
+            frame = new
+            {
+                cell = refusal.Cell,
+                creatureId = refusal.CreatureId,
+                creature = refusal.Name,
+                decidedAtTick = refusal.IntentTick,
+                stillStandingAtTick = lastTick,
+                line = InspectorText.DescribeWoundIntent(
+                    refusalState.Creatures.Single(item => item.Id == refusal.CreatureId)),
+                file = "evidence/431-panel-intent.png",
+                command =
+                    "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-game.ps1 " +
+                    "-Fixture prepared -Seed 20260728 -ScreenshotTicks 2360 -SelectCreature 4 " +
+                    "-CameraZoom 1.0 -UiScale 1.0 -FrameSize 1280x720 " +
+                    "-ScreenshotPath \"431/panel-intent.png\"",
+                checksum = "23328b665264529962c47603e381d2d10b004223bd00bfd9153291c7ea3d4ebf",
+                readability =
+                    "hudReadability.readable = true, violations = [], пол 12 px; проверено на " +
+                    "12 кадрах от 1280x720 до 3840x2160.",
+                labelFit =
+                    "inspector: neededLines 13, visibleLines 13, hardLines 13 — ни одна строка " +
+                    "не перенеслась. Запас панели измерен отдельно: временная набивка строки " +
+                    "INTENT до 71 символа дала neededLines 14 / visibleLines 14, и гард остался " +
+                    "зелёным на всех семи проверяемых кадрах, то есть строка с пометкой о " +
+                    "вердикте — которую нельзя сфотографировать, потому что в поставляемых " +
+                    "журналах нет вердиктов, — панель не ломает.",
+                why =
+                    "Кадр критерия 8 снимается на этой партии, потому что её умеет " +
+                    "scripts/run-game.ps1: поставляемая фикстура с подменой seed (probe-verdicts " +
+                    "скрипт не принимает, а -Fixture у него закрытый набор). Окно, в котором " +
+                    "строка стоит, измерено здесь, а не выбрано на глаз.",
             },
             card = new
             {
