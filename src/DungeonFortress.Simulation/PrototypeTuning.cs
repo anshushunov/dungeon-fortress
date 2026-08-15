@@ -621,6 +621,25 @@ public static class PrototypeTuning
     public const int LoyaltyGrudgeRefusedPlacePeriod = 100;
     public const int LoyaltyGrudgeRefusedPlace = 1;
 
+    // What being sent into a fight wounded costs the domain later (Issue #431,
+    // docs/design/VERDICT_AND_THE_WOUNDED.md §3.4). Credited only where the fear
+    // of the domain <b>was the reason</b> — the creature took the field and would
+    // have spared itself without that term — because otherwise «выпускать» would
+    // become a punishment for any wounded creature ever being in a fight, and the
+    // magnitude would stop meaning unfairness.
+    //
+    // Six, which is exactly LoyaltyGrudgeDischarge below: one coercion buys the
+    // domain precisely what one refusal spends, so a domain that presses once and
+    // is refused once is square, and only one that keeps pressing without ever
+    // being refused accumulates. It is charged at most once per creature per wave
+    // without a rule saying so — a creature that takes the field is `Fighting`,
+    // and the roll call does not ask anybody who is already in it.
+    //
+    // <b>It does not close the loop of §3.4 on the shipped matrix, and that is a
+    // measured finding rather than a number waiting to be raised</b> — see
+    // evidence/431-loop.json and the escalation in the body of the pull request.
+    public const int LoyaltyGrudgePressedWounded = 6;
+
     // How much resentment is spent when it is finally acted on. Less than a
     // punishment costs, so one refusal does not clear the whole account.
     public const int LoyaltyGrudgeDischarge = 6;

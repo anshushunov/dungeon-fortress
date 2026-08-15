@@ -2846,6 +2846,7 @@ reason code не отрисовывается «как похожий»: ада�
 | `combat_refused_injured` | тяжёлый **торс** до боя; `details.wave` называет волну |
 | `combat_absent_unreachable` | налётчик недостижим или слишком далеко; `details.wave` называет волну |
 | `combat_spared_wound` | раненое существо решило беречься и вышло из сбора (10.2, состязание раненого); `details` несут `spare`, `press`, `part`, `severity`, `verdictDecided` и `wave` |
+| `combat_pressed_wound` | раненое существо вышло в строй, и причиной был страх перед владением: без него «беречься» перевесило бы. Начисляет `grudge_pressed_wounded`; `details` несут `spare`, `press`, `part`, `grudge` и `wave` |
 | `combat_attack` | удар по налётчику; `details` несут `raiderId` и урон |
 | `combat_raider_downed` | налётчик выведен из строя |
 | `combat_fled_morale` | провалена проверка морали; `details` несут `downedAlliesNear` (упавшие союзники в поле зрения), `raidersNear` (налётчики в упор) и `hpPercent` (собственное здоровье) — три слагаемых решения из 10.3 |

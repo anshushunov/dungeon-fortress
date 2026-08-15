@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "issue": "#431",
+  "checkpoint": "3 — grudge_pressed_wounded, замыкание петли и «залечился посреди волны»",
+  "command": "dotnet test tests/DungeonFortress.Simulation.Tests --filter FullyQualifiedName~PrototypePressedWoundedTests",
+  "loyaltyGrudgePressedWounded": 6,
+  "loop": {
+    "what": "Cases in which a creature charged `grudge_pressed_wounded` later refused the line by `combat_refused_grudge`. The refusal is the mechanism that was already in the tree; this slice only feeds it.",
+    "count": 0,
+    "cases": []
+  },
+  "nearMisses": {
+    "what": "For every creature charged `grudge_pressed_wounded`, the closest the refusal `ReleasedGrudge x T.loyalty_refuse_grudge_weight > benefit + fear + grit x T.loyalty_refuse_grit_weight` ever came to being true afterwards. A negative gap means the condition WAS true and the roll call still never asked — because the creature was Fighting at that moment.",
+    "cases": [
+      {
+        "Cell": "prepared/20260728 every-punish",
+        "CreatureId": 4,
+        "Name": "Дёготь",
+        "Charged": 6,
+        "Tick": 2351,
+        "ModeThen": "Fighting",
+        "ReleasedTimesWeight": 0,
+        "Holding": 45,
+        "Gap": 45,
+        "Grudge": 20,
+        "Fear": 32
+      }
+    ]
+  },
+  "mendedMidWave": {
+    "what": "Cases in which a creature that had already been asked about its wound came back to a later roll call whole. §3.6: it bypasses the contest, takes the `combat_joined` path and its intent is cleared.",
+    "count": 14,
+    "cases": [
+      {
+        "Cell": "baseline/20260728 every-punish",
+        "CreatureId": 5,
+        "Name": "Уголёк",
+        "AskedAtTick": 2020,
+        "AskedOutcome": "pressed",
+        "WoundThen": "Head:Light",
+        "JoinedWholeAtTick": 2350,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "baseline/20260728 every-reward",
+        "CreatureId": 5,
+        "Name": "Уголёк",
+        "AskedAtTick": 2060,
+        "AskedOutcome": "spared",
+        "WoundThen": "Head:Light",
+        "JoinedWholeAtTick": 2080,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "baseline/20260728 every-reward",
+        "CreatureId": 6,
+        "Name": "Прель",
+        "AskedAtTick": 2000,
+        "AskedOutcome": "pressed",
+        "WoundThen": "Leg:Light",
+        "JoinedWholeAtTick": 2390,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260726 silent",
+        "CreatureId": 0,
+        "Name": "Брусок",
+        "AskedAtTick": 2000,
+        "AskedOutcome": "pressed",
+        "WoundThen": "Torso:Light",
+        "JoinedWholeAtTick": 2350,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260726 every-punish",
+        "CreatureId": 0,
+        "Name": "Брусок",
+        "AskedAtTick": 2000,
+        "AskedOutcome": "pressed",
+        "WoundThen": "Torso:Light",
+        "JoinedWholeAtTick": 2350,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260726 every-reward",
+        "CreatureId": 5,
+        "Name": "Уголёк",
+        "AskedAtTick": 2020,
+        "AskedOutcome": "spared",
+        "WoundThen": "Torso:Light",
+        "JoinedWholeAtTick": 2040,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260726 every-reward",
+        "CreatureId": 0,
+        "Name": "Брусок",
+        "AskedAtTick": 2000,
+        "AskedOutcome": "pressed",
+        "WoundThen": "Torso:Light",
+        "JoinedWholeAtTick": 2350,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260726 every-reward",
+        "CreatureId": 1,
+        "Name": "Кремень",
+        "AskedAtTick": 2080,
+        "AskedOutcome": "spared",
+        "WoundThen": "Leg:Light",
+        "JoinedWholeAtTick": 2350,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260726 every-reward",
+        "CreatureId": 3,
+        "Name": "Смола",
+        "AskedAtTick": 2080,
+        "AskedOutcome": "spared",
+        "WoundThen": "Leg:Light",
+        "JoinedWholeAtTick": 2350,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260727 silent",
+        "CreatureId": 5,
+        "Name": "Уголёк",
+        "AskedAtTick": 1650,
+        "AskedOutcome": "pressed",
+        "WoundThen": "Arm:Light",
+        "JoinedWholeAtTick": 2000,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260727 every-punish",
+        "CreatureId": 5,
+        "Name": "Уголёк",
+        "AskedAtTick": 1650,
+        "AskedOutcome": "pressed",
+        "WoundThen": "Arm:Light",
+        "JoinedWholeAtTick": 2000,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260727 every-reward",
+        "CreatureId": 5,
+        "Name": "Уголёк",
+        "AskedAtTick": 1650,
+        "AskedOutcome": "pressed",
+        "WoundThen": "Arm:Light",
+        "JoinedWholeAtTick": 2000,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260727 every-reward",
+        "CreatureId": 3,
+        "Name": "Смола",
+        "AskedAtTick": 2390,
+        "AskedOutcome": "spared",
+        "WoundThen": "Leg:Light",
+        "JoinedWholeAtTick": 2410,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      },
+      {
+        "Cell": "prepared/20260728 every-reward",
+        "CreatureId": 4,
+        "Name": "Дёготь",
+        "AskedAtTick": 2080,
+        "AskedOutcome": "spared",
+        "WoundThen": "Arm:Light",
+        "JoinedWholeAtTick": 2350,
+        "ReasonCode": "combat_joined",
+        "IntentAfter": null
+      }
+    ]
+  }
+}

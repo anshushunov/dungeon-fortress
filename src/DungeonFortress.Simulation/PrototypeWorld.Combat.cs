@@ -189,6 +189,41 @@ public sealed partial class PrototypeWorld
                 }
 
                 creature.WoundIntent = contest;
+
+                // <b>The loop of §3.4: coercion works now and is paid for
+                // later.</b> The creature took the field, and without the fear of
+                // the domain the sparing side would have won — so it is in the
+                // line because it is afraid of the player, which is the textbook
+                // coercion of pitch 6.3. The grudge is credited here and only
+                // here, never for the mere fact of a wounded creature fighting:
+                // charged on every entry it would stop meaning unfairness and
+                // start meaning participation.
+                //
+                // Nothing new closes the loop. The resentment surfaces as the fear
+                // that hid it fades (`ReleasedGrudge`) and takes the creature out
+                // of the line through the mechanism that is already there —
+                // `ResentmentOutweighsTheLine` and `combat_refused_grudge`, two
+                // refusals above this one.
+                if (contest.Spare > contest.Press -
+                        creature.Loyalty.DomainFear / PrototypeTuning.CombatPressDomainFearDivisor &&
+                    Accrue(
+                        creature,
+                        LoyaltyAxis.Grudge,
+                        "grudge_pressed_wounded",
+                        PrototypeTuning.LoyaltyGrudgePressedWounded))
+                {
+                    RecordDecision(
+                        creature,
+                        "combat_pressed_wound",
+                        new Dictionary<string, int>
+                        {
+                            ["spare"] = contest.Spare,
+                            ["press"] = contest.Press,
+                            ["part"] = (int)contest.Part,
+                            ["grudge"] = creature.Loyalty.Grudge,
+                            ["wave"] = wave.Number,
+                        });
+                }
             }
 
             if (creature.CurrentJob is not null)

@@ -110,6 +110,7 @@ T.loyalty_grudge_fear_floor` (= 5)**: без страха не бывает пр
 | `grudge_refused_place` | 100 тиков подряд отказа от работы по памяти о месте (`AvoidedThisTick`) | 1 | да |
 | `grudge_punished_unfairly` | вердикт `punish` о существе, чьи нервы с прошлой карточки не сдавали | 14 | да (вердикт сам поднял страх) |
 | `grudge_ignored` | карточка о deed закрылась без вердикта | 2 | **нет** |
+| `grudge_pressed_wounded` | раненое существо вышло в строй, и без слагаемого страха перед владением «беречься» перевесило бы (Issue #431) | 6 | да по построению: без страха перед владением терм не начисляется вовсе |
 | `grudge_spent` | обида сработала: отказ идти в бой или бегство из-за неё | −`min(обида, 6)` | — |
 
 **Названное расхождение с §6.3.** `grudge_ignored` — единственное слагаемое, не
@@ -576,6 +577,7 @@ ADR 0019, вопрос 3. Вердикт меняет **величины**; ве
 | `loyalty_verdict_punish_unfair_grudge` | 14 |
 | `loyalty_grudge_ignored` | 2 |
 | `loyalty_domain_fear_fade_period` | 60 |
+| `loyalty_grudge_pressed_wounded` | 6 |
 | `loyalty_work_fear_divisor` | 8 |
 | `loyalty_work_grudge_divisor` | 3 |
 | `loyalty_work_reach_divisor` | 3 |

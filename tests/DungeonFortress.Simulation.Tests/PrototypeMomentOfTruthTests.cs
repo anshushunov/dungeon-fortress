@@ -138,6 +138,10 @@ public sealed class PrototypeMomentOfTruthTests
             "benefit_faded", "benefit_fed", "benefit_rewarded",
             "benefit_tended", "fear_ally_downed", "fear_faded", "fear_panic",
             "fear_punished", "fear_wound", "grudge_hunger", "grudge_ignored",
+            // Issue #431: the delayed price of being sent into a fight wounded.
+            // It is credited by the contest of the roll call and not by the
+            // sweep, and only where the fear of the domain was the reason.
+            "grudge_pressed_wounded",
             "grudge_punished_unfairly", "grudge_refused_place", "grudge_spent",
         ];
         var unknown = seen.Except(known, StringComparer.Ordinal).ToArray();
