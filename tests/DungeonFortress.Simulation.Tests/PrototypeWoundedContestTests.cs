@@ -143,6 +143,23 @@ public sealed class PrototypeWoundedContestTests
             "no verdict anywhere in the matrix decided a contest, so `verdictDecided` is false " +
             "by construction and holds nothing.");
         Assert.All(flipped, item => Assert.NotEqual("-", item.Sign));
+
+        // <b>Both halves of the channel must be able to decide something, and each
+        // half separately.</b> This is the fourth amendment of the second review
+        // round applied to causality: an aggregate over «a verdict decided it» can
+        // be carried entirely by one sign while the other stays decorative, and
+        // the two mutants of criterion 3 are aimed at exactly these two
+        // assertions — the first empties the `punish` line, the second the
+        // `reward` line (evidence/431-mutants.json).
+        foreach (var sign in new[] { "reward", "punish" })
+        {
+            var decided = flipped.Where(item => item.Sign == sign).ToArray();
+            Assert.True(
+                decided.Length > 0,
+                $"not one contest in the whole matrix was decided by `{sign}`. The term this " +
+                "sign writes is then present in the formula and reaches no outcome, which is " +
+                "what §3.5 calls a decorative channel.\n" + Describe(flipped));
+        }
     }
 
     // ------------------------------------------------------------------
