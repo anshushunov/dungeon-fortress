@@ -43,7 +43,7 @@
   "chosen": {
     "row": "legend[6]",
     "text": "red mark on a body = wound, bright = heavy / [M] stockpile: cornered square = material cell / grey box on a crew = carried stone",
-    "length": 126,
+    "length": 128,
     "linesAfter": 2,
     "why": "Это единственная строка, у которой вторая линия уже есть и наполовину пуста. Клаузула про рану стоит первой, потому что новая метка — то, что читатель ищет; ни одно слово прежней легенды не тронуто.",
     "rejected": "Сократить «grey box on a crew» до «grey box» или «material cell» до «cell», чтобы шестая строка стала одной линией и место освободилось где-то ещё: это плата за новую метку смыслом старой.",
