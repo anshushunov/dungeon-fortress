@@ -156,9 +156,9 @@
         "t1759 #1 reward (wounded)",
         "t1759 #3 punish (wounded)",
         "t1759 #5 reward (wounded)",
-        "t2090 #6 reward (wounded)",
-        "t2090 #3 punish (wounded)",
-        "t2090 #5 reward (wounded)"
+        "t2086 #5 reward (wounded)",
+        "t2086 #6 punish (wounded)",
+        "t2086 #1 reward (wounded)"
       ],
       "RewardChains": [
         {

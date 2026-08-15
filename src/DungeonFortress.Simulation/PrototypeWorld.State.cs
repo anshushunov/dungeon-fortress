@@ -45,7 +45,8 @@ public sealed partial class PrototypeWorld
             [.. creature.InjuredParts().Select(
                 part => new PrototypeInjurySnapshot(part.Part, part.Severity))],
             creature.StepsLostToLimp,
-            creature.ActionsLostToStun);
+            creature.ActionsLostToStun,
+            creature.WoundIntent);
     }
 
     private PrototypeDigDesignationSnapshot ToSnapshot(GridPoint tile)
@@ -457,6 +458,19 @@ public sealed partial class PrototypeWorld
         /// the tick in hand and never survives into the canonical document.
         /// </summary>
         public int LastLimpTick { get; set; } = -1;
+
+        /// <summary>
+        /// What this creature decided at the roll call about its own wound, and
+        /// null while it is whole or no wave has asked it yet (Issue #431).
+        ///
+        /// <para>Canonical state and not a view model: it is written by the
+        /// contest in <see cref="PrototypeWorld.UpdateCombatParticipation"/> and
+        /// has to survive into the document, because the panel that reads it is
+        /// not allowed to read <see cref="LastDecision"/> — the roll call runs
+        /// before job generation and matching, so the decision would be
+        /// overwritten inside the tick it was taken on.</para>
+        /// </summary>
+        public PrototypeWoundIntentSnapshot? WoundIntent { get; set; }
 
         public int RecoveryTicks { get; set; }
         public CreatureMode Mode { get; set; }

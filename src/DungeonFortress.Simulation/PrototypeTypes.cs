@@ -139,6 +139,46 @@ public static class BodyParts
 public sealed record PrototypeInjurySnapshot(BodyPart Part, InjuryKind Severity);
 
 /// <summary>
+/// What one wounded creature decided at the roll call, and out of what
+/// (Issue #431, <c>docs/design/VERDICT_AND_THE_WOUNDED.md</c> §3.1 and §4).
+///
+/// <para><b>Why this is a published field of the creature and not a reason code
+/// on the journal.</b> The panel builds its «why» line from
+/// <c>lastDecision</c>, and <c>UpdateCombatParticipation</c> runs before
+/// <c>GenerateJobs</c> and <c>MatchJobs</c> in the tick
+/// (<c>PrototypeWorld.Step</c>), so the very next <c>RecordDecision</c> of the
+/// same tick overwrites it. A decision to spare oneself would be gone from the
+/// panel on the tick it was taken. This field is the decision itself and lives
+/// until the next re-check overturns it or the wave it was about is over.</para>
+/// </summary>
+/// <param name="Code">
+/// <c>spared</c> — the creature stayed out of the line and is free to look for a
+/// bunk; <c>pressed</c> — it took the field wounded.
+/// </param>
+/// <param name="Part">
+/// The part the sentence names: the worst-hurt one, and the earliest in
+/// <see cref="BodyPart"/> order when two are equally hurt, so the wording never
+/// depends on the order blows happened to land in.
+/// </param>
+/// <param name="VerdictDecided">
+/// Whether the player's verdict is what settled it, by the causality rule of
+/// §3.5: the contest is recomputed without the terms a verdict wrote — the
+/// reward's own <c>benefit_rewarded</c> on the sparing side and the whole of
+/// <c>fearOfTheDomain</c> on the pressing side — and this is true only when the
+/// outcome flips. It is what stops the feed from crediting the player with an
+/// outcome that a fed and tended domain would have produced anyway (§3.2).
+/// </param>
+public sealed record PrototypeWoundIntentSnapshot(
+    string Code,
+    int Tick,
+    int Wave,
+    int Spare,
+    int Press,
+    BodyPart Part,
+    InjuryKind Severity,
+    bool VerdictDecided);
+
+/// <summary>
 /// The closed enumeration of signs of judgement a player may pass on one
 /// creature (ADR 0019). It is a list of <b>judgements</b> and not of actions:
 /// every value here is walked through the five conditions of admissibility in
@@ -324,7 +364,11 @@ public sealed record PrototypeCreatureSnapshot(
     int StepsLostToLimp,
     // Combat actions a hurt head has taken away over the party — the stun, in the
     // same family as StepsLostToLimp above and read by nothing but a measurement.
-    int ActionsLostToStun);
+    int ActionsLostToStun,
+    // Appended on purpose, like every section added since v2. What this creature
+    // decided at the roll call about its own wound, and null for one that is
+    // whole or that no wave has asked yet (Issue #431).
+    PrototypeWoundIntentSnapshot? WoundIntent = null);
 
 public sealed record PrototypeJobSnapshot(
     long JobId,

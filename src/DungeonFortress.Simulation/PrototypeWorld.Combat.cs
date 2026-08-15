@@ -142,6 +142,55 @@ public sealed partial class PrototypeWorld
                 continue;
             }
 
+            // <b>The contest of the wounded</b> (Issue #431), last of the refusals
+            // and after the reachability test rather than before it. The order is
+            // the second round of independent review of the specification putting
+            // the specification's own reasoning right: with consecutive
+            // `continue`s, a contest placed above the distance test would hide
+            // `combat_absent_unreachable` behind «it spared itself» on a creature
+            // that could not have got there at all. A creature both too far away
+            // and minded to spare itself is reported as too far away, because that
+            // is the fact the domain can act on.
+            //
+            // A whole creature does not enter the contest at all, and its intent
+            // is cleared here rather than anywhere else: the one that mended its
+            // last part mid-wave takes the existing path and the panel stops
+            // saying it is sparing a leg it no longer has (§3.6).
+            if (creature.Injury == InjuryKind.None)
+            {
+                creature.WoundIntent = null;
+            }
+            else
+            {
+                var contest = WeighTheWound(creature, wave.Number);
+                if (contest.Code == "spared")
+                {
+                    // A transition and not a `continue`, and the difference is the
+                    // whole of «кто не встал, тот ложится». The right of a wounded
+                    // creature to a bunk is unconditional only *outside* a muster
+                    // (`Planning.cs` `!creature.IsMustering` in both places), and
+                    // a mustering creature is walked to the assembly point by
+                    // `Acting.cs`. So the three flags a creature entering the
+                    // fight sheds are shed here as well, and the working
+                    // `GenerateJobs` hands out the bunk by itself. The issuing of
+                    // `Rest` is not touched by this slice — the creature is simply
+                    // returned to the state the existing mechanism serves.
+                    if (creature.CurrentJob is not null)
+                    {
+                        CancelJob(creature, "combat_spared_wound");
+                    }
+
+                    creature.IsMustering = false;
+                    creature.MusterNeedsRation = false;
+                    creature.MealReserved = false;
+                    creature.WoundIntent = contest;
+                    RecordDecision(creature, "combat_spared_wound", ContestDetails(contest));
+                    continue;
+                }
+
+                creature.WoundIntent = contest;
+            }
+
             if (creature.CurrentJob is not null)
             {
                 CancelJob(creature, "combat_joined");
@@ -153,6 +202,106 @@ public sealed partial class PrototypeWorld
             RecordDecision(creature, "combat_joined", new Dictionary<string, int> { ["readiness"] = ComputeReadiness(creature), ["wave"] = wave.Number });
         }
     }
+
+    /// <summary>
+    /// The contest of §3.1: what a wounded creature has to gain by sparing itself
+    /// against what it has to gain by taking the field, decided from the current
+    /// magnitudes and never from the fact of a verdict.
+    ///
+    /// <code>
+    /// spare = T.combat_spare_wound_weight x (sum of severities over hurt parts)
+    ///       + benefit / T.combat_spare_benefit_divisor
+    /// press = fear of the domain / T.combat_press_domain_fear_divisor
+    ///       + grit x T.combat_press_grit_weight
+    /// </code>
+    ///
+    /// <para><b>The sum of severities rather than «severity times the number of
+    /// parts».</b> The two agree wherever the hurt parts are equally hurt, which
+    /// is what the specification's phrase describes, and they part company on a
+    /// creature carrying a heavy leg and a light arm — where the product would
+    /// charge the light arm as though it were heavy. The sum is the honest
+    /// generalisation and is the one implemented; §10 of the specification leaves
+    /// the shape of this weight to measurement.</para>
+    ///
+    /// <para><b>One weight and not four.</b> Nothing measured here distinguishes a
+    /// hurt leg from a hurt arm on the sparing side, and four numbers no
+    /// measurement separates are four places for the rule to be quietly wrong.
+    /// The parts already differ where they were given consequences — the arm in
+    /// <see cref="WeaponWeight"/>, the head in <see cref="StunnedThisTick"/>, the
+    /// leg in the limp, the torso in <see cref="ComputeReadiness"/> — and that is
+    /// where the difference between them is paid for.</para>
+    ///
+    /// <para><b>Benefit is read whole, and that is named rather than hidden</b>
+    /// (§3.2): <c>benefit_fed</c> and <c>benefit_tended</c> are ordinary terms of
+    /// a well-run domain, so a domain that looks after its people spares its
+    /// wounded without a single verdict being spoken. That is the sentence of
+    /// pitch 6.3 read from the other side, and its price is
+    /// <see cref="PrototypeWoundIntentSnapshot.VerdictDecided"/>: the feed may
+    /// only credit the player where the player's own term is what flipped
+    /// it.</para>
+    ///
+    /// <para><b>Fear is read through the derived magnitude and never through the
+    /// total</b> (§3.3). Three of the four sources of <c>fear</c> are the fight
+    /// itself, and <c>fear_wound</c> is credited to exactly the creature this
+    /// method is asking about — reading the total would say that being hurt makes
+    /// a creature keener to be hurt again.</para>
+    /// </summary>
+    private PrototypeWoundIntentSnapshot WeighTheWound(CreatureState creature, int wave)
+    {
+        var severity = 0;
+        var worst = BodyPart.Head;
+        var worstSeverity = InjuryKind.None;
+        foreach (var (part, kind) in creature.InjuredParts())
+        {
+            severity += (int)kind;
+            if (kind > worstSeverity)
+            {
+                worst = part;
+                worstSeverity = kind;
+            }
+        }
+
+        var wound = severity * PrototypeTuning.CombatSpareWoundWeight;
+        var benefit = creature.Loyalty.Benefit / PrototypeTuning.CombatSpareBenefitDivisor;
+        var dread = creature.Loyalty.DomainFear / PrototypeTuning.CombatPressDomainFearDivisor;
+        var grit = creature.Grit * PrototypeTuning.CombatPressGritWeight;
+
+        var spare = wound + benefit;
+        var press = dread + grit;
+
+        // The causality rule of §3.5, applied rather than described: the same
+        // contest without the two terms a verdict writes. `benefit_rewarded` is
+        // the reward's own share of the benefit; the whole of the fear of the
+        // domain is the punishment's, because nothing else ever writes to it.
+        var rewarded = creature.Loyalty.BenefitTerms.GetValueOrDefault("benefit_rewarded");
+        var spareWithout = wound +
+            (creature.Loyalty.Benefit - rewarded) / PrototypeTuning.CombatSpareBenefitDivisor;
+        var pressWithout = grit;
+
+        // A tie leaves the creature in the line, so that the slice moves nothing
+        // where no magnitude has spoken.
+        var spared = spare > press;
+        return new PrototypeWoundIntentSnapshot(
+            spared ? "spared" : "pressed",
+            CurrentTick,
+            wave,
+            spare,
+            press,
+            worst,
+            worstSeverity,
+            spared != spareWithout > pressWithout);
+    }
+
+    private static Dictionary<string, int> ContestDetails(PrototypeWoundIntentSnapshot contest) =>
+        new()
+        {
+            ["spare"] = contest.Spare,
+            ["press"] = contest.Press,
+            ["part"] = (int)contest.Part,
+            ["severity"] = (int)contest.Severity,
+            ["verdictDecided"] = contest.VerdictDecided ? 1 : 0,
+            ["wave"] = contest.Wave,
+        };
 
     /// <summary>
     /// How far this creature is from the fight — the distance the admission rule
@@ -528,6 +677,16 @@ public sealed partial class PrototypeWorld
         // are not built here: the tick is still running, and a card built from
         // half a tick would report a fight that has not finished settling.
         _pendingMomentOfTruth = wave;
+
+        // And what the wounded decided about *this* wave stops being true, because
+        // there is no line left to stand in (Issue #431). The wound stays and is
+        // still on the panel; the intent is about a roll call, and the roll calls
+        // of this wave are over. Leaving it would make the panel say «bearing a
+        // leg» through a whole quiet stretch in which nobody asked it anything.
+        foreach (var creature in _creatures)
+        {
+            creature.WoundIntent = null;
+        }
 
         foreach (var creature in _creatures.Where(creature => creature.Mode is CreatureMode.Fled or CreatureMode.Fighting))
         {

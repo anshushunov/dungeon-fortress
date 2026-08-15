@@ -219,6 +219,41 @@ public static class PrototypeTuning
     public const int CombatJoinRecheck = 20;
     public const int EngageRadius = 8;
 
+    // ------------------------------------------------------------------
+    // The contest of the wounded at the roll call (Issue #431). Design contract:
+    // docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md §10.2 and
+    // docs/design/VERDICT_AND_THE_WOUNDED.md §3.1. Tuning by ADR 0010.
+    //
+    //     spare = wound_weight x sum of severities + benefit / benefit_divisor
+    //     press = fear_of_the_domain / fear_divisor + grit x grit_weight
+    //
+    // and the creature stays out of the line only when spare is strictly greater,
+    // so a tie leaves the party exactly as it was before this mechanic.
+    //
+    // What the four numbers were chosen against, and it is a boundary rather than
+    // a taste. Issue #409 took the wound out of the admission rule on purpose —
+    // a heavy wound was the largest single cause of absence, 18 of 27 over the
+    // matrix (PR #408), and the four consequences of a wound inside a fight would
+    // have been written for a creature that is never in one. So the default of
+    // this contest has to be «the wounded still take the field», and what moves
+    // it has to be the verdict rather than the wound. At grit 2..5 the pressing
+    // side is 4..10 before a verdict is spoken, and:
+    //
+    // - one light part on an ordinary well-fed creature weighs 2 + about 1 and
+    //   loses to every grit;
+    // - one heavy part weighs 4 + about 1 and takes only the least steady out;
+    // - a reward (twelve benefit at a stroke) adds four to the sparing side and
+    //   takes most of the wounded out of the line;
+    // - a punishment (ten of fear of the domain) adds five to the pressing side
+    //   and puts back in a creature that two heavy parts would have kept out.
+    //
+    // Neither sign settles anything on its own, which is the executable half of
+    // «ни одно значение не делает ни одно поведение неизбежным» (ADR 0019).
+    public const int CombatSpareWoundWeight = 2;
+    public const int CombatSpareBenefitDivisor = 3;
+    public const int CombatPressDomainFearDivisor = 2;
+    public const int CombatPressGritWeight = 2;
+
     // Reach is a property of the attack, not a constant of combat resolution.
     // Everything today is a brawler at one tile; raising this number is the only
     // edit a bow would need on this side of the seam.

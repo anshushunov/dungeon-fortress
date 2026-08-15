@@ -283,6 +283,37 @@ public static class PrototypeCanonical
             writer.WriteEndArray();
             writer.WriteNumber("stepsLostToLimp", creature.StepsLostToLimp);
             writer.WriteNumber("actionsLostToStun", creature.ActionsLostToStun);
+
+            // What a wounded creature decided at the roll call (Issue #431).
+            // Additive, like every section added since v2: a new field on an
+            // existing section, nothing renamed, removed, retyped or re-pointed,
+            // so the schema version does not move. No frame before the first wave
+            // moves either, because the field is null until a wave asks somebody
+            // with a wound — which is the same shape `raiders[].rememberedPlace`
+            // already has.
+            //
+            // Canonical rather than presentational: the panel is forbidden to
+            // read this off `lastDecision` (the roll call runs before job
+            // generation, so the decision is overwritten inside its own tick), so
+            // a replay has to be able to reproduce the intent exactly.
+            if (creature.WoundIntent is { } intent)
+            {
+                writer.WriteStartObject("woundIntent");
+                writer.WriteString("code", intent.Code);
+                writer.WriteNumber("tick", intent.Tick);
+                writer.WriteNumber("wave", intent.Wave);
+                writer.WriteNumber("spare", intent.Spare);
+                writer.WriteNumber("press", intent.Press);
+                writer.WriteString("part", ToJson(intent.Part));
+                writer.WriteString("severity", ToJson(intent.Severity));
+                writer.WriteBoolean("verdictDecided", intent.VerdictDecided);
+                writer.WriteEndObject();
+            }
+            else
+            {
+                writer.WriteNull("woundIntent");
+            }
+
             writer.WriteEndObject();
         }
 
