@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 2,
+  "scenario": "custom",
+  "seed": 20260726,
+  "commands": [
+    {
+      "tick": 0,
+      "kind": "zone_paint",
+      "zoneKind": "TrainingGround",
+      "tiles": [[9,1],[10,1],[11,1],[12,1],[9,2],[10,2],[11,2],[12,2],[9,3],[10,3],[11,3],[12,3],[9,4],[10,4],[11,4],[12,4]]
+    },
+    {
+      "tick": 300,
+      "kind": "set_priority",
+      "jobKind": "Drill",
+      "value": 3
+    },
+    {
+      "tick": 320,
+      "kind": "zone_paint",
+      "zoneKind": "Watch",
+      "tiles": [[22,12],[23,12],[24,12],[25,12],[26,12],[22,13],[23,13],[24,13],[25,13],[26,13]]
+    },
+    {
+      "tick": 320,
+      "kind": "set_rule",
+      "ruleId": "ration_reserve",
+      "value": 6
+    },
+    {
+      "tick": 320,
+      "kind": "set_priority",
+      "jobKind": "Watch",
+      "value": 3
+    },
+    {
+      "tick": 880,
+      "kind": "set_rule",
+      "ruleId": "muster_lead_ticks",
+      "value": 60
+    },
+    {
+      "tick": 1334,
+      "kind": "verdict",
+      "creatureId": 1,
+      "verdict": "reward"
+    },
+    {
+      "tick": 1334,
+      "kind": "verdict",
+      "creatureId": 3,
+      "verdict": "punish"
+    },
+    {
+      "tick": 1334,
+      "kind": "verdict",
+      "creatureId": 7,
+      "verdict": "reward"
+    }
+  ]
+}
