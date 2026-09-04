@@ -308,6 +308,10 @@ public static class PrototypeTuning
     // different numbers, and this constant bears exactly one of them:
     // `Preparation_changes_the_deterministic_party_without_direct_orders`.
     public const int DamageMightWeight = 4;
+    // A raider of base might drops a weapon worth one point of might; every
+    // point above base adds one more. Renown raises raider might, so later
+    // waves drop better trophies — the first time renown opens something.
+    public const int TrophyBonusBase = 1;
     public const int DamageReadinessDivisor = 6;
     public const int RaiderMightWeight = 5;
     public const int ArmourReadinessDivisor = 12;
@@ -606,6 +610,14 @@ public static class PrototypeTuning
     public const int LoyaltyBenefitTended = 4;
     public const int LoyaltyBenefitFadePeriod = 60;
 
+    // Trophies (docs/design/TROPHY_WEAPON.md). Carrying one is worth what a
+    // tended wound is worth: a thing the domain gave, once. Seeing it go to
+    // somebody else costs the one who earned it exactly one coercion — the same
+    // six points LoyaltyGrudgePressedWounded charges, so the two prices of the
+    // ledger stay comparable.
+    public const int LoyaltyBenefitTrophy = 4;
+    public const int LoyaltyGrudgeTrophyTaken = 6;
+
     // Grudge as the delayed price of fear. Nothing is credited below this floor,
     // so a domain nobody is afraid of accumulates no resentment at all. How much
     // of what is accumulated is *acted on* is not a second constant: it is
@@ -873,6 +885,10 @@ public static class PrototypeTuning
     public const int BuildStoneCost = 2;
     public const int BuildTicks = 30;
 
+    // Picking a weapon up is the arrival, not a labour: one tick, the floor of
+    // WorkDuration.
+    public const int ClaimTicks = 1;
+
     public const int DrillTicks = 30;
     public const int DrillGain = 12;
     public const int DrillFatigue = 6;
@@ -935,6 +951,7 @@ public static class PrototypeTuning
     // last in enum order, so an equal score still loses to the food chain and to
     // excavation, and the default priority changes nothing until a blueprint exists.
     public const int DefaultBuildPriority = 3;
+    public const int DefaultClaimPriority = 3;
     public const int RationReserveMaximum = 20;
     public const int RationReserveDefault = 0;
     public const int DrillMinimumSatietyMaximum = 100;

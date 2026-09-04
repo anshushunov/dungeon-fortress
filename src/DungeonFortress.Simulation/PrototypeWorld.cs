@@ -14,6 +14,11 @@ public sealed partial class PrototypeWorld
     private readonly Dictionary<GridPoint, BedState> _beds;
     private readonly Dictionary<(GridPoint Point, ResourceKind Resource), int> _loose = [];
 
+    // Weapons on the floor. A list and not a dictionary keyed by tile, because
+    // two raiders can fall on one tile; the canonical order is imposed when the
+    // snapshot is built, never assumed from insertion order.
+    private readonly List<(GridPoint Position, WeaponState Weapon)> _looseWeapons = [];
+
     // Stored stone is canonical per-cell state, deliberately separate from the
     // loose pile on the same tile: "lying on the floor" and "put away in the
     // stockpile" are different game facts and must stay distinguishable.
@@ -524,7 +529,12 @@ public sealed partial class PrototypeWorld
             // fall out of step with them and no command creates one directly.
             PrototypeRooms.Derive(_map, _zones, _priorities),
             ToMomentOfTruthSnapshot(),
-            [.. SurvivorSnapshots()]);
+            [.. SurvivorSnapshots()],
+            [.. _looseWeapons
+                .OrderBy(entry => entry.Position)
+                .ThenBy(entry => entry.Weapon.Wave)
+                .ThenBy(entry => entry.Weapon.Name, StringComparer.Ordinal)
+                .Select(entry => new PrototypeLooseWeaponSnapshot(entry.Position, entry.Weapon.ToSnapshot()))]);
     }
 
     /// <summary>

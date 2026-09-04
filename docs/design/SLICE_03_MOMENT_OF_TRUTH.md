@@ -610,6 +610,12 @@ Issue #431 файл сознательно не трогался — он при
 перечисления, пять условий допустимости, детерминизм отбора карточек и сходимость
 разбора с итогом — они в разделах выше, а не в этой таблице.
 
+`loyalty_benefit_trophy` и `loyalty_grudge_trophy_taken` принадлежат срезу
+[docs/design/TROPHY_WEAPON.md](TROPHY_WEAPON.md), а не этому; они здесь только
+потому, что `The_tuning_table_of_the_contract_carries_the_numbers_the_code_holds`
+проверяет каждую константу `Loyalty*` из `PrototypeTuning.cs` по имени, а не по
+срезу, которому она служит.
+
 | `T.*` | Значение |
 |---|---|
 | `loyalty_fear_wound` | 8 |
@@ -619,6 +625,7 @@ Issue #431 файл сознательно не трогался — он при
 | `loyalty_benefit_fed` | 2 |
 | `loyalty_benefit_tended` | 4 |
 | `loyalty_benefit_fade_period` | 60 |
+| `loyalty_benefit_trophy` | 4 |
 | `loyalty_grudge_fear_floor` | 5 |
 | `loyalty_grudge_hunger_period` | 100 |
 | `loyalty_grudge_hunger` | 1 |
@@ -631,6 +638,7 @@ Issue #431 файл сознательно не трогался — он при
 | `loyalty_grudge_ignored` | 2 |
 | `loyalty_domain_fear_fade_period` | 60 |
 | `loyalty_grudge_pressed_wounded` | 6 |
+| `loyalty_grudge_trophy_taken` | 6 |
 | `loyalty_work_fear_divisor` | 8 |
 | `loyalty_work_grudge_divisor` | 3 |
 | `loyalty_work_reach_divisor` | 3 |

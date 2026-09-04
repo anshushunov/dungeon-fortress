@@ -46,7 +46,8 @@ public sealed partial class PrototypeWorld
                 part => new PrototypeInjurySnapshot(part.Part, part.Severity))],
             creature.StepsLostToLimp,
             creature.ActionsLostToStun,
-            creature.WoundIntent);
+            creature.WoundIntent,
+            creature.Weapon?.ToSnapshot());
     }
 
     private PrototypeDigDesignationSnapshot ToSnapshot(GridPoint tile)
@@ -472,6 +473,10 @@ public sealed partial class PrototypeWorld
         /// </summary>
         public PrototypeWoundIntentSnapshot? WoundIntent { get; set; }
 
+        // The trophy this creature carries. Null is "nothing", and a creature
+        // carrying one never claims another (docs/design/TROPHY_WEAPON.md §2.6).
+        public WeaponState? Weapon { get; set; }
+
         public int RecoveryTicks { get; set; }
         public CreatureMode Mode { get; set; }
         public JobState? CurrentJob { get; set; }
@@ -757,6 +762,21 @@ public sealed partial class PrototypeWorld
                 : LowestHp * 100 > StartingHp * PrototypeTuning.LightInjuryShare
                     ? InjuryKind.Light
                     : InjuryKind.Heavy;
+    }
+
+    /// <summary>
+    /// The live form of <see cref="PrototypeWeaponSnapshot"/>. Immutable: a
+    /// weapon changes hands and tiles, never its name or bonus.
+    /// </summary>
+    private sealed class WeaponState(string name, int raiderId, int wave, int bonus, int downedBy)
+    {
+        public string Name { get; } = name;
+        public int RaiderId { get; } = raiderId;
+        public int Wave { get; } = wave;
+        public int Bonus { get; } = bonus;
+        public int DownedBy { get; } = downedBy;
+
+        public PrototypeWeaponSnapshot ToSnapshot() => new(Name, RaiderId, Wave, Bonus, DownedBy);
     }
 
     /// <summary>

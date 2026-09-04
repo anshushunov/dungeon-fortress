@@ -368,7 +368,10 @@ public sealed record PrototypeCreatureSnapshot(
     // Appended on purpose, like every section added since v2. What this creature
     // decided at the roll call about its own wound, and null for one that is
     // whole or that no wave has asked yet (Issue #431).
-    PrototypeWoundIntentSnapshot? WoundIntent = null);
+    PrototypeWoundIntentSnapshot? WoundIntent = null,
+    // Appended on purpose, like every section added since v2. The trophy this
+    // creature carries, and null for one that carries nothing.
+    PrototypeWeaponSnapshot? Weapon = null);
 
 public sealed record PrototypeJobSnapshot(
     long JobId,
@@ -402,6 +405,27 @@ public sealed record PrototypeLooseItemSnapshot(
     GridPoint Position,
     ResourceKind Resource,
     int Quantity);
+
+/// <summary>
+/// One trophy weapon (docs/design/TROPHY_WEAPON.md). <see cref="Name"/> is the
+/// name of the raider it was taken from and is the weapon's whole identity:
+/// raider names are unique within a party and a downed raider never comes
+/// back, so no two weapons of one party share it. The wording «blade of X»
+/// belongs to the presentation layer, like every other label.
+/// </summary>
+/// <param name="Bonus">Added to the holder's might where might becomes damage, and nowhere else.</param>
+/// <param name="DownedBy">The creature that put the raider down: the one the pitch's «двое хотят одно» is about.</param>
+public sealed record PrototypeWeaponSnapshot(
+    string Name,
+    int RaiderId,
+    int Wave,
+    int Bonus,
+    int DownedBy);
+
+/// <summary>A weapon lying on a tile, waiting for whoever the domain sends.</summary>
+public sealed record PrototypeLooseWeaponSnapshot(
+    GridPoint Position,
+    PrototypeWeaponSnapshot Weapon);
 
 /// <summary>
 /// One cell of the <see cref="ZoneKind.MaterialStockpile"/> zone. Stored stone is
@@ -773,7 +797,10 @@ public sealed record PrototypeSnapshot(
     PrototypeMomentOfTruthSnapshot MomentOfTruth,
     // Appended for the same reason (Issue #358). Everybody who left the domain
     // alive, when they are due back, and what became of that debt.
-    IReadOnlyList<PrototypeSurvivorSnapshot> Survivors);
+    IReadOnlyList<PrototypeSurvivorSnapshot> Survivors,
+    // Appended for the same reason (docs/design/TROPHY_WEAPON.md). Every weapon
+    // lying on the floor, ordered by tile, then wave, then name.
+    IReadOnlyList<PrototypeLooseWeaponSnapshot> LooseWeapons);
 
 public sealed record PrototypeRunResult(
     int Tick,

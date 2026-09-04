@@ -323,6 +323,11 @@ public static class PrototypeCanonical
                 writer.WriteNull("woundIntent");
             }
 
+            // The trophy (docs/design/TROPHY_WEAPON.md). Additive, explicit null
+            // like `woundIntent` above: present on every creature from tick 0,
+            // so every checksum moves and the golden frames are regenerated.
+            WriteWeapon(writer, "weapon", creature.Weapon);
+
             writer.WriteEndObject();
         }
 
@@ -572,6 +577,23 @@ public static class PrototypeCanonical
             WritePoint(writer, "position", item.Position);
             writer.WriteString("resource", ToJson(item.Resource));
             writer.WriteNumber("quantity", item.Quantity);
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
+
+        // Weapons on the floor. Their own section rather than a resource kind
+        // in `looseItems`: a weapon has a name and no quantity, and putting it
+        // through ResourceKind would move the sort key of every loose pile.
+        writer.WriteStartArray("looseWeapons");
+        foreach (var entry in state.LooseWeapons
+                     .OrderBy(entry => entry.Position)
+                     .ThenBy(entry => entry.Weapon.Wave)
+                     .ThenBy(entry => entry.Weapon.Name, StringComparer.Ordinal))
+        {
+            writer.WriteStartObject();
+            WritePoint(writer, "position", entry.Position);
+            WriteWeapon(writer, "weapon", entry.Weapon);
             writer.WriteEndObject();
         }
 
@@ -958,6 +980,23 @@ public static class PrototypeCanonical
         WritePoint(writer, "place", remembered.Place);
         writer.WriteNumber("tick", remembered.Tick);
         writer.WriteString("cause", remembered.Cause);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteWeapon(Utf8JsonWriter writer, string property, PrototypeWeaponSnapshot? weapon)
+    {
+        if (weapon is null)
+        {
+            writer.WriteNull(property);
+            return;
+        }
+
+        writer.WriteStartObject(property);
+        writer.WriteString("name", weapon.Name);
+        writer.WriteNumber("raiderId", weapon.RaiderId);
+        writer.WriteNumber("wave", weapon.Wave);
+        writer.WriteNumber("bonus", weapon.Bonus);
+        writer.WriteNumber("downedBy", weapon.DownedBy);
         writer.WriteEndObject();
     }
 

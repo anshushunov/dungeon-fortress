@@ -137,7 +137,10 @@ public sealed class PrototypeSnapshotShapeTests
     /// </summary>
     private static readonly string[] RecordedShape =
     [
-        "$ -> beds, buildSites, commandsApplied, creatures, digDesignations, domain, economy, events, jobs, labor, looseItems, map, materialStockpile, momentOfTruth, nextJobId, pendingCommands, priorities, raiders, rooms, rules, schemaVersion, seed, sessionResult, stations, stocks, survivors, threat, tick, waves, zones",
+        // docs/design/TROPHY_WEAPON.md. Additive: a new section beside
+        // `looseItems`, empty and `null` on every creature from tick 0 until a
+        // later slice fills it (Task 1 of the trophy-weapon plan).
+        "$ -> beds, buildSites, commandsApplied, creatures, digDesignations, domain, economy, events, jobs, labor, looseItems, looseWeapons, map, materialStockpile, momentOfTruth, nextJobId, pendingCommands, priorities, raiders, rooms, rules, schemaVersion, seed, sessionResult, stations, stocks, survivors, threat, tick, waves, zones",
         "$.beds[] -> growthProgress, position, ripe",
         "$.buildSites[] -> delivered, incomingReserved, jobId, progressTicks, reachable, required, requiredTicks, reservedBy, statusCode, tile",
         // Issue #409, additive twice over: `stepsLostToLimp` is what a hurt leg
@@ -148,7 +151,10 @@ public sealed class PrototypeSnapshotShapeTests
         // Issue #431. Additive: `woundIntent` is what a wounded creature decided
         // at the roll call, and null — like `raiders[].rememberedPlace` — until a
         // wave asks somebody who is carrying a wound.
-        "$.creatures[] -> actionsLostToStun, affinities, blockedTicks, carryAmount, carrying, currentJobId, fatigue, grit, hp, id, injuries, injury, isMustering, lastDecision, lastMoveTick, lastYieldTick, loyalty, martialForm, maxHp, mealReserved, mealTarget, mealTicksRemaining, might, mode, moveCount, musterNeedsRation, musterTarget, name, position, readiness, readinessAtRaid, recoveryTicks, rememberedPlaces, satiety, stepsLostToLimp, watchTicks, workTicks, woundIntent, yieldCount",
+        // docs/design/TROPHY_WEAPON.md. Additive: `weapon` is the trophy this
+        // creature carries, and null — same shape as `woundIntent` above — from
+        // tick 0 until a later slice ever sets it.
+        "$.creatures[] -> actionsLostToStun, affinities, blockedTicks, carryAmount, carrying, currentJobId, fatigue, grit, hp, id, injuries, injury, isMustering, lastDecision, lastMoveTick, lastYieldTick, loyalty, martialForm, maxHp, mealReserved, mealTarget, mealTicksRemaining, might, mode, moveCount, musterNeedsRation, musterTarget, name, position, readiness, readinessAtRaid, recoveryTicks, rememberedPlaces, satiety, stepsLostToLimp, watchTicks, weapon, workTicks, woundIntent, yieldCount",
         // Issue #409. Additive: a new array beside `injury`, which stays and is
         // its worst entry.
         "$.creatures[].injuries[] -> part, severity",
