@@ -1,0 +1,160 @@
+{
+  "issue": 418,
+  "question": "Why does memory of place change nothing on baseline/20260729, the party the owner plays?",
+  "answer": "Reach, and nothing else. Places are written, they are live, the creature is fed and free to match — and the work it is offered never starts within the radius the rule reaches. On that party, 0 of 38 offers of non-rest work to a creature holding a live memory started within 4 tiles of the nearest thing that creature remembered; the histogram of those 38 begins at d10 and its mode is d11=29.",
+  "base": "origin/main = 86537cf (PR #417 merged)",
+  "howToReadTheNumbers": [
+    "Every number below carries the commit it was taken on and the command that produced it.",
+    "`refusals` is the per-tick count printed by A_remembered_place_changes_what_the_creature_does_next.",
+    "`offers` / `inReach` are printed by Report_how_far_the_work_a_creature_is_offered_is_from_what_it_remembers, which reads only the public counterfactual probe of Issue #125 (TrackMemoryFreeMatching) and applies exactly the three conditions AvoidedPlace applies before it looks at a distance: not a bunk, satiety at or above MemoryYieldsSatiety, at least one memory younger than MemoryAvoidTicks. What is left is the reach question.",
+    "Where a probe needed something the public API does not expose, the patch that exposed it is named and quoted; it added counters only and was reverted."
+  ],
+
+  "theRedReproduced": {
+    "commit": "363a0dd",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~A_remembered_place_changes_what_the_creature_does_next\" --logger \"console;verbosity=detailed\"",
+    "change": "20260729 added to ObservabilitySeeds, which Issue #409 had narrowed to three",
+    "message": "baseline: memory of place changed nothing in 1 of 4 parties of the matrix — 20260729.",
+    "perSeed": {
+      "baseline/20260726": "34 refusals by 2 creature(s)",
+      "baseline/20260727": "1 refusals by 1 creature(s)",
+      "baseline/20260728": "3 refusals by 2 creature(s)",
+      "baseline/20260729": "0 refusals by 0 creature(s)",
+      "prepared/20260726": "1 refusals by 1 creature(s)",
+      "prepared/20260727": "14 refusals by 3 creature(s)",
+      "prepared/20260728": "69 refusals by 3 creature(s)",
+      "prepared/20260729": "11 refusals by 3 creature(s)"
+    },
+    "note": "prepared is loud on the very same seed. The silence is a property of the baseline fixture on this seed, not of the seed."
+  },
+
+  "whereTheChainStops": {
+    "commit": "363a0dd",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_where_the_chain_from_a_written_place_to_a_refusal_stops\" --logger \"console;verbosity=detailed\"",
+    "claim": "Each stage is a subset of the one above it. Nothing before reach is degenerate on 20260729 — three of the four candidate causes the brief named are ruled out right here.",
+    "baseline/20260729": {
+      "placesWritten": 26,
+      "creatureTicksWithMemory": 8085,
+      "andLive": 4946,
+      "andFed": 3205,
+      "andFreeToMatch": 1324,
+      "jobInReach": 0,
+      "refusals": 0
+    },
+    "baseline/20260726": {
+      "placesWritten": 22,
+      "creatureTicksWithMemory": 6075,
+      "andLive": 3773,
+      "andFed": 3198,
+      "andFreeToMatch": 944,
+      "jobInReach": 141,
+      "refusals": 34
+    },
+    "ruledOutHere": [
+      "«мест не запоминается вовсе» — 26 places written, more than any other baseline seed but one.",
+      "«наблюдаемость мерится величиной, которая на этой партии вырождена» — the party runs its full 2445 ticks, the memory is live for 4946 creature-ticks, and prepared/20260729 records 11 refusals on the same seed.",
+      "«слишком голодны, чтобы отказываться» — 3205 of 4946 live creature-ticks are at or above MemoryYieldsSatiety."
+    ]
+  },
+
+  "theCauseItself": {
+    "commit": "79e81ab",
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~Report_how_far_the_work_a_creature_is_offered_is_from_what_it_remembers\" --logger \"console;verbosity=detailed\"",
+    "radiusTheRuleReaches": 4,
+    "perCell": {
+      "baseline/20260726": { "offers": 50, "inReach": 13, "refusals": 34, "histogram": "d0=2, d1=1, d4=10, d6=2, d10=2, d12=3, d13=3, d14=2, d15=2, d20=3, d21=1, d22=3, d23=5, d24=4, d25=2, d26=2, d28=2, d29=1" },
+      "baseline/20260727": { "offers": 26, "inReach": 1, "refusals": 1, "histogram": "d2=1, d7=1, d8=2, d9=2, d10=1, d11=2, d12=3, d14=1, d16=1, d18=1, d19=1, d20=2, d21=1, d22=1, d23=1, d24=1, d26=1, d27=1, d28=1, d29=1" },
+      "baseline/20260728": { "offers": 28, "inReach": 3, "refusals": 3, "histogram": "d2=1, d3=1, d4=1, d9=1, d10=1, d11=6, d12=4, d13=1, d14=2, d15=3, d20=2, d21=1, d22=1, d23=1, d24=2" },
+      "baseline/20260729": { "offers": 38, "inReach": 0, "refusals": 0, "histogram": "d10=2, d11=29, d12=1, d13=1, d14=1, d15=3, d16=1" },
+      "prepared/20260726": { "offers": 30, "inReach": 1, "refusals": 1 },
+      "prepared/20260727": { "offers": 52, "inReach": 15, "refusals": 14 },
+      "prepared/20260728": { "offers": 94, "inReach": 71, "refusals": 69 },
+      "prepared/20260729": { "offers": 39, "inReach": 11, "refusals": 11 }
+    },
+    "whyThisIsTheCauseAndNotACorrelate": "inReach tracks refusals across all eight cells: 13/1/3/0 and 1/15/71/11 against 34/1/3/0 and 1/14/69/11. The one cell where inReach is zero is the one cell where refusals are zero, and it is the only such cell.",
+    "confirmedAgainstTheMatchingItself": {
+      "patch": "counters added to CollectPairs in PrototypeWorld.Matching.cs — DiagArmFired incremented where AvoidedPlace returns non-null under applyMemory, DiagLostToBestTaken where a held refusal failed the `best.Score > bestTaken` test. Behaviour untouched; reverted after measuring.",
+      "commit": "363a0dd plus the patch above",
+      "armFired": { "baseline/20260726": 52, "baseline/20260727": 1, "baseline/20260728": 5, "baseline/20260729": 0, "prepared/20260726": 40, "prepared/20260727": 85, "prepared/20260728": 166, "prepared/20260729": 46 },
+      "lostToBestTaken": { "baseline/20260726": 1, "baseline/20260727": 0, "baseline/20260728": 1, "baseline/20260729": 0, "prepared/20260726": 23, "prepared/20260727": 33, "prepared/20260728": 19, "prepared/20260729": 20 },
+      "reading": "On baseline/20260729 the memory arm — the only place in the simulation that reads a remembered place — is never reached once in a 2445-tick party. The `best.Score > bestTaken` gate of Issue #125 is not what silences baseline: it discards 1, 0, 1 and 0 refusals over the four seeds. On prepared it is the dominant filter (23 of 24, 33 of 47, 19 of 88, 20 of 31), so the two fixtures are silent for different reasons and only one of them is silent at all."
+    },
+    "theGeometryBehindIt": "The fight on baseline stands in the east corridor and the work stands in the west. On 20260729 the westernmost place any creature remembers is Кремень (16,9) t2378 — and Кремень was wounded to write it, so it spends the remaining 67 ticks of the party in a bunk. Every other place is at x >= 20: Обух (20,7) t2362, Брусок (21,7) t2368, Дёготь (21,4) t2370, Смола (22,3) t2380, Уголёк (22,6) t2366, Прель (22,6) t2433, Тишина (22,7) t2361, Мотылёк (23,8) t2361. The larder and kitchen the domain works are (13..17, 6..8). The gap is the d10 and d11 in the histogram."
+  },
+
+  "whatWasCheckedAndRefuted": {
+    "note": "Every row is a substitution applied to the tree at the named commit, built, and run through the same two reports. Numbers are refusals per seed on `baseline` unless said otherwise.",
+    "hypothesisOfTheReviewOfPR417": {
+      "claim": "«Причина — решение по торсу»: creatures who used to sit a wave out on a heavy limb now take the field, are carried off more often, and spend the window between waves in bunks instead of walking past the places they remember. Written in the body of PR #417 (risk 3) and in the docstring beside ObservabilitySeeds.",
+      "substitution": "PrototypeWorld.Combat.cs: `creature.PartInjury(BodyPart.Torso) == InjuryKind.Heavy` -> `creature.Injury == InjuryKind.Heavy` at the roll call, and the same in CanAnswerTheCall",
+      "commit": "79e81ab plus that substitution",
+      "command": "dotnet build DungeonFortress.sln -c Release && dotnet test tests/DungeonFortress.Simulation.Tests -c Release --no-build --filter \"FullyQualifiedName~A_remembered_place_changes_what_the_creature_does_next|FullyQualifiedName~Report_how_far_the_work_a_creature_is_offered_is_from_what_it_remembers\" --logger \"console;verbosity=detailed\"",
+      "result": "REFUTED. baseline 34 / 1 / 2 / 0, and 20260729 is unchanged in every figure: 38 offers, 0 in reach, 0 refusals — the same three numbers as the shipped tree.",
+      "secondRefutation": "The bunk half of the claim is refuted separately by the stage counts. Creature-ticks spent Resting while holding a live memory on baseline/20260729: 738 before the slice, 841 after. The collapse is 358 -> 0 in jobInReach, not in bunk time."
+    },
+    "candidates": [
+      { "id": "D1", "what": "torso decision at the roll call reverted to the summary wound", "commit": "79e81ab + patch", "baseline": [34, 1, 2, 0], "verdict": "does not restore 20260729" },
+      { "id": "D3", "what": "mending returned to closing every hurt part per period instead of the worst one (Stores.cs MendTheWounded)", "commit": "79e81ab + patch", "baseline": [34, 1, 2, 0], "verdict": "does not restore 20260729; the bunk hypothesis fails on its own mechanism too" },
+      { "id": "C5", "what": "stun off — HeadLightStunPeriod = HeadHeavyStunPeriod = 0", "commit": "363a0dd + patch", "baseline": [34, 1, 1, 0], "verdict": "does not restore 20260729, agreeing with the five-period sweep PR #417 ran" },
+      { "id": "C6", "what": "arm off — ArmLightMightPercent = ArmHeavyMightPercent = 100", "commit": "363a0dd + patch", "baseline": [34, 1, 2, 0], "verdict": "does not restore 20260729" },
+      { "id": "C2", "what": "readiness penalty taken from the summary Injury again instead of the torso (State.cs)", "commit": "363a0dd + patch", "baseline": [34, 4, 0, 56], "verdict": "restores 20260729 and silences 20260728 — moves the zero, does not remove it" },
+      { "id": "C4", "what": "limp off — LegLightLimpPeriod = LegHeavyLimpPeriod = 0", "commit": "363a0dd + patch", "baseline": [34, 0, 2, 43], "verdict": "restores 20260729 and silences 20260727 — moves the zero, does not remove it" }
+    ],
+    "whatTheCandidateTableMeans": "No single consequence of PR #417 owns the silence. Two of the six move the zero to another seed and four do not move it at all. That is the shape of a quantity riding on a handful of events, not of a defect with a revertible cause — and the shape is visible without any substitution at all: on the shipped tree the whole baseline column reads 13, 1, 3 and 0 offers in reach out of 50, 26, 28 and 38."
+  },
+
+  "whatTheMemoryTuningCanAndCannotDo": {
+    "command": "for each value: python edit of PrototypeTuning.cs, then dotnet build DungeonFortress.sln -c Release && dotnet test tests/DungeonFortress.Simulation.Tests -c Release --no-build --filter \"FullyQualifiedName~A_remembered_place_changes_what_the_creature_does_next\" --logger \"console;verbosity=detailed\"",
+    "commit": "363a0dd plus the counter patch",
+    "MemoryAvoidTicks": {
+      "shipped": 200,
+      "swept": { "250": [37, 1, 3, 0], "300": [158, 1, 3, 0], "350": [158, 1, 3, 0] },
+      "reading": "Time is not the constraint. Even at 350 — the whole wave interval, the bound the tuning comment says the number must stay under — baseline/20260729 fires the memory arm zero times."
+    },
+    "MemoryAvoidRadius": {
+      "shipped": 4,
+      "swept": { "5": [34, 1, 3, 0], "6": [55, 1, 3, 0], "7": [55, 8, 3, 0], "9": [64, 173, 4, 0], "11": [441, 224, 407, 131] },
+      "reading": "The first radius that restores baseline/20260729 is 11. Below it the party is silent at every value, including 9.",
+      "whatRadius11Costs": {
+        "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release",
+        "commit": "79e81ab plus MemoryAvoidRadius = 11",
+        "result": "2 failed, 379 passed, 1 skipped. The observability check goes green and two others go red: PrototypeScenarioTests.The_contract_invariants_hold_on_every_seed_of_the_matrix(seed: 20260727) and PrototypePostCombatDispersalTests.A_refused_step_after_a_fight_usually_had_a_way_round_it.",
+        "reading": "A Manhattan radius of 11 is a diamond of 265 tiles on a 28x16 map. It does not restore the mechanic, it deletes the sentence the mechanic is bounded by — «a memory may take away a place, for a while, from a creature that can afford it, and may not take away a room for a party» (PrototypeWorld.Combat.cs, AvoidedPlace). The contract disagreeing is that sentence being enforced."
+      }
+    }
+  },
+
+  "theTwoProductInvariants": {
+    "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release",
+    "commit": "79e81ab",
+    "state": "1 failed, 380 passed, 1 skipped. The only red is A_remembered_place_changes_what_the_creature_does_next(baseline) — the reproduction this branch added. Deliberately_losing_creatures_and_stock_never_scores_better and Preparation_changes_the_deterministic_party_without_direct_orders are both green.",
+    "whatHoldsThem": {
+      "mutant": "PrototypeTuning.HpRecoveryStep = 8 -> 1",
+      "commit": "79e81ab plus that substitution",
+      "command": "dotnet test tests/DungeonFortress.Simulation.Tests -c Release",
+      "result": "4 failed, 377 passed, 1 skipped. Both invariants redden: «giving up half way scored 148, keeping scored 128» and «prepared put down 6 raiders, baseline 9». Also A_wound_closes_in_a_creature_that_rests_and_eats, and the reproduction which was already red.",
+      "reading": "HpRecoveryStep still holds both, as PR #402 measured for the first and PR #409 for both. This branch has changed no behaviour, so there was nothing that could have moved the holder; the mutant is run to say so with a command rather than by assumption."
+    }
+  },
+
+  "beforeThisSliceExisted": {
+    "why": "The «after» is only half a fact without the «before»: PR #417's own body says this party lost its refusals, and it is worth knowing what it lost and whether baseline was ever robust.",
+    "commit": "9c39b0b (origin/main immediately before PR #417) with the test file of 363a0dd copied in unchanged",
+    "command": "git worktree add --detach C:/gamedev/_wt-418-scratch-pre417 9c39b0b && cp tests/DungeonFortress.Simulation.Tests/PrototypeMemoryTests.cs <scratch>/tests/DungeonFortress.Simulation.Tests/ && cd <scratch> && dotnet test tests/DungeonFortress.Simulation.Tests -c Release --filter \"FullyQualifiedName~A_remembered_place_changes_what_the_creature_does_next|FullyQualifiedName~Report_where_the_chain_from_a_written_place_to_a_refusal_stops\" --logger \"console;verbosity=detailed\"",
+    "refusals": {
+      "baselineBefore": [34, 262, 11, 29],
+      "baselineAfter": [34, 1, 3, 0],
+      "preparedBefore": [2, 2, 4, 19],
+      "preparedAfter": [1, 14, 69, 11]
+    },
+    "jobInReach": { "baselineBefore": [142, 444, 32, 358], "baselineAfter": [141, 41, 11, 0] },
+    "reading": "PR #417 did not silence one party. It took an order of magnitude off three of the four baseline parties, and 20260729 is the one that reached zero. 20260727 fell from 262 refusals to 1 and 20260728 from 11 to 3 — both are one unlucky fight away from zero themselves. The check that guards the promise is currently carried by a 1 and a 3."
+  },
+
+  "conclusion": {
+    "cause": "Reach. On baseline/20260729 the work a creature holding a live memory is offered never starts within 4 tiles of what that creature remembers: 0 of 38 offers, histogram starting at d10, mode d11=29. The memory arm in CollectPairs is never reached, 0 times in 2445 ticks.",
+    "notTheCause": "Not the torso decision (substitution leaves the party identical). Not the bunks (738 -> 841 resting creature-ticks, and reverting part-by-part mending changes nothing). Not the stun, not the arm. Not the truthfulness gate of Issue #125, which discards 0 refusals on this party. Not the hunger yield, not the age of the memory — at MemoryAvoidTicks = 350 the arm still fires zero times.",
+    "whyItIsNotRepairableInsideThisIssue": "The distance between where this fixture fights and where this fixture works is 10 to 11 tiles. The only memory-of-place number that spans it is MemoryAvoidRadius = 11, and at 11 the contract invariants and the post-combat dispersal check go red — the tuning is bounded from the other side and the bound is doing its job. Everything else that moves the party is a number PR #402 or PR #417 chose by measurement, and each of those merely relocates the zero to another seed.",
+    "outcome": "The second of the two outcomes Issue #418 names: observability is not restorable on this balance surface without a decision that is not this executor's to take. Handed to the coordinator as a fork with numbers, per the brief and record 20 of Issue #415."
+  }
+}
