@@ -354,8 +354,8 @@ public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
             "get it back: re-measure, name the new cell, and say in the PR that the old one " +
             "moved.");
 
-        File.WriteAllText(
-            Path.Combine(FindRepositoryRoot(), "evidence", "431-order.json"),
+        ArtifactFile.WriteAllText(
+            Path.Combine(FindRepositoryRoot(), ".artifacts", "evidence", "431-order.json"),
             JsonSerializer.Serialize(
                 new
                 {
@@ -489,8 +489,8 @@ public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
             })
             .ToArray();
 
-        File.WriteAllText(
-            Path.Combine(FindRepositoryRoot(), "evidence", "431-contest.json"),
+        ArtifactFile.WriteAllText(
+            Path.Combine(FindRepositoryRoot(), ".artifacts", "evidence", "431-contest.json"),
             JsonSerializer.Serialize(
                 new
                 {

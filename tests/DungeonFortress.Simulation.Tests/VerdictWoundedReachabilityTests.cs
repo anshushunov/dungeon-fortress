@@ -154,8 +154,8 @@ public sealed class VerdictWoundedReachabilityTests
                   "the slice and returns the fork to the coordinator with these numbers; " +
                   "moving a weight instead is a blocking finding at review.");
 
-        File.WriteAllText(
-            Path.Combine(root, "evidence", "431-reachability.json"),
+        ArtifactFile.WriteAllText(
+            Path.Combine(root, ".artifacts", "evidence", "431-reachability.json"),
             JsonSerializer.Serialize(report, ReportOptions) + "\n",
             new UTF8Encoding(false));
 

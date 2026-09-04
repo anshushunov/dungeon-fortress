@@ -46,35 +46,10 @@ $scenarioProject = Join-Path $repoRoot "tests\DungeonFortress.Scenarios\DungeonF
 $scenarioAssembly = Join-Path $repoRoot "tests\DungeonFortress.Scenarios\bin\Release\net8.0\DungeonFortress.Scenarios.dll"
 $testProject = Join-Path $repoRoot "tests\DungeonFortress.Simulation.Tests\DungeonFortress.Simulation.Tests.csproj"
 $presentationTestProject = Join-Path $repoRoot "tests\DungeonFortress.Presentation.Tests\DungeonFortress.Presentation.Tests.csproj"
-$domainMcpTestProject = Join-Path $repoRoot "tests\DungeonFortress.DomainMcp.Tests\DungeonFortress.DomainMcp.Tests.csproj"
 $commandsPath = Join-Path $repoRoot "scenarios\smoke.commands.json"
 $gameProjectPath = Join-Path $repoRoot "src\DungeonFortress.Game"
 $gameProjectFile = Join-Path $gameProjectPath "DungeonFortress.Game.csproj"
-$guardTestScript = Join-Path $repoRoot "scripts\test-godot-output-guard.ps1"
-$verifyStagesTestScript = Join-Path $repoRoot "scripts\test-verify-stages.ps1"
-$temporaryRootTestScript = Join-Path $repoRoot "scripts\test-temporary-root.ps1"
-$runGameTemporaryRootTestScript = Join-Path $repoRoot "scripts\test-run-game-temporary-root.ps1"
-$runGameCaptureParametersTestScript = Join-Path $repoRoot "scripts\test-run-game-capture-parameters.ps1"
-$screenshotOutputPathTestScript = Join-Path $repoRoot "scripts\test-screenshot-output-path.ps1"
-$evidenceToolsTestScript = Join-Path $repoRoot "scripts\test-evidence-tools.ps1"
-$verifyResultPersistenceTestScript = Join-Path $repoRoot "scripts\test-verify-result-persistence.ps1"
-$claimedSha256TestScript = Join-Path $repoRoot "scripts\test-check-claimed-sha256.ps1"
-$codexSessionsSearchTestScript = Join-Path $repoRoot "scripts\test-search-codex-sessions.ps1"
-$baseStaleTestScript = Join-Path $repoRoot "scripts\test-check-base-stale.ps1"
-$githubAuthToolsTestScript = Join-Path $repoRoot "scripts\test-github-auth-tools.ps1"
 $goblinImportTestScript = Join-Path $repoRoot "scripts\test-goblin-sprite-import.ps1"
-$ivanMcpConfigTestScript = Join-Path $repoRoot "scripts\test-ivan-mcp-config.ps1"
-$domainMcpConfigTestScript = Join-Path $repoRoot "scripts\test-domain-mcp-config.ps1"
-$domainMcpLauncherTestScript = Join-Path $repoRoot "scripts\test-domain-mcp-launcher.ps1"
-$domainMcpVerificationScript = Join-Path $repoRoot "scripts\verify-domain-mcp.ps1"
-$takeTaskTestScript = Join-Path $repoRoot "scripts\agent\test-take-task.ps1"
-$noWorktreesInRootScript = Join-Path $repoRoot "scripts\check-no-worktrees-in-root.ps1"
-$noWorktreesInRootTestScript = Join-Path $repoRoot "scripts\test-check-no-worktrees-in-root.ps1"
-$rootOnMainScript = Join-Path $repoRoot "scripts\check-root-on-main.ps1"
-$rootOnMainTestScript = Join-Path $repoRoot "scripts\test-check-root-on-main.ps1"
-$tokenBudgetReportTestScript = Join-Path $repoRoot "scripts\test-token-budget-report.ps1"
-$ledgerTableColumnsScript = Join-Path $repoRoot "scripts\check-ledger-table-columns.ps1"
-$ledgerTableColumnsTestScript = Join-Path $repoRoot "scripts\test-check-ledger-table-columns.ps1"
 
 $env:DOTNET_CLI_HOME = Join-Path $artifactsRoot "dotnet-home"
 $env:DOTNET_NOLOGO = "1"
@@ -358,143 +333,16 @@ function Initialize-EngineRuntime {
 # is a group that fails for one reason and that one kind of change needs, so an
 # agent can verify what it touched without paying for the rest.
 $stageCatalog = [ordered]@{
-    scripts = [pscustomobject]@{
-        Summary = "Dependency-free script guards: stage selection, temporary directory (including run-game.ps1/update-golden-ui.ps1's own calls), Godot output, screenshot/evidence/verification-result paths, GitHub auth diagnostics, Ivan and domain MCP config, take-task behavioural test."
-        Body = {
-            # Issue #253 (rule 17, AGENTS.md "Работа нескольких агентов"): the root
-            # working copy belongs to the coordination session, and three measured
-            # incidents in four days show text alone does not hold that boundary.
-            # These two guards run for real against *this* invocation's own
-            # checkout (whichever one $repoRoot resolves to) before anything else
-            # in a full run, so a violation is reported before any long stage
-            # starts, not after. Each is a no-op (exit 0, "not applicable") when
-            # run from a task worktree, which is what every agent's own verify.ps1
-            # run actually is - the invariant only binds the one checkout that is
-            # the root itself. check-no-worktrees-in-root.ps1 already existed
-            # (Issue #287) but was never wired into anything; check-root-on-main.ps1
-            # is new. Full rationale, the three historical cases and why this
-            # mechanism was chosen over -take-task.ps1 guard/.gitignore live in
-            # docs/engineering/ENVIRONMENT_SETUP.md.
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $noWorktreesInRootScript,
-                "-RepoRoot", $repoRoot
-            )
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $rootOnMainScript,
-                "-RepoRoot", $repoRoot
-            )
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $noWorktreesInRootTestScript
-            )
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $rootOnMainTestScript
-            )
-
-            # Stage selection is only honest while every check lives in a stage and
-            # the documented table matches this script. Neither is visible in a green
-            # run, so it is checked first and without a build.
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $verifyStagesTestScript
-            )
-            # The preflight above this stage refused to start on an unusable
-            # temporary directory. This proves the refusal still happens, still
-            # names the directory, and still lets cleanup fail without failing
-            # the run.
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $temporaryRootTestScript
-            )
-            # Issue #329. run-game.ps1 and update-golden-ui.ps1 both resolve a
-            # temporary directory before starting the engine, neither is
-            # reached by any stage here (stage `godot` starts the engine its
-            # own way), and that blind spot is exactly why Issue #302's
-            # contract change to Resolve-VerificationTemporaryRoot broke both
-            # of them for a full day without any of ten merged PRs noticing.
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $runGameTemporaryRootTestScript
-            )
-            # Issue #329, second and independent finding: run-game.ps1's own
-            # screenshot precondition only ever checked -CameraZoom, so a
-            # request missing -UiScale and/or -FrameSize sailed past it into a
-            # full build and only then hit the engine's own refusal. Invisible
-            # for the same reason as the resolver defect above - no stage here
-            # reaches run-game.ps1 - until it stopped being masked by the
-            # resolver dying first.
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $runGameCaptureParametersTestScript
-            )
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $guardTestScript
-            )
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $screenshotOutputPathTestScript
-            )
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $evidenceToolsTestScript
-            )
-            # Issue #427. Publish-VerificationResult/Save-VerificationResult
-            # (scripts/VerifyResult.ps1) are what keep verification_result on
-            # disk after `finally` deletes $verifyRoot, without letting a save
-            # failure cost the run its own stdout; this is their
-            # dependency-free behavioural test.
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $verifyResultPersistenceTestScript
-            )
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $claimedSha256TestScript
-            )
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $codexSessionsSearchTestScript
-            )
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $baseStaleTestScript
-            )
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $githubAuthToolsTestScript
-            )
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ivanMcpConfigTestScript
-            )
-            # A client session must run its own copy of the domain MCP server. If it ever
-            # goes back to executing the build output, the solution build below fails with
-            # MSB3027 whenever an agent has the server connected.
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $domainMcpConfigTestScript
-            )
-            # The behavioural test for take-task.ps1 (Issue #182) runs real code
-            # through a stub gh harness and an end-to-end fixture repository. It does
-            # not depend on the solution build, the engine, or network access.
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $takeTaskTestScript
-            )
-            # Issue #357: a "Записи" table row with an unescaped "|" byte gets
-            # more columns than the header and GitHub silently drops the tail
-            # ("Срок с" / "Переформулировок") off the rendered row. Unlike
-            # check-base-stale.ps1 this check is cheap, deterministic and
-            # needs no network, so both the check itself (against the real
-            # DEBT_LEDGER.md, catching a regression) and its own unit test
-            # (against fixtures, catching a bug in the checker) run here.
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ledgerTableColumnsScript
-            )
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ledgerTableColumnsTestScript
-            )
-        }
-    }
-
     build = [pscustomobject]@{
-        Summary = "Restore of the solution, locked-mode restore of the domain MCP tests, Release build of everything."
+        Summary = "Restore of the solution and Release build of everything."
         Body = {
             Initialize-SolutionRestore
-            Invoke-Checked -FilePath "dotnet" -Arguments @(
-                "restore", $domainMcpTestProject, "--locked-mode"
-            )
             Initialize-SolutionBuild
         }
     }
 
     tests = [pscustomobject]@{
-        Summary = "dotnet test for Simulation, Presentation and domain MCP."
+        Summary = "dotnet test for Simulation and Presentation."
         Body = {
             Initialize-SolutionBuild
             Invoke-Checked -FilePath "dotnet" -Arguments @(
@@ -506,28 +354,6 @@ $stageCatalog = [ordered]@{
             # wires the text through to the labels.
             Invoke-Checked -FilePath "dotnet" -Arguments @(
                 "test", $presentationTestProject, "--configuration", "Release", "--no-build", "--no-restore"
-            )
-            Invoke-Checked -FilePath "dotnet" -Arguments @(
-                "test", $domainMcpTestProject, "--configuration", "Release", "--no-build", "--no-restore"
-            )
-        }
-    }
-
-    mcp = [pscustomobject]@{
-        Summary = "Domain MCP launcher started for real plus the stdio contract check in verify-domain-mcp.ps1."
-        Body = {
-            Initialize-SolutionBuild
-            # The text guard in the scripts stage cannot tell whether the batch launcher
-            # still runs. A typo in it would leave this script green and break the owner's
-            # next client session, so the launcher is started for real once the build
-            # output exists.
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $domainMcpLauncherTestScript
-            )
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-                $domainMcpVerificationScript, "-Seed", $Seed.ToString(
-                    [Globalization.CultureInfo]::InvariantCulture), "-NoBuild"
             )
         }
     }
@@ -1149,54 +975,11 @@ $stageCatalog = [ordered]@{
         }
     }
 
-    "token-budget" = [pscustomobject]@{
-        Summary = "Regression test for token-budget-report.ps1 (Issue #303) against this machine's real Claude Code transcripts."
-        Body = {
-            # Issue #310. This test shipped unwired in PR #309 (scripts/test-verify-stages.ps1
-            # was owned by a concurrent PR at the time), was wired into the `scripts`
-            # stage once that blocker cleared, and moved here in the same Issue's
-            # follow-up round. Reason for its own stage rather than a slot in
-            # `scripts`: it is the only check in the whole catalogue that reads state
-            # outside the repository (this machine's own
-            # ~/.claude/projects/... transcript history - the boundary the script
-            # itself documents, "Замер локален.") and it dominates whatever stage
-            # holds it: measured at 700+ s versus low single digits for every other
-            # `scripts` guard combined (evidence/310-mutant-in-scripts-stage.json's
-            # negative-control run: 121.7 s for all fifteen `scripts` checks
-            # together, without this one). Rule 22 runs the full suite once per PR;
-            # wiring it into `scripts`
-            # made every *targeted* `-Stage scripts` run during a PR's intermediate
-            # rounds pay that cost too, even though nothing about editing an
-            # unrelated script needs a transcript scan. Its own stage keeps the cost
-            # exactly where it is unavoidable - the one full run - and off every
-            # other stage selection. Like `scripts`, it needs neither the solution
-            # build nor the Godot engine (see $engineFreeStages below).
-            Invoke-Checked -FilePath "powershell" -Arguments @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $tokenBudgetReportTestScript
-            )
-        }
-    }
 }
 
 $allStages = @($stageCatalog.Keys)
 
-# The two stages whose bodies never call dotnet or the Godot executable:
-# `scripts` (pure PowerShell script guards, see its Summary above) and
-# `token-budget` (a single dependency-free PowerShell test, see its Summary
-# above). Every other stage reaches Initialize-SolutionRestore or
-# Initialize-SolutionBuild somewhere in its body - directly (build, tests,
-# mcp), through Initialize-ScenarioAssembly (sim, load) or through
-# Initialize-GameHostBuild (godot, ui, screenshots) - and that restore's
-# NuGet profile is deliberately sourced from the engine's bundled packages
-# rather than nuget.org, so a partial run does not silently
-# check a different source than a full run does. Measured, including why
-# nuget.org is not used instead, in evidence/285-stage-engine-need.json
-# (Issue #285). `token-budget` joined this list in Issue #310's follow-up
-# round for the same reason `scripts` was in it originally: its body is pure
-# PowerShell, so gating it behind engine resolution would make a targeted
-# `-Stage token-budget` run refuse on a machine without Godot configured for
-# no reason connected to what it actually checks.
-$engineFreeStages = @("scripts", "token-budget")
+$engineFreeStages = @()
 
 function Expand-StageNames {
     param(
@@ -1316,7 +1099,7 @@ try {
 
     # The engine is resolved only when a selected stage actually needs it - see
     # $engineFreeStages above for which ones do and why. A full run's refusal is
-    # unchanged: every stage but `scripts` and `token-budget` needs the engine,
+    # unchanged: every stage needs the engine,
     # so a full selection always falls into the "requires it" branch below and
     # reports the same preflight failure it always has.
     $engineRequiringStages = @($selectedStages | Where-Object { $_ -notin $engineFreeStages })

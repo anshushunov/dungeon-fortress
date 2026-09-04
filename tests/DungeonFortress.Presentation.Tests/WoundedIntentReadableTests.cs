@@ -509,8 +509,8 @@ public sealed class WoundedIntentReadableTests(ITestOutputHelper output)
             },
         };
 
-        File.WriteAllText(
-            Path.Combine(PresentationFixtures.FindRepositoryRoot(), "evidence", "431-presentation.json"),
+        ArtifactFile.WriteAllText(
+            Path.Combine(PresentationFixtures.FindRepositoryRoot(), ".artifacts", "evidence", "431-presentation.json"),
             JsonSerializer.Serialize(
                 report,
                 new JsonSerializerOptions

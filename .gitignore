@@ -4,22 +4,22 @@
 !.env.example
 secrets/
 
-# Claude Code local state
+# Agent client local state
 CLAUDE.local.md
 .claude/settings.local.json
 .claude/worktrees/
 docs/superpowers/
-
-# Матрица разрешений внешнего исполнителя: решение владельца 2026-08-16, см.
-# docs/engineering/EXTERNAL_DELEGATION.md, раздел «Где лежит конфигурация»
 opencode.json
+.mcp.json
+
+# Local evidence and screenshots
+evidence/
 
 # .NET and Godot derived files
 **/bin/
 **/obj/
 **/.godot/
 *.import
-# Godot regenerates *.uid on import; see docs/engineering/ENVIRONMENT_SETUP.md
 *.uid
 .artifacts/
 src/DungeonFortress.Game/addons/godot_mcp/
