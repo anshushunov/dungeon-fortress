@@ -26,6 +26,36 @@ public sealed class PrototypeTrophyTests(ITestOutputHelper output)
         Assert.All(state.Creatures, creature => Assert.Null(creature.Weapon));
     }
 
+    [Fact]
+    public void A_downed_raider_leaves_a_weapon_named_after_it_where_it_fell()
+    {
+        var drops = 0;
+        Walk(Baseline, PrototypeTuning.DefaultSeed, (before, after) =>
+        {
+            foreach (var raider in after.Raiders.Where(raider => raider.Mode == RaiderMode.Downed))
+            {
+                var was = before.Raiders.SingleOrDefault(other => other.Id == raider.Id);
+                if (was is null || was.Mode == RaiderMode.Downed)
+                {
+                    continue;
+                }
+
+                drops++;
+                output.WriteLine($"t{after.Tick}: {raider.Name} (#{raider.Id}, might {raider.Might}) fell at ({raider.Position.X},{raider.Position.Y})");
+                var weapon = Assert.Single(after.LooseWeapons, entry => entry.Weapon.RaiderId == raider.Id);
+                Assert.Equal(raider.Position, weapon.Position);
+                Assert.Equal(raider.Name, weapon.Weapon.Name);
+                Assert.Equal(raider.Wave, weapon.Weapon.Wave);
+                Assert.Equal(
+                    Math.Max(PrototypeTuning.TrophyBonusBase, PrototypeTuning.TrophyBonusBase + raider.Might - PrototypeTuning.RaiderMightBase),
+                    weapon.Weapon.Bonus);
+                Assert.Contains(after.Creatures, creature => creature.Id == weapon.Weapon.DownedBy);
+            }
+        });
+
+        Assert.True(drops > 0, "nobody was put down in the whole party, so the rule was never exercised");
+    }
+
     // ---- helpers shared by every test of this file ----
 
     internal static PrototypeCommandLog LoadFixture(string name, ulong seed)

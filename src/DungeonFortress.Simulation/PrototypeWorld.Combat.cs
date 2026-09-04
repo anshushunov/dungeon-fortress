@@ -535,6 +535,7 @@ public sealed partial class PrototypeWorld
         {
             target.Hp = 0;
             DropRaiderMeals(target);
+            DropRaiderWeapon(target, creature);
             target.Mode = RaiderMode.Downed;
             _raidersDownedTotal++;
             // The deed the moment of truth is mostly about. ADR 0019's own
