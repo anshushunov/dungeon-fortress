@@ -1,50 +1,34 @@
 # Dungeon Fortress
 
-Рабочее название проекта.
+Игра с непрямым управлением: игрок вырубает из скалы подземное владение и
+населяет его существами, которые живут своей жизнью. Он не отдаёт приказов, а
+проектирует пространство, задаёт правила и иногда вмешивается рукой. Регулярно
+приходят те, кто хочет забрать накопленное.
 
-Dungeon Fortress — игра с непрямым управлением, строительством и развитием
-подземного владения, глубокой симуляцией его обитателей, экономикой и тактическими
-боями с RPG-элементами.
+Стек: Godot 4.7.1 .NET как хост, симуляция и представление на чистом C# без
+ссылок на движок ([ADR 0003](docs/decisions/0003-stack-for-prototypes.md),
+[ADR 0011](docs/decisions/0011-presentation-layer-without-engine.md)).
 
-Проект находится на стадии pre-production. Godot .NET и чистое C#-ядро приняты
-как стек первых прототипов ([ADR 0003](docs/decisions/0003-stack-for-prototypes.md),
-статус `Accepted`). Контракт первого вертикального прототипа зафиксирован в
-[Prototype 1 «Подготовка к набегу»](docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md).
+## Запуск
 
-## Проверка технического spike
-
-Требуются .NET SDK 8.0.423 и Godot 4.7.1 .NET. После настройки
-`GODOT4_CONSOLE` или `PATH` одна команда собирает solution, запускает тесты,
-проверяет детерминизм, выполняет нагрузочный сценарий и Godot headless smoke:
+Нужны .NET SDK 8.0.423 и Godot 4.7.1 .NET. Настройка —
+[`docs/engineering/ENVIRONMENT_SETUP.md`](docs/engineering/ENVIRONMENT_SETUP.md).
 
 ```powershell
+# Тесты без движка
+dotnet test tests\DungeonFortress.Simulation.Tests -c Release
+dotnet test tests\DungeonFortress.Presentation.Tests -c Release
+
+# Игра
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1
+
+# Полная проверка перед PR: сборка, тесты, детерминизм, Godot smoke, золотые кадры HUD
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
 ```
 
-Проверка разделена на стадии: во время итерации можно проверить только
-затронутое (`-Stage ui`, `-Stage tests,sim`, `-Skip load,screenshots`), а перед
-handoff и merge выполняется полный прогон. Список стадий печатает
-`-ListStages`, а `scope` в итоговой строке `verification_result` отличает
-частичный прогон от полного.
-
-Видимый thin host запускается отдельно:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-game.ps1
-```
-
-Точная настройка, варианты обнаружения Godot и откат описаны в
-[`docs/engineering/ENVIRONMENT_SETUP.md`](docs/engineering/ENVIRONMENT_SETUP.md).
-
 ## С чего начать
 
-- [Видение игры](docs/product/VISION.md)
-- [Контракт Prototype 1](docs/design/PROTOTYPE_01_PREPARE_FOR_RAID.md)
+- [Питч: главная идея и core gameplay](docs/product/PITCH.md)
+- [Roadmap: что сделано, что дальше](docs/product/ROADMAP.md)
 - [Карта документации](docs/README.md)
-- [Открытые вопросы](docs/OPEN_QUESTIONS.md)
-- [Процесс разработки агентами](docs/engineering/AGENT_WORKFLOW.md)
-- [Работа с несколькими агентами](docs/engineering/MULTI_AGENT_WORKFLOW.md)
-- [Сравнение технологического стека](docs/engineering/STACK_EVALUATION.md)
-- [Технологический радар](docs/engineering/TECH_RADAR.md)
-- [Настройка окружения](docs/engineering/ENVIRONMENT_SETUP.md)
-- [Журнал архитектурных и продуктовых решений](docs/decisions/README.md)
+- [Правила работы в репозитории](AGENTS.md)

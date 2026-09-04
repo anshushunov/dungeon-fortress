@@ -235,40 +235,6 @@ public sealed class PrototypeDomainFearTests
             };
         }
 
-        File.WriteAllText(
-            Path.Combine(root, "evidence", "431-domain-fear.json"),
-            JsonSerializer.Serialize(
-                new
-                {
-                    schemaVersion = 1,
-                    issue = "#431",
-                    checkpoint = "1 — производная величина «страх перед владением»",
-                    command =
-                        "dotnet test tests/DungeonFortress.Simulation.Tests " +
-                        "--filter FullyQualifiedName~PrototypeDomainFearTests",
-                    what =
-                        "The fade curve of the derived magnitude on prepared/20260726 after a " +
-                        "single punishment, sampled every T.loyalty_domain_fear_fade_period " +
-                        "ticks, with the combat fear of the same creature beside it. The two " +
-                        "columns are what check 3 of §3.3 compares: the derived magnitude walks " +
-                        "to nought on its own clock while `fear` does whatever the fight makes " +
-                        "it do.",
-                    fixture = "prepared",
-                    seed = 20260726,
-                    subject,
-                    verdictTick = atTick,
-                    verdict = "punish",
-                    loyaltyVerdictPunishFear = PrototypeTuning.LoyaltyVerdictPunishFear,
-                    loyaltyDomainFearFadePeriod = PrototypeTuning.LoyaltyDomainFearFadePeriod,
-                    termOfTheFade = term,
-                    samples = samples.Values,
-                },
-                new JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-                }) + "\n",
-            new UTF8Encoding(false));
 
         Assert.NotEmpty(samples);
     }

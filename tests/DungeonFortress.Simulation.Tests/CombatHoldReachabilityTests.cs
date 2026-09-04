@@ -139,13 +139,13 @@ public sealed class CombatHoldReachabilityTests
                       $"threshold ({RemovedHoldThreshold}) on any measured cell. The removal stands " +
                       "confirmed against the merged mechanic rather than the one it was decided on.");
 
-        var destinationPath = Path.Combine(repositoryRoot, "evidence", "403-reachability.json");
+        var destinationPath = Path.Combine(repositoryRoot, ".artifacts", "evidence", "403-reachability.json");
         var options = new JsonSerializerOptions
         {
             WriteIndented = true,
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         };
-        File.WriteAllText(destinationPath, JsonSerializer.Serialize(report, options) + "\n", new UTF8Encoding(false));
+        ArtifactFile.WriteAllText(destinationPath, JsonSerializer.Serialize(report, options) + "\n", new UTF8Encoding(false));
 
         // This is the guard the mutant in evidence/403-mutants.json exercises:
         // a substitution that moves CombatJoinSatiety has to move this number,

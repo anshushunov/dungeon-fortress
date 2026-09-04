@@ -35,8 +35,8 @@ public sealed class InjuryMarkTests(ITestOutputHelper output)
     private static JsonElement Measurement { get; } = JsonDocument
         .Parse(File.ReadAllText(Path.Combine(
             PresentationFixtures.FindRepositoryRoot(),
-            "evidence",
-            "420-part-anchors.json")))
+            "tests", "DungeonFortress.Presentation.Tests", "Fixtures",
+            "part-anchors.json")))
         .RootElement;
 
     private static double[] Numbers(string rigPart, string field) =>

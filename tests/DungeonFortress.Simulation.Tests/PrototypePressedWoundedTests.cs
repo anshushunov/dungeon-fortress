@@ -256,8 +256,8 @@ public sealed class PrototypePressedWoundedTests(ITestOutputHelper output)
         var closures = FindClosures();
         var mendings = FindMendings();
 
-        File.WriteAllText(
-            Path.Combine(FindRepositoryRoot(), "evidence", "431-loop.json"),
+        ArtifactFile.WriteAllText(
+            Path.Combine(FindRepositoryRoot(), ".artifacts", "evidence", "431-loop.json"),
             JsonSerializer.Serialize(
                 new
                 {
