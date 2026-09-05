@@ -123,7 +123,11 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     // nearest one that carries the ratio back on its own — four more
     // detoured refused steps and none yieldable, 26 against 15, a ratio of
     // 1.73 — without touching the floor or either of the two counters this
-    // file already asserts must exist.
+    // file already asserts must exist. `MatrixSeeds` is fixture-agnostic
+    // (`Fixtures.SelectMany(_ => MatrixSeeds, ...)` below), so
+    // `baseline/20260731` joined the matrix in the same stroke; it measures
+    // detoured=0, yieldable=0, so it is not what moved the ratio, but the
+    // delta this seed adds to the matrix is of two parties, not one.
     private static readonly ulong[] MatrixSeeds =
         [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL, 20_260_730UL, 20_260_731UL];
 
@@ -336,10 +340,19 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     /// two.</para>
     ///
     /// <para><b>One and a half is a floor that was chosen, not a number that was
-    /// derived.</b> The measured ratio is 1.86; the floor sits under it with room,
-    /// and it sits above one, which is what the conclusion actually needs — a way
-    /// round reaching more refused steps than a yield could. Moving it down from
-    /// two was forced (the corrected 1.86 would have reddened a check written for
+    /// derived.</b> The measured ratio was 1.86 when the floor was set; the
+    /// trophy slice's fix rounds have moved it twice since, each time by
+    /// shifting who fights and who yields rather than by anything this file
+    /// itself does — first work «забрать» giving the window after a fight
+    /// something to do, then paying a circulating blade's grudge only once —
+    /// and each time the seed sample was widened rather than the floor
+    /// lowered. Measured now, on the six seeds <see cref="MatrixSeeds"/>
+    /// holds: 1.73 (26 detoured against 15 yieldable); on the original five,
+    /// before the sixth seed's addition, it had fallen to 1.47. The floor
+    /// still sits under the current measurement with room, and it sits above
+    /// one, which is what the conclusion actually needs — a way round
+    /// reaching more refused steps than a yield could. Moving it down from two
+    /// was forced (the corrected 1.86 would have reddened a check written for
     /// the flattered 2.23) and is legitimate for the same reason, but it is a
     /// choice and is named as one.</para>
     ///
@@ -396,8 +409,9 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// The six parties, measured once and shared: a party takes about a second to
-    /// walk and three assertions over the same six would otherwise pay for it
+    /// The twelve parties (two fixtures times <see cref="MatrixSeeds"/>'s six
+    /// seeds), measured once and shared: a party takes about a second to walk
+    /// and three assertions over the same twelve would otherwise pay for it
     /// three times.
     /// </summary>
     private static IReadOnlyList<PartyMeasurement> Matrix => MatrixMeasurements.Value;

@@ -61,25 +61,46 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
     /// (review finding 1 of fix round 3, 2026-09-05).</b> Freeing a weapon off
     /// a fallen or fled holder moves who is standing where and how hard the
     /// line hits, which moves every raider's wounds and every returning
-    /// raider's road in turn. After that shift the first seed of the range
-    /// (20260726) still brings back raider #18 remembering the larder tile —
-    /// but this body was put down at (23,4) before it ever got near the larder,
-    /// walking the direct approach the whole way (<see cref="RoadNotMemoryEndedIt"/>
-    /// says so), the same shape
+    /// raider's road in turn. On the tree fix round 3 measured this on, the
+    /// first seed of the range (20260726) brought back raider #18 remembering
+    /// the larder tile but put down at (23,4) before it ever got near it,
+    /// walking the direct approach the whole way — combat, not memory, ended
+    /// it, the same shape
     /// <see cref="A_returning_raider_walks_round_the_place_it_was_hit_hardest"/>
     /// already tracks apart from the rule under a name of its own
-    /// (<c>putDownOnTheWayIn</c>): not arriving because combat ended the
-    /// raider on a route memory never touched is not the same fact as not
-    /// arriving because memory walled the road off, and only the second is
-    /// what this bound is about. <see cref="ObjectiveWitnesses"/> is the one
+    /// (<c>putDownOnTheWayIn</c>). <see cref="ObjectiveWitnesses"/> is the one
     /// filter both this search and the Fact below read, so a seed accepted
     /// here can never disagree with what the Fact then asserts (review
     /// finding 2) — the search asks for at least one witness surviving that
     /// filter, and the Fact quantifies over exactly that same, already-culled
-    /// population rather than the raw, unfiltered one. A scan of the
-    /// unchanged range with the filter applied lands on 20260740 (raider #21,
-    /// Escaped, visited), still inside <see cref="SearchSeeds"/> — the range
-    /// was not widened.</para>
+    /// population rather than the raw, unfiltered one.</para>
+    ///
+    /// <para><b>The doorstep, not the direct road, is what a raider fearing
+    /// its own objective can be diverted from (review finding of fix round 4,
+    /// 2026-09-05).</b> <see cref="RoadNotMemoryEndedIt"/>'s road-shape
+    /// comparison says nothing when the feared tile is the objective itself —
+    /// nothing can be routed round its own destination, so a raider cut down
+    /// approaching normally and one refused the very last step onto the
+    /// objective by memory of it, then left lingering next to it until
+    /// combat found it there, looked identical to that comparison. The second
+    /// is exactly the violation this bound exists to catch, so the exclusion
+    /// for this one case reads whether the raider ever reached a tile
+    /// adjacent to the objective (Manhattan distance 1) instead: one that
+    /// never did was stopped by something with no business at the doorstep at
+    /// all, and is excluded; one that reached the doorstep and still failed
+    /// to step in is kept.</para>
+    ///
+    /// <para><b>Where the search lands, after both fixes and after finding 3's
+    /// own production change (paying a circulating blade's debt only once,
+    /// same fix round).</b> That change moved combat pacing again, and on the
+    /// current tree the first seed of the range (20260726) no longer needs
+    /// either exclusion at all: raider #18 (Сиплый) now reaches the larder and
+    /// escapes cleanly (<c>Mode.Escaped</c>, larder tile visited), so
+    /// <see cref="ObjectiveSeedSearch"/> returns 20260726 itself. The doorstep
+    /// rule is not exercised by this particular witness — it exists for
+    /// whichever future shift next produces the shape it was written for,
+    /// the same way the cause-based exclusion above sat unexercised on this
+    /// exact seed until Task 5 gave it a subject.</para>
     /// </summary>
     private static ulong ObjectiveSeed => ObjectiveSeedSearch.Value;
 
@@ -140,11 +161,22 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
         [new(0, -1), new(1, 0), new(0, 1), new(-1, 0)];
 
     /// <summary>
-    /// A tile of the authored layout a body can stand on — everything but rock
-    /// (<c>#</c>) and the quarry face it is spelled differently for (<c>d</c>),
-    /// the same rule <c>PrototypeMap.IsPassable</c> states over the live map.
-    /// Read off <see cref="PrototypeLayout"/> rather than the internal map for
-    /// the same reason the two tiles above are.
+    /// A tile of the <b>authored</b> layout a body can stand on — everything
+    /// but rock (<c>#</c>) and the quarry face it is spelled differently for
+    /// (<c>d</c>). This is not quite <c>PrototypeMap.IsPassable</c>'s own rule
+    /// over the live map: the live map also treats a dug-out tile as passable,
+    /// and this reads the fixed picture in <see cref="PrototypeLayout"/>
+    /// instead of the internal map, so a tile excavated mid-party never joins
+    /// the approach here. That divergence is fail-loud rather than silent: a
+    /// raider that actually walks onto newly-dug rock falls outside every
+    /// shortest-approach set this file computes and is reported as stranded
+    /// (or, for the objective's own doorstep branch, as combat-ended) rather
+    /// than correctly excused — a false positive a reader would see and could
+    /// investigate, not a false negative that hides a real stranding. It is
+    /// acceptable for what this file measures because raiders do not path
+    /// through a domain's own dig sites in the shipped fixtures the returning-raider
+    /// slice is read on; if that ever changes, this rule needs the live map's
+    /// excavated tiles added to it, not silent trust that it already has them.
     /// </summary>
     private static bool IsPassableTile(GridPoint point)
     {
@@ -225,22 +257,39 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
     /// route shows the road, not its memory, is what ended it there. That road
     /// is "the shortest approach the map gives you, with the remembered tile
     /// as the only obstacle" — computed once by <see cref="ShortestApproachTiles"/>
-    /// with <paramref name="feared"/> blocked, or with nothing blocked at all
-    /// when <paramref name="feared"/> equals <paramref name="objective"/>
-    /// itself, since nothing can be routed round its own destination (the case
-    /// <see cref="ObjectiveSeedSearch"/> and
-    /// <see cref="A_memory_takes_away_a_road_and_never_the_objective"/> both
-    /// read, where the tile remembered <b>is</b> the objective). A raider whose
-    /// visited tiles never leave that approach was walking it correctly when
-    /// something else — combat, almost always — cut it down; one whose visited
-    /// tiles leave it was not, and stays counted wherever this returns
-    /// <c>false</c>.
+    /// with <paramref name="feared"/> blocked. A raider whose visited tiles
+    /// never leave that approach was walking it correctly when something else
+    /// — combat, almost always — cut it down; one whose visited tiles leave it
+    /// was not, and stays counted wherever this returns <c>false</c>.
+    ///
+    /// <para><b>When <paramref name="feared"/> equals <paramref
+    /// name="objective"/> itself (review finding of fix round 4, 2026-09-05),
+    /// the road-shape comparison above says nothing at all.</b> Nothing can be
+    /// routed round its own destination, so the "obstacle blocked" approach and
+    /// the plain direct one are the same set — a raider cut down while
+    /// approaching normally and a raider refused the very last step onto the
+    /// objective by memory of that objective, then left lingering next to it
+    /// until combat found it there, walk identical routes by that comparison,
+    /// and the second is exactly the violation
+    /// <see cref="A_memory_takes_away_a_road_and_never_the_objective"/> exists
+    /// to catch. The doorstep is the evidence instead: memory's only way to
+    /// divert a raider from its own objective is to stop it crossing the
+    /// threshold, so a raider that never even reached a tile adjacent to the
+    /// objective (Manhattan distance 1) was stopped by something with no
+    /// business at the objective's doorstep at all — usually combat, well
+    /// short of it — and is excluded; one that reached the doorstep and still
+    /// failed to step in is kept, whatever the direct-route comparison would
+    /// have said.</para>
     ///
     /// <para>The same helper backs three call sites — the `stranded` bucket
     /// below, <see cref="ObjectiveSeedSearch"/>'s candidate filter and the
     /// `atTheObjective` filter of the Fact that search feeds — so a seed the
     /// search accepts can never disagree with what the Fact then asserts
-    /// (review finding 2): both read the same cause on the same route.</para>
+    /// (review finding 2): both read the same cause on the same route. Only
+    /// the two call sites that ever pass <paramref name="feared"/> equal to
+    /// <paramref name="objective"/> (the search and its Fact) reach the
+    /// doorstep branch; `stranded` never does, because its own <c>avoiders</c>
+    /// population is filtered to remembered tiles other than the objective.</para>
     /// </summary>
     private static bool RoadNotMemoryEndedIt(
         RaiderMode mode,
@@ -253,11 +302,19 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
             return false;
         }
 
+        if (feared == objective)
+        {
+            return !visited.Any(tile => Manhattan(tile, objective) == 1);
+        }
+
         var direct = ShortestApproachTiles(Gate, objective, null);
-        var obstacle = feared != objective && direct.Contains(feared) ? feared : (GridPoint?)null;
+        var obstacle = direct.Contains(feared) ? feared : (GridPoint?)null;
         var approach = ShortestApproachTiles(Gate, objective, obstacle);
         return visited.All(approach.Contains);
     }
+
+    private static int Manhattan(GridPoint a, GridPoint b) =>
+        Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y);
 
     [Fact]
     public void Every_name_a_party_can_need_fits_in_the_pool()
