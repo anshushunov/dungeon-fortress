@@ -293,15 +293,37 @@ public static class HudText
     /// </para>
     ///
     /// <para>
-    /// Four levels, and each answers a different question a player asks about a
+    /// Five levels, and each answers a different question a player asks about a
     /// creature:
     /// </para>
     ///
     /// <list type="number">
-    /// <item><b>3 — how what happened changed what it does.</b> A refusal by
+    /// <item><b>4 — how what happened changed what it does.</b> A refusal by
     /// memory of place is the only decision in the journal that is caused by the
     /// creature's own history, and it is the sentence the whole slice exists for
-    /// ("…и как это изменило его следующее решение"). Nothing outranks it;</item>
+    /// ("…и как это изменило его следующее решение"). Nothing outranks it, and
+    /// since the trophy slice's Task 5 fix round that sentence is enforced
+    /// rather than merely written: level 3 grew crowded enough — a verdict, a
+    /// grudge answered either way, a contest decided, a blade taken or lost, all
+    /// distinct reason codes and each its own line under the one-line-per-code
+    /// rule below — that a long enough career could carry four of those more
+    /// recently than its last refusal by memory and lose the one sentence this
+    /// panel exists for. Measured on <c>baseline/20260728</c>: Обух refused by
+    /// memory 9 times over 455 entries and its panel showed a grudge, a blade
+    /// taken, an unanswered verdict and a blade lost instead — four different
+    /// level-3 codes, every one of them more recent. A shared level was a peer
+    /// relationship the day <c>combat_refused_grudge</c> joined it (Issue #312)
+    /// and stayed one through the trophy slice's own addition of
+    /// <c>trophy_taken</c>/<c>trophy_lost</c>; it stopped being one only once
+    /// there were enough peers for four of them to outrun the code the level was
+    /// named for. This level exists for that one code and nothing else joins
+    /// it;</item>
+    /// <item><b>3 — a verdict, or a grudge, or a trophy.</b> A reward, a
+    /// punishment, a grudge answered by standing or refusing to, a contest
+    /// decided by fear or benefit, a blade taken or a blade lost — every one of
+    /// them the past changing what a creature does next, except that here the
+    /// past is something the player did or something two creatures fought over
+    /// rather than a place the creature itself flinches from;</item>
     /// <item><b>2 — what the wave cost it.</b> Its nerve, its footing, its
     /// health: broke and ran, was put down, was carried off, is mending, is
     /// whole again. This is the "что с ним произошло" half of the same
@@ -334,20 +356,39 @@ public static class HudText
     /// </summary>
     public static int StoryWeight(string reasonCode) => reasonCode switch
     {
+        // Level 4, alone (trophy slice, Task 5 fix round). A refusal by memory
+        // of place is the sentence the whole slice exists for and used to share
+        // level 3 with everything below — a peer relationship that held from
+        // Issue #312 through the trophy slice's own `trophy_taken`/`trophy_lost`
+        // addition, right up until there were enough peers, each its own line
+        // under the one-line-per-code rule, for four of them to be newer than a
+        // creature's last refusal and push it off a four-line panel entirely.
+        // Measured on baseline/20260728: Обух refused by memory 9 times and its
+        // panel carried a grudge, a blade taken, an unanswered verdict and a
+        // blade lost instead of any of them — see `CreatureStoryTests`'s own
+        // long-run guard for the count. Splitting the level is the narrowest
+        // fix that keeps the promise literally rather than making it a
+        // probability: this code and no other sits here, so it can never again
+        // be outrun by the size of level 3. This restores the original intent
+        // of "Nothing outranks it" to something literally true again rather
+        // than a sentence a big enough level 3 could quietly falsify, and it
+        // is the same promise Issue #418 named on the owner's own party:
+        // memory of place must never go silent on a panel he is looking at.
+        "refused_place_of_panic" or "refused_place_of_wound" => 4,
+
         // Level 3 also holds everything the player's own verdict caused
         // (Issue #312). A verdict, and the two behaviours a grudge is answered
-        // with, are the same kind of fact as a refusal by memory of place — the
-        // creature's past changing what it does next — except that here the past
-        // is something the player did, which is the whole claim of slice 3.
+        // with, are the same kind of fact as a refusal by memory of place used
+        // to be ranked with — the creature's past changing what it does next —
+        // except that here the past is something the player did, which is the
+        // whole claim of slice 3.
         // The contest of the wounded joins them (Issue #431). Both codes are the
         // same kind of fact for the same reason `combat_refused_grudge` is: what
         // has already happened to a creature — a wound, and what the player said
         // about it — deciding what it does next. Ranking them level 1 with
         // `combat_joined` would put the decision of the slice below the fact of
-        // being in the line, which is the ranking the feed already refuses for a
-        // refusal by memory of place.
-        "refused_place_of_panic" or "refused_place_of_wound"
-            or "verdict_rewarded" or "verdict_punished"
+        // being in the line.
+        "verdict_rewarded" or "verdict_punished"
             or "verdict_punished_without_fault" or "verdict_ignored"
             or "combat_refused_grudge"
             or "combat_spared_wound" or "combat_pressed_wound"

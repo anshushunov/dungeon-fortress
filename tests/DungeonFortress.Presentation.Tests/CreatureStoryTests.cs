@@ -324,6 +324,48 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// Regression for the trophy slice's Task 5 fix round: level 3 grew a peer
+    /// for every one of <c>verdict_rewarded</c>/<c>verdict_punished</c>/
+    /// <c>verdict_punished_without_fault</c>/<c>verdict_ignored</c>/
+    /// <c>combat_refused_grudge</c>/<c>combat_spared_wound</c>/
+    /// <c>combat_pressed_wound</c>/<c>trophy_taken</c>/<c>trophy_lost</c> — nine
+    /// distinct reason codes, each its own line under
+    /// <see cref="HudText.StorySelection"/>'s one-line-per-code rule — and a
+    /// creature whose last refusal by memory was older than four of them lost
+    /// the one sentence <see cref="HudText.StoryWeight"/>'s own doc-comment
+    /// says nothing outranks (<c>baseline/20260728</c>, Обух, measured by
+    /// <see cref="Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel"/>).
+    /// The fix split memory of place into its own top level rather than
+    /// widening the four-line budget or thinning level 3, so the guard here is
+    /// exactly that split: the two memory codes outrank every one of the nine
+    /// level-3 peers, named rather than inferred from a number that could
+    /// silently drift back to 3 on either side.
+    /// </summary>
+    [Fact]
+    public void A_refusal_by_memory_outranks_every_peer_of_the_level_it_used_to_share()
+    {
+        var memoryCodes = new[] { "refused_place_of_panic", "refused_place_of_wound" };
+        var formerPeers = new[]
+        {
+            "verdict_rewarded", "verdict_punished", "verdict_punished_without_fault",
+            "verdict_ignored", "combat_refused_grudge", "combat_spared_wound",
+            "combat_pressed_wound", "trophy_taken", "trophy_lost",
+        };
+
+        foreach (var memoryCode in memoryCodes)
+        {
+            foreach (var peer in formerPeers)
+            {
+                Assert.True(
+                    HudText.StoryWeight(memoryCode) > HudText.StoryWeight(peer),
+                    $"`{memoryCode}` (weight {HudText.StoryWeight(memoryCode)}) no longer outranks " +
+                    $"`{peer}` (weight {HudText.StoryWeight(peer)}). A refusal by memory of place is " +
+                    "the sentence the whole slice exists for; nothing may share its level again.");
+            }
+        }
+    }
+
+    /// <summary>
     /// The bound, and the fact that the panel says what it is hiding — <b>both
     /// how much and of what kind</b>.
     ///
