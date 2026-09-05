@@ -50,4 +50,26 @@ public sealed class TrophyReadoutTests
         Assert.Contains("Кремень carries the blade", EventNarration.Sentence("trophy_lost", details, null, null, state), StringComparison.Ordinal);
         Assert.Contains($"raider {raider.Id}", EventNarration.Sentence("trophy_taken", details, JobKind.Claim, null), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void The_mark_shows_on_a_holder_and_on_nobody_else()
+    {
+        var state = Party();
+        var armed = state.Creatures.First() with { Weapon = new PrototypeWeaponSnapshot("Крюк", 40, 2, 1, 5) };
+        var downed = armed with { Mode = CreatureMode.Downed };
+        var unarmed = state.Creatures.First() with { Weapon = null };
+
+        Assert.NotNull(TrophyMarks.Of(armed));
+        Assert.Null(TrophyMarks.Of(downed));
+        Assert.Null(TrophyMarks.Of(unarmed));
+        Assert.Equal(TrophyMarks.Color, TrophyMarks.Of(armed)!.Value.Color);
+    }
+
+    [Fact]
+    public void The_mark_is_declared_in_the_draw_order()
+    {
+        var routine = WorldDrawOrder.Find("DrawTrophyMark")!;
+        Assert.Equal(WorldDrawPass.Informational, routine.Pass);
+        Assert.Equal(OverlayMark.BodyState, routine.Mark);
+    }
 }

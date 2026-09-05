@@ -563,6 +563,7 @@ public partial class Main
             ScaleWorld(2.25f),
             CreatureStateColor(creature));
         DrawInjuryMarks(center, creature, new BodyRef(BodyKind.Creature, creature.Id));
+        DrawTrophyMark(center, creature, new BodyRef(BodyKind.Creature, creature.Id));
 
         // The ring round the body the inspector is pointed at. Whether it is drawn
         // at all, and every number in it, is WorldSelectionMark's answer; the
@@ -689,6 +690,32 @@ public partial class Main
             DrawCircle(at, radius, new Color(InjuryMarks.RimColor), false, rim);
         }
 
+        ClearBodyPose();
+    }
+
+    /// <summary>
+    /// The trophy mark itself, beside the near arm (docs/design/TROPHY_WEAPON.md
+    /// §5). Same shape as <see cref="DrawInjuryMarks"/>: pushed through the
+    /// body's own pose, every number taken from <see cref="TrophyMarks"/>, and
+    /// this routine only multiplies by the tile scale and calls the engine.
+    /// </summary>
+    private void DrawTrophyMark(
+        Vector2 center,
+        PrototypeCreatureSnapshot creature,
+        BodyRef body)
+    {
+        if (TrophyMarks.Of(creature) is not { } mark)
+        {
+            return;
+        }
+
+        PushBodyPose(center, body);
+        var radius = ScaleWorld((float)TrophyMarks.RadiusRef);
+        var rim = ScaleWorld((float)TrophyMarks.RimWidthRef);
+        var at = BodyLocalCenter() +
+            ScaleWorld((float)mark.OffsetRef.X, (float)mark.OffsetRef.Y);
+        DrawCircle(at, radius, new Color(mark.Color));
+        DrawCircle(at, radius, new Color(TrophyMarks.RimColor), false, rim);
         ClearBodyPose();
     }
 
