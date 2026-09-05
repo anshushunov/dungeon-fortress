@@ -184,9 +184,12 @@ public sealed class PrototypeSnapshotShapeTests
         "$.labor -> buildTicks, digTicks, drillTicks, eatTicks, foodWorkPercent, foodWorkTicks, idleTicks, musterTicks, postCapacityTicks, postOccupancyPercent, postOccupiedTicks, restTicks, stoneHaulTicks, totalCreatureTicks, watchTicks",
         "$.looseItems[] -> position, quantity, resource",
         // docs/design/TROPHY_WEAPON.md, Task 2: the array stopped being always
-        // empty once a downed raider drops its weapon, so a sample walks into
-        // an element of it for the first time. Additive: the section itself
-        // was already recorded in Task 1, only its own composition was not.
+        // empty once a downed raider drops its weapon, so a sample walks into an
+        // element of it for the first time. Additive, and the two lines below are
+        // both new here: the walker records only the elements it actually visits,
+        // so while `looseWeapons` was empty in every sample there was nothing to
+        // record about its elements at all. What Task 1 recorded is the key on the
+        // `$` line above — that the section exists — and nothing beneath it.
         "$.looseWeapons[] -> position, weapon",
         "$.looseWeapons[].weapon -> bonus, downedBy, name, raiderId, taken, wave",
         "$.map -> buildFloorTiles, builtPostTiles, diggableTiles, excavatedTiles, rockTiles, stockpileFloorTiles",

@@ -227,9 +227,22 @@ public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// Criterion 13 asked of the one piece of state the three flags do not
+    /// <b>What this check asserts is an invariant, and the scene in its old name
+    /// is only observed.</b> Asserted, over every creature of every tick of every
+    /// party of the class matrix: nothing is ever in
+    /// <see cref="CreatureMode.Eating"/> without a meal reserved. Observed and
+    /// merely counted to <c>output</c>: a creature spared while it was literally
+    /// eating — the witness the check was originally written around. The matrix
+    /// need not produce one, and on this branch it does not; where it does, that
+    /// creature's own two behaviours are hard assertions again (it leaves
+    /// <c>Eating</c> at once and reaches <see cref="CreatureMode.Resting"/> before
+    /// the party ends). The name says both halves, because the old one named the
+    /// half that is not asserted and a green run therefore promised more than it
+    /// had checked.
+    ///
+    /// <para>Criterion 13 asked of the one piece of state the three flags do not
     /// describe — <b>the mode</b> — and of the place the creature is most likely
-    /// to be standing in when the roll call reaches it.
+    /// to be standing in when the roll call reaches it.</para>
     ///
     /// <para>A mustering creature that needs feeding is walked to the larder and
     /// put into <see cref="CreatureMode.Eating"/> by <c>ActMuster</c>, which gives
@@ -282,7 +295,7 @@ public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
     /// check going red for want of one.</para>
     /// </summary>
     [Fact]
-    public void A_creature_spared_while_it_is_eating_is_taken_out_of_the_meal_as_well()
+    public void No_creature_is_ever_eating_without_a_meal_reserved_and_a_spared_eater_lies_down()
     {
         var scenes = 0;
         foreach (var fixtureName in Fixtures)
@@ -392,19 +405,29 @@ public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
     /// because the witness proves the order is exercised and the class proves it
     /// holds everywhere.</para>
     ///
-    /// <para><b>The witness is not in the slice's matrix, and that is measured
-    /// rather than assumed.</b> Over the six parties of the matrix the roll call
-    /// turns 19 creatures away as unreachable, 10 of them carrying a wound, and
-    /// <b>none</b> of those ten would have spared itself: a wound light enough to
+    /// <para><b>Whether the witness is in the slice's own matrix is measured
+    /// rather than assumed, and the answer has changed.</b> When the witness cell
+    /// was chosen the matrix was six parties, and over them the roll call turned
+    /// 19 creatures away as unreachable, 10 of them carrying a wound, with
+    /// <b>none</b> of those ten past the sparing line: a wound light enough to
     /// leave a creature at work far from the fight is usually light enough for the
-    /// pressing side to win. So the coincidence was searched for — both fixtures
-    /// over seeds 20260710–20260760, 102 parties — and it exists twice, both times
-    /// on the same creature: <c>baseline/20260716</c> t2350 and
+    /// pressing side to win. The matrix is <b>ten</b> parties now (two fixtures
+    /// times the five seeds of <see cref="MatrixSeeds"/>), and measured on it the
+    /// roll call turns <b>48</b> creatures away as unreachable, <b>22</b> of them
+    /// carrying a wound, of which <b>4</b> would have spared themselves. So the
+    /// assertion below is no longer without a subject if the extra cell is taken
+    /// away — but the cell stays, because it is the one witness that has been
+    /// traced by hand and named, and because a check whose subject depends on the
+    /// balance of ten parties is the failure mode this cell was introduced
+    /// against.</para>
+    ///
+    /// <para>The cell was found by search — both fixtures over seeds
+    /// 20260710–20260760, 102 parties — where the coincidence existed twice, both
+    /// times on the same creature: <c>baseline/20260716</c> t2350 and
     /// <c>baseline/20260738</c> t2370, Прель (#6), five points of severity against
     /// grit 4. One of them is named here as a single extra party. It is a
     /// <b>witness cell</b> and not a widened matrix: every other check in this file
-    /// still reads the matrix seeds, and this one party exists because
-    /// without it the assertion below has no subject.</para>
+    /// still reads the matrix seeds.</para>
     ///
     /// <para><b>The cell moved once, and the search was taken again rather than
     /// widened</b> (docs/design/TROPHY_WEAPON.md). Work «забрать» changes what
@@ -593,7 +616,8 @@ public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// The six parties of the matrix plus the one named witness cell of the order
+    /// The ten parties of the matrix — two fixtures times the five seeds of
+    /// <see cref="MatrixSeeds"/> — plus the one named witness cell of the order
     /// check. Kept apart from <see cref="EveryParty"/> on purpose: everything
     /// about the contest itself is measured on the matrix and nowhere else, and
     /// this list exists for exactly one assertion.

@@ -269,17 +269,31 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
     /// the plain direct one are the same set — a raider cut down while
     /// approaching normally and a raider refused the very last step onto the
     /// objective by memory of that objective, then left lingering next to it
-    /// until combat found it there, walk identical routes by that comparison,
-    /// and the second is exactly the violation
-    /// <see cref="A_memory_takes_away_a_road_and_never_the_objective"/> exists
-    /// to catch. The doorstep is the evidence instead: memory's only way to
-    /// divert a raider from its own objective is to stop it crossing the
-    /// threshold, so a raider that never even reached a tile adjacent to the
-    /// objective (Manhattan distance 1) was stopped by something with no
-    /// business at the objective's doorstep at all — usually combat, well
-    /// short of it — and is excluded; one that reached the doorstep and still
-    /// failed to step in is kept, whatever the direct-route comparison would
-    /// have said.</para>
+    /// until combat found it there, walk identical routes by that comparison.
+    /// The doorstep is the evidence instead: a raider that never even reached a
+    /// tile adjacent to the objective (Manhattan distance 1) was stopped well
+    /// short of it — usually by combat — and is excluded; one that reached the
+    /// doorstep and still failed to step in is kept, whatever the direct-route
+    /// comparison would have said.</para>
+    ///
+    /// <para><b>The scene this branch discriminates cannot occur under the
+    /// production code as it stands, and it is kept deliberately.</b>
+    /// <c>PrototypeWorld.RaiderBlockedTiles</c> blocks a remembered tile only
+    /// while <c>place.Place != target</c>, so memory can never wall a raider out
+    /// of its own objective: «a memory takes away a road, never the objective»
+    /// is enforced there and not merely asserted here. The «reached the
+    /// doorstep and was still refused the last step by memory» case therefore
+    /// has no way to arise, and under today's rule the only raiders this branch
+    /// excludes are the ones that never reached the doorstep at all — which is
+    /// the same reading the sibling clause states in
+    /// <see cref="A_returning_raider_walks_round_the_place_it_was_hit_hardest"/>
+    /// («not arriving has two shapes … the domain putting it down on a route
+    /// memory never touched»). The branch stays because it is what makes the
+    /// Fact independent of that production rule: relax
+    /// <c>RaiderBlockedTiles</c> so that a remembered objective is blocked, and
+    /// a raider stopped on the doorstep starts being counted instead of quietly
+    /// passing as a road death. Read as coverage it is vacuous today; read as a
+    /// guard it is the whole point.</para>
     ///
     /// <para>The same helper backs three call sites — the `stranded` bucket
     /// below, <see cref="ObjectiveSeedSearch"/>'s candidate filter and the
@@ -596,11 +610,20 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
                 // gives it with the remembered tile as the one obstacle to
                 // route around (or the plain direct approach, when the
                 // remembered tile was never on the road to begin with). The
-                // two buckets below therefore may now disagree where they used
-                // to agree by accident (PR #417 measured `stranded=0` and
-                // `putDownOnTheWayIn=0` together on every seed this file had
-                // ever walked; the trophy slice's own trajectory shifts are
-                // the first to separate them). Found on baseline/20260735:
+                // two buckets below are therefore *allowed* to disagree where
+                // they used to agree by accident (PR #417 measured `stranded=0`
+                // and `putDownOnTheWayIn=0` together on every seed this file had
+                // ever walked). On the tree as it stands they agree again —
+                // `ROUTES avoiders=24 walkedOverIt=2 stranded=0
+                // putDownOnTheWayIn=0` — so nothing here is being kept for a
+                // population that currently exists; it is kept so that agreement
+                // is a measurement rather than a property of the cut. The one
+                // traced example below was measured earlier in this same fix
+                // round, before `Taken` stopped a circulating blade re-grudging
+                // its downer, and that change moved the party out from under it:
+                // the scene is recorded as the reason the cut is by cause, not as
+                // something the shipped seeds still produce. Found on
+                // baseline/20260735, on that earlier tree:
                 // Бурый Младший remembers (16,7), died at (15,7) one tile short
                 // of the larder (14,7) — its full eighteen-tile route
                 // ((26,13)…(26,8), west along y=8 to (15,8), then the single
@@ -654,11 +677,15 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
         // needed on that tree: the population they would have removed was
         // empty (`putDownOnTheWayIn=0`, `stranded=0` over the twelve parties),
         // so an outcome-based relaxation that bought nothing was taken back
-        // out, and the two buckets had agreed by accident ever since. The
-        // trophy slice's own trajectory shifts ended that accident: they
-        // produced the first downed raider this file has ever measured whose
-        // own route shows combat, not memory, ended it (Бурый Младший,
-        // baseline/20260735, traced above). Re-adding an unconditional `Mode
+        // out, and the two buckets had agreed by accident ever since. Earlier in
+        // this same fix round the trophy slice's trajectory shifts produced the
+        // first downed raider this file had ever measured whose own route shows
+        // combat, not memory, ended it (Бурый Младший, baseline/20260735, traced
+        // above); the `Taken` fix landed in the same commit and moved the party
+        // out from under it, so on the tree as it stands the two buckets read
+        // zero and zero again. That is why the cut is by cause and not by the
+        // sample: the agreement is a thing this file measures each run and prints
+        // below, not a thing it assumes. Re-adding an unconditional `Mode
         // != Downed` exclusion here would repeat exactly the outcome-based
         // relaxation PR #417 rejected — it would also silently clear a raider
         // memory genuinely walled off and wandering, if combat happened to
@@ -666,8 +693,9 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
         // difference: it excludes a downed raider from `stranded` only when
         // its own route never left the shortest approach the map gives it, so
         // the two buckets below are now allowed to disagree — `stranded` can
-        // stay 0 while `putDownOnTheWayIn` is not, exactly the case this seed
-        // is — where before that would have meant one of them was wrong.
+        // stay 0 while `putDownOnTheWayIn` is not — where before that would have
+        // meant one of them was wrong. They do not disagree today; being allowed
+        // to is the point.
         Assert.True(
             stranded.Count == 0,
             $"{stranded.Count} returning raiders neither reached the larder nor left: avoidance " +
@@ -677,9 +705,13 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
         // A wave resolves only when none of its raiders is still raiding, so an
         // avoider of a resolved wave is Escaped, Downed, or the defect the clause
         // names — and this line prints how many fall in each, so that «the clause
-        // is green» can be told apart from «the clause has no subject». On the
-        // shipped journals it currently prints zero on both counts, which is the
-        // evidence behind the vacuity finding raised against Issue #358 itself.
+        // is green» can be told apart from «the clause has no subject». Measured
+        // on the tree this comment is being written on, over the twelve parties:
+        // `avoiders=24 walkedOverIt=2 stranded=0 putDownOnTheWayIn=0`. Zero on
+        // both of the last two counts is the evidence behind the vacuity finding
+        // raised against Issue #358 itself, and it is printed rather than asserted
+        // exactly so that the day it stops being zero is a line in the run and not
+        // a silence.
         output.WriteLine(
             $"ROUTES avoiders={avoiderCount} walkedOverIt={walkedOverIt.Count} " +
             $"stranded={stranded.Count} putDownOnTheWayIn={putDownOnTheWayIn.Count} " +
@@ -697,9 +729,15 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
     /// damage jitter live, which changes who is hit where, and on
     /// <c>PrototypeTuning.DefaultSeed</c> no returning raider remembers the
     /// larder tile any more — the scene the bound is about is simply not in that
-    /// party. Scanned over <c>baseline</c> and <c>prepared</c> at seeds
-    /// 20260726–20260755, it is in eight parties; this one has two raiders in it
-    /// rather than one, which is why it and not the first hit was taken. The other
+    /// party. It is no longer a seed anybody chose, either: <see cref="ObjectiveSeed"/>
+    /// is whatever <see cref="ObjectiveSeedSearch"/> returns — the first seed of
+    /// <see cref="SearchSeeds"/> that holds a witness surviving
+    /// <see cref="ObjectiveWitnesses"/>, computed on the run rather than written
+    /// down, so a party that shifts under the scene moves the seed instead of
+    /// reddening the check for want of a subject. Nothing is picked here for
+    /// having two raiders in it rather than one; the search takes the first that
+    /// qualifies, and the Fact quantifies over exactly the population the search
+    /// accepted it on. The other
     /// half of the rule — walking round a memory that is not the objective — was
     /// pinned to <see cref="RouteSeed"/> in the same way and for the same reason,
     /// and Issue #405 replaced that pin with a floor read over twelve parties; see

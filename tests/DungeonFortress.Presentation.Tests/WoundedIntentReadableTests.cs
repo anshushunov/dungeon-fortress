@@ -49,11 +49,14 @@ public sealed class WoundedIntentReadableTests(ITestOutputHelper output)
         ("baseline", 20_260_727UL),
         ("baseline", 20_260_728UL),
         // The controlled case, added when the trophy slice landed
-        // (docs/design/TROPHY_WEAPON.md). Rule §2.5 sends a hurt creature to the
-        // bunk rather than after a blade, so the wounded of the six cells above
-        // now mend between waves and no shipped party reaches a `spared` contest
-        // on a creature that earned its benefit by being fed and tended — the
-        // subject the checks below are about.
+        // (docs/design/TROPHY_WEAPON.md). What is measured, and all that is
+        // measured: with claim jobs present, none of the six cells above reaches
+        // a `spared` contest on a creature that earned its benefit by being fed
+        // and tended — the subject the checks below are about — and holding the
+        // Claim priority at zero on the same three seeds brings it back. Which
+        // part of the slice does that is not measured here and is deliberately
+        // not named: the difference is «claims on» against «claims off», not a
+        // rule of the spec shown to be the cause.
         //
         // This is that same party with one lever held at zero from tick 0:
         // trophies still fall and still lie there, and nobody goes for them, so

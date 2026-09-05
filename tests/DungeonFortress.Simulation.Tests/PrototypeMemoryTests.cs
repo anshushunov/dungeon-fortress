@@ -54,7 +54,7 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
     /// <see cref="A_remembered_place_changes_what_the_creature_does_next"/> reads.
     ///
     /// <para><b>Why this check keeps three seeds while the rest of the file has
-    /// four.</b> The fourth seed was added earlier on this same branch for the
+    /// five.</b> The fourth and the fifth were added on this same branch for the
     /// check below it, whose need is a <i>sample floor</i>: more parties can only
     /// help a rule of the form "this branch must be reached at least once". The
     /// observability rule is of the opposite form — <i>every</i> party of the
@@ -63,7 +63,7 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
     /// <c>evidence/333-memory-floor.json</c> recorded the alternatives for.
     /// Nobody decided that, and it is undone here rather than carried.</para>
     ///
-    /// <para><b>What it does not hide.</b> On the party that seed plays,
+    /// <para><b>What it does not hide.</b> On the party the fourth seed plays,
     /// <c>baseline</c> now shows no refusal by memory at all, and that is a real
     /// consequence of this slice rather than a coincidence: it reads zero at every
     /// one of the five stun periods swept over it (4, 5, 6, 7 and 8), so no tuning
