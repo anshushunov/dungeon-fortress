@@ -530,7 +530,7 @@ public sealed partial class PrototypeWorld
         // (Issue #358), and it is recorded here rather than derived later because
         // "where" stops being answerable the moment the raider takes its next step.
         target.RecordBlow(damage, CurrentTick);
-        RecordDecision(creature, "combat_attack", new Dictionary<string, int> { ["raiderId"] = target.Id, ["damage"] = damage });
+        RecordDecision(creature, "combat_attack", new Dictionary<string, int> { ["raiderId"] = target.Id, ["damage"] = damage, ["bonus"] = creature.Weapon?.Bonus ?? 0 });
         if (target.Hp <= 0)
         {
             target.Hp = 0;
@@ -1261,7 +1261,10 @@ public sealed partial class PrototypeWorld
 
     private static int WeaponWeight(CreatureState creature)
     {
-        var full = creature.Might * PrototypeTuning.DamageMightWeight;
+        // The trophy adds to might before the hand is taken into account: a
+        // heavy arm holds a trophy blade as badly as it holds anything.
+        var might = creature.Might + (creature.Weapon?.Bonus ?? 0);
+        var full = might * PrototypeTuning.DamageMightWeight;
         var percent = creature.PartInjury(BodyPart.Arm) switch
         {
             InjuryKind.Heavy => PrototypeTuning.ArmHeavyMightPercent,

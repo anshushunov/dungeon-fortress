@@ -169,6 +169,41 @@ public sealed class PrototypeTrophyTests(ITestOutputHelper output)
         Assert.True(claims > 0, "no claim was ever assigned in the matrix");
     }
 
+    [Fact]
+    public void A_holder_strikes_harder_by_exactly_the_bonus()
+    {
+        var blows = 0;
+        foreach (var (fixture, seed) in Matrix())
+        {
+            Walk(fixture, seed, (_, after) =>
+            {
+                foreach (var creature in after.Creatures)
+                {
+                    if (creature.Weapon is null ||
+                        creature.LastDecision.ReasonCode != "combat_attack" ||
+                        creature.LastDecision.Tick < after.Tick - 1 ||
+                        creature.Injuries.Any(injury => injury.Part == BodyPart.Arm))
+                    {
+                        continue;
+                    }
+
+                    blows++;
+                    var details = creature.LastDecision.Details;
+                    Assert.Equal(creature.Weapon.Bonus, details["bonus"]);
+                    // Damage is weight + readiness share + jitter in [-DamageJitter, DamageJitter],
+                    // so with the bonus in the weight the blow can never fall further
+                    // below the armed weight than the jitter allows.
+                    var armedWeight = (creature.Might + creature.Weapon.Bonus) * PrototypeTuning.DamageMightWeight;
+                    Assert.True(
+                        details["damage"] + PrototypeTuning.DamageJitter >= armedWeight,
+                        $"{creature.Name} with +{creature.Weapon.Bonus} struck for {details["damage"]}, below an armed weight of {armedWeight}");
+                }
+            });
+        }
+
+        Assert.True(blows > 0, "no armed creature with a whole arm ever struck in the matrix");
+    }
+
     // ---- helpers shared by every test of this file ----
 
     internal static PrototypeCommandLog LoadFixture(string name, ulong seed)
