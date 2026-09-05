@@ -204,6 +204,86 @@ public sealed class PrototypeTrophyTests(ITestOutputHelper output)
         Assert.True(blows > 0, "no armed creature with a whole arm ever struck in the matrix");
     }
 
+    [Fact]
+    public void A_holder_put_down_or_broken_leaves_the_blade_where_it_stood()
+    {
+        var drops = 0;
+        foreach (var (fixture, seed) in Matrix())
+        {
+            Walk(fixture, seed, (before, after) =>
+            {
+                foreach (var creature in after.Creatures)
+                {
+                    var was = before.Creatures.Single(other => other.Id == creature.Id);
+                    if (was.Weapon is null ||
+                        was.Mode is CreatureMode.Downed or CreatureMode.Fled ||
+                        creature.Mode is not (CreatureMode.Downed or CreatureMode.Fled))
+                    {
+                        continue;
+                    }
+
+                    drops++;
+                    output.WriteLine($"{fixture}/{seed} t{after.Tick}: {creature.Name} {creature.Mode} and dropped the blade of {was.Weapon.Name}");
+                    Assert.Null(creature.Weapon);
+                    var lying = Assert.Single(after.LooseWeapons, entry => entry.Weapon.RaiderId == was.Weapon.RaiderId);
+                    // The blade lies where the creature stood the moment it went
+                    // down or fled (spec §2.8) — `was.Position`, the position
+                    // before this tick's own actions. A fled creature runs its
+                    // first step toward refuge in this same tick
+                    // (`RunFromTheFight`, called right after the mode flips), so
+                    // by the time this snapshot is taken `creature.Position` can
+                    // already be one tile further on; the floor does not chase
+                    // the runner it was left by.
+                    Assert.Equal(was.Position, lying.Position);
+                    Assert.Contains(after.Events, e => e.CreatureId == creature.Id && e.ReasonCode == "trophy_dropped");
+                }
+            });
+        }
+
+        Assert.True(drops > 0, "no armed creature was ever put down or broke in the matrix; widen MatrixSeeds before concluding the rule is dead");
+    }
+
+    /// <summary>
+    /// Regression for the fix round of Task 5: a fear of the tile a weapon lies
+    /// on must never wall a creature off the claim (spec §2, rule 4). A claim
+    /// job exists only while no wave is active, which is exactly the one span
+    /// of time the tile a memory was written on is not the danger that memory
+    /// is of — so the memory-of-place rule (`PrototypeWorld.Matching.cs`,
+    /// <c>CollectPairs</c>) exempts <see cref="JobKind.Claim"/> the same way it
+    /// already exempted <see cref="JobKind.Rest"/>.
+    ///
+    /// <para>Found on <c>baseline/20260726</c>: a creature's own dropped weapon
+    /// (Task 5) landed on (14,8), a tile it feared, and it refused the claim —
+    /// then the cooking and hauling beside it, since its trade has nowhere else
+    /// to stand — on 128 consecutive ticks, past the bound
+    /// <c>PrototypeMemoryCostTests.No_creature_is_taken_out_of_the_domain_by_what_it_remembers</c>
+    /// holds every party to. This is that party's own regression guard, kept
+    /// with the trophy tests because the exemption is trophy code.</para>
+    /// </summary>
+    [Fact]
+    public void A_claim_is_never_refused_by_memory_of_the_tile_the_blade_lies_on()
+    {
+        var refusals = 0;
+        foreach (var (fixture, seed) in Matrix())
+        {
+            Walk(fixture, seed, (_, after) =>
+            {
+                foreach (var @event in after.Events.Where(e =>
+                             e.LastTick >= after.Tick - 1 &&
+                             e.ReasonCode is "refused_place_of_panic" or "refused_place_of_wound"))
+                {
+                    refusals++;
+                    Assert.NotEqual(JobKind.Claim, @event.JobKind);
+                }
+            });
+        }
+
+        // The exemption is proved on a matrix that actually exercises memory
+        // refusal, not one that happens to have none: a check that never sees
+        // a refusal at all would pass whether the exemption existed or not.
+        Assert.True(refusals > 0, "no refusal by memory of place ever happened in the matrix; widen MatrixSeeds before concluding the exemption holds");
+    }
+
     // ---- helpers shared by every test of this file ----
 
     internal static PrototypeCommandLog LoadFixture(string name, ulong seed)

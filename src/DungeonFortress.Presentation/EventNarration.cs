@@ -250,6 +250,8 @@ public static class EventNarration
                 $"took the blade of {RaiderName("raiderId")}: +{Number(details, "bonus", "?")} might.",
             "trophy_lost" =>
                 $"put {RaiderName("raiderId")} down and got nothing: {CrewName("takenBy")} carries the blade.",
+            "trophy_dropped" =>
+                $"dropped the blade of {RaiderName("raiderId")} here.",
             "claim_cancelled" =>
                 "left the trophy lying: the wave came first.",
 

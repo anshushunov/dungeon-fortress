@@ -89,4 +89,29 @@ public sealed partial class PrototypeWorld
                 ["takenBy"] = creature.Id,
             });
     }
+
+    /// <summary>
+    /// A holder that goes down or breaks leaves the blade where it stood, and
+    /// it waits for the first again (spec §2.8). Recorded before the decision
+    /// that put the creature there, so the journal keeps both and the panel
+    /// keeps the one that matters more.
+    /// </summary>
+    private void DropCreatureWeapon(CreatureState creature)
+    {
+        if (creature.Weapon is not { } weapon)
+        {
+            return;
+        }
+
+        _looseWeapons.Add((creature.Position, weapon));
+        creature.Weapon = null;
+        RecordDecision(
+            creature,
+            "trophy_dropped",
+            new Dictionary<string, int>
+            {
+                ["raiderId"] = weapon.RaiderId,
+                ["bonus"] = weapon.Bonus,
+            });
+    }
 }

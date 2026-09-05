@@ -196,6 +196,21 @@ public sealed partial class PrototypeWorld
                 // the bunk it was carried to would be refusing to heal, which is
                 // not a decision about work at all.
                 //
+                // Claim is exempt for a parallel reason (trophy slice, Task 5),
+                // not a copy of it: a fear of this tile is a memory of danger
+                // that was there, and a Claim job exists only while no wave is
+                // active (spec §2 rule 4) — the one span of time the tile is
+                // provably not the danger remembered. Without the exemption a
+                // creature can be walled off its own trade for the rest of a
+                // window: measured on baseline/20260726, defender #4 — whose
+                // whole trade sits at the larder — had its own dropped weapon
+                // land at (14,8), the tile it feared, and refused the claim (and
+                // then the cooking and hauling next to it, since its trade has
+                // nowhere else to stand) on 128 consecutive ticks, past the
+                // bound `PrototypeMemoryCostTests` holds this to. A blade is not
+                // the danger that put the fear there, and by rule 4 nothing else
+                // is either while the job offering it exists.
+                //
                 // The arm is **last**, after every other condition on the pair and
                 // after the score (Issue #125). Standing first it refused work the
                 // creature was never going to take — unreachable, occupied, below
@@ -210,7 +225,7 @@ public sealed partial class PrototypeWorld
                 // names the work this creature would have put first rather than
                 // whichever job happened to be oldest in the list.
                 if (applyMemory &&
-                    job.Kind != JobKind.Rest &&
+                    job.Kind is not (JobKind.Rest or JobKind.Claim) &&
                     AvoidedPlace(creature, target) is { } avoided)
                 {
                     if (refused is not { } held || score > held.Score)

@@ -686,6 +686,7 @@ public sealed partial class PrototypeWorld
                 {
                     defender.Hp = 0;
                     Wound(defender, InjuryKind.Heavy, raider.Id);
+                    DropCreatureWeapon(defender);
                     defender.Mode = CreatureMode.Downed;
                     CurrentWave()?.CountDefenderDowned();
                     Remember(defender, "wound");
@@ -1008,6 +1009,7 @@ public sealed partial class PrototypeWorld
                 continue;
             }
 
+            DropCreatureWeapon(creature);
             creature.Mode = CreatureMode.Fled;
             CurrentWave()?.CountDefenderFled();
             Remember(creature, "panic");

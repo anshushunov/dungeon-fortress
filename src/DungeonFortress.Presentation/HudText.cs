@@ -365,7 +365,12 @@ public static class HudText
         // to.
         "combat_fled_morale" or "combat_downed" or "injury_localised"
             or "injury_tended" or "injury_mending"
-            or "injury_healed" => 2,
+            or "injury_healed"
+            // A holder put down or driven off leaves the blade lying where it
+            // stood (docs/design/TROPHY_WEAPON.md §2.8) — the same weight as
+            // the wound that caused it, not the weightier fact of who now
+            // carries the blade.
+            or "trophy_dropped" => 2,
 
         "combat_joined" or "combat_returned" or "combat_raider_downed"
             or "combat_refused_starving" or "combat_refused_injured"
