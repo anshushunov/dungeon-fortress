@@ -611,6 +611,9 @@ public sealed partial class PrototypeWorld
                     0,
                     creature.Satiety - PrototypeTuning.DrillSatietyCost);
                 break;
+            case JobKind.Claim:
+                TakeWeapon(creature, job);
+                break;
         }
 
         FinishJob(creature, job);

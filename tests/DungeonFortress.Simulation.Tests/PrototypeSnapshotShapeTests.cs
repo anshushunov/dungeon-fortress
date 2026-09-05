@@ -152,8 +152,8 @@ public sealed class PrototypeSnapshotShapeTests
         // at the roll call, and null — like `raiders[].rememberedPlace` — until a
         // wave asks somebody who is carrying a wound.
         // docs/design/TROPHY_WEAPON.md. Additive: `weapon` is the trophy this
-        // creature carries, and null — same shape as `woundIntent` above — from
-        // tick 0 until a later slice ever sets it.
+        // creature carries, and null — same shape as `woundIntent` above —
+        // until it walks over to a blade on the floor and takes it.
         "$.creatures[] -> actionsLostToStun, affinities, blockedTicks, carryAmount, carrying, currentJobId, fatigue, grit, hp, id, injuries, injury, isMustering, lastDecision, lastMoveTick, lastYieldTick, loyalty, martialForm, maxHp, mealReserved, mealTarget, mealTicksRemaining, might, mode, moveCount, musterNeedsRation, musterTarget, name, position, readiness, readinessAtRaid, recoveryTicks, rememberedPlaces, satiety, stepsLostToLimp, watchTicks, weapon, workTicks, woundIntent, yieldCount",
         // Issue #409. Additive: a new array beside `injury`, which stays and is
         // its worst entry.
@@ -168,6 +168,11 @@ public sealed class PrototypeSnapshotShapeTests
         "$.creatures[].loyalty.fearTerms[] -> amount, code",
         "$.creatures[].loyalty.grudgeTerms[] -> amount, code",
         "$.creatures[].rememberedPlaces[] -> cause, place, tick",
+        // docs/design/TROPHY_WEAPON.md, Task 3: reached from the tick somebody
+        // walks over to a blade on the floor and picks it up. The same five
+        // fields the floor publishes below — a weapon is one object whether it
+        // lies on a tile or is carried.
+        "$.creatures[].weapon -> bonus, downedBy, name, raiderId, wave",
         "$.creatures[].woundIntent -> code, part, press, severity, spare, tick, verdictDecided, wave",
         "$.digDesignations[] -> jobId, progressTicks, reachable, requiredTicks, reservedBy, statusCode, tile, workTile",
         "$.domain -> downedCreatures, injuredCreatures, livingCreatures, peakMeals, renown, renownAtPreviousWave, strength, strengthAtPreviousWave, waveCount, wavesArrived, wavesResolved",

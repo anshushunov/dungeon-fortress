@@ -42,7 +42,7 @@ public static class EventNarration
         var repeats = @event.Repeats > 1
             ? string.Create(CultureInfo.InvariantCulture, $" (x{@event.Repeats})")
             : string.Empty;
-        return $"{name} {Sentence(@event.ReasonCode, @event.Details, @event.JobKind, @event.Target)}{repeats}";
+        return $"{name} {Sentence(@event.ReasonCode, @event.Details, @event.JobKind, @event.Target, state)}{repeats}";
     }
 
     /// <summary>
@@ -54,7 +54,7 @@ public static class EventNarration
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(creature);
         var decision = creature.LastDecision;
-        return $"{creature.Name} {Sentence(decision.ReasonCode, decision.Details, decision.JobKind, decision.Target)}";
+        return $"{creature.Name} {Sentence(decision.ReasonCode, decision.Details, decision.JobKind, decision.Target, state)}";
     }
 
     /// <summary>
@@ -65,7 +65,8 @@ public static class EventNarration
         string reasonCode,
         IReadOnlyDictionary<string, int> details,
         JobKind? jobKind,
-        GridPoint? target)
+        GridPoint? target,
+        PrototypeSnapshot? state = null)
     {
         ArgumentNullException.ThrowIfNull(reasonCode);
         ArgumentNullException.ThrowIfNull(details);
@@ -73,6 +74,20 @@ public static class EventNarration
         var where = target is { } tile
             ? string.Create(CultureInfo.InvariantCulture, $" at ({tile.X},{tile.Y})")
             : string.Empty;
+
+        // Trophy sentences name a raider. Details carry ids, so the name is
+        // looked up in the snapshot when there is one, and falls back to the id
+        // when the caller has none (the inspector's line has the state; a bare
+        // sentence test does not).
+        string RaiderName(string key) =>
+            (Id(details, key) is { } id
+                ? state?.Raiders.FirstOrDefault(raider => raider.Id == id)?.Name
+                : null)
+            ?? $"raider {Number(details, key, "?")}";
+        string CrewName(string key) =>
+            state is not null && Id(details, key) is { } id
+                ? HudText.CreatureName(state, id)
+                : $"#{Number(details, key, "?")}";
 
         return reasonCode switch
         {
@@ -228,6 +243,16 @@ public static class EventNarration
             "build_waiting_material" => "would build: the stone is not here yet.",
             "build_unreachable" => $"cannot get onto the site{where}.",
 
+            // Trophies (docs/design/TROPHY_WEAPON.md §5). Two of the three name
+            // somebody: a blade is worth telling about because it belonged to
+            // one raider and went to one creature rather than another.
+            "trophy_taken" =>
+                $"took the blade of {RaiderName("raiderId")}: +{Number(details, "bonus", "?")} might.",
+            "trophy_lost" =>
+                $"put {RaiderName("raiderId")} down and got nothing: {CrewName("takenBy")} carries the blade.",
+            "claim_cancelled" =>
+                "left the trophy lying: the wave came first.",
+
             _ => throw new ArgumentOutOfRangeException(
                 nameof(reasonCode),
                 reasonCode,
@@ -249,6 +274,7 @@ public static class EventNarration
         JobKind.Watch => "the watch",
         JobKind.Dig => "digging",
         JobKind.Build => "building",
+        JobKind.Claim => "claiming a trophy",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unnamed kind of work."),
     };
 
@@ -281,6 +307,13 @@ public static class EventNarration
                 _ => "body",
             }
             : "body";
+
+    /// <summary>
+    /// The same detail as <see cref="Number"/>, kept as a number: an id is only
+    /// useful to a sentence that goes looking for the name behind it.
+    /// </summary>
+    private static int? Id(IReadOnlyDictionary<string, int> details, string key) =>
+        details.TryGetValue(key, out var value) ? value : null;
 
     private static string Number(IReadOnlyDictionary<string, int> details, string key, string fallback) =>
         details.TryGetValue(key, out var value)

@@ -62,7 +62,7 @@ public static class InspectorText
                 $"{DescribeCarrierRoute(creature, job, state.BuildSites)}" +
                 $"{DescribeMemory(creature)}" +
                 $"WHY t{creature.LastDecision.Tick} · {creature.LastDecision.ReasonCode}\n" +
-                $"{EventNarration.Sentence(creature.LastDecision.ReasonCode, creature.LastDecision.Details, creature.LastDecision.JobKind, creature.LastDecision.Target)}\n" +
+                $"{EventNarration.Sentence(creature.LastDecision.ReasonCode, creature.LastDecision.Details, creature.LastDecision.JobKind, creature.LastDecision.Target, state)}\n" +
                 $"{details}";
         }
 

@@ -121,7 +121,7 @@ public sealed class PrototypeMomentOfTruthTests
         // cannot appear here, because no shipped fixture contains a verdict.
         string[] required =
         [
-            "benefit_faded", "benefit_fed", "benefit_tended",
+            "benefit_faded", "benefit_fed", "benefit_tended", "benefit_trophy",
             "fear_ally_downed", "fear_faded", "fear_panic", "fear_wound",
             "grudge_ignored",
         ];
@@ -136,8 +136,12 @@ public sealed class PrototypeMomentOfTruthTests
         string[] known =
         [
             "benefit_faded", "benefit_fed", "benefit_rewarded",
-            "benefit_tended", "fear_ally_downed", "fear_faded", "fear_panic",
+            "benefit_tended", "benefit_trophy",
+            "fear_ally_downed", "fear_faded", "fear_panic",
             "fear_punished", "fear_wound", "grudge_hunger", "grudge_ignored",
+            // The trophy went to somebody else while the one who earned it
+            // still stood (docs/design/TROPHY_WEAPON.md §3).
+            "grudge_trophy_taken",
             // Issue #431: the delayed price of being sent into a fight wounded.
             // It is credited by the contest of the roll call and not by the
             // sweep, and only where the fear of the domain was the reason.

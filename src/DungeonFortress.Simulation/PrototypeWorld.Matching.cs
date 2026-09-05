@@ -105,6 +105,30 @@ public sealed partial class PrototypeWorld
                     continue;
                 }
 
+                // One trophy per creature (spec §2.6): the second blade goes to
+                // the second fighter, not to a better-armed first.
+                if (job.Kind == JobKind.Claim && creature.Weapon is not null)
+                {
+                    continue;
+                }
+
+                // And the bunk comes before the blade (spec §2.5). This is the
+                // condition a Rest job is offered on, written out here rather
+                // than inferred from it, so that the two rules cannot drift
+                // apart. Without it a trophy outbids the bunk on score alone —
+                // claim priority stands above rest — and a creature with a heavy
+                // wound walks the length of the domain for a blade instead of
+                // mending: measured on baseline/20260728, where one hurt
+                // creature took the same claim three times over rather than lie
+                // down. A wound closes in a bunk and nowhere else.
+                if (job.Kind == JobKind.Claim &&
+                    (creature.NeedsRest ||
+                     creature.Fatigue >= PrototypeTuning.RestSeekThreshold ||
+                     creature.Injury != InjuryKind.None))
+                {
+                    continue;
+                }
+
                 // Nobody picks stone up without a place to put it down. The
                 // destination is planned from the pile, so the carry leg is the
                 // short one and the choice does not depend on who volunteers.
@@ -137,7 +161,10 @@ public sealed partial class PrototypeWorld
                 }
 
                 var urgency = Urgency(job.Kind, job.Resource);
-                var affinity = creature.Affinity(job.Kind);
+                // A claim reads the pull of a fighter, not a pull of its own
+                // (spec §2.5): the creature that trains is the one the blade is
+                // for. No new magnitude on the creature — drill affinity is it.
+                var affinity = creature.Affinity(job.Kind == JobKind.Claim ? JobKind.Drill : job.Kind);
                 // How willing this creature is to work for this domain at all.
                 // It is the same number for every job, so it never moves a
                 // creature between two kinds of work — it moves the creature
@@ -359,6 +386,7 @@ public sealed partial class PrototypeWorld
                 ["jobId"] = checked((int)job.Id),
                 ["score"] = selected.Score,
                 ["distance"] = selected.Distance,
+                ["affinity"] = selected.Affinity,
             },
             job.Kind,
             selected.InitialTarget);

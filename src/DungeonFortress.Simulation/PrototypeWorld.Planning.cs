@@ -223,6 +223,24 @@ public sealed partial class PrototypeWorld
             }
         }
 
+        // Trophies wait while a wave is inside (spec §2.4): otherwise the cook
+        // walks off with the blade while the fighters it should pull are busy
+        // fighting. The moment of truth needs no gate of its own — Step returns
+        // before GenerateJobs while a verdict is awaited.
+        if (_priorities[JobKind.Claim] > 0 && ActiveWave() is null)
+        {
+            foreach (var tile in LooseWeaponTiles())
+            {
+                EnsureJob(
+                    $"claim:{tile.X}:{tile.Y}",
+                    JobKind.Claim,
+                    tile,
+                    null,
+                    0,
+                    desired);
+            }
+        }
+
         _jobs.RemoveAll(job => job.ReservedBy is null && !desired.Contains(job.Key));
     }
 

@@ -140,6 +140,7 @@ public sealed partial class PrototypeWorld
             [JobKind.Watch] = PrototypeTuning.DefaultWatchPriority,
             [JobKind.Dig] = PrototypeTuning.DefaultDigPriority,
             [JobKind.Build] = PrototypeTuning.DefaultBuildPriority,
+            [JobKind.Claim] = PrototypeTuning.DefaultClaimPriority,
         };
         _rules = new(StringComparer.Ordinal)
         {

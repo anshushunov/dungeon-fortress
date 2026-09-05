@@ -56,6 +56,119 @@ public sealed class PrototypeTrophyTests(ITestOutputHelper output)
         Assert.True(drops > 0, "nobody was put down in the whole party, so the rule was never exercised");
     }
 
+    [Fact]
+    public void No_claim_is_offered_while_a_wave_is_inside_and_one_is_offered_after()
+    {
+        var offered = 0;
+        foreach (var (fixture, seed) in Matrix())
+        {
+            Walk(fixture, seed, (_, after) =>
+            {
+                var claims = after.Jobs.Where(job => job.Kind == JobKind.Claim).ToArray();
+                if (after.Threat.Active)
+                {
+                    Assert.Empty(claims);
+                }
+
+                offered += claims.Length;
+            });
+        }
+
+        Assert.True(offered > 0, "the whole matrix never offered a claim, so nobody could ever pick a weapon up");
+    }
+
+    [Fact]
+    public void The_weapon_is_taken_and_the_ledger_says_by_whom_and_at_whose_expense()
+    {
+        var taken = 0;
+        var lost = 0;
+        foreach (var (fixture, seed) in Matrix())
+        {
+            Walk(fixture, seed, (before, after) =>
+            {
+                foreach (var creature in after.Creatures)
+                {
+                    var was = before.Creatures.Single(other => other.Id == creature.Id);
+                    if (creature.Weapon is null || was.Weapon is not null)
+                    {
+                        continue;
+                    }
+
+                    taken++;
+                    var weapon = creature.Weapon;
+                    output.WriteLine($"{fixture}/{seed} t{after.Tick}: {creature.Name} took the blade of {weapon.Name} (downed by #{weapon.DownedBy})");
+
+                    // The floor no longer holds it, and the journal names the deed.
+                    Assert.DoesNotContain(after.LooseWeapons, entry => entry.Weapon.RaiderId == weapon.RaiderId);
+                    Assert.Contains(after.Events, e =>
+                        e.CreatureId == creature.Id && e.ReasonCode == "trophy_taken" && e.LastTick >= after.Tick - 1
+                        && e.Details["raiderId"] == weapon.RaiderId);
+                    Assert.Contains(creature.Loyalty.BenefitTerms, term => term.Code == "benefit_trophy" && term.Amount > 0);
+
+                    if (weapon.DownedBy == creature.Id)
+                    {
+                        continue;
+                    }
+
+                    var downer = after.Creatures.Single(other => other.Id == weapon.DownedBy);
+                    if (downer.Mode is CreatureMode.Downed or CreatureMode.Fled)
+                    {
+                        Assert.DoesNotContain(downer.Loyalty.GrudgeTerms, term => term.Code == "grudge_trophy_taken");
+                        continue;
+                    }
+
+                    lost++;
+                    Assert.Contains(after.Events, e =>
+                        e.CreatureId == downer.Id && e.ReasonCode == "trophy_lost"
+                        && e.Details["raiderId"] == weapon.RaiderId && e.Details["takenBy"] == creature.Id);
+                    Assert.Contains(downer.Loyalty.GrudgeTerms, term => term.Code == "grudge_trophy_taken" && term.Amount > 0);
+                }
+            });
+        }
+
+        output.WriteLine($"taken {taken}, lost {lost}");
+        Assert.True(taken > 0, "nobody in the whole matrix ever picked a weapon up");
+        Assert.True(lost > 0, "in the whole matrix the one who downed the raider always took the blade: the conflict the slice exists for never happened");
+    }
+
+    [Fact]
+    public void A_claim_reads_the_pull_of_a_fighter_and_a_holder_never_claims_again()
+    {
+        var claims = 0;
+        foreach (var (fixture, seed) in Matrix())
+        {
+            Walk(fixture, seed, (before, after) =>
+            {
+                foreach (var job in after.Jobs.Where(job => job.Kind == JobKind.Claim && job.ReservedBy is { }))
+                {
+                    var wasReserved = before.Jobs.Any(other => other.JobId == job.JobId && other.ReservedBy is { });
+                    if (wasReserved)
+                    {
+                        continue;
+                    }
+
+                    claims++;
+                    var taker = after.Creatures.Single(creature => creature.Id == job.ReservedBy);
+                    var wasTaker = before.Creatures.Single(creature => creature.Id == job.ReservedBy);
+                    Assert.Null(wasTaker.Weapon);
+                    // The decision that *took* this job, and not simply the last
+                    // one of the tick: a creature whose way out is blocked, or
+                    // whose work is cancelled again, writes over `lastDecision`
+                    // on the same tick it was given the job. The assignment is
+                    // the decision that names this job and the score it won by.
+                    var chosen = after.Events.Last(e =>
+                        e.CreatureId == taker.Id &&
+                        e.Details.GetValueOrDefault("jobId", -1) == job.JobId &&
+                        e.Details.ContainsKey("score"));
+                    output.WriteLine($"{fixture}/{seed} t{after.Tick}: {taker.Name} claims by {chosen.ReasonCode}, affinity {chosen.Details["affinity"]}");
+                    Assert.Equal(taker.Affinities.GetValueOrDefault(JobKind.Drill), chosen.Details["affinity"]);
+                }
+            });
+        }
+
+        Assert.True(claims > 0, "no claim was ever assigned in the matrix");
+    }
+
     // ---- helpers shared by every test of this file ----
 
     internal static PrototypeCommandLog LoadFixture(string name, ulong seed)

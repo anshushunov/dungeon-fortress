@@ -350,7 +350,12 @@ public static class HudText
             or "verdict_rewarded" or "verdict_punished"
             or "verdict_punished_without_fault" or "verdict_ignored"
             or "combat_refused_grudge"
-            or "combat_spared_wound" or "combat_pressed_wound" => 3,
+            or "combat_spared_wound" or "combat_pressed_wound"
+            // A trophy is the same kind of fact (docs/design/TROPHY_WEAPON.md
+            // §1): who carries the blade, and who put the raider down and did
+            // not get it, is what the player is meant to be able to name two
+            // waves later without opening the inspector.
+            or "trophy_taken" or "trophy_lost" => 3,
 
         // `injury_localised` sits with the other wounds and not above them
         // (Issue #409). It is the sentence that gives a creature the thing the
@@ -364,7 +369,10 @@ public static class HudText
 
         "combat_joined" or "combat_returned" or "combat_raider_downed"
             or "combat_refused_starving" or "combat_refused_injured"
-            or "combat_absent_unreachable" => 1,
+            or "combat_absent_unreachable"
+            // Giving a trophy up to a wave is worth a line and no more: nothing
+            // about the domain changed, the blade is still lying there.
+            or "claim_cancelled" => 1,
 
         _ => 0,
     };
@@ -587,6 +595,7 @@ public static class HudText
         "benefit_drilled" => "trained",
         "benefit_tended" => "nursed",
         "benefit_rewarded" => "rewarded",
+        "benefit_trophy" => "carries a trophy",
         "benefit_faded" => "faded",
         "grudge_hunger" => "hungry with a full larder",
         "grudge_refused_place" => "sent back where it broke",
@@ -597,6 +606,7 @@ public static class HudText
         // would not be rendered at all: `TermName` refuses an unknown code
         // rather than printing it raw.
         "grudge_pressed_wounded" => "sent into the line hurt",
+        "grudge_trophy_taken" => "the trophy went to another",
         "grudge_ignored" => "ignored",
         "grudge_spent" => "spent",
         _ => throw new ArgumentOutOfRangeException(

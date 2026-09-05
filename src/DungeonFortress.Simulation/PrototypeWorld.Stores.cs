@@ -719,6 +719,7 @@ public sealed partial class PrototypeWorld
             JobKind.Drill => PrototypeTuning.DrillTicks,
             JobKind.Dig => PrototypeTuning.DigTicks,
             JobKind.Build => PrototypeTuning.BuildTicks,
+            JobKind.Claim => PrototypeTuning.ClaimTicks,
             JobKind.Rest or JobKind.Watch => int.MaxValue,
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
@@ -807,6 +808,7 @@ public sealed partial class PrototypeWorld
                 site.Delivered >= PrototypeTuning.BuildStoneCost &&
                 IsBuildSiteWorkable(site.Tile) &&
                 Reachable(site.Tile)),
+            JobKind.Claim => LooseWeaponTiles().Any(Reachable),
             _ => false,
         };
     }

@@ -55,6 +55,10 @@ public enum JobKind
     // Appended for the same reason. Build is last, so a blueprint never outranks
     // the food chain or excavation on an otherwise equal score.
     Build,
+
+    // Appended for the same reason. Claim is last: picking a trophy up never
+    // outranks work the domain lives on when the scores are otherwise equal.
+    Claim,
 }
 
 public enum ResourceKind
