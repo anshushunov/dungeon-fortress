@@ -170,11 +170,12 @@ public sealed partial class PrototypeWorld
                     // creature to a bunk is unconditional only *outside* a muster
                     // (`Planning.cs` `!creature.IsMustering` in both places), and
                     // a mustering creature is walked to the assembly point by
-                    // `Acting.cs`. So the three flags a creature entering the
-                    // fight sheds are shed here as well, and the working
-                    // `GenerateJobs` hands out the bunk by itself. The issuing of
-                    // `Rest` is not touched by this slice — the creature is simply
-                    // returned to the state the existing mechanism serves.
+                    // `Acting.cs`. So everything a creature entering the fight
+                    // sheds is shed here as well — the three flags and the meal
+                    // below — and the working `GenerateJobs` hands out the bunk by
+                    // itself. The issuing of `Rest` is not touched by this slice —
+                    // the creature is simply returned to the state the existing
+                    // mechanism serves.
                     if (creature.CurrentJob is not null)
                     {
                         CancelJob(creature, "combat_spared_wound");
@@ -182,7 +183,34 @@ public sealed partial class PrototypeWorld
 
                     creature.IsMustering = false;
                     creature.MusterNeedsRation = false;
-                    creature.MealReserved = false;
+                    // <b>And the ration is put down, not merely unbooked.</b> A
+                    // creature can be asked by the roll call while it is standing
+                    // at the larder eating the muster's ration: `ActMuster` puts
+                    // it in <see cref="CreatureMode.Eating"/> and gives the mode
+                    // back on the tick the meal ends. Dropping the reservation
+                    // without ending the meal leaves the mode behind with nothing
+                    // to sustain it — `ActEating` builds its queue out of the
+                    // creatures that hold a reservation, finds this one is not in
+                    // it and returns; `Acting.cs` tests `Eating` before work and
+                    // before going off duty, so nothing else runs; and
+                    // `GenerateJobs` refuses a bunk to a creature that is eating.
+                    // The creature then stands at the larder until the party ends,
+                    // its satiety draining, which is «кто не встал, тот ложится»
+                    // failing in the one place it was written for.
+                    //
+                    // Measured on prepared/20260727 under `every-reward`: Дёготь
+                    // was spared at t2350 four ticks into the ration and was still
+                    // in `Eating` when the party ended. The pressing side never
+                    // showed this because it overwrites the mode on its way out
+                    // (`Mode = CreatureMode.Fighting` below); the sparing side had
+                    // nothing to overwrite it with, so it has to put it back.
+                    var wasEating = creature.Mode == CreatureMode.Eating;
+                    CancelMealReservation(creature);
+                    if (wasEating)
+                    {
+                        creature.Mode = CreatureMode.Waiting;
+                    }
+
                     creature.WoundIntent = contest;
                     RecordDecision(creature, "combat_spared_wound", ContestDetails(contest));
                     continue;

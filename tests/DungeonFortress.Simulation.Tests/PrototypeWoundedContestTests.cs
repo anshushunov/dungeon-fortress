@@ -214,6 +214,106 @@ public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
         }
     }
 
+    /// <summary>
+    /// Criterion 13 asked of the one piece of state the three flags do not
+    /// describe — <b>the mode</b> — and of the place the creature is most likely
+    /// to be standing in when the roll call reaches it.
+    ///
+    /// <para>A mustering creature that needs feeding is walked to the larder and
+    /// put into <see cref="CreatureMode.Eating"/> by <c>ActMuster</c>, which gives
+    /// the mode back on the tick the ration is finished. Sparing itself in the
+    /// middle of that meal used to shed the three flags and leave the mode: a
+    /// mode with no reservation behind it is a dead end, because <c>ActEating</c>
+    /// builds its queue out of the creatures that hold a reservation and returns
+    /// at once for one that does not, <c>Acting.cs</c> tests <c>Eating</c> ahead
+    /// of both work and going off duty, and <c>GenerateJobs</c> refuses a bunk to
+    /// a creature that is eating. The creature stood at the larder with its
+    /// satiety draining until the party ended — «кто не встал, тот ложится»
+    /// failing in the one place it was written for.</para>
+    ///
+    /// <para><b>The party is named rather than searched for, and that is
+    /// deliberate.</b> The matrix check above is the general claim; this one holds
+    /// on to the case that produced it — <c>prepared/20260727</c> under
+    /// <c>every-reward</c>, Дёготь spared at t2350 four ticks into the ration —
+    /// so that the mechanism keeps a subject even if the pacing moves the general
+    /// case somewhere else. The invariant it asserts is not about this party at
+    /// all: no creature anywhere in the run may hold <see cref="CreatureMode.Eating"/>
+    /// without the reservation that mode lives on.</para>
+    /// </summary>
+    [Fact]
+    public void A_creature_spared_while_it_is_eating_is_taken_out_of_the_meal_as_well()
+    {
+        var log = AnswerEveryPause(
+            LoadFixture("prepared") with { Seed = 20_260_727UL },
+            VerdictKind.Reward);
+        var world = new PrototypeWorld(log);
+        var before = world.GetSnapshot();
+        var witnesses = new List<(int Id, string Name, int Tick)>();
+        // Resolved the way `Measure` resolves it: the bunk has to come *after* the
+        // contest, so a creature that happened to be lying down earlier in the
+        // party proves nothing about this transition.
+        var pending = new List<(int Id, string Name, int Tick)>();
+        var laidDown = new List<(int Id, string Name, int Tick)>();
+        while (!world.IsComplete)
+        {
+            world.Step();
+            var after = world.GetSnapshot();
+            foreach (var creature in after.Creatures)
+            {
+                // The invariant the defect broke. It is checked on every creature
+                // of every tick rather than on the witness alone, because the two
+                // halves of the meal — the reservation and the mode — are written
+                // together everywhere else and this is the assertion that says so.
+                Assert.False(
+                    creature.Mode == CreatureMode.Eating && !creature.MealReserved,
+                    $"t{after.Tick}: {creature.Name} is in `Mode == Eating` with no meal " +
+                    "reserved. `ActEating` serves only the creatures that hold a reservation, " +
+                    "so this one will stand where it is until the party ends: no work, no " +
+                    "bunk, no going off duty.");
+
+                if (creature.Mode == CreatureMode.Resting)
+                {
+                    foreach (var waiting in pending.Where(item => item.Id == creature.Id).ToArray())
+                    {
+                        laidDown.Add(waiting);
+                        pending.Remove(waiting);
+                    }
+                }
+
+                if (creature.WoundIntent is not { } intent ||
+                    intent.Tick != after.Tick - 1 ||
+                    intent.Code != "spared" ||
+                    before.Creatures.Single(item => item.Id == creature.Id).Mode !=
+                        CreatureMode.Eating)
+                {
+                    continue;
+                }
+
+                witnesses.Add((creature.Id, creature.Name, intent.Tick));
+                pending.Add((creature.Id, creature.Name, intent.Tick));
+                Assert.NotEqual(CreatureMode.Eating, creature.Mode);
+            }
+
+            before = after;
+        }
+
+        Assert.True(
+            witnesses.Count > 0,
+            "nobody in this party was asked by the roll call while it was eating the muster's " +
+            "ration, so the case this check exists for was never reached and it compared " +
+            "nothing. The party is pinned precisely so that it stays reached; if the pacing " +
+            "has moved it, find the new one and name it here rather than deleting the check.");
+        foreach (var (_, name, tick) in pending)
+        {
+            Assert.Fail(
+                $"t{tick}: {name} spared itself in the middle of its ration and never lay " +
+                "down afterwards. Ending the muster without ending the meal leaves the " +
+                "creature at the larder, and «чинить» never happens.");
+        }
+
+        Assert.Equal(witnesses.Count, laidDown.Count);
+    }
+
     // ------------------------------------------------------------------
     // The order of the refusals (second amendment of the second review round).
     // ------------------------------------------------------------------
