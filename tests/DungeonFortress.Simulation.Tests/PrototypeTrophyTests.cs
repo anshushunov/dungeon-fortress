@@ -82,8 +82,14 @@ public sealed class PrototypeTrophyTests(ITestOutputHelper output)
     {
         var taken = 0;
         var lost = 0;
+        var circulatedWithoutRegrudging = 0;
         foreach (var (fixture, seed) in Matrix())
         {
+            // Debt paid once (spec §3, trophy slice fix round 3): the same
+            // raiderId can be taken more than once as its weapon circulates
+            // through holders, and only the first taking may still owe a
+            // grudge to the original downer.
+            var everTaken = new HashSet<int>();
             Walk(fixture, seed, (before, after) =>
             {
                 foreach (var creature in after.Creatures)
@@ -101,9 +107,22 @@ public sealed class PrototypeTrophyTests(ITestOutputHelper output)
                     // The floor no longer holds it, and the journal names the deed.
                     Assert.DoesNotContain(after.LooseWeapons, entry => entry.Weapon.RaiderId == weapon.RaiderId);
                     Assert.Contains(after.Events, e =>
-                        e.CreatureId == creature.Id && e.ReasonCode == "trophy_taken" && e.LastTick >= after.Tick - 1
+                        e.CreatureId == creature.Id && e.ReasonCode == "trophy_taken" && e.LastTick == after.Tick - 1
                         && e.Details["raiderId"] == weapon.RaiderId);
                     Assert.Contains(creature.Loyalty.BenefitTerms, term => term.Code == "benefit_trophy" && term.Amount > 0);
+
+                    var firstTaking = everTaken.Add(weapon.RaiderId);
+                    if (!firstTaking)
+                    {
+                        // The blade's debt was already paid by whoever took it
+                        // first; this later taking never re-grudges the
+                        // original downer, whatever they are doing now.
+                        circulatedWithoutRegrudging++;
+                        Assert.DoesNotContain(after.Events, e =>
+                            e.ReasonCode == "trophy_lost" && e.LastTick == after.Tick - 1 &&
+                            e.Details.GetValueOrDefault("raiderId", -1) == weapon.RaiderId);
+                        continue;
+                    }
 
                     if (weapon.DownedBy == creature.Id)
                     {
@@ -126,7 +145,7 @@ public sealed class PrototypeTrophyTests(ITestOutputHelper output)
             });
         }
 
-        output.WriteLine($"taken {taken}, lost {lost}");
+        output.WriteLine($"taken {taken}, lost {lost}, circulated without re-grudging {circulatedWithoutRegrudging}");
         Assert.True(taken > 0, "nobody in the whole matrix ever picked a weapon up");
         Assert.True(lost > 0, "in the whole matrix the one who downed the raider always took the blade: the conflict the slice exists for never happened");
     }
@@ -269,7 +288,7 @@ public sealed class PrototypeTrophyTests(ITestOutputHelper output)
             Walk(fixture, seed, (_, after) =>
             {
                 foreach (var @event in after.Events.Where(e =>
-                             e.LastTick >= after.Tick - 1 &&
+                             e.LastTick == after.Tick - 1 &&
                              e.ReasonCode is "refused_place_of_panic" or "refused_place_of_wound"))
                 {
                     refusals++;
@@ -282,6 +301,65 @@ public sealed class PrototypeTrophyTests(ITestOutputHelper output)
         // refusal, not one that happens to have none: a check that never sees
         // a refusal at all would pass whether the exemption existed or not.
         Assert.True(refusals > 0, "no refusal by memory of place ever happened in the matrix; widen MatrixSeeds before concluding the exemption holds");
+    }
+
+    /// <summary>
+    /// Regression for review finding 3 of the fix round (2026-09-05): the same
+    /// weapon can circulate through several holders over a party — dropped by
+    /// one, picked up, dropped again when that holder falls or flees, picked
+    /// up again — and <see cref="WeaponState.DownedBy"/> never changes, so
+    /// without a paid-once flag every pickup after the first would re-grudge
+    /// the raider's original downer for the one kill it already paid for. A
+    /// weapon is identified by its party and its raider id — one raider never
+    /// drops twice (spec: a downed raider never comes back), so within one
+    /// party a raider id names exactly one weapon.
+    /// </summary>
+    [Fact]
+    public void A_circulating_blade_re_grudges_nobody_after_its_debt_is_paid()
+    {
+        var lostByWeapon = new Dictionary<(string Fixture, ulong Seed, int RaiderId), int>();
+        var takenByWeapon = new Dictionary<(string Fixture, ulong Seed, int RaiderId), int>();
+        foreach (var (fixture, seed) in Matrix())
+        {
+            Walk(fixture, seed, (_, after) =>
+            {
+                foreach (var @event in after.Events.Where(e =>
+                             e.LastTick == after.Tick - 1 && e.ReasonCode == "trophy_lost"))
+                {
+                    var key = (fixture, seed, @event.Details["raiderId"]);
+                    lostByWeapon[key] = lostByWeapon.GetValueOrDefault(key) + 1;
+                }
+
+                foreach (var @event in after.Events.Where(e =>
+                             e.LastTick == after.Tick - 1 && e.ReasonCode == "trophy_taken"))
+                {
+                    var key = (fixture, seed, @event.Details["raiderId"]);
+                    takenByWeapon[key] = takenByWeapon.GetValueOrDefault(key) + 1;
+                }
+            });
+        }
+
+        foreach (var (weapon, count) in lostByWeapon)
+        {
+            Assert.True(
+                count <= 1,
+                $"{weapon.Fixture}/{weapon.Seed} raiderId {weapon.RaiderId}: trophy_lost fired " +
+                $"{count} times over the party. The debt for one kill is paid once; a circulating " +
+                "blade must not re-grudge the same downer every time it changes hands again.");
+        }
+
+        // Not vacuous: measured on the shipped matrix (this file's Matrix()),
+        // 14 of 25 distinct weapons taken were taken two or three times, so
+        // the bound above is exercised against real circulating blades and
+        // not merely true for want of a second taking anywhere.
+        var takenTwice = takenByWeapon.Where(pair => pair.Value >= 2).ToArray();
+        output.WriteLine(
+            $"weapons taken twice or more: {takenTwice.Length} of {takenByWeapon.Count} distinct " +
+            $"weapons over the matrix.");
+        Assert.True(
+            takenTwice.Length > 0,
+            "no weapon in the matrix was ever taken a second time, so the bound above was never " +
+            "exercised against a circulating blade; widen MatrixSeeds before concluding the fix holds.");
     }
 
     // ---- helpers shared by every test of this file ----

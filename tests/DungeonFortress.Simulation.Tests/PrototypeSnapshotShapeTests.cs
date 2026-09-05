@@ -169,10 +169,12 @@ public sealed class PrototypeSnapshotShapeTests
         "$.creatures[].loyalty.grudgeTerms[] -> amount, code",
         "$.creatures[].rememberedPlaces[] -> cause, place, tick",
         // docs/design/TROPHY_WEAPON.md, Task 3: reached from the tick somebody
-        // walks over to a blade on the floor and picks it up. The same five
+        // walks over to a blade on the floor and picks it up. The same six
         // fields the floor publishes below — a weapon is one object whether it
-        // lies on a tile or is carried.
-        "$.creatures[].weapon -> bonus, downedBy, name, raiderId, wave",
+        // lies on a tile or is carried. `taken` joined the other five in the
+        // fix round that stopped a circulating blade re-grudging its
+        // original downer on every pickup after the first.
+        "$.creatures[].weapon -> bonus, downedBy, name, raiderId, taken, wave",
         "$.creatures[].woundIntent -> code, part, press, severity, spare, tick, verdictDecided, wave",
         "$.digDesignations[] -> jobId, progressTicks, reachable, requiredTicks, reservedBy, statusCode, tile, workTile",
         "$.domain -> downedCreatures, injuredCreatures, livingCreatures, peakMeals, renown, renownAtPreviousWave, strength, strengthAtPreviousWave, waveCount, wavesArrived, wavesResolved",
@@ -186,7 +188,7 @@ public sealed class PrototypeSnapshotShapeTests
         // an element of it for the first time. Additive: the section itself
         // was already recorded in Task 1, only its own composition was not.
         "$.looseWeapons[] -> position, weapon",
-        "$.looseWeapons[].weapon -> bonus, downedBy, name, raiderId, wave",
+        "$.looseWeapons[].weapon -> bonus, downedBy, name, raiderId, taken, wave",
         "$.map -> buildFloorTiles, builtPostTiles, diggableTiles, excavatedTiles, rockTiles, stockpileFloorTiles",
         "$.materialStockpile[] -> capacity, incomingReserved, position, reachable, statusCode, stored",
         "$.momentOfTruth -> cards, open, openedTick, waitedSteps, waveNumber, windowSteps",

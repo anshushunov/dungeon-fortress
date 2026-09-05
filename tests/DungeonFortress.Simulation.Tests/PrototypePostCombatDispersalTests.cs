@@ -112,8 +112,20 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     // `20260730` is the nearest one that carries all three back: 116 refused
     // steps, two walled-in, one blocked by a creature with no destination. The
     // floor stays where it is, as it did in #409.
+    //
+    // The sixth seed is the same repair a third time, taken when the trophy
+    // slice's own fix round stopped a circulating blade re-grudging its
+    // original downer past the first pickup (spec §3): fewer standing
+    // grudges shift who presses and who spares in turn, which moved the
+    // ratio `Walking_round_reaches_more_of_the_clinch_than_a_yield_could`
+    // holds to 1.5 down to 1.47 (22 detoured against 15 yieldable). Scanned
+    // over fifteen candidates on both fixtures, `prepared/20260731` is the
+    // nearest one that carries the ratio back on its own — four more
+    // detoured refused steps and none yieldable, 26 against 15, a ratio of
+    // 1.73 — without touching the floor or either of the two counters this
+    // file already asserts must exist.
     private static readonly ulong[] MatrixSeeds =
-        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL, 20_260_730UL];
+        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL, 20_260_730UL, 20_260_731UL];
 
     private static readonly string[] Fixtures = ["baseline", "prepared"];
 

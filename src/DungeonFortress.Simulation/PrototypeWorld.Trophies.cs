@@ -37,7 +37,12 @@ public sealed partial class PrototypeWorld
     /// The creature standing on the tile takes the first weapon there in
     /// canonical order (wave, then name). Whoever put the raider down and did
     /// not get the blade pays a grudge — if still standing: a creature on the
-    /// floor or on the run has other things to resent (spec §3).
+    /// floor or on the run has other things to resent (spec §3) — but only
+    /// once. The same <see cref="WeaponState"/> keeps circulating every time
+    /// its holder falls and somebody else picks it back up (spec §2.8), and
+    /// <see cref="WeaponState.DownedBy"/> never changes; without a debt flag
+    /// every later pickup would re-grudge the raider's original downer for
+    /// the one kill it already paid for (trophy slice fix round 3).
     /// </summary>
     private void TakeWeapon(CreatureState creature, JobState job)
     {
@@ -68,7 +73,11 @@ public sealed partial class PrototypeWorld
             JobKind.Claim,
             job.Origin);
 
-        if (entry.Weapon.DownedBy == creature.Id)
+        // The debt is paid once. Read before it is set, so this same pickup
+        // is the last one that can still owe it.
+        var alreadyPaid = entry.Weapon.Taken;
+        entry.Weapon.Taken = true;
+        if (alreadyPaid || entry.Weapon.DownedBy == creature.Id)
         {
             return;
         }
@@ -94,7 +103,7 @@ public sealed partial class PrototypeWorld
     /// A holder that goes down or breaks leaves the blade where it stood, and
     /// it waits for the first again (spec §2.8). Recorded before the decision
     /// that put the creature there, so the journal keeps both and the panel
-    /// keeps the one that matters more.
+    /// keeps the later-written one.
     /// </summary>
     private void DropCreatureWeapon(CreatureState creature)
     {

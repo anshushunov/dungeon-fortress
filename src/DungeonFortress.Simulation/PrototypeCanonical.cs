@@ -997,6 +997,7 @@ public static class PrototypeCanonical
         writer.WriteNumber("wave", weapon.Wave);
         writer.WriteNumber("bonus", weapon.Bonus);
         writer.WriteNumber("downedBy", weapon.DownedBy);
+        writer.WriteBoolean("taken", weapon.Taken);
         writer.WriteEndObject();
     }
 

@@ -57,44 +57,56 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
     /// instead of asserting over an empty set.</para>
     ///
     /// <para><b>A downed-on-the-way-in candidate is not a scene (trophy slice,
-    /// Task 5).</b> Freeing a weapon off a fallen or fled holder moves who is
-    /// standing where and how hard the line hits, which moves every raider's
-    /// wounds and every returning raider's road in turn. After that shift the
-    /// first seed of the range (20260726) still brings back raider #18
-    /// remembering the larder tile — but this body was put down at (23,4)
-    /// before it ever got near the larder, the same shape
+    /// Task 5), and the exclusion is cut by cause, not by <c>Mode</c> alone
+    /// (review finding 1 of fix round 3, 2026-09-05).</b> Freeing a weapon off
+    /// a fallen or fled holder moves who is standing where and how hard the
+    /// line hits, which moves every raider's wounds and every returning
+    /// raider's road in turn. After that shift the first seed of the range
+    /// (20260726) still brings back raider #18 remembering the larder tile —
+    /// but this body was put down at (23,4) before it ever got near the larder,
+    /// walking the direct approach the whole way (<see cref="RoadNotMemoryEndedIt"/>
+    /// says so), the same shape
     /// <see cref="A_returning_raider_walks_round_the_place_it_was_hit_hardest"/>
     /// already tracks apart from the rule under a name of its own
     /// (<c>putDownOnTheWayIn</c>): not arriving because combat ended the
-    /// raider is not the same fact as not arriving because memory walled the
-    /// road off, and only the second is what this bound is about. The search
-    /// below excludes exactly that shape, the same one line the sibling check
-    /// already prints and does not fail on; it does not touch what the scene
-    /// found has to prove — the road actually crossing the tile is still a
-    /// real <see cref="Assert.Contains{T}(T, IEnumerable{T})"/> in the body of
-    /// <see cref="A_memory_takes_away_a_road_and_never_the_objective"/> below,
-    /// not folded into the search. A scan of the unchanged range with the
-    /// exclusion applied lands on 20260740 (raider #21, Escaped, visited),
-    /// still inside <see cref="SearchSeeds"/> — the range was not widened.</para>
+    /// raider on a route memory never touched is not the same fact as not
+    /// arriving because memory walled the road off, and only the second is
+    /// what this bound is about. <see cref="ObjectiveWitnesses"/> is the one
+    /// filter both this search and the Fact below read, so a seed accepted
+    /// here can never disagree with what the Fact then asserts (review
+    /// finding 2) — the search asks for at least one witness surviving that
+    /// filter, and the Fact quantifies over exactly that same, already-culled
+    /// population rather than the raw, unfiltered one. A scan of the
+    /// unchanged range with the filter applied lands on 20260740 (raider #21,
+    /// Escaped, visited), still inside <see cref="SearchSeeds"/> — the range
+    /// was not widened.</para>
     /// </summary>
     private static ulong ObjectiveSeed => ObjectiveSeedSearch.Value;
+
+    /// <summary>
+    /// The returning raiders of <paramref name="state"/> that remember the
+    /// objective tile and survive <see cref="RoadNotMemoryEndedIt"/> — read by
+    /// both <see cref="ObjectiveSeedSearch"/> and
+    /// <see cref="A_memory_takes_away_a_road_and_never_the_objective"/>, so the
+    /// two can never quantify over different populations again (review
+    /// finding 2).
+    /// </summary>
+    private static PrototypeRaiderSnapshot[] ObjectiveWitnesses(
+        PrototypeSnapshot state,
+        Dictionary<int, HashSet<GridPoint>> visits) =>
+        state.Raiders
+            .Where(raider =>
+                raider.ReturnedFromWave is not null &&
+                raider.RememberedPlace?.Place == FirstLarderTile &&
+                !RoadNotMemoryEndedIt(raider.Mode, FirstLarderTile, FirstLarderTile, visits[raider.Id]))
+            .ToArray();
 
     private static readonly Lazy<ulong> ObjectiveSeedSearch = new(() =>
     {
         foreach (var seed in SearchSeeds)
         {
             var (visits, state) = RaiderRoutes(ShippedFixture, seed);
-            var candidate = state.Raiders.FirstOrDefault(raider =>
-                raider.ReturnedFromWave is not null &&
-                raider.RememberedPlace?.Place == FirstLarderTile &&
-                // Put down on the way in is combat ending the raider, not
-                // memory walling the objective off — the same distinction
-                // A_returning_raider_walks_round_the_place_it_was_hit_hardest
-                // already draws and prints as `putDownOnTheWayIn` rather than
-                // counting it as a stranding. This search is not allowed to
-                // hand the Fact below a scene of that shape.
-                !(raider.Mode == RaiderMode.Downed && !visits[raider.Id].Contains(FirstLarderTile)));
-            if (candidate is not null)
+            if (ObjectiveWitnesses(state, visits).Length > 0)
             {
                 return seed;
             }
@@ -117,6 +129,135 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
     /// <c>PrototypeLayout.Read</c>'s own docstring says the order is for.
     /// </summary>
     private static GridPoint FirstLarderTile => PrototypeLayout.Read('L')[0];
+
+    /// <summary>
+    /// Where every raider walks from. Read out of the authored layout for the
+    /// same reason <see cref="FirstLarderTile"/> is.
+    /// </summary>
+    private static GridPoint Gate => PrototypeLayout.Read('G')[0];
+
+    private static readonly GridPoint[] StepOffsets =
+        [new(0, -1), new(1, 0), new(0, 1), new(-1, 0)];
+
+    /// <summary>
+    /// A tile of the authored layout a body can stand on — everything but rock
+    /// (<c>#</c>) and the quarry face it is spelled differently for (<c>d</c>),
+    /// the same rule <c>PrototypeMap.IsPassable</c> states over the live map.
+    /// Read off <see cref="PrototypeLayout"/> rather than the internal map for
+    /// the same reason the two tiles above are.
+    /// </summary>
+    private static bool IsPassableTile(GridPoint point)
+    {
+        if (point.Y < 0 || point.Y >= PrototypeLayout.Rows.Count)
+        {
+            return false;
+        }
+
+        var row = PrototypeLayout.Rows[point.Y];
+        return point.X >= 0 && point.X < row.Length && row[point.X] is not ('#' or 'd');
+    }
+
+    /// <summary>
+    /// Every tile's distance from <paramref name="start"/> by a plain grid walk
+    /// of the authored layout, optionally with <paramref name="blocked"/> made
+    /// impassable too. A breadth-first search over a sixteen-by-twenty-eight
+    /// board costs nothing worth avoiding, so it is not cached.
+    /// </summary>
+    private static Dictionary<GridPoint, int> DistancesFrom(GridPoint start, GridPoint? blocked)
+    {
+        var distances = new Dictionary<GridPoint, int> { [start] = 0 };
+        var queue = new Queue<GridPoint>();
+        queue.Enqueue(start);
+        while (queue.TryDequeue(out var current))
+        {
+            foreach (var offset in StepOffsets)
+            {
+                var next = new GridPoint(current.X + offset.X, current.Y + offset.Y);
+                if (!IsPassableTile(next) || next == blocked || distances.ContainsKey(next))
+                {
+                    continue;
+                }
+
+                distances[next] = distances[current] + 1;
+                queue.Enqueue(next);
+            }
+        }
+
+        return distances;
+    }
+
+    /// <summary>
+    /// Every tile that lies on at least one shortest walk from
+    /// <paramref name="start"/> to <paramref name="target"/>, optionally with
+    /// <paramref name="obstacle"/> made impassable — "the shortest approach the
+    /// map gives you", read by a breadth-first search from both ends and kept
+    /// where the two halves add up to the shortest total. Empty when no such
+    /// walk exists (the obstacle cuts every road).
+    /// </summary>
+    private static HashSet<GridPoint> ShortestApproachTiles(
+        GridPoint start,
+        GridPoint target,
+        GridPoint? obstacle)
+    {
+        var fromStart = DistancesFrom(start, obstacle);
+        if (!fromStart.TryGetValue(target, out var shortest))
+        {
+            return [];
+        }
+
+        var fromTarget = DistancesFrom(target, obstacle);
+        var tiles = new HashSet<GridPoint>();
+        foreach (var (tile, distance) in fromStart)
+        {
+            if (fromTarget.TryGetValue(tile, out var back) && distance + back == shortest)
+            {
+                tiles.Add(tile);
+            }
+        }
+
+        return tiles;
+    }
+
+    /// <summary>
+    /// Cause, not outcome (review finding 1 of the coordinator's fix round 3,
+    /// 2026-09-05): a downed raider that never reached <paramref
+    /// name="objective"/> is excluded from a stranding claim only when its own
+    /// route shows the road, not its memory, is what ended it there. That road
+    /// is "the shortest approach the map gives you, with the remembered tile
+    /// as the only obstacle" — computed once by <see cref="ShortestApproachTiles"/>
+    /// with <paramref name="feared"/> blocked, or with nothing blocked at all
+    /// when <paramref name="feared"/> equals <paramref name="objective"/>
+    /// itself, since nothing can be routed round its own destination (the case
+    /// <see cref="ObjectiveSeedSearch"/> and
+    /// <see cref="A_memory_takes_away_a_road_and_never_the_objective"/> both
+    /// read, where the tile remembered <b>is</b> the objective). A raider whose
+    /// visited tiles never leave that approach was walking it correctly when
+    /// something else — combat, almost always — cut it down; one whose visited
+    /// tiles leave it was not, and stays counted wherever this returns
+    /// <c>false</c>.
+    ///
+    /// <para>The same helper backs three call sites — the `stranded` bucket
+    /// below, <see cref="ObjectiveSeedSearch"/>'s candidate filter and the
+    /// `atTheObjective` filter of the Fact that search feeds — so a seed the
+    /// search accepts can never disagree with what the Fact then asserts
+    /// (review finding 2): both read the same cause on the same route.</para>
+    /// </summary>
+    private static bool RoadNotMemoryEndedIt(
+        RaiderMode mode,
+        GridPoint objective,
+        GridPoint feared,
+        IReadOnlySet<GridPoint> visited)
+    {
+        if (mode != RaiderMode.Downed || visited.Contains(objective))
+        {
+            return false;
+        }
+
+        var direct = ShortestApproachTiles(Gate, objective, null);
+        var obstacle = feared != objective && direct.Contains(feared) ? feared : (GridPoint?)null;
+        var approach = ShortestApproachTiles(Gate, objective, obstacle);
+        return visited.All(approach.Contains);
+    }
 
     [Fact]
     public void Every_name_a_party_can_need_fits_in_the_pool()
@@ -382,24 +523,40 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
                     walkedOverIt.Add($"{seed}/{raider.Name}@({remembered.X},{remembered.Y})");
                 }
 
-                // Not arriving has two shapes (Issue #409, and until the trophy
-                // slice's Task 5 fix round both were always 0 together on this
-                // range, so the line below was dead code rather than a decision):
-                // a memory walled the raider out, which is what this clause is
-                // named for, and the domain put it down on the way in, which is
-                // the domain doing its job and has nothing to do with what the
-                // raider remembers. `stranded` now excludes the second shape by
-                // the same test `putDownOnTheWayIn` already names it with, so the
-                // two counts are the disjoint pair the surrounding comment always
-                // described rather than an overlapping one that only agreed by
-                // accident. Found on baseline/20260735: Бурый Младший remembers
-                // (16,7) and was downed at (15,7), one tile short of the larder —
-                // combat, not avoidance, and the trajectory shift of Task 5 (and
-                // of this fix round's own Claim exemption, PrototypeWorld.Matching.cs)
-                // is what first sent a raider down that exact tile.
+                // Not arriving has two shapes (Issue #409), and which one a
+                // downed raider is counted as is cut by cause, not by `Mode`
+                // alone (review finding 1 of fix round 3, 2026-09-05, reverting
+                // an outcome-based `Mode != Downed` this file briefly carried).
+                // A memory walling the raider out is what this clause is named
+                // for; the domain putting it down on a route memory never
+                // touched is the domain doing its job and has nothing to do
+                // with what the raider remembers — but a raider memory *did*
+                // wall off, that wandered, and was *then* cut down, is still a
+                // stranding: outcome (Downed) cannot tell the two apart, only
+                // the route can. `RoadNotMemoryEndedIt` reads that route: a
+                // downed raider is excluded from `stranded` only when its
+                // visited tiles never leave the shortest approach the map
+                // gives it with the remembered tile as the one obstacle to
+                // route around (or the plain direct approach, when the
+                // remembered tile was never on the road to begin with). The
+                // two buckets below therefore may now disagree where they used
+                // to agree by accident (PR #417 measured `stranded=0` and
+                // `putDownOnTheWayIn=0` together on every seed this file had
+                // ever walked; the trophy slice's own trajectory shifts are
+                // the first to separate them). Found on baseline/20260735:
+                // Бурый Младший remembers (16,7), died at (15,7) one tile short
+                // of the larder (14,7) — its full eighteen-tile route
+                // ((26,13)…(26,8), west along y=8 to (15,8), then the single
+                // step to (15,7)) is exactly the shortest walk from the gate
+                // to the larder and never touches (16,7) at all, so
+                // `RoadNotMemoryEndedIt` is true: the road, not the memory,
+                // ended it, and it is excluded from `stranded` and counted
+                // only in `putDownOnTheWayIn`. See the report for the full
+                // trace and the general seeds/candidates this was checked
+                // against.
                 if (!visits[raider.Id].Contains(FirstLarderTile) &&
                     raider.Mode != RaiderMode.Escaped &&
-                    raider.Mode != RaiderMode.Downed)
+                    !RoadNotMemoryEndedIt(raider.Mode, FirstLarderTile, remembered, visits[raider.Id]))
                 {
                     stranded.Add($"{seed}/{raider.Name}");
                 }
@@ -407,6 +564,9 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
                 // Counted beside the clause above and asserted on by nothing
                 // (Issue #409): the domain putting a raider down on the way in,
                 // named apart from a true stranding rather than folded into it.
+                // Outcome-based on purpose — this bucket is a diagnostic print,
+                // not the assertion, so it does not need the cause-based cut
+                // `stranded` does.
                 if (raider.Mode == RaiderMode.Downed &&
                     !visits[raider.Id].Contains(FirstLarderTile))
                 {
@@ -428,15 +588,29 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
             $"remember, which is more than the one fifth the way-round-when-there-is-a-way-round " +
             $"rule leaves room for: {string.Join(' ', walkedOverIt)}");
 
-        // <b>The clause is this branch's `main` edition, unchanged.</b> Issue #409
-        // did relax it for a while — a raider put down on the way in, and a raider
-        // of a wave the session fuse cut short, were both excluded from «stranded»
-        // — and independent review of PR #417 measured that neither exclusion was
-        // needed: the `main` edition is green on this tree, and the population the
-        // exclusions removed is empty (`putDownOnTheWayIn=0`, `stranded=0` over the
-        // twelve parties). A relaxation that buys nothing is a relaxation nobody
-        // can price, so it was taken back out. The example that had been offered
-        // for it did not reproduce here either.
+        // <b>The clause is cut by cause again, not by an outcome-based
+        // exclusion (fix round 3, 2026-09-05, reverting the interim state of
+        // fix round 1).</b> Issue #409 relaxed it once by outcome — a raider
+        // put down on the way in, and a raider of a wave the session fuse cut
+        // short, were both excluded from «stranded» regardless of why — and
+        // independent review of PR #417 measured that neither exclusion was
+        // needed on that tree: the population they would have removed was
+        // empty (`putDownOnTheWayIn=0`, `stranded=0` over the twelve parties),
+        // so an outcome-based relaxation that bought nothing was taken back
+        // out, and the two buckets had agreed by accident ever since. The
+        // trophy slice's own trajectory shifts ended that accident: they
+        // produced the first downed raider this file has ever measured whose
+        // own route shows combat, not memory, ended it (Бурый Младший,
+        // baseline/20260735, traced above). Re-adding an unconditional `Mode
+        // != Downed` exclusion here would repeat exactly the outcome-based
+        // relaxation PR #417 rejected — it would also silently clear a raider
+        // memory genuinely walled off and wandering, if combat happened to
+        // finish it afterwards. `RoadNotMemoryEndedIt` is the cause-based
+        // difference: it excludes a downed raider from `stranded` only when
+        // its own route never left the shortest approach the map gives it, so
+        // the two buckets below are now allowed to disagree — `stranded` can
+        // stay 0 while `putDownOnTheWayIn` is not, exactly the case this seed
+        // is — where before that would have meant one of them was wrong.
         Assert.True(
             stranded.Count == 0,
             $"{stranded.Count} returning raiders neither reached the larder nor left: avoidance " +
@@ -478,11 +652,11 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
     {
         var (visits, state) = RaiderRoutes(ShippedFixture, ObjectiveSeed);
 
-        var atTheObjective = state.Raiders
-            .Where(raider =>
-                raider.ReturnedFromWave is not null &&
-                raider.RememberedPlace?.Place == FirstLarderTile)
-            .ToArray();
+        // The identical filter ObjectiveSeedSearch accepted the seed on
+        // (review finding 2): a seed this search picks can never leave the
+        // Fact quantifying over a raider the search itself would have called
+        // a non-witness.
+        var atTheObjective = ObjectiveWitnesses(state, visits);
         Assert.NotEmpty(atTheObjective);
         Assert.All(atTheObjective, raider => Assert.Contains(
             FirstLarderTile,

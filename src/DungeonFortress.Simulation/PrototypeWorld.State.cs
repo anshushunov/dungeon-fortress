@@ -765,8 +765,14 @@ public sealed partial class PrototypeWorld
     }
 
     /// <summary>
-    /// The live form of <see cref="PrototypeWeaponSnapshot"/>. Immutable: a
-    /// weapon changes hands and tiles, never its name or bonus.
+    /// The live form of <see cref="PrototypeWeaponSnapshot"/>. A weapon changes
+    /// hands and tiles, never its name or bonus — those stay immutable. <see
+    /// cref="Taken"/> is the one mutable fact of a weapon: whether its debt has
+    /// been paid (spec §3, trophy slice fix round 3). The same
+    /// <see cref="WeaponState"/> object circulates through every later pickup
+    /// once a raider drops it and a holder drops it again in turn, so without
+    /// this flag every pickup after the first would re-emit the grudge against
+    /// the raider's original downer for the one kill that already paid it.
     /// </summary>
     private sealed class WeaponState(string name, int raiderId, int wave, int bonus, int downedBy)
     {
@@ -775,8 +781,9 @@ public sealed partial class PrototypeWorld
         public int Wave { get; } = wave;
         public int Bonus { get; } = bonus;
         public int DownedBy { get; } = downedBy;
+        public bool Taken { get; set; }
 
-        public PrototypeWeaponSnapshot ToSnapshot() => new(Name, RaiderId, Wave, Bonus, DownedBy);
+        public PrototypeWeaponSnapshot ToSnapshot() => new(Name, RaiderId, Wave, Bonus, DownedBy, Taken);
     }
 
     /// <summary>

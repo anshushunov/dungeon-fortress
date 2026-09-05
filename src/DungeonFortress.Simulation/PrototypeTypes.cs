@@ -419,12 +419,14 @@ public sealed record PrototypeLooseItemSnapshot(
 /// </summary>
 /// <param name="Bonus">Added to the holder's might where might becomes damage, and nowhere else.</param>
 /// <param name="DownedBy">The creature that put the raider down: the one the pitch's «двое хотят одно» is about.</param>
+/// <param name="Taken">Whether the debt this blade owes has already been paid: <c>false</c> until its first pickup, <c>true</c> for every one after (spec §3, trophy slice fix round 3). A circulating blade re-grudges nobody for a kill it already grudged once.</param>
 public sealed record PrototypeWeaponSnapshot(
     string Name,
     int RaiderId,
     int Wave,
     int Bonus,
-    int DownedBy);
+    int DownedBy,
+    bool Taken = false);
 
 /// <summary>A weapon lying on a tile, waiting for whoever the domain sends.</summary>
 public sealed record PrototypeLooseWeaponSnapshot(
