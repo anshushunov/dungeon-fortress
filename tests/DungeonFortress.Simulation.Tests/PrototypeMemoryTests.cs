@@ -54,8 +54,9 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
     /// <see cref="A_remembered_place_changes_what_the_creature_does_next"/> reads.
     ///
     /// <para><b>Why this check keeps three seeds while the rest of the file has
-    /// five.</b> The fourth and the fifth were added on this same branch for the
-    /// check below it, whose need is a <i>sample floor</i>: more parties can only
+    /// five.</b> The fourth seed was added by Issue #409 and the fifth on this
+    /// branch, both for the check below it, whose need is a <i>sample floor</i>:
+    /// more parties can only
     /// help a rule of the form "this branch must be reached at least once". The
     /// observability rule is of the opposite form — <i>every</i> party of the
     /// matrix must show memory of place at work — so widening the matrix silently

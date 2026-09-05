@@ -601,10 +601,15 @@ public sealed class DomainFeedTests(ITestOutputHelper output)
                 {
                     world.Step();
                     var state = world.GetSnapshot();
-                    // The pickups of this tick, and only those: a journal entry
-                    // coalesces and its `LastTick` advances every tick it repeats,
-                    // so this is one count per taking rather than one per tick the
-                    // entry survives.
+                    // The pickups of this tick, and only those. A journal entry
+                    // lives on in `state.Events` for the rest of the party, so
+                    // matching on the code alone would count one taking on every
+                    // tick after it; `LastTick == Tick - 1` narrows that to the
+                    // tick it was written on. That is one count per taking because
+                    // `trophy_taken` never repeats — a creature that holds a blade
+                    // does not claim another (spec §2.6), and the next decision it
+                    // takes ends any coalescing window anyway — so no entry's
+                    // `LastTick` ever advances onto a second tick here.
                     var takings = state.Events
                         .Where(@event => @event.ReasonCode == "trophy_taken" &&
                             @event.LastTick == state.Tick - 1)

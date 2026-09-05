@@ -377,10 +377,17 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     ///
     /// <para>So the floor is not cleared by the balance — it is cleared by which
     /// seeds are read, and the widest cut of the three is the one that misses it
-    /// furthest. The sixth seed was added for a different check's sample floor and
-    /// carried this ratio back over the line as a side effect; that is honest as
-    /// far as it goes and it is not evidence that the ratio is above one and a
-    /// half. What the conclusion of Issue #186 actually needs is only that a way
+    /// furthest. Nor is that a side effect: the sixth seed was chosen <b>for this
+    /// ratio</b>, and <see cref="MatrixSeeds"/> records how. When the fix round
+    /// that pays a circulating blade's grudge once dropped the ratio to 1.47, under
+    /// the floor, fifteen candidates were scanned over both fixtures until one —
+    /// <c>prepared/20260731</c> — carried it back over the line on its own, and
+    /// that seed was added. Only the fourth and the fifth seeds are sample-floor
+    /// repairs (the count of refused steps falling under the 100 this file holds
+    /// itself to); the sixth is a seed picked because the assertion below was going
+    /// red without it. A floor that a search for seeds is what keeps green is a
+    /// floor the sample is chosen against, and it should be read as one. What the
+    /// conclusion of Issue #186 actually needs is only that a way
     /// round reach more refused steps than a yield could — above <b>one</b> — and
     /// every one of the three cuts clears that. Whether the floor should therefore
     /// be one, or the matrix should be the eight seeds, or the naming of the

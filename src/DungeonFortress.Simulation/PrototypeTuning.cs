@@ -859,10 +859,17 @@ public static class PrototypeTuning
     // column and reproduces in the corridor exactly the jam it just left.
     //
     // The quantity is the one `Walking_round_reaches_more_of_the_clinch_than_a_
-    // yield_could` asserts — detourWithABody / yieldCouldClear, floor 1.5 — and
-    // the three readings are: with the stagger 937 / 605 = 1.55; without it
-    // 916 / 639 = 1.43, under the floor, and the test goes red; on origin/main,
-    // before this rule existed, 639 / 344 = 1.86.
+    // yield_could` asserts — detourWithABody / yieldCouldClear, floor 1.5. The
+    // readings that used to stand here (937/605 = 1.55 with the stagger,
+    // 916/639 = 1.43 without it, 639/344 = 1.86 on origin/main) were taken on a
+    // sample five times the size and are gone with it. Measured on the current
+    // code, three cuts of the seed matrix: five seeds 22/15 = 1.47, six seeds
+    // 26/15 = 1.73, eight seeds 74/56 = 1.32.
+    //
+    // So the floor is currently cleared by the choice of cut and not by this
+    // constant, and the sixth seed was picked to clear it. Read the docstring of
+    // that test before tuning this number: the open question there is the owner's,
+    // not this constant's.
     //
     // Leaving one at a time is what a group does anyway, and by id it stays
     // deterministic.

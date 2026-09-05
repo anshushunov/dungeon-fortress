@@ -91,8 +91,17 @@ public static class InspectorText
             // the cell names the one that lies here instead of saying how many —
             // and one line each, because two raiders can fall on one tile and «a
             // blade of one of them» is not an answer. No heading and no section of
-            // its own: it is one short line, and the panel is measured by the HUD
-            // overflow guard at every viewport the game supports.
+            // its own: on nearly every cell that carries a blade at all it is one
+            // short line.
+            //
+            // It is not bounded, though, and the HUD overflow guard does not
+            // currently reach it: several raiders can fall on one tile over four
+            // waves, and every measured frame is taken before
+            // PrototypeTuning.FirstRaidTick, so no guarded frame has ever carried a
+            // blade on the selected cell. If one ever overflows the panel, the fix
+            // is the one DescribeMemory and DescribeRooms already took — compact
+            // the block into a single line joined with « · », rather than make the
+            // panel taller.
             var weaponSection = string.Concat(state.LooseWeapons
                 .Where(entry => entry.Position == cell)
                 .Select(entry =>
