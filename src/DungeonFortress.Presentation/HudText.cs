@@ -1138,6 +1138,22 @@ public static class HudText
                     (injury.Severity == InjuryKind.Heavy ? "тяжело" : "легко")));
     }
 
+    /// <summary>«blade of Крюк». The weapon's canonical name is the raider's; the
+    /// noun lives here with every other label.</summary>
+    public static string WeaponName(PrototypeWeaponSnapshot weapon)
+    {
+        ArgumentNullException.ThrowIfNull(weapon);
+        return $"blade of {weapon.Name}";
+    }
+
+    public static string CreatureWeaponLong(PrototypeCreatureSnapshot creature)
+    {
+        ArgumentNullException.ThrowIfNull(creature);
+        return creature.Weapon is { } weapon
+            ? $"{WeaponName(weapon)} (+{weapon.Bonus} might)"
+            : "nothing";
+    }
+
     public static string CreatureLifeState(PrototypeCreatureSnapshot creature) => creature.Mode switch
     {
         CreatureMode.Downed => "DOWNED",

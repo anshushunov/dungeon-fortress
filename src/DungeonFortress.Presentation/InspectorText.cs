@@ -55,6 +55,10 @@ public static class InspectorText
                 // than the line being dropped, because "this one is whole" is an
                 // answer and a missing line is not.
                 $"wounds {HudText.CreatureInjuryLong(creature)}\n" +
+                // docs/design/TROPHY_WEAPON.md §5: the blade is part of the
+                // portrait, next to the wound, and «nothing» is printed rather
+                // than the line dropped, for the reason «цел» is.
+                $"wields {HudText.CreatureWeaponLong(creature)}\n" +
                 $"{DescribeWoundIntent(creature)}" +
                 $"mode {creature.Mode}\n" +
                 $"job {(job is null ? "none" : $"#{job.JobId} {job.Kind}")}\n" +
