@@ -55,6 +55,27 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
     /// subject. The scan is therefore the code, run over the same range, taking
     /// the first seed that holds the scene; if none does, the failure says so
     /// instead of asserting over an empty set.</para>
+    ///
+    /// <para><b>A downed-on-the-way-in candidate is not a scene (trophy slice,
+    /// Task 5).</b> Freeing a weapon off a fallen or fled holder moves who is
+    /// standing where and how hard the line hits, which moves every raider's
+    /// wounds and every returning raider's road in turn. After that shift the
+    /// first seed of the range (20260726) still brings back raider #18
+    /// remembering the larder tile — but this body was put down at (23,4)
+    /// before it ever got near the larder, the same shape
+    /// <see cref="A_returning_raider_walks_round_the_place_it_was_hit_hardest"/>
+    /// already tracks apart from the rule under a name of its own
+    /// (<c>putDownOnTheWayIn</c>): not arriving because combat ended the
+    /// raider is not the same fact as not arriving because memory walled the
+    /// road off, and only the second is what this bound is about. The search
+    /// below excludes exactly that shape, the same one line the sibling check
+    /// already prints and does not fail on; it does not touch what the scene
+    /// found has to prove — the road actually crossing the tile is still a
+    /// real <see cref="Assert.Contains{T}(T, IEnumerable{T})"/> in the body of
+    /// <see cref="A_memory_takes_away_a_road_and_never_the_objective"/> below,
+    /// not folded into the search. A scan of the unchanged range with the
+    /// exclusion applied lands on 20260740 (raider #21, Escaped, visited),
+    /// still inside <see cref="SearchSeeds"/> — the range was not widened.</para>
     /// </summary>
     private static ulong ObjectiveSeed => ObjectiveSeedSearch.Value;
 
@@ -62,10 +83,18 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
     {
         foreach (var seed in SearchSeeds)
         {
-            var state = FullParty(ShippedFixture, seed).State;
-            if (state.Raiders.Any(raider =>
-                    raider.ReturnedFromWave is not null &&
-                    raider.RememberedPlace?.Place == FirstLarderTile))
+            var (visits, state) = RaiderRoutes(ShippedFixture, seed);
+            var candidate = state.Raiders.FirstOrDefault(raider =>
+                raider.ReturnedFromWave is not null &&
+                raider.RememberedPlace?.Place == FirstLarderTile &&
+                // Put down on the way in is combat ending the raider, not
+                // memory walling the objective off — the same distinction
+                // A_returning_raider_walks_round_the_place_it_was_hit_hardest
+                // already draws and prints as `putDownOnTheWayIn` rather than
+                // counting it as a stranding. This search is not allowed to
+                // hand the Fact below a scene of that shape.
+                !(raider.Mode == RaiderMode.Downed && !visits[raider.Id].Contains(FirstLarderTile)));
+            if (candidate is not null)
             {
                 return seed;
             }
@@ -73,10 +102,12 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
 
         throw new InvalidOperationException(
             $"No seed of {SearchSeeds[0]}..{SearchSeeds[^1]} brings a returning raider back " +
-            $"remembering the larder tile {FirstLarderTile}, so the bound «a memory takes away a " +
-            "road and never the objective» has no scene to be read on. That is a finding about " +
-            "the world rather than a broken test: either the objective stopped being the tile " +
-            "raiders are hit on, or returning raiders stopped carrying a memory at all.");
+            $"remembering the larder tile {FirstLarderTile} without having been put down on the " +
+            "way in, so the bound «a memory takes away a road and never the objective» has no " +
+            "scene to be read on. That is a finding about the world rather than a broken test: " +
+            "either the objective stopped being the tile raiders are hit on, or returning " +
+            "raiders stopped carrying a memory at all, or every one that does is cut down before " +
+            "the road it walked could say anything about memory.");
     });
 
     /// <summary>
@@ -351,17 +382,31 @@ public sealed class PrototypeReturningRaiderTests(ITestOutputHelper output)
                     walkedOverIt.Add($"{seed}/{raider.Name}@({remembered.X},{remembered.Y})");
                 }
 
-                if (!visits[raider.Id].Contains(FirstLarderTile) && raider.Mode != RaiderMode.Escaped)
+                // Not arriving has two shapes (Issue #409, and until the trophy
+                // slice's Task 5 fix round both were always 0 together on this
+                // range, so the line below was dead code rather than a decision):
+                // a memory walled the raider out, which is what this clause is
+                // named for, and the domain put it down on the way in, which is
+                // the domain doing its job and has nothing to do with what the
+                // raider remembers. `stranded` now excludes the second shape by
+                // the same test `putDownOnTheWayIn` already names it with, so the
+                // two counts are the disjoint pair the surrounding comment always
+                // described rather than an overlapping one that only agreed by
+                // accident. Found on baseline/20260735: Бурый Младший remembers
+                // (16,7) and was downed at (15,7), one tile short of the larder —
+                // combat, not avoidance, and the trajectory shift of Task 5 (and
+                // of this fix round's own Claim exemption, PrototypeWorld.Matching.cs)
+                // is what first sent a raider down that exact tile.
+                if (!visits[raider.Id].Contains(FirstLarderTile) &&
+                    raider.Mode != RaiderMode.Escaped &&
+                    raider.Mode != RaiderMode.Downed)
                 {
                     stranded.Add($"{seed}/{raider.Name}");
                 }
 
-                // Counted beside the clause and asserted on by nothing (Issue
-                // #409). Not arriving has two shapes — a memory walled the raider
-                // out, which is what the clause is named for, and the domain put it
-                // down on the way in, which is the domain doing its job — and the
-                // clause cannot tell them apart. Printing the second is what lets a
-                // reader see how much of the first is left.
+                // Counted beside the clause above and asserted on by nothing
+                // (Issue #409): the domain putting a raider down on the way in,
+                // named apart from a true stranding rather than folded into it.
                 if (raider.Mode == RaiderMode.Downed &&
                     !visits[raider.Id].Contains(FirstLarderTile))
                 {

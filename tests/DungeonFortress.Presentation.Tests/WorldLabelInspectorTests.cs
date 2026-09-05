@@ -22,6 +22,10 @@ public sealed class WorldLabelInspectorTests
     private const WorldLabelLayoutTests.OwnerFrame Crowded =
         WorldLabelLayoutTests.OwnerFrame.WhereTheCrowdIsThickest;
 
+    /// <inheritdoc cref="Thin"/>
+    private const WorldLabelLayoutTests.OwnerFrame StoriedCrowd =
+        WorldLabelLayoutTests.OwnerFrame.WhereAReturnerCarriesAStoryInACrowd;
+
     /// <inheritdoc cref="WorldLabelLayoutTests.OwnerFrame"/>
     private static PrototypeSnapshot OwnerScene(WorldLabelLayoutTests.OwnerFrame frame) =>
         WorldLabelLayoutTests.OwnerScene(frame);
@@ -461,7 +465,15 @@ public sealed class WorldLabelInspectorTests
     [Fact]
     public void The_panel_of_a_returning_raider_says_what_his_caption_says()
     {
-        var state = OwnerScene(Crowded);
+        // `StoriedCrowd` and not `Crowded` (trophy slice, Task 5 fix round): the
+        // check is about the two-line caption — name plus the story of the last
+        // encounter — and `Crowded` only promises a captioned returner, not a
+        // scarred one. Freeing a weapon off a downed or fled holder shifted
+        // which tick is thickest to one where every captioned raider of the
+        // owner's own party happened to return unscarred (`Story` null), which
+        // made `returning` empty by the search's own construction rather than
+        // by anything wrong with the panel.
+        var state = OwnerScene(StoriedCrowd);
         var returning = state.Raiders
             .Where(ReturningHeroLabel.IsCaptioned)
             .Where(raider => ReturningHeroLabel.Story(raider) is not null)
