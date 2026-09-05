@@ -209,10 +209,21 @@ public sealed class PrototypeTrophyTests(ITestOutputHelper output)
                     blows++;
                     var details = creature.LastDecision.Details;
                     Assert.Equal(creature.Weapon.Bonus, details["bonus"]);
+                    var armedWeight = (creature.Might + creature.Weapon.Bonus) * PrototypeTuning.DamageMightWeight;
+                    // «Ровно на бонус» (spec §2.7), and it is an equality because
+                    // the bound below is not one: damage carries readiness and the
+                    // scatter as well, so doubling the bonus in the production code
+                    // passes it just as comfortably. The one term of the blow the
+                    // blade is in is published as `weight`
+                    // (`PrototypeWorld.Combat.cs`), and on a whole arm — which is
+                    // what this loop filters for — it must equal might plus bonus
+                    // times the might weight, with nothing else in it.
+                    Assert.Equal(armedWeight, details["weight"]);
                     // Damage is weight + readiness share + jitter in [-DamageJitter, DamageJitter],
                     // so with the bonus in the weight the blow can never fall further
-                    // below the armed weight than the jitter allows.
-                    var armedWeight = (creature.Might + creature.Weapon.Bonus) * PrototypeTuning.DamageMightWeight;
+                    // below the armed weight than the jitter allows. Kept beside the
+                    // equality because it is the claim about what the raider
+                    // actually took, and the equality is the claim about the term.
                     Assert.True(
                         details["damage"] + PrototypeTuning.DamageJitter >= armedWeight,
                         $"{creature.Name} with +{creature.Weapon.Bonus} struck for {details["damage"]}, below an armed weight of {armedWeight}");

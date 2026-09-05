@@ -51,6 +51,41 @@ public sealed class TrophyReadoutTests
         Assert.Contains($"raider {raider.Id}", EventNarration.Sentence("trophy_taken", details, JobKind.Claim, null), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// docs/design/TROPHY_WEAPON.md §5, third bullet: «оружие на полу видно на
+    /// клетке как предмет с именем при наведении». The cell panel is where the
+    /// player asks about a tile, so it is where the blade lying on it answers —
+    /// by name, bonus and wave, the same three facts the holder's line carries.
+    ///
+    /// <para>The snapshot is a real party with its <c>looseWeapons</c> replaced:
+    /// the panel is a pure function of the snapshot, so stating the list is
+    /// stating the input rather than faking the result, and it lets the negative
+    /// half of the check name a tile that certainly carries nothing.</para>
+    /// </summary>
+    [Fact]
+    public void A_blade_on_the_floor_is_named_on_the_cell_it_lies_on()
+    {
+        var state = Party();
+        var cell = state.Creatures[0].Position;
+        var bare = state.Creatures.First(creature => creature.Position != cell).Position;
+        state = state with
+        {
+            LooseWeapons = [new PrototypeLooseWeaponSnapshot(
+                cell,
+                new PrototypeWeaponSnapshot("Крюк", 40, 2, 3, 5))],
+        };
+        var view = state.Shown();
+
+        Assert.Contains(
+            "on the floor: blade of Крюк (+3 might), from wave 2",
+            InspectorText.Build(view, null, cell),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "on the floor:",
+            InspectorText.Build(view, null, bare),
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_mark_shows_on_a_holder_and_on_nobody_else()
     {

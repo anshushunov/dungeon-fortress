@@ -548,8 +548,9 @@ public sealed partial class PrototypeWorld
             return;
         }
 
+        var weight = WeaponWeight(creature);
         var damage = Math.Max(PrototypeTuning.DamageFloor,
-            WeaponWeight(creature) +
+            weight +
             ComputeReadiness(creature) / PrototypeTuning.DamageReadinessDivisor +
             CombatJitter(PrototypeTuning.DamageJitter));
         target.Hp -= damage;
@@ -558,7 +559,16 @@ public sealed partial class PrototypeWorld
         // (Issue #358), and it is recorded here rather than derived later because
         // "where" stops being answerable the moment the raider takes its next step.
         target.RecordBlow(damage, CurrentTick);
-        RecordDecision(creature, "combat_attack", new Dictionary<string, int> { ["raiderId"] = target.Id, ["damage"] = damage, ["bonus"] = creature.Weapon?.Bonus ?? 0 });
+        // `weight` is the one term of the blow the trophy is in: might plus the
+        // blade's bonus, times DamageMightWeight, then whatever a hurt arm takes
+        // off it. `damage` also carries readiness and the scatter, so «the holder
+        // strikes harder by exactly the bonus» cannot be asserted from it —
+        // doubling the bonus still clears any bound read off a jittered total.
+        // Published so that PrototypeTrophyTests can assert the equality rather
+        // than an inequality (spec §2.7, review fix round 5). It is the same local
+        // the damage above was built from, not a second call, so the journal
+        // cannot report a weight the blow was not struck with.
+        RecordDecision(creature, "combat_attack", new Dictionary<string, int> { ["raiderId"] = target.Id, ["damage"] = damage, ["bonus"] = creature.Weapon?.Bonus ?? 0, ["weight"] = weight });
         if (target.Hp <= 0)
         {
             target.Hp = 0;

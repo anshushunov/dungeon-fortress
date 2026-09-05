@@ -86,6 +86,18 @@ public static class InspectorText
             var looseSection = looseStone is null
                 ? string.Empty
                 : $"LOOSE STONE\n{BuildLooseStoneExplanation(state, looseStone, jobs)}\n\n";
+            // docs/design/TROPHY_WEAPON.md §5: «оружие на полу видно на клетке как
+            // предмет с именем». A blade is not a resource with a count (§2.3), so
+            // the cell names the one that lies here instead of saying how many —
+            // and one line each, because two raiders can fall on one tile and «a
+            // blade of one of them» is not an answer. No heading and no section of
+            // its own: it is one short line, and the panel is measured by the HUD
+            // overflow guard at every viewport the game supports.
+            var weaponSection = string.Concat(state.LooseWeapons
+                .Where(entry => entry.Position == cell)
+                .Select(entry =>
+                    $"on the floor: {HudText.WeaponName(entry.Weapon)} " +
+                    $"(+{entry.Weapon.Bonus} might), from wave {entry.Weapon.Wave}\n"));
             // Only a cell that is part of the construction chain carries this
             // section. A tile that is neither a blueprint nor a built post reads
             // exactly as it did before the chain existed.
@@ -101,7 +113,9 @@ public static class InspectorText
                 $"CELL ({cell.X}, {cell.Y})\n\n" +
                 $"tile {TileDescription(view, cell)}\n" +
                 DescribeRooms(view, cell) +
-                $"jobs {(jobs.Length == 0 ? "none" : string.Join(", ", jobs.Select(job => $"#{job.JobId} {job.Kind}")))}\n\n" +
+                $"jobs {(jobs.Length == 0 ? "none" : string.Join(", ", jobs.Select(job => $"#{job.JobId} {job.Kind}")))}\n" +
+                weaponSection +
+                "\n" +
                 looseSection +
                 buildSection +
                 stockpileSection +
