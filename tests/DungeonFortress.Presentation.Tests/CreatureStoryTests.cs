@@ -125,8 +125,15 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     private static (int Weight, int Tick) Rank(PrototypeEvent @event) =>
         (HudText.StoryWeight(@event.ReasonCode), @event.LastTick);
 
-    /// <summary>Whether this line of the panel is this entry of the journal.</summary>
-    private static bool Renders(PrototypeEvent @event, string line) =>
+    /// <summary>Whether this line of the panel is this entry of the journal.
+    ///
+    /// <para>The snapshot is handed in because the panel renders with it
+    /// (<c>HudText.CreatureStory</c> → <c>StoryLine</c>), and a sentence that
+    /// names somebody — the raider whose blade was taken — reads that name out
+    /// of the state. Restating the rendering without it would compare the panel
+    /// against a sentence the panel never prints.</para>
+    /// </summary>
+    private static bool Renders(PrototypeSnapshot state, PrototypeEvent @event, string line) =>
         // The tick prefix ends at a separator, and that is load-bearing rather
         // than tidy: without it `"t2399 · …".StartsWith("t239")` is true, so an
         // entry of t239 claims a line of t2399 whenever both render the same
@@ -154,7 +161,8 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
                 @event.ReasonCode,
                 @event.Details,
                 @event.JobKind,
-                @event.Target),
+                @event.Target,
+                state),
             StringComparison.Ordinal);
 
     /// <summary>
@@ -230,7 +238,7 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
                     lines.Length);
                 var shown = lines
                     .Select(line => Assert.Single(
-                        newestOfEachKind.Where(@event => Renders(@event, line))))
+                        newestOfEachKind.Where(@event => Renders(state, @event, line))))
                     .ToArray();
                 Assert.Equal(
                     shown.Length,
@@ -796,7 +804,7 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
             var mine = state.Events.Where(@event => @event.CreatureId == creature.Id).ToArray();
             var lines = Body(HudText.CreatureStory(state, creature.Id));
             var kinds = lines
-                .SelectMany(line => mine.Where(@event => Renders(@event, line)))
+                .SelectMany(line => mine.Where(@event => Renders(state, @event, line)))
                 .Select(@event => @event.ReasonCode)
                 .ToArray();
 

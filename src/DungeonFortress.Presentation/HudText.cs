@@ -813,7 +813,7 @@ public static class HudText
                 CultureInfo.InvariantCulture,
                 $"STORY · {name} · {shown.Count} of {story.Length} · {mattered} mattered")
             : string.Create(CultureInfo.InvariantCulture, $"STORY · {name} · {story.Length} in all");
-        return head + "\n" + string.Join("\n", shown.Select(StoryLine));
+        return head + "\n" + string.Join("\n", shown.Select(@event => StoryLine(state, @event)));
     }
 
     /// <summary>
@@ -916,8 +916,14 @@ public static class HudText
 
     /// <summary>
     /// One line of one creature's story: when it decided, and what it decided.
+    ///
+    /// <para>The snapshot is threaded in for the same reason the feed and the
+    /// inspector thread it in: a sentence that names somebody — the raider whose
+    /// blade was taken, the creature that took it — can only reach the name
+    /// through the state. Without it this panel printed «took the blade of
+    /// raider 12» in the very place a trophy is ranked a turning point.</para>
     /// </summary>
-    private static string StoryLine(PrototypeEvent @event)
+    private static string StoryLine(PrototypeSnapshot state, PrototypeEvent @event)
     {
         var when = @event.FirstTick == @event.LastTick
             ? string.Create(CultureInfo.InvariantCulture, $"t{@event.LastTick}")
@@ -929,7 +935,8 @@ public static class HudText
             @event.ReasonCode,
             @event.Details,
             @event.JobKind,
-            @event.Target);
+            @event.Target,
+            state);
         return $"{when} · {sentence}{held}";
     }
 
