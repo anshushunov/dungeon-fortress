@@ -29,7 +29,16 @@ public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
 {
     private static readonly string[] Fixtures = ["baseline", "prepared"];
 
-    private static readonly ulong[] MatrixSeeds = [20_260_726UL, 20_260_727UL, 20_260_728UL];
+    // The fourth seed was added when the trophy slice landed
+    // (docs/design/TROPHY_WEAPON.md): with work «забрать» filling the window
+    // between waves, the wounded of the old three seeds all reach the roll call
+    // with a benefit too small to spare themselves, and one and the same
+    // verdict stopped producing two outcomes. `prepared/20260729`, measured out
+    // of ten candidates, presses seven and spares two, and the verdict is what
+    // decides two of them. The old three are kept: the contest still happens on
+    // them, it just no longer swings both ways on its own.
+    private static readonly ulong[] MatrixSeeds =
+        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL];
 
     /// <summary>
     /// One decision of one contest, read off the published <c>woundIntent</c> on
@@ -247,10 +256,20 @@ public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
     /// over seeds 20260710–20260760, 102 parties — and it exists twice, both times
     /// on the same creature: <c>baseline/20260716</c> t2350 and
     /// <c>baseline/20260738</c> t2370, Прель (#6), five points of severity against
-    /// grit 4. The first of the two is named here as a single extra party. It is a
+    /// grit 4. One of them is named here as a single extra party. It is a
     /// <b>witness cell</b> and not a widened matrix: every other check in this file
-    /// still reads the three matrix seeds, and this one party exists because
+    /// still reads the matrix seeds, and this one party exists because
     /// without it the assertion below has no subject.</para>
+    ///
+    /// <para><b>The cell moved once, and the search was taken again rather than
+    /// widened</b> (docs/design/TROPHY_WEAPON.md). Work «забрать» changes what
+    /// the crew does between waves, and neither of the two parties above
+    /// produces the coincidence any more. The same space — both fixtures over
+    /// 20260710–20260760 — now holds nine of them, and the one named is
+    /// <c>prepared/20260721</c> t2370: Прель (#6) again, five points of
+    /// severity against grit 4, spare 10 over press 8. The old cell is recorded
+    /// here rather than deleted, so that "the witness moved" stays a fact
+    /// somebody can check.</para>
     /// </summary>
     [Fact]
     public void A_wounded_creature_that_would_have_spared_itself_is_still_turned_away_as_unreachable()
@@ -444,7 +463,13 @@ public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
             }
         }
 
-        yield return ("baseline", 20_260_716UL);
+        // The witness moved when the trophy slice landed, and was re-measured
+        // rather than searched for by widening the matrix: same search space as
+        // before — both fixtures over 20260710-20260760 — and nine coincidences
+        // in it now, of which this is the same creature carrying the same shape
+        // of wound as the one that has gone: Прель (#6), five points of
+        // severity against grit 4. `baseline/20260716` no longer produces one.
+        yield return ("prepared", 20_260_721UL);
     }
 
     /// <summary>

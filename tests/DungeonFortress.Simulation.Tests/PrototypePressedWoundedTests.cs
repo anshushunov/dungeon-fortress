@@ -38,7 +38,18 @@ public sealed class PrototypePressedWoundedTests(ITestOutputHelper output)
 
     private static readonly string[] Fixtures = ["baseline", "prepared"];
 
-    private static readonly ulong[] MatrixSeeds = [20_260_726UL, 20_260_727UL, 20_260_728UL];
+    // The fourth seed was added when the trophy slice landed
+    // (docs/design/TROPHY_WEAPON.md). Work «забрать» gives the window between
+    // waves something to do, so every party of the old three moved, and on all
+    // three the wounded now reach the roll call with too little benefit to
+    // spare themselves: `punish` pressed everybody and spared nobody, the price
+    // of coercion was never charged, and this file went blind. Measured over
+    // ten candidate seeds, `prepared/20260729` is the one that carries the
+    // whole channel again — 9 contests, 7 pressed, 2 spared, 2 of them decided
+    // by the verdict, 2 charged. The old three are kept rather than replaced:
+    // nothing about them became wrong, they simply stopped being enough.
+    private static readonly ulong[] MatrixSeeds =
+        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL];
 
     /// <summary>
     /// The term is credited exactly where §3.4 says and nowhere else: the

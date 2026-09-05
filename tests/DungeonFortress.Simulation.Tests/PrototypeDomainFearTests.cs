@@ -128,7 +128,16 @@ public sealed class PrototypeDomainFearTests
     {
         var open = RunToMomentOfTruth("prepared");
         var atTick = open.CurrentTick;
-        var subject = open.GetSnapshot().MomentOfTruth.Cards[0].CreatureId;
+        // The second card and not the first, since the trophy slice landed
+        // (docs/design/TROPHY_WEAPON.md). This check needs a punished creature
+        // the next wave actually reaches, because its whole point is a fade
+        // running while the fight is still crediting fright; with work
+        // «забрать» in the window between the waves the first card's creature no
+        // longer meets that wave and its combat fear stopped moving at all.
+        // Measured on the same party: card 0 (#1 Кремень) no longer rises,
+        // cards 1 (#3 Смола) and 2 (#7 Обух) do. Nothing else is changed — the
+        // subject is a pointer into the party, not a term of the check.
+        var subject = open.GetSnapshot().MomentOfTruth.Cards[1].CreatureId;
 
         var term = PrototypeTuning.LoyaltyVerdictPunishFear *
             PrototypeTuning.LoyaltyDomainFearFadePeriod;

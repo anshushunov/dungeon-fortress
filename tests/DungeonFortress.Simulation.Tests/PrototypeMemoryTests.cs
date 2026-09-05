@@ -35,8 +35,18 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
     // «the memory-free tick did not honour this refusal» stopped being reached at
     // all. That branch is what the check exists for, so the matrix was widened
     // rather than the branch relaxed.
+    // And the fifth was added when the trophy slice landed
+    // (docs/design/TROPHY_WEAPON.md), for the same reason a second time: work
+    // «забрать» moves what the crew does between waves, and on `prepared` the
+    // four seeds above stopped contesting a refused job at all. The branch was
+    // not relaxed, the matrix was widened — and by measurement rather than by
+    // the next number in the series: over 20260726-20260745 on `prepared` the
+    // branch is reached on 20260731 (once), 20260732 (once), 20260734 (28
+    // times), 20260735 (once), 20260743 (4) and 20260744 (13); 20260730 does
+    // not contest at all. The nearest one that does is taken. If this ever
+    // needs a thicker sample rather than a live branch, 20260734 is the seed.
     private static readonly ulong[] MatrixSeeds =
-        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL];
+        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL, 20_260_731UL];
 
     /// <summary>
     /// The matrix the <b>observability</b> rule of Issue #333 was chosen against,

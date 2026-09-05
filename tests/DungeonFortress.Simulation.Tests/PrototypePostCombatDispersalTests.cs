@@ -102,8 +102,18 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     // to. Lowering that floor would have been the wrong repair — the floor says
     // how big a sample the conclusions below need — so the sample was made bigger
     // instead, on the seed the rest of the suite already reads.
+    // The fifth seed is the same repair for the same reason, taken again when the
+    // trophy slice landed (docs/design/TROPHY_WEAPON.md). Work «забрать» gives
+    // the window after a fight something to do, so fewer ex-combatants stand in
+    // each other's way: the sample fell from 116 to 95 against the floor of 100,
+    // and the two rare classes the file separates — a step with no route at all
+    // once bodies are walls, and a step blocked by a creature with nowhere to go
+    // — left the sample altogether. Measured over four candidates,
+    // `20260730` is the nearest one that carries all three back: 116 refused
+    // steps, two walled-in, one blocked by a creature with no destination. The
+    // floor stays where it is, as it did in #409.
     private static readonly ulong[] MatrixSeeds =
-        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL];
+        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL, 20_260_730UL];
 
     private static readonly string[] Fixtures = ["baseline", "prepared"];
 

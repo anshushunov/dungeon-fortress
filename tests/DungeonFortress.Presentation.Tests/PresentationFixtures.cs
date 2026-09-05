@@ -1,3 +1,6 @@
+using System.Text;
+using System.Text.Json.Nodes;
+
 using DungeonFortress.Simulation;
 
 namespace DungeonFortress.Presentation.Tests;
@@ -148,9 +151,27 @@ internal static class PresentationFixtures
     /// tick by tick, or run one on a seed other than the journal's own, needs the
     /// log rather than a finished snapshot.
     /// </summary>
-    internal static PrototypeCommandLog LogOf(string fixtureName) =>
-        PrototypeCommandDocument.Load(Path.Combine(
-            FindRepositoryRoot(), "scenarios", "prototype1", $"{fixtureName}.commands.v2.json"));
+    internal static PrototypeCommandLog LogOf(string fixtureName)
+    {
+        var path = Path.Combine(
+            FindRepositoryRoot(), "scenarios", "prototype1", $"{fixtureName}.commands.v2.json");
+        if (!fixtureName.StartsWith("prepared-", StringComparison.Ordinal))
+        {
+            return PrototypeCommandDocument.Load(path);
+        }
+
+        // The one-lever fixtures — `prepared-claim-zero` and its two elders
+        // `prepared-ration-zero` and `prepared-watch-zero` — carry a scenario
+        // label that says which lever is down, and the validator only accepts
+        // the four labels of the shipped scenarios. Every consumer relabels them
+        // to `prepared` before parsing, which is what they are: the same party
+        // with one command added. See the same two lines in
+        // CombatHoldReachabilityTests.LoadFixture and in
+        // PrototypeEvaluation.RunOnce.
+        var document = JsonNode.Parse(File.ReadAllText(path, Encoding.UTF8))!.AsObject();
+        document["scenario"] = "prepared";
+        return PrototypeCommandDocument.Parse(Encoding.UTF8.GetBytes(document.ToJsonString()));
+    }
 
     internal static PrototypeCommandLog Log(params PrototypeCommand[] commands) =>
         new("custom", PrototypeTuning.DefaultSeed, commands);
