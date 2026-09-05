@@ -55,6 +55,10 @@ public static class InspectorText
                 // than the line being dropped, because "this one is whole" is an
                 // answer and a missing line is not.
                 $"wounds {HudText.CreatureInjuryLong(creature)}\n" +
+                // docs/design/TROPHY_WEAPON.md §5: the blade is part of the
+                // portrait, next to the wound, and «nothing» is printed rather
+                // than the line dropped, for the reason «цел» is.
+                $"wields {HudText.CreatureWeaponLong(creature)}\n" +
                 $"{DescribeWoundIntent(creature)}" +
                 $"mode {creature.Mode}\n" +
                 $"job {(job is null ? "none" : $"#{job.JobId} {job.Kind}")}\n" +
@@ -62,7 +66,7 @@ public static class InspectorText
                 $"{DescribeCarrierRoute(creature, job, state.BuildSites)}" +
                 $"{DescribeMemory(creature)}" +
                 $"WHY t{creature.LastDecision.Tick} · {creature.LastDecision.ReasonCode}\n" +
-                $"{EventNarration.Sentence(creature.LastDecision.ReasonCode, creature.LastDecision.Details, creature.LastDecision.JobKind, creature.LastDecision.Target)}\n" +
+                $"{EventNarration.Sentence(creature.LastDecision.ReasonCode, creature.LastDecision.Details, creature.LastDecision.JobKind, creature.LastDecision.Target, state)}\n" +
                 $"{details}";
         }
 
@@ -82,6 +86,27 @@ public static class InspectorText
             var looseSection = looseStone is null
                 ? string.Empty
                 : $"LOOSE STONE\n{BuildLooseStoneExplanation(state, looseStone, jobs)}\n\n";
+            // docs/design/TROPHY_WEAPON.md §5: «оружие на полу видно на клетке как
+            // предмет с именем». A blade is not a resource with a count (§2.3), so
+            // the cell names the one that lies here instead of saying how many —
+            // and one line each, because two raiders can fall on one tile and «a
+            // blade of one of them» is not an answer. No heading and no section of
+            // its own: on nearly every cell that carries a blade at all it is one
+            // short line.
+            //
+            // It is not bounded, though, and the HUD overflow guard does not
+            // currently reach it: several raiders can fall on one tile over four
+            // waves, and every measured frame is taken before
+            // PrototypeTuning.FirstRaidTick, so no guarded frame has ever carried a
+            // blade on the selected cell. If one ever overflows the panel, the fix
+            // is the one DescribeMemory and DescribeRooms already took — compact
+            // the block into a single line joined with « · », rather than make the
+            // panel taller.
+            var weaponSection = string.Concat(state.LooseWeapons
+                .Where(entry => entry.Position == cell)
+                .Select(entry =>
+                    $"on the floor: {HudText.WeaponName(entry.Weapon)} " +
+                    $"(+{entry.Weapon.Bonus} might), from wave {entry.Weapon.Wave}\n"));
             // Only a cell that is part of the construction chain carries this
             // section. A tile that is neither a blueprint nor a built post reads
             // exactly as it did before the chain existed.
@@ -97,7 +122,9 @@ public static class InspectorText
                 $"CELL ({cell.X}, {cell.Y})\n\n" +
                 $"tile {TileDescription(view, cell)}\n" +
                 DescribeRooms(view, cell) +
-                $"jobs {(jobs.Length == 0 ? "none" : string.Join(", ", jobs.Select(job => $"#{job.JobId} {job.Kind}")))}\n\n" +
+                $"jobs {(jobs.Length == 0 ? "none" : string.Join(", ", jobs.Select(job => $"#{job.JobId} {job.Kind}")))}\n" +
+                weaponSection +
+                "\n" +
                 looseSection +
                 buildSection +
                 stockpileSection +

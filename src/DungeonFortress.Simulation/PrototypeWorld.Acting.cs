@@ -95,7 +95,25 @@ public sealed partial class PrototypeWorld
             {
                 creature.IdleTicks = 0;
                 creature.OffDutyTarget = null;
-                creature.LeftTheFight = false;
+                // Work spends the trigger of Issue #201 only when it takes the
+                // creature off the ground the fight was fought on. Work done
+                // where it already stands does not: measured on
+                // baseline/20260727, a creature took the trophy of the raider
+                // that fell on its own tile — one tick, no step — and the
+                // clearing of this flag left it standing in the battlefield for
+                // the rest of the party. That is exactly the symptom the rule
+                // exists to prevent, reached through a job rather than through
+                // idleness, so the flag now follows the sentence the rule is
+                // written in: it has left the fight when it has left the tile.
+                // Defended by
+                // PrototypeOffDutyTests.A_creature_left_without_work_after_a_fight_does_not_stand_where_it_was_fought
+                // (baseline, 20260727), which goes red if this clear becomes
+                // unconditional again — mutation-verified by review.
+                if (job.Target != creature.Position)
+                {
+                    creature.LeftTheFight = false;
+                }
+
                 ActJob(creature, job);
                 continue;
             }

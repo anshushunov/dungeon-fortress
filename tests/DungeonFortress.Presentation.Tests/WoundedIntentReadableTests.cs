@@ -48,6 +48,27 @@ public sealed class WoundedIntentReadableTests(ITestOutputHelper output)
         ("baseline", 20_260_726UL),
         ("baseline", 20_260_727UL),
         ("baseline", 20_260_728UL),
+        // The controlled case, added when the trophy slice landed
+        // (docs/design/TROPHY_WEAPON.md). What is measured, and all that is
+        // measured: with claim jobs present, none of the six cells above reaches
+        // a `spared` contest on a creature that earned its benefit by being fed
+        // and tended — the subject the checks below are about — and holding the
+        // Claim priority at zero on the same three seeds brings it back. Which
+        // part of the slice does that is not measured here and is deliberately
+        // not named: the difference is «claims on» against «claims off», not a
+        // rule of the spec shown to be the cause.
+        //
+        // This is that same party with one lever held at zero from tick 0:
+        // trophies still fall and still lie there, and nobody goes for them, so
+        // the wounded walk the trajectory they walked before the slice. It is
+        // the controlled case the search's own message asks for and not a wider
+        // net — the seeds are untouched, and the fixture is `prepared` plus a
+        // single `set_priority Claim 0`, the way `prepared-watch-zero` and
+        // `prepared-ration-zero` are their own levers held down.
+        // On the three seeds this class already walks, and no others.
+        ("prepared-claim-zero", 20_260_726UL),
+        ("prepared-claim-zero", 20_260_727UL),
+        ("prepared-claim-zero", 20_260_728UL),
     ];
 
     // ------------------------------------------------------------------

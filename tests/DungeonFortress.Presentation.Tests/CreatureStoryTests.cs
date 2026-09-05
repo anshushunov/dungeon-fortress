@@ -125,8 +125,15 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
     private static (int Weight, int Tick) Rank(PrototypeEvent @event) =>
         (HudText.StoryWeight(@event.ReasonCode), @event.LastTick);
 
-    /// <summary>Whether this line of the panel is this entry of the journal.</summary>
-    private static bool Renders(PrototypeEvent @event, string line) =>
+    /// <summary>Whether this line of the panel is this entry of the journal.
+    ///
+    /// <para>The snapshot is handed in because the panel renders with it
+    /// (<c>HudText.CreatureStory</c> → <c>StoryLine</c>), and a sentence that
+    /// names somebody — the raider whose blade was taken — reads that name out
+    /// of the state. Restating the rendering without it would compare the panel
+    /// against a sentence the panel never prints.</para>
+    /// </summary>
+    private static bool Renders(PrototypeSnapshot state, PrototypeEvent @event, string line) =>
         // The tick prefix ends at a separator, and that is load-bearing rather
         // than tidy: without it `"t2399 · …".StartsWith("t239")` is true, so an
         // entry of t239 claims a line of t2399 whenever both render the same
@@ -154,7 +161,8 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
                 @event.ReasonCode,
                 @event.Details,
                 @event.JobKind,
-                @event.Target),
+                @event.Target,
+                state),
             StringComparison.Ordinal);
 
     /// <summary>
@@ -230,7 +238,7 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
                     lines.Length);
                 var shown = lines
                     .Select(line => Assert.Single(
-                        newestOfEachKind.Where(@event => Renders(@event, line))))
+                        newestOfEachKind.Where(@event => Renders(state, @event, line))))
                     .ToArray();
                 Assert.Equal(
                     shown.Length,
@@ -313,6 +321,48 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
             seen.Count >= 20,
             $"only {seen.Count} distinct reason codes were exercised, which is too few for this to " +
             "be a guard at all.");
+    }
+
+    /// <summary>
+    /// Regression for the trophy slice's Task 5 fix round: level 3 grew a peer
+    /// for every one of <c>verdict_rewarded</c>/<c>verdict_punished</c>/
+    /// <c>verdict_punished_without_fault</c>/<c>verdict_ignored</c>/
+    /// <c>combat_refused_grudge</c>/<c>combat_spared_wound</c>/
+    /// <c>combat_pressed_wound</c>/<c>trophy_taken</c>/<c>trophy_lost</c> — nine
+    /// distinct reason codes, each its own line under
+    /// <see cref="HudText.StorySelection"/>'s one-line-per-code rule — and a
+    /// creature whose last refusal by memory was older than four of them lost
+    /// the one sentence <see cref="HudText.StoryWeight"/>'s own doc-comment
+    /// says nothing outranks (<c>baseline/20260728</c>, Обух, measured by
+    /// <see cref="Every_creature_that_refused_by_memory_reads_that_refusal_on_its_panel"/>).
+    /// The fix split memory of place into its own top level rather than
+    /// widening the four-line budget or thinning level 3, so the guard here is
+    /// exactly that split: the two memory codes outrank every one of the nine
+    /// level-3 peers, named rather than inferred from a number that could
+    /// silently drift back to 3 on either side.
+    /// </summary>
+    [Fact]
+    public void A_refusal_by_memory_outranks_every_peer_of_the_level_it_used_to_share()
+    {
+        var memoryCodes = new[] { "refused_place_of_panic", "refused_place_of_wound" };
+        var formerPeers = new[]
+        {
+            "verdict_rewarded", "verdict_punished", "verdict_punished_without_fault",
+            "verdict_ignored", "combat_refused_grudge", "combat_spared_wound",
+            "combat_pressed_wound", "trophy_taken", "trophy_lost",
+        };
+
+        foreach (var memoryCode in memoryCodes)
+        {
+            foreach (var peer in formerPeers)
+            {
+                Assert.True(
+                    HudText.StoryWeight(memoryCode) > HudText.StoryWeight(peer),
+                    $"`{memoryCode}` (weight {HudText.StoryWeight(memoryCode)}) no longer outranks " +
+                    $"`{peer}` (weight {HudText.StoryWeight(peer)}). A refusal by memory of place is " +
+                    "the sentence the whole slice exists for; nothing may share its level again.");
+            }
+        }
     }
 
     /// <summary>
@@ -796,7 +846,7 @@ public sealed class CreatureStoryTests(ITestOutputHelper output)
             var mine = state.Events.Where(@event => @event.CreatureId == creature.Id).ToArray();
             var lines = Body(HudText.CreatureStory(state, creature.Id));
             var kinds = lines
-                .SelectMany(line => mine.Where(@event => Renders(@event, line)))
+                .SelectMany(line => mine.Where(@event => Renders(state, @event, line)))
                 .Select(@event => @event.ReasonCode)
                 .ToArray();
 

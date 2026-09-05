@@ -565,6 +565,99 @@ public sealed class DomainFeedTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// The trophy sentence survives the feed's own ranking
+    /// (docs/design/TROPHY_WEAPON.md §5, fourth bullet: «две фразы ленты: кто
+    /// взял и кто остался ни с чем»).
+    ///
+    /// <para><b>Why a check and not an assumption.</b> The feed gives a creature
+    /// one line and that line is its <em>heaviest</em> entry, not its newest
+    /// (<see cref="HudText.StoryWeight"/>). A taker that has already been
+    /// wounded, has already broken, or is already remembered somewhere carries an
+    /// entry that outranks <c>trophy_taken</c>, and the sentence the slice was
+    /// written for never reaches the panel that plays without a click. Nothing
+    /// upstream promises otherwise, so the share is measured here.</para>
+    ///
+    /// <para><b>What is asserted and what is printed.</b> The assertion is that
+    /// the sentence reaches the feed at all, over the trophy slice's own matrix —
+    /// both fixtures on the three seeds <c>PrototypeTrophyTests</c> reads. The
+    /// share itself is written to output rather than floored: it is a property of
+    /// what else has happened to the takers of these six parties, and a floor on
+    /// it would be a recording of a party. <see cref="HudText.StoryWeight"/> is
+    /// not touched by this check — promoting the trophy above a wound is a
+    /// question for the owner, not a repair a test may make on its own.</para>
+    /// </summary>
+    [Fact]
+    public void The_blade_a_creature_took_reaches_the_domain_feed()
+    {
+        var report = new StringBuilder();
+        var shown = 0;
+        var total = 0;
+        foreach (var fixtureName in new[] { "baseline", "prepared" })
+        {
+            foreach (var seed in MatrixSeeds)
+            {
+                var world = new PrototypeWorld(Fixture(fixtureName) with { Seed = seed });
+                while (!world.IsComplete)
+                {
+                    world.Step();
+                    var state = world.GetSnapshot();
+                    // The pickups of this tick, and only those. A journal entry
+                    // lives on in `state.Events` for the rest of the party, so
+                    // matching on the code alone would count one taking on every
+                    // tick after it; `LastTick == Tick - 1` narrows that to the
+                    // tick it was written on. That is one count per taking because
+                    // `trophy_taken` never repeats — a creature that holds a blade
+                    // does not claim another (spec §2.6), and the next decision it
+                    // takes ends any coalescing window anyway — so no entry's
+                    // `LastTick` ever advances onto a second tick here.
+                    var takings = state.Events
+                        .Where(@event => @event.ReasonCode == "trophy_taken" &&
+                            @event.LastTick == state.Tick - 1)
+                        .ToArray();
+                    if (takings.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    var lines = FeedLines(HudText.Feedback(View(state)));
+                    foreach (var @event in takings)
+                    {
+                        total++;
+                        var onThePanel = lines.Any(line => Renders(state, @event, line));
+                        if (onThePanel)
+                        {
+                            shown++;
+                        }
+
+                        report.AppendLine(string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{fixtureName}/{seed} t{state.Tick - 1}: " +
+                            $"{HudText.CreatureName(state, @event.CreatureId)} took a blade — " +
+                            $"{(onThePanel ? "on the feed" : "off the feed")}"));
+                    }
+                }
+            }
+        }
+
+        report.AppendLine(string.Create(
+            CultureInfo.InvariantCulture,
+            $"trophy_taken on the domain feed: {shown} of {total} takings over six parties " +
+            $"({(total == 0 ? 0 : 100.0 * shown / total):0.0}%)"));
+        output.WriteLine(report.ToString());
+
+        Assert.True(
+            total > 0,
+            "nobody took a blade anywhere in the matrix, so the feed was never asked to carry the " +
+            "sentence at all.");
+        Assert.True(
+            shown > 0,
+            $"not one of the {total} takings of the matrix reached the domain feed. The two " +
+            "sentences of docs/design/TROPHY_WEAPON.md §5 are what a player is told about a trophy " +
+            "without clicking anything, and a taker whose heaviest entry is a wound keeps them off " +
+            "the panel entirely.");
+    }
+
+    /// <summary>
     /// The measurement behind
     /// <see cref="The_line_a_creature_gets_is_the_worst_thing_that_happened_to_it"/>:
     /// how often the feed shows a creature something <b>other than</b> that

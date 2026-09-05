@@ -45,7 +45,13 @@ namespace DungeonFortress.Simulation.Tests;
 /// is load-bearing. That is what makes "толчея" a claim rather than an
 /// impression: the post-combat window is only interesting if it differs from the
 /// peacetime one, and the ratio is reported instead of asserted because it is a
-/// property of six runs (13.4).</para>
+/// property of the parties walked and not of the rule. Those parties are twelve —
+/// two fixtures times the six seeds of <see cref="MatrixSeeds"/> — and on them the
+/// ratio now reads <c>clinchRatio=0.20</c> and <c>blockedRatio=0.33</c>: the window
+/// after a fight carries fewer refused steps than the peacetime control, where the
+/// run this file was first written on read 13.4. That reversal is recorded rather
+/// than interpreted here — the balance has moved four slices since, and whether the
+/// owner still sees «толчея» is a question for a playtest, not for a docstring.</para>
 ///
 /// <para><b>Where the numbers come from.</b> Blocked steps are read from the
 /// canonical event log by <c>LastTick</c>, the way
@@ -102,8 +108,34 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     // to. Lowering that floor would have been the wrong repair — the floor says
     // how big a sample the conclusions below need — so the sample was made bigger
     // instead, on the seed the rest of the suite already reads.
+    // The fifth seed is the same repair for the same reason, taken again when the
+    // trophy slice landed (docs/design/TROPHY_WEAPON.md). Work «забрать» gives
+    // the window after a fight something to do, so fewer ex-combatants stand in
+    // each other's way: the sample fell from 116 to 95 against the floor of 100,
+    // and the two rare classes the file separates — a step with no route at all
+    // once bodies are walls, and a step blocked by a creature with nowhere to go
+    // — left the sample altogether. Measured over four candidates,
+    // `20260730` is the nearest one that carries all three back: 116 refused
+    // steps, two walled-in, one blocked by a creature with no destination. The
+    // floor stays where it is, as it did in #409.
+    //
+    // The sixth seed is the same repair a third time, taken when the trophy
+    // slice's own fix round stopped a circulating blade re-grudging its
+    // original downer past the first pickup (spec §3): fewer standing
+    // grudges shift who presses and who spares in turn, which moved the
+    // ratio `Walking_round_reaches_more_of_the_clinch_than_a_yield_could`
+    // holds to 1.5 down to 1.47 (22 detoured against 15 yieldable). Scanned
+    // over fifteen candidates on both fixtures, `prepared/20260731` is the
+    // nearest one that carries the ratio back on its own — four more
+    // detoured refused steps and none yieldable, 26 against 15, a ratio of
+    // 1.73 — without touching the floor or either of the two counters this
+    // file already asserts must exist. `MatrixSeeds` is fixture-agnostic
+    // (`Fixtures.SelectMany(_ => MatrixSeeds, ...)` below), so
+    // `baseline/20260731` joined the matrix in the same stroke; it measures
+    // detoured=0, yieldable=0, so it is not what moved the ratio, but the
+    // delta this seed adds to the matrix is of two parties, not one.
     private static readonly ulong[] MatrixSeeds =
-        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL];
+        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL, 20_260_730UL, 20_260_731UL];
 
     private static readonly string[] Fixtures = ["baseline", "prepared"];
 
@@ -231,8 +263,13 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     /// sees bodies the two are no longer opposites — a step is refused now mostly
     /// where the body-aware route was already being walked and the tile was lost
     /// to the arbitration on the tick — so the fifth stopped being a property of
-    /// the search and became a property of the balance. Measured on the final
-    /// party: 16 of 104, where the same guard read 261 of 782 before.</para>
+    /// the search and became a property of the balance. Measured on the matrix as
+    /// it stands: 26 ways round of the 140 refused steps with a destination, where
+    /// the same guard read 261 of 782 on the sample this file carried when the
+    /// fifth was written down. Both halves of that older pair are gone — neither
+    /// the count nor the sample it was a fifth of survives a matrix a fifth the
+    /// size — which is why what replaced it is a pair of existence claims and not
+    /// a share.</para>
     ///
     /// <para><b>What replaces it says the same thing about the search and does
     /// not name a share.</b> Two counts, each of them zero if bodies are left out
@@ -314,20 +351,60 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     /// two.</para>
     ///
     /// <para><b>One and a half is a floor that was chosen, not a number that was
-    /// derived.</b> The measured ratio is 1.86; the floor sits under it with room,
-    /// and it sits above one, which is what the conclusion actually needs — a way
-    /// round reaching more refused steps than a yield could. Moving it down from
-    /// two was forced (the corrected 1.86 would have reddened a check written for
-    /// the flattered 2.23) and is legitimate for the same reason, but it is a
-    /// choice and is named as one.</para>
+    /// derived.</b> The measured ratio was 1.86 when the floor was set; the
+    /// trophy slice's fix rounds have moved it twice since, each time by
+    /// shifting who fights and who yields rather than by anything this file
+    /// itself does — first work «забрать» giving the window after a fight
+    /// something to do, then paying a circulating blade's grudge only once —
+    /// and each time the seed sample was widened rather than the floor
+    /// lowered. Moving it down from two was forced (the corrected 1.86 would
+    /// have reddened a check written for the flattered 2.23) and is legitimate
+    /// for the same reason, but it is a choice and is named as one.</para>
+    ///
+    /// <para><b>The floor is currently cleared by the choice of cut, and that is
+    /// an open question for the owner rather than a settled reading.</b> The same
+    /// comparison, measured three ways on the same code:</para>
+    ///
+    /// <list type="bullet">
+    /// <item><description>the original five seeds (20260726–20260730), ten
+    /// parties: <b>1.47</b> — 22 detoured against 15 yieldable, <em>under</em> the
+    /// floor;</description></item>
+    /// <item><description>the six seeds <see cref="MatrixSeeds"/> holds, twelve
+    /// parties: <b>1.73</b> — 26 against 15, over it;</description></item>
+    /// <item><description>eight seeds (20260726–20260733), sixteen parties:
+    /// <b>1.32</b> — 74 against 56, under it again.</description></item>
+    /// </list>
+    ///
+    /// <para>So the floor is not cleared by the balance — it is cleared by which
+    /// seeds are read, and the widest cut of the three is the one that misses it
+    /// furthest. Nor is that a side effect: the sixth seed was chosen <b>for this
+    /// ratio</b>, and <see cref="MatrixSeeds"/> records how. When the fix round
+    /// that pays a circulating blade's grudge once dropped the ratio to 1.47, under
+    /// the floor, fifteen candidates were scanned over both fixtures until one —
+    /// <c>prepared/20260731</c> — carried it back over the line on its own, and
+    /// that seed was added. Only the fourth and the fifth seeds are sample-floor
+    /// repairs (the count of refused steps falling under the 100 this file holds
+    /// itself to); the sixth is a seed picked because the assertion below was going
+    /// red without it. A floor that a search for seeds is what keeps green is a
+    /// floor the sample is chosen against, and it should be read as one. What the
+    /// conclusion of Issue #186 actually needs is only that a way
+    /// round reach more refused steps than a yield could — above <b>one</b> — and
+    /// every one of the three cuts clears that. Whether the floor should therefore
+    /// be one, or the matrix should be the eight seeds, or the naming of the
+    /// mechanism should be taken again on the wider sample, is a decision for the
+    /// owner: none of them is a repair a fix round may make on its own, and the
+    /// floor and the assertion below are deliberately left exactly as they
+    /// were.</para>
     ///
     /// <para><b>And a floor chosen below every variant of the comparison stops
     /// telling the variants apart.</b> That is not a general observation, it is
-    /// what happened here: 1.5 lies under 1.86 (correct), under 1.95 (the
-    /// correction of the yield's reach reverted) and under 2.12 (the correction to
-    /// a comparable set reverted), so a ratio against that floor was blind to
-    /// both. The two assertions below exist because of it and hold the counters
-    /// themselves rather than their ratio.</para>
+    /// what happened here: when the floor was set, 1.5 lay under 1.86 (correct),
+    /// under 1.95 (the correction of the yield's reach reverted) and under 2.12
+    /// (the correction to a comparable set reverted), so a ratio against that
+    /// floor was blind to both. The two assertions below exist because of it and
+    /// hold the counters themselves rather than their ratio; the comments on them
+    /// carry what the same two reversions are worth on the matrix as it stands
+    /// now.</para>
     /// </summary>
     [Fact]
     public void Walking_round_reaches_more_of_the_clinch_than_a_yield_could()
@@ -352,7 +429,12 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
         // The reach of a yield counts a blocker with no destination at all on the
         // yield's side, because the last clause of CanYield lifts to true for it.
         // Put that class back where the first version of this harness had it and
-        // the ratio moves from 1.86 to 1.95 — over the floor either way, which is
+        // the reach of a yield falls by at most `byNoDestination`, which the
+        // matrix as it stands measures at 3 of the 15: the ratio would move from
+        // 1.73 to at most 26/12 = 2.17. (At most, because only the blockers of
+        // that class that also had an empty tile to step onto are on the yield's
+        // side at all.) It read 1.86 to 1.95 when this comment was first written,
+        // on a sample five times the size. Over the floor either way, which is
         // exactly why the class is asserted to exist instead.
         Assert.True(
             withNoDestination > 0,
@@ -363,8 +445,11 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
 
         // The comparable set has to be smaller than the whole sample, or the
         // restriction that makes the comparison fair is not restricting anything.
-        // Reverted, this number goes from 639 to 728 and the ratio from 1.86 to
-        // 2.12 — again over the floor, again invisible to the ratio.
+        // Reverted, the numerator goes from `detoured` to `everyDetour` — 26 to
+        // 126 on the matrix as it stands — and the ratio from 1.73 to 8.40. It
+        // read 639 to 728 and 1.86 to 2.12 when this comment was first written, on
+        // a sample five times the size; the reversion is far louder on today's
+        // smaller one, and still invisible to a floor of one and a half.
         Assert.True(
             detoured < everyDetour,
             $"A way round reached {everyDetour} refused steps in all and {detoured} of the ones a " +
@@ -374,8 +459,9 @@ public sealed class PrototypePostCombatDispersalTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// The six parties, measured once and shared: a party takes about a second to
-    /// walk and three assertions over the same six would otherwise pay for it
+    /// The twelve parties (two fixtures times <see cref="MatrixSeeds"/>'s six
+    /// seeds), measured once and shared: a party takes about a second to walk
+    /// and three assertions over the same twelve would otherwise pay for it
     /// three times.
     /// </summary>
     private static IReadOnlyList<PartyMeasurement> Matrix => MatrixMeasurements.Value;

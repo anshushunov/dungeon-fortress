@@ -82,6 +82,7 @@ public partial class Main
         JobKind.Watch => new Color("#f472b6"),
         JobKind.Dig => new Color("#f59e0b"),
         JobKind.Build => new Color("#2dd4bf"),
+        JobKind.Claim => new Color("#eab308"),
         _ => new Color("#ffffff"),
     };
 

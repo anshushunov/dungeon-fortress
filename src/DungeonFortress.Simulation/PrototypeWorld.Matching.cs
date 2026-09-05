@@ -105,6 +105,30 @@ public sealed partial class PrototypeWorld
                     continue;
                 }
 
+                // One trophy per creature (spec §2.6): the second blade goes to
+                // the second fighter, not to a better-armed first.
+                if (job.Kind == JobKind.Claim && creature.Weapon is not null)
+                {
+                    continue;
+                }
+
+                // And the bunk comes before the blade (spec §2.5). This is the
+                // condition a Rest job is offered on, written out here rather
+                // than inferred from it, so that the two rules cannot drift
+                // apart. Without it a trophy outbids the bunk on score alone —
+                // claim priority stands above rest — and a creature with a heavy
+                // wound walks the length of the domain for a blade instead of
+                // mending: measured on baseline/20260728, where one hurt
+                // creature took the same claim three times over rather than lie
+                // down. A wound closes in a bunk and nowhere else.
+                if (job.Kind == JobKind.Claim &&
+                    (creature.NeedsRest ||
+                     creature.Fatigue >= PrototypeTuning.RestSeekThreshold ||
+                     creature.Injury != InjuryKind.None))
+                {
+                    continue;
+                }
+
                 // Nobody picks stone up without a place to put it down. The
                 // destination is planned from the pile, so the carry leg is the
                 // short one and the choice does not depend on who volunteers.
@@ -137,7 +161,10 @@ public sealed partial class PrototypeWorld
                 }
 
                 var urgency = Urgency(job.Kind, job.Resource);
-                var affinity = creature.Affinity(job.Kind);
+                // A claim reads the pull of a fighter, not a pull of its own
+                // (spec §2.5): the creature that trains is the one the blade is
+                // for. No new magnitude on the creature — drill affinity is it.
+                var affinity = creature.Affinity(job.Kind == JobKind.Claim ? JobKind.Drill : job.Kind);
                 // How willing this creature is to work for this domain at all.
                 // It is the same number for every job, so it never moves a
                 // creature between two kinds of work — it moves the creature
@@ -169,6 +196,21 @@ public sealed partial class PrototypeWorld
                 // the bunk it was carried to would be refusing to heal, which is
                 // not a decision about work at all.
                 //
+                // Claim is exempt for a parallel reason (trophy slice, Task 5),
+                // not a copy of it: a fear of this tile is a memory of danger
+                // that was there, and a Claim job exists only while no wave is
+                // active (spec §2 rule 4) — the one span of time the tile is
+                // provably not the danger remembered. Without the exemption a
+                // creature can be walled off its own trade for the rest of a
+                // window: measured on baseline/20260726, defender #4 — whose
+                // whole trade sits at the larder — had its own dropped weapon
+                // land at (14,8), the tile it feared, and refused the claim (and
+                // then the cooking and hauling next to it, since its trade has
+                // nowhere else to stand) on 128 consecutive ticks, past the
+                // bound `PrototypeMemoryCostTests` holds this to. A blade is not
+                // the danger that put the fear there, and by rule 4 nothing else
+                // is either while the job offering it exists.
+                //
                 // The arm is **last**, after every other condition on the pair and
                 // after the score (Issue #125). Standing first it refused work the
                 // creature was never going to take — unreachable, occupied, below
@@ -183,7 +225,7 @@ public sealed partial class PrototypeWorld
                 // names the work this creature would have put first rather than
                 // whichever job happened to be oldest in the list.
                 if (applyMemory &&
-                    job.Kind != JobKind.Rest &&
+                    job.Kind is not (JobKind.Rest or JobKind.Claim) &&
                     AvoidedPlace(creature, target) is { } avoided)
                 {
                     if (refused is not { } held || score > held.Score)
@@ -359,6 +401,7 @@ public sealed partial class PrototypeWorld
                 ["jobId"] = checked((int)job.Id),
                 ["score"] = selected.Score,
                 ["distance"] = selected.Distance,
+                ["affinity"] = selected.Affinity,
             },
             job.Kind,
             selected.InitialTarget);

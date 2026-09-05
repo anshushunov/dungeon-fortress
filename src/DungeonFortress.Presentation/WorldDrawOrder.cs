@@ -168,6 +168,10 @@ public static class WorldDrawOrder
         // it. BlowFeedback is the other reading and deliberately not this one —
         // that is what has just happened, drawn for one tick and gone.
         new("DrawInjuryMarks", WorldDrawPass.Informational, OverlayMark.BodyState),
+        // docs/design/TROPHY_WEAPON.md. The trophy beside the arm, BodyState for
+        // the reason the wound is: it stays for as long as the creature carries
+        // the blade and is read off the same snapshot as the HP bar.
+        new("DrawTrophyMark", WorldDrawPass.Informational, OverlayMark.BodyState),
         new("DrawHpBar", WorldDrawPass.Informational, OverlayMark.BodyState),
         new("DrawRoomLabels", WorldDrawPass.Informational, OverlayMark.RoomLabel),
         new("DrawRoomLabel", WorldDrawPass.Informational, OverlayMark.RoomLabel),

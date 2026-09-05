@@ -170,11 +170,12 @@ public sealed partial class PrototypeWorld
                     // creature to a bunk is unconditional only *outside* a muster
                     // (`Planning.cs` `!creature.IsMustering` in both places), and
                     // a mustering creature is walked to the assembly point by
-                    // `Acting.cs`. So the three flags a creature entering the
-                    // fight sheds are shed here as well, and the working
-                    // `GenerateJobs` hands out the bunk by itself. The issuing of
-                    // `Rest` is not touched by this slice — the creature is simply
-                    // returned to the state the existing mechanism serves.
+                    // `Acting.cs`. So everything a creature entering the fight
+                    // sheds is shed here as well — the three flags and the meal
+                    // below — and the working `GenerateJobs` hands out the bunk by
+                    // itself. The issuing of `Rest` is not touched by this slice —
+                    // the creature is simply returned to the state the existing
+                    // mechanism serves.
                     if (creature.CurrentJob is not null)
                     {
                         CancelJob(creature, "combat_spared_wound");
@@ -182,7 +183,34 @@ public sealed partial class PrototypeWorld
 
                     creature.IsMustering = false;
                     creature.MusterNeedsRation = false;
-                    creature.MealReserved = false;
+                    // <b>And the ration is put down, not merely unbooked.</b> A
+                    // creature can be asked by the roll call while it is standing
+                    // at the larder eating the muster's ration: `ActMuster` puts
+                    // it in <see cref="CreatureMode.Eating"/> and gives the mode
+                    // back on the tick the meal ends. Dropping the reservation
+                    // without ending the meal leaves the mode behind with nothing
+                    // to sustain it — `ActEating` builds its queue out of the
+                    // creatures that hold a reservation, finds this one is not in
+                    // it and returns; `Acting.cs` tests `Eating` before work and
+                    // before going off duty, so nothing else runs; and
+                    // `GenerateJobs` refuses a bunk to a creature that is eating.
+                    // The creature then stands at the larder until the party ends,
+                    // its satiety draining, which is «кто не встал, тот ложится»
+                    // failing in the one place it was written for.
+                    //
+                    // Measured on prepared/20260727 under `every-reward`: Дёготь
+                    // was spared at t2350 four ticks into the ration and was still
+                    // in `Eating` when the party ended. The pressing side never
+                    // showed this because it overwrites the mode on its way out
+                    // (`Mode = CreatureMode.Fighting` below); the sparing side had
+                    // nothing to overwrite it with, so it has to put it back.
+                    var wasEating = creature.Mode == CreatureMode.Eating;
+                    CancelMealReservation(creature);
+                    if (wasEating)
+                    {
+                        creature.Mode = CreatureMode.Waiting;
+                    }
+
                     creature.WoundIntent = contest;
                     RecordDecision(creature, "combat_spared_wound", ContestDetails(contest));
                     continue;
@@ -520,8 +548,9 @@ public sealed partial class PrototypeWorld
             return;
         }
 
+        var weight = WeaponWeight(creature);
         var damage = Math.Max(PrototypeTuning.DamageFloor,
-            WeaponWeight(creature) +
+            weight +
             ComputeReadiness(creature) / PrototypeTuning.DamageReadinessDivisor +
             CombatJitter(PrototypeTuning.DamageJitter));
         target.Hp -= damage;
@@ -530,11 +559,21 @@ public sealed partial class PrototypeWorld
         // (Issue #358), and it is recorded here rather than derived later because
         // "where" stops being answerable the moment the raider takes its next step.
         target.RecordBlow(damage, CurrentTick);
-        RecordDecision(creature, "combat_attack", new Dictionary<string, int> { ["raiderId"] = target.Id, ["damage"] = damage });
+        // `weight` is the one term of the blow the trophy is in: might plus the
+        // blade's bonus, times DamageMightWeight, then whatever a hurt arm takes
+        // off it. `damage` also carries readiness and the scatter, so «the holder
+        // strikes harder by exactly the bonus» cannot be asserted from it —
+        // doubling the bonus still clears any bound read off a jittered total.
+        // Published so that PrototypeTrophyTests can assert the equality rather
+        // than an inequality (spec §2.7, review fix round 5). It is the same local
+        // the damage above was built from, not a second call, so the journal
+        // cannot report a weight the blow was not struck with.
+        RecordDecision(creature, "combat_attack", new Dictionary<string, int> { ["raiderId"] = target.Id, ["damage"] = damage, ["bonus"] = creature.Weapon?.Bonus ?? 0, ["weight"] = weight });
         if (target.Hp <= 0)
         {
             target.Hp = 0;
             DropRaiderMeals(target);
+            DropRaiderWeapon(target, creature);
             target.Mode = RaiderMode.Downed;
             _raidersDownedTotal++;
             // The deed the moment of truth is mostly about. ADR 0019's own
@@ -657,6 +696,7 @@ public sealed partial class PrototypeWorld
                 {
                     defender.Hp = 0;
                     Wound(defender, InjuryKind.Heavy, raider.Id);
+                    DropCreatureWeapon(defender);
                     defender.Mode = CreatureMode.Downed;
                     CurrentWave()?.CountDefenderDowned();
                     Remember(defender, "wound");
@@ -979,6 +1019,7 @@ public sealed partial class PrototypeWorld
                 continue;
             }
 
+            DropCreatureWeapon(creature);
             creature.Mode = CreatureMode.Fled;
             CurrentWave()?.CountDefenderFled();
             Remember(creature, "panic");
@@ -1260,7 +1301,10 @@ public sealed partial class PrototypeWorld
 
     private static int WeaponWeight(CreatureState creature)
     {
-        var full = creature.Might * PrototypeTuning.DamageMightWeight;
+        // The trophy adds to might before the hand is taken into account: a
+        // heavy arm holds a trophy blade as badly as it holds anything.
+        var might = creature.Might + (creature.Weapon?.Bonus ?? 0);
+        var full = might * PrototypeTuning.DamageMightWeight;
         var percent = creature.PartInjury(BodyPart.Arm) switch
         {
             InjuryKind.Heavy => PrototypeTuning.ArmHeavyMightPercent,

@@ -358,7 +358,9 @@ public sealed partial class PrototypeWorld
                         ? "dig_cancelled"
                         : job.Kind == JobKind.Build
                             ? "build_cancelled"
-                            : "refused_zone_not_designated";
+                            : job.Kind == JobKind.Claim
+                                ? "claim_cancelled"
+                                : "refused_zone_not_designated";
             CancelJob(creature, reason);
         }
     }
@@ -381,6 +383,10 @@ public sealed partial class PrototypeWorld
             JobKind.Build => _buildSites.TryGetValue(job.Origin, out var site) &&
                 site.Delivered >= PrototypeTuning.BuildStoneCost &&
                 _map.IsBuildableFloor(job.Origin),
+            // A claim stands while the weapon still lies there and no wave is
+            // inside: the wave came first, the trophy waits (spec §2.4).
+            JobKind.Claim => ActiveWave() is null &&
+                _looseWeapons.Any(entry => entry.Position == job.Origin),
             _ => false,
         };
     }

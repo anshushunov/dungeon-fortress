@@ -67,6 +67,20 @@ public sealed class WorldLabelLayoutTests
         /// shape in the party.
         /// </summary>
         WhereACrewMemberStandsInFrontOfARaider,
+
+        /// <summary>
+        /// The thickest crowd among the ticks that carry a caption <b>with a
+        /// story line</b> — <see cref="ReturningHeroLabel.Story"/> non-null,
+        /// i.e. the returner carries a scar. Added in the trophy slice's Task 5
+        /// fix round for the same reason
+        /// <see cref="WhereACrewMemberStandsInFrontOfARaider"/> was: the general
+        /// crowd found by <see cref="WhereTheCrowdIsThickest"/> can be thickest
+        /// on a tick where every captioned raider returned unscarred, which
+        /// proves nothing about the two-line caption
+        /// <see cref="WorldLabelInspectorTests.The_panel_of_a_returning_raider_says_what_his_caption_says"/>
+        /// is about.
+        /// </summary>
+        WhereAReturnerCarriesAStoryInACrowd,
     }
 
     /// <inheritdoc cref="OwnerFrame"/>
@@ -78,6 +92,12 @@ public sealed class WorldLabelLayoutTests
                 "no tick of the owner's party puts a crew member in front of a raider, so the " +
                 "frame the click-through rule is about does not exist anywhere in the party. " +
                 "That is a change in what the party does and not a broken test."),
+        OwnerFrame.WhereAReturnerCarriesAStoryInACrowd => Scenes.Value.StoriedCrowd ??
+            throw new InvalidOperationException(
+                "no tick of any shipped party carries a captioned returner with a story line, so " +
+                "the frame the two-line caption panel check is about does not exist anywhere. " +
+                "That is a change in what the party does — every returner comes back unscarred " +
+                "— and not a broken test."),
         _ => Scenes.Value.Crowded,
     };
 
@@ -175,10 +195,11 @@ public sealed class WorldLabelLayoutTests
     private static readonly ulong[] SceneSeeds =
         [OwnerSeed, 20_260_726UL, 20_260_727UL, 20_260_728UL];
 
-    private static readonly Lazy<(PrototypeSnapshot Thin, PrototypeSnapshot Crowded, PrototypeSnapshot? Mixed)> Scenes =
+    private static readonly Lazy<(PrototypeSnapshot Thin, PrototypeSnapshot Crowded, PrototypeSnapshot? Mixed, PrototypeSnapshot? StoriedCrowd)> Scenes =
         new(() =>
         {
             PrototypeSnapshot? mixedAnywhere = null;
+            PrototypeSnapshot? storiedAnywhere = null;
             foreach (var seed in SceneSeeds)
             {
                 var world = new PrototypeWorld(
@@ -186,7 +207,9 @@ public sealed class WorldLabelLayoutTests
                 PrototypeSnapshot? thin = null;
                 PrototypeSnapshot? crowded = null;
                 PrototypeSnapshot? mixed = null;
+                PrototypeSnapshot? storiedCrowd = null;
                 var thickest = 0;
+                var thickestStoried = 0;
                 while (!world.IsComplete)
                 {
                     world.Step();
@@ -214,11 +237,31 @@ public sealed class WorldLabelLayoutTests
                         thickest = crowd;
                         crowded = state;
                     }
+
+                    // The storied-crowd frame is its own tracked maximum and not a
+                    // filter over `crowded` (trophy slice, Task 5 fix round): the
+                    // thickest tick overall need not be one where any captioned
+                    // raider carries a scar (<see cref="ReturningHeroLabel.Story"/>
+                    // is null for one that returns unscarred), and
+                    // `WorldLabelInspectorTests.The_panel_of_a_returning_raider_says_what_his_caption_says`
+                    // asks specifically about a caption with a story line, the
+                    // two-line case Issue #355 exists for.
+                    if (state.Raiders.Any(raider =>
+                            ReturningHeroLabel.IsCaptioned(raider) &&
+                            ReturningHeroLabel.Story(raider) is not null))
+                    {
+                        storiedAnywhere ??= state;
+                        if (crowd > thickestStoried)
+                        {
+                            thickestStoried = crowd;
+                            storiedCrowd = state;
+                        }
+                    }
                 }
 
                 if (thin is not null && crowded is not null)
                 {
-                    return (thin, crowded, mixed ?? mixedAnywhere);
+                    return (thin, crowded, mixed ?? mixedAnywhere, storiedCrowd ?? storiedAnywhere);
                 }
             }
 

@@ -1,0 +1,431 @@
+using DungeonFortress.Simulation;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace DungeonFortress.Simulation.Tests;
+
+/// <summary>
+/// docs/design/TROPHY_WEAPON.md. Every check here is a party played out on the
+/// shipped fixtures, because the simulation has no seam for placing a weapon
+/// by hand and is not going to get one: the rules are proved on what the
+/// domain actually does.
+/// </summary>
+public sealed class PrototypeTrophyTests(ITestOutputHelper output)
+{
+    private const string Baseline = "baseline";
+    private const string Prepared = "prepared";
+    private static readonly ulong[] MatrixSeeds = [20_260_726, 20_260_727, 20_260_728];
+
+    [Fact]
+    public void A_fresh_world_carries_no_weapon_anywhere()
+    {
+        var state = new PrototypeWorld(LoadFixture(Baseline, PrototypeTuning.DefaultSeed)).GetSnapshot();
+        output.WriteLine($"tick {state.Tick}: {state.Creatures.Count} creatures, {state.LooseWeapons.Count} loose weapons");
+
+        Assert.Empty(state.LooseWeapons);
+        Assert.All(state.Creatures, creature => Assert.Null(creature.Weapon));
+    }
+
+    [Fact]
+    public void A_downed_raider_leaves_a_weapon_named_after_it_where_it_fell()
+    {
+        var drops = 0;
+        Walk(Baseline, PrototypeTuning.DefaultSeed, (before, after) =>
+        {
+            foreach (var raider in after.Raiders.Where(raider => raider.Mode == RaiderMode.Downed))
+            {
+                var was = before.Raiders.SingleOrDefault(other => other.Id == raider.Id);
+                if (was is null || was.Mode == RaiderMode.Downed)
+                {
+                    continue;
+                }
+
+                drops++;
+                output.WriteLine($"t{after.Tick}: {raider.Name} (#{raider.Id}, might {raider.Might}) fell at ({raider.Position.X},{raider.Position.Y})");
+                var weapon = Assert.Single(after.LooseWeapons, entry => entry.Weapon.RaiderId == raider.Id);
+                Assert.Equal(raider.Position, weapon.Position);
+                Assert.Equal(raider.Name, weapon.Weapon.Name);
+                Assert.Equal(raider.Wave, weapon.Weapon.Wave);
+                Assert.Equal(
+                    Math.Max(PrototypeTuning.TrophyBonusBase, PrototypeTuning.TrophyBonusBase + raider.Might - PrototypeTuning.RaiderMightBase),
+                    weapon.Weapon.Bonus);
+                Assert.Contains(after.Creatures, creature => creature.Id == weapon.Weapon.DownedBy);
+            }
+        });
+
+        Assert.True(drops > 0, "nobody was put down in the whole party, so the rule was never exercised");
+    }
+
+    [Fact]
+    public void No_claim_is_offered_while_a_wave_is_inside_and_one_is_offered_after()
+    {
+        var offered = 0;
+        foreach (var (fixture, seed) in Matrix())
+        {
+            Walk(fixture, seed, (_, after) =>
+            {
+                var claims = after.Jobs.Where(job => job.Kind == JobKind.Claim).ToArray();
+                if (after.Threat.Active)
+                {
+                    Assert.Empty(claims);
+                }
+
+                offered += claims.Length;
+            });
+        }
+
+        Assert.True(offered > 0, "the whole matrix never offered a claim, so nobody could ever pick a weapon up");
+    }
+
+    [Fact]
+    public void The_weapon_is_taken_and_the_ledger_says_by_whom_and_at_whose_expense()
+    {
+        var taken = 0;
+        var lost = 0;
+        var circulatedWithoutRegrudging = 0;
+        foreach (var (fixture, seed) in Matrix())
+        {
+            // Debt paid once (spec §3, trophy slice fix round 3): the same
+            // raiderId can be taken more than once as its weapon circulates
+            // through holders, and only the first taking may still owe a
+            // grudge to the original downer.
+            var everTaken = new HashSet<int>();
+            Walk(fixture, seed, (before, after) =>
+            {
+                foreach (var creature in after.Creatures)
+                {
+                    var was = before.Creatures.Single(other => other.Id == creature.Id);
+                    if (creature.Weapon is null || was.Weapon is not null)
+                    {
+                        continue;
+                    }
+
+                    taken++;
+                    var weapon = creature.Weapon;
+                    output.WriteLine($"{fixture}/{seed} t{after.Tick}: {creature.Name} took the blade of {weapon.Name} (downed by #{weapon.DownedBy})");
+
+                    // The floor no longer holds it, and the journal names the deed.
+                    Assert.DoesNotContain(after.LooseWeapons, entry => entry.Weapon.RaiderId == weapon.RaiderId);
+                    Assert.Contains(after.Events, e =>
+                        e.CreatureId == creature.Id && e.ReasonCode == "trophy_taken" && e.LastTick == after.Tick - 1
+                        && e.Details["raiderId"] == weapon.RaiderId);
+                    Assert.Contains(creature.Loyalty.BenefitTerms, term => term.Code == "benefit_trophy" && term.Amount > 0);
+
+                    var firstTaking = everTaken.Add(weapon.RaiderId);
+                    if (!firstTaking)
+                    {
+                        // The blade's debt was already paid by whoever took it
+                        // first; this later taking never re-grudges the
+                        // original downer, whatever they are doing now.
+                        circulatedWithoutRegrudging++;
+                        Assert.DoesNotContain(after.Events, e =>
+                            e.ReasonCode == "trophy_lost" && e.LastTick == after.Tick - 1 &&
+                            e.Details.GetValueOrDefault("raiderId", -1) == weapon.RaiderId);
+                        continue;
+                    }
+
+                    if (weapon.DownedBy == creature.Id)
+                    {
+                        continue;
+                    }
+
+                    var downer = after.Creatures.Single(other => other.Id == weapon.DownedBy);
+                    if (downer.Mode is CreatureMode.Downed or CreatureMode.Fled)
+                    {
+                        Assert.DoesNotContain(downer.Loyalty.GrudgeTerms, term => term.Code == "grudge_trophy_taken");
+                        continue;
+                    }
+
+                    lost++;
+                    Assert.Contains(after.Events, e =>
+                        e.CreatureId == downer.Id && e.ReasonCode == "trophy_lost"
+                        && e.Details["raiderId"] == weapon.RaiderId && e.Details["takenBy"] == creature.Id);
+                    Assert.Contains(downer.Loyalty.GrudgeTerms, term => term.Code == "grudge_trophy_taken" && term.Amount > 0);
+                }
+            });
+        }
+
+        output.WriteLine($"taken {taken}, lost {lost}, circulated without re-grudging {circulatedWithoutRegrudging}");
+        Assert.True(taken > 0, "nobody in the whole matrix ever picked a weapon up");
+        Assert.True(lost > 0, "in the whole matrix the one who downed the raider always took the blade: the conflict the slice exists for never happened");
+    }
+
+    [Fact]
+    public void A_claim_reads_the_pull_of_a_fighter_and_a_holder_never_claims_again()
+    {
+        var claims = 0;
+        foreach (var (fixture, seed) in Matrix())
+        {
+            Walk(fixture, seed, (before, after) =>
+            {
+                foreach (var job in after.Jobs.Where(job => job.Kind == JobKind.Claim && job.ReservedBy is { }))
+                {
+                    var wasReserved = before.Jobs.Any(other => other.JobId == job.JobId && other.ReservedBy is { });
+                    if (wasReserved)
+                    {
+                        continue;
+                    }
+
+                    claims++;
+                    var taker = after.Creatures.Single(creature => creature.Id == job.ReservedBy);
+                    var wasTaker = before.Creatures.Single(creature => creature.Id == job.ReservedBy);
+                    Assert.Null(wasTaker.Weapon);
+                    // The decision that *took* this job, and not simply the last
+                    // one of the tick: a creature whose way out is blocked, or
+                    // whose work is cancelled again, writes over `lastDecision`
+                    // on the same tick it was given the job. The assignment is
+                    // the decision that names this job and the score it won by.
+                    var chosen = after.Events.Last(e =>
+                        e.CreatureId == taker.Id &&
+                        e.Details.GetValueOrDefault("jobId", -1) == job.JobId &&
+                        e.Details.ContainsKey("score"));
+                    output.WriteLine($"{fixture}/{seed} t{after.Tick}: {taker.Name} claims by {chosen.ReasonCode}, affinity {chosen.Details["affinity"]}");
+                    Assert.Equal(taker.Affinities.GetValueOrDefault(JobKind.Drill), chosen.Details["affinity"]);
+                }
+            });
+        }
+
+        Assert.True(claims > 0, "no claim was ever assigned in the matrix");
+    }
+
+    [Fact]
+    public void A_holder_strikes_harder_by_exactly_the_bonus()
+    {
+        var blows = 0;
+        foreach (var (fixture, seed) in Matrix())
+        {
+            Walk(fixture, seed, (_, after) =>
+            {
+                foreach (var creature in after.Creatures)
+                {
+                    if (creature.Weapon is null ||
+                        creature.LastDecision.ReasonCode != "combat_attack" ||
+                        creature.LastDecision.Tick < after.Tick - 1 ||
+                        creature.Injuries.Any(injury => injury.Part == BodyPart.Arm))
+                    {
+                        continue;
+                    }
+
+                    blows++;
+                    var details = creature.LastDecision.Details;
+                    Assert.Equal(creature.Weapon.Bonus, details["bonus"]);
+                    var armedWeight = (creature.Might + creature.Weapon.Bonus) * PrototypeTuning.DamageMightWeight;
+                    // «Ровно на бонус» (spec §2.7), and it is an equality because
+                    // the bound below is not one: damage carries readiness and the
+                    // scatter as well, so doubling the bonus in the production code
+                    // passes it just as comfortably. The one term of the blow the
+                    // blade is in is published as `weight`
+                    // (`PrototypeWorld.Combat.cs`), and on a whole arm — which is
+                    // what this loop filters for — it must equal might plus bonus
+                    // times the might weight, with nothing else in it.
+                    Assert.Equal(armedWeight, details["weight"]);
+                    // Damage is weight + readiness share + jitter in [-DamageJitter, DamageJitter],
+                    // so with the bonus in the weight the blow can never fall further
+                    // below the armed weight than the jitter allows. Kept beside the
+                    // equality because it is the claim about what the raider
+                    // actually took, and the equality is the claim about the term.
+                    Assert.True(
+                        details["damage"] + PrototypeTuning.DamageJitter >= armedWeight,
+                        $"{creature.Name} with +{creature.Weapon.Bonus} struck for {details["damage"]}, below an armed weight of {armedWeight}");
+                }
+            });
+        }
+
+        Assert.True(blows > 0, "no armed creature with a whole arm ever struck in the matrix");
+    }
+
+    [Fact]
+    public void A_holder_put_down_or_broken_leaves_the_blade_where_it_stood()
+    {
+        var drops = 0;
+        foreach (var (fixture, seed) in Matrix())
+        {
+            Walk(fixture, seed, (before, after) =>
+            {
+                foreach (var creature in after.Creatures)
+                {
+                    var was = before.Creatures.Single(other => other.Id == creature.Id);
+                    if (was.Weapon is null ||
+                        was.Mode is CreatureMode.Downed or CreatureMode.Fled ||
+                        creature.Mode is not (CreatureMode.Downed or CreatureMode.Fled))
+                    {
+                        continue;
+                    }
+
+                    drops++;
+                    output.WriteLine($"{fixture}/{seed} t{after.Tick}: {creature.Name} {creature.Mode} and dropped the blade of {was.Weapon.Name}");
+                    Assert.Null(creature.Weapon);
+                    var lying = Assert.Single(after.LooseWeapons, entry => entry.Weapon.RaiderId == was.Weapon.RaiderId);
+                    // The blade lies where the creature stood the moment it went
+                    // down or fled (spec §2.8) — `was.Position`, the position
+                    // before this tick's own actions. A fled creature runs its
+                    // first step toward refuge in this same tick
+                    // (`RunFromTheFight`, called right after the mode flips), so
+                    // by the time this snapshot is taken `creature.Position` can
+                    // already be one tile further on; the floor does not chase
+                    // the runner it was left by.
+                    Assert.Equal(was.Position, lying.Position);
+                    Assert.Contains(after.Events, e => e.CreatureId == creature.Id && e.ReasonCode == "trophy_dropped");
+                }
+            });
+        }
+
+        Assert.True(drops > 0, "no armed creature was ever put down or broke in the matrix; widen MatrixSeeds before concluding the rule is dead");
+    }
+
+    /// <summary>
+    /// Regression for the fix round of Task 5: a fear of the tile a weapon lies
+    /// on must never wall a creature off the claim (spec §2, rule 4). A claim
+    /// job exists only while no wave is active, which is exactly the one span
+    /// of time the tile a memory was written on is not the danger that memory
+    /// is of — so the memory-of-place rule (`PrototypeWorld.Matching.cs`,
+    /// <c>CollectPairs</c>) exempts <see cref="JobKind.Claim"/> the same way it
+    /// already exempted <see cref="JobKind.Rest"/>.
+    ///
+    /// <para>Found on <c>baseline/20260726</c>: a creature's own dropped weapon
+    /// (Task 5) landed on (14,8), a tile it feared, and it refused the claim —
+    /// then the cooking and hauling beside it, since its trade has nowhere else
+    /// to stand — on 128 consecutive ticks, past the bound
+    /// <c>PrototypeMemoryCostTests.No_creature_is_taken_out_of_the_domain_by_what_it_remembers</c>
+    /// holds every party to. This is that party's own regression guard, kept
+    /// with the trophy tests because the exemption is trophy code.</para>
+    /// </summary>
+    [Fact]
+    public void A_claim_is_never_refused_by_memory_of_the_tile_the_blade_lies_on()
+    {
+        var refusals = 0;
+        foreach (var (fixture, seed) in Matrix())
+        {
+            Walk(fixture, seed, (_, after) =>
+            {
+                foreach (var @event in after.Events.Where(e =>
+                             e.LastTick == after.Tick - 1 &&
+                             e.ReasonCode is "refused_place_of_panic" or "refused_place_of_wound"))
+                {
+                    refusals++;
+                    Assert.NotEqual(JobKind.Claim, @event.JobKind);
+                }
+            });
+        }
+
+        // The exemption is proved on a matrix that actually exercises memory
+        // refusal, not one that happens to have none: a check that never sees
+        // a refusal at all would pass whether the exemption existed or not.
+        Assert.True(refusals > 0, "no refusal by memory of place ever happened in the matrix; widen MatrixSeeds before concluding the exemption holds");
+    }
+
+    /// <summary>
+    /// Regression for review finding 3 of the fix round (2026-09-05): the same
+    /// weapon can circulate through several holders over a party — dropped by
+    /// one, picked up, dropped again when that holder falls or flees, picked
+    /// up again — and <see cref="WeaponState.DownedBy"/> never changes, so
+    /// without a paid-once flag every pickup after the first would re-grudge
+    /// the raider's original downer for the one kill it already paid for. A
+    /// weapon is identified by its party and its raider id — one raider never
+    /// drops twice (spec: a downed raider never comes back), so within one
+    /// party a raider id names exactly one weapon.
+    /// </summary>
+    [Fact]
+    public void A_circulating_blade_re_grudges_nobody_after_its_debt_is_paid()
+    {
+        var lostByWeapon = new Dictionary<(string Fixture, ulong Seed, int RaiderId), int>();
+        var takenByWeapon = new Dictionary<(string Fixture, ulong Seed, int RaiderId), int>();
+        foreach (var (fixture, seed) in Matrix())
+        {
+            Walk(fixture, seed, (_, after) =>
+            {
+                foreach (var @event in after.Events.Where(e =>
+                             e.LastTick == after.Tick - 1 && e.ReasonCode == "trophy_lost"))
+                {
+                    var key = (fixture, seed, @event.Details["raiderId"]);
+                    lostByWeapon[key] = lostByWeapon.GetValueOrDefault(key) + 1;
+                }
+
+                foreach (var @event in after.Events.Where(e =>
+                             e.LastTick == after.Tick - 1 && e.ReasonCode == "trophy_taken"))
+                {
+                    var key = (fixture, seed, @event.Details["raiderId"]);
+                    takenByWeapon[key] = takenByWeapon.GetValueOrDefault(key) + 1;
+                }
+            });
+        }
+
+        foreach (var (weapon, count) in lostByWeapon)
+        {
+            Assert.True(
+                count <= 1,
+                $"{weapon.Fixture}/{weapon.Seed} raiderId {weapon.RaiderId}: trophy_lost fired " +
+                $"{count} times over the party. The debt for one kill is paid once; a circulating " +
+                "blade must not re-grudge the same downer every time it changes hands again.");
+        }
+
+        // Not vacuous: measured on the shipped matrix (this file's Matrix()),
+        // 14 of 25 distinct weapons taken were taken two or three times, so
+        // the bound above is exercised against real circulating blades and
+        // not merely true for want of a second taking anywhere.
+        var takenTwice = takenByWeapon.Where(pair => pair.Value >= 2).ToArray();
+        output.WriteLine(
+            $"weapons taken twice or more: {takenTwice.Length} of {takenByWeapon.Count} distinct " +
+            $"weapons over the matrix.");
+        Assert.True(
+            takenTwice.Length > 0,
+            "no weapon in the matrix was ever taken a second time, so the bound above was never " +
+            "exercised against a circulating blade; widen MatrixSeeds before concluding the fix holds.");
+    }
+
+    // ---- helpers shared by every test of this file ----
+
+    internal static PrototypeCommandLog LoadFixture(string name, ulong seed)
+    {
+        var document = PrototypeCommandDocument.Load(Path.Combine(
+            FindRepositoryRoot(),
+            "scenarios",
+            "prototype1",
+            $"{name}.commands.v2.json"));
+        return document.Seed == seed ? document : document with { Seed = seed };
+    }
+
+    /// <summary>
+    /// Plays one party tick by tick and hands every consecutive pair of
+    /// snapshots to <paramref name="visit"/>. The pair is what a rule about a
+    /// transition ("when X becomes Y, Z is true") needs; a single end state is
+    /// not enough because weapons are picked up and dropped again.
+    /// </summary>
+    internal static void Walk(
+        string fixture,
+        ulong seed,
+        Action<PrototypeSnapshot, PrototypeSnapshot> visit)
+    {
+        var world = new PrototypeWorld(LoadFixture(fixture, seed));
+        var before = world.GetSnapshot();
+        while (!world.IsComplete)
+        {
+            world.Step();
+            var after = world.GetSnapshot();
+            visit(before, after);
+            before = after;
+        }
+    }
+
+    internal static IEnumerable<(string Fixture, ulong Seed)> Matrix()
+    {
+        foreach (var fixture in new[] { Baseline, Prepared })
+        {
+            foreach (var seed in MatrixSeeds)
+            {
+                yield return (fixture, seed);
+            }
+        }
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "DungeonFortress.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        return directory?.FullName ?? throw new InvalidOperationException("DungeonFortress.sln not found above " + AppContext.BaseDirectory);
+    }
+}

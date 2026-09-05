@@ -35,8 +35,18 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
     // «the memory-free tick did not honour this refusal» stopped being reached at
     // all. That branch is what the check exists for, so the matrix was widened
     // rather than the branch relaxed.
+    // And the fifth was added when the trophy slice landed
+    // (docs/design/TROPHY_WEAPON.md), for the same reason a second time: work
+    // «забрать» moves what the crew does between waves, and on `prepared` the
+    // four seeds above stopped contesting a refused job at all. The branch was
+    // not relaxed, the matrix was widened — and by measurement rather than by
+    // the next number in the series: over 20260726-20260745 on `prepared` the
+    // branch is reached on 20260731 (once), 20260732 (once), 20260734 (28
+    // times), 20260735 (once), 20260743 (4) and 20260744 (13); 20260730 does
+    // not contest at all. The nearest one that does is taken. If this ever
+    // needs a thicker sample rather than a live branch, 20260734 is the seed.
     private static readonly ulong[] MatrixSeeds =
-        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL];
+        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL, 20_260_731UL];
 
     /// <summary>
     /// The matrix the <b>observability</b> rule of Issue #333 was chosen against,
@@ -44,8 +54,9 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
     /// <see cref="A_remembered_place_changes_what_the_creature_does_next"/> reads.
     ///
     /// <para><b>Why this check keeps three seeds while the rest of the file has
-    /// four.</b> The fourth seed was added earlier on this same branch for the
-    /// check below it, whose need is a <i>sample floor</i>: more parties can only
+    /// five.</b> The fourth seed was added by Issue #409 and the fifth on this
+    /// branch, both for the check below it, whose need is a <i>sample floor</i>:
+    /// more parties can only
     /// help a rule of the form "this branch must be reached at least once". The
     /// observability rule is of the opposite form — <i>every</i> party of the
     /// matrix must show memory of place at work — so widening the matrix silently
@@ -53,7 +64,7 @@ public sealed class PrototypeMemoryTests(ITestOutputHelper output)
     /// <c>evidence/333-memory-floor.json</c> recorded the alternatives for.
     /// Nobody decided that, and it is undone here rather than carried.</para>
     ///
-    /// <para><b>What it does not hide.</b> On the party that seed plays,
+    /// <para><b>What it does not hide.</b> On the party the fourth seed plays,
     /// <c>baseline</c> now shows no refusal by memory at all, and that is a real
     /// consequence of this slice rather than a coincidence: it reads zero at every
     /// one of the five stun periods swept over it (4, 5, 6, 7 and 8), so no tuning

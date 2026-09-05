@@ -29,7 +29,28 @@ public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
 {
     private static readonly string[] Fixtures = ["baseline", "prepared"];
 
-    private static readonly ulong[] MatrixSeeds = [20_260_726UL, 20_260_727UL, 20_260_728UL];
+    // The fourth seed was added when the trophy slice landed
+    // (docs/design/TROPHY_WEAPON.md): with work «забрать» filling the window
+    // between waves, the wounded of the old three seeds all reach the roll call
+    // with a benefit too small to spare themselves, and one and the same
+    // verdict stopped producing two outcomes. `prepared/20260729`, measured out
+    // of ten candidates, presses seven and spares two, and the verdict is what
+    // decides two of them. The old three are kept: the contest still happens on
+    // them, it just no longer swings both ways on its own.
+    //
+    // The fifth seed was added in the same slice's Task 5 fix round: freeing a
+    // weapon off a downed or fled holder shifts who fights and how hard again,
+    // and on the previous four seeds `punish` stopped ever producing a
+    // `spared` decision at all (0 of 46 over the whole matrix). Scanned over
+    // `prepared`/20260726..20260745 (the same twenty candidates
+    // `PrototypeReturningRaiderTests.SearchSeeds` draws its own range from):
+    // `baseline` gives none at all at any candidate, and of eight `prepared`
+    // candidates that do, `prepared/20260730` was taken as the nearest —
+    // spares 10, presses 8 under `punish` alone, both signs still flip
+    // somewhere on the enlarged matrix. The five kept are additive, same as
+    // the fourth was: nothing here narrows what the older four already prove.
+    private static readonly ulong[] MatrixSeeds =
+        [20_260_726UL, 20_260_727UL, 20_260_728UL, 20_260_729UL, 20_260_730UL];
 
     /// <summary>
     /// One decision of one contest, read off the published <c>woundIntent</c> on
@@ -205,6 +226,152 @@ public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
         }
     }
 
+    /// <summary>
+    /// <b>What this check asserts is an invariant, and the scene in its old name
+    /// is only observed.</b> Asserted, over every creature of every tick of every
+    /// party of the class matrix: nothing is ever in
+    /// <see cref="CreatureMode.Eating"/> without a meal reserved. Observed and
+    /// merely counted to <c>output</c>: a creature spared while it was literally
+    /// eating — the witness the check was originally written around. The matrix
+    /// need not produce one, and on this branch it does not; where it does, that
+    /// creature's own two behaviours are hard assertions again (it leaves
+    /// <c>Eating</c> at once and reaches <see cref="CreatureMode.Resting"/> before
+    /// the party ends). The name says both halves, because the old one named the
+    /// half that is not asserted and a green run therefore promised more than it
+    /// had checked.
+    ///
+    /// <para>Criterion 13 asked of the one piece of state the three flags do not
+    /// describe — <b>the mode</b> — and of the place the creature is most likely
+    /// to be standing in when the roll call reaches it.</para>
+    ///
+    /// <para>A mustering creature that needs feeding is walked to the larder and
+    /// put into <see cref="CreatureMode.Eating"/> by <c>ActMuster</c>, which gives
+    /// the mode back on the tick the ration is finished. Sparing itself in the
+    /// middle of that meal used to shed the three flags and leave the mode: a
+    /// mode with no reservation behind it is a dead end, because <c>ActEating</c>
+    /// builds its queue out of the creatures that hold a reservation and returns
+    /// at once for one that does not, <c>Acting.cs</c> tests <c>Eating</c> ahead
+    /// of both work and going off duty, and <c>GenerateJobs</c> refuses a bunk to
+    /// a creature that is eating. The creature stood at the larder with its
+    /// satiety draining until the party ended — «кто не встал, тот ложится»
+    /// failing in the one place it was written for.</para>
+    ///
+    /// <para><b>Was a pinned party; is now a live guard plus a soft count
+    /// (trophy slice, Task 5 fix round 2).</b> The witness — a creature spared
+    /// while literally in <see cref="CreatureMode.Eating"/> at the roll call —
+    /// used to be pinned to one party: <c>prepared/20260727</c> under
+    /// <c>every-reward</c>, Дёготь spared at t2350 four ticks into the ration,
+    /// on this branch's own commit a5d8346. Freeing a weapon off a downed or
+    /// fled holder moved every party's pacing and the pinned scene stopped
+    /// reproducing: <c>prepared/20260727</c> no longer carries the coincidence
+    /// under <c>every-reward</c>. Searched for a replacement and not found one
+    /// over roughly 450 further party-runs: all four regimes (<c>every-reward</c>,
+    /// <c>every-punish</c>, <c>first-reward</c>, <c>first-punish</c>) on the
+    /// five seeds of <see cref="MatrixSeeds"/> on both <c>baseline</c> and
+    /// <c>prepared</c>; <c>every-reward</c> alone on both fixtures at seeds
+    /// 20260746 through 20260875; and <c>prepared-ration-zero</c> (the
+    /// existing lever fixture starving the whole crew, on the theory that
+    /// hungrier creatures eat more often) on all four regimes at seeds
+    /// 20260726 through 20260745. That is a rare coincidence, not an
+    /// impossible one — a wound, a muster-fed meal and a roll call landing on
+    /// the same tick for the same creature — and a search of that size not
+    /// finding it again says the scene is scarce, not that the rule broke.</para>
+    ///
+    /// <para><b>What still runs unconditionally, over every party of the
+    /// class matrix (<see cref="Fixtures"/> × <see cref="MatrixSeeds"/>,
+    /// under <c>every-reward</c>) and every tick of each:</b> no creature may
+    /// ever hold <see cref="CreatureMode.Eating"/> without
+    /// <c>MealReserved</c>. This is the live guard and it is unchanged in what
+    /// it asserts; only its reach grew, from one party to the whole matrix,
+    /// which can only make it more likely to catch a regression rather than
+    /// less. Whenever the matrix does happen to produce the witness scene —
+    /// a spared creature caught mid-meal — the second half of the original
+    /// claim is still a hard assertion for that scene: it leaves
+    /// <c>Mode == Eating</c> at once, and it reaches
+    /// <see cref="CreatureMode.Resting"/> before its party ends. What is
+    /// <b>no longer</b> asserted is that the matrix must produce at least one
+    /// such scene; the count is written to <c>output</c> instead, so a reader
+    /// can see whether the rare case is still occurring without the whole
+    /// check going red for want of one.</para>
+    /// </summary>
+    [Fact]
+    public void No_creature_is_ever_eating_without_a_meal_reserved_and_a_spared_eater_lies_down()
+    {
+        var scenes = 0;
+        foreach (var fixtureName in Fixtures)
+        {
+            foreach (var seed in MatrixSeeds)
+            {
+                var log = AnswerEveryPause(LoadFixture(fixtureName) with { Seed = seed }, VerdictKind.Reward);
+                var world = new PrototypeWorld(log);
+                var before = world.GetSnapshot();
+                // Resolved the way `Measure` resolves it: the bunk has to come
+                // *after* the contest, so a creature that happened to be lying
+                // down earlier in the party proves nothing about this
+                // transition.
+                var pending = new List<(int Id, string Name, int Tick)>();
+                while (!world.IsComplete)
+                {
+                    world.Step();
+                    var after = world.GetSnapshot();
+                    foreach (var creature in after.Creatures)
+                    {
+                        // The invariant the defect broke, and the live guard of
+                        // this check: every creature, every tick, every party of
+                        // the class matrix. It is checked here rather than on
+                        // the witness alone, because the two halves of the meal
+                        // — the reservation and the mode — are written together
+                        // everywhere else and this is the assertion that says
+                        // so.
+                        Assert.False(
+                            creature.Mode == CreatureMode.Eating && !creature.MealReserved,
+                            $"{fixtureName}/{seed} t{after.Tick}: {creature.Name} is in " +
+                            "`Mode == Eating` with no meal reserved. `ActEating` serves only " +
+                            "the creatures that hold a reservation, so this one will stand " +
+                            "where it is until the party ends: no work, no bunk, no going off " +
+                            "duty.");
+
+                        if (creature.Mode == CreatureMode.Resting)
+                        {
+                            pending.RemoveAll(item => item.Id == creature.Id);
+                        }
+
+                        if (creature.WoundIntent is not { } intent ||
+                            intent.Tick != after.Tick - 1 ||
+                            intent.Code != "spared" ||
+                            before.Creatures.Single(item => item.Id == creature.Id).Mode !=
+                                CreatureMode.Eating)
+                        {
+                            continue;
+                        }
+
+                        // A witness scene: soft-counted rather than required,
+                        // but once it exists its own two behaviours are still
+                        // hard assertions — a rare scene must still behave.
+                        scenes++;
+                        pending.Add((creature.Id, creature.Name, intent.Tick));
+                        Assert.NotEqual(CreatureMode.Eating, creature.Mode);
+                    }
+
+                    before = after;
+                }
+
+                foreach (var (_, name, tick) in pending)
+                {
+                    Assert.Fail(
+                        $"{fixtureName}/{seed} t{tick}: {name} spared itself in the middle of " +
+                        "its ration and never lay down before the party ended. Ending the " +
+                        "muster without ending the meal leaves the creature at the larder, and " +
+                        "«чинить» never happens.");
+                }
+            }
+        }
+
+        output.WriteLine(
+            $"spared-while-eating scenes over the matrix: {scenes} (not asserted positive — " +
+            "see the docstring on why).");
+    }
+
     // ------------------------------------------------------------------
     // The order of the refusals (second amendment of the second review round).
     // ------------------------------------------------------------------
@@ -238,19 +405,39 @@ public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
     /// because the witness proves the order is exercised and the class proves it
     /// holds everywhere.</para>
     ///
-    /// <para><b>The witness is not in the slice's matrix, and that is measured
-    /// rather than assumed.</b> Over the six parties of the matrix the roll call
-    /// turns 19 creatures away as unreachable, 10 of them carrying a wound, and
-    /// <b>none</b> of those ten would have spared itself: a wound light enough to
+    /// <para><b>Whether the witness is in the slice's own matrix is measured
+    /// rather than assumed, and the answer has changed.</b> When the witness cell
+    /// was chosen the matrix was six parties, and over them the roll call turned
+    /// 19 creatures away as unreachable, 10 of them carrying a wound, with
+    /// <b>none</b> of those ten past the sparing line: a wound light enough to
     /// leave a creature at work far from the fight is usually light enough for the
-    /// pressing side to win. So the coincidence was searched for — both fixtures
-    /// over seeds 20260710–20260760, 102 parties — and it exists twice, both times
-    /// on the same creature: <c>baseline/20260716</c> t2350 and
+    /// pressing side to win. The matrix is <b>ten</b> parties now (two fixtures
+    /// times the five seeds of <see cref="MatrixSeeds"/>), and measured on it the
+    /// roll call turns <b>48</b> creatures away as unreachable, <b>22</b> of them
+    /// carrying a wound, of which <b>4</b> would have spared themselves. So the
+    /// assertion below is no longer without a subject if the extra cell is taken
+    /// away — but the cell stays, because it is the one witness that has been
+    /// traced by hand and named, and because a check whose subject depends on the
+    /// balance of ten parties is the failure mode this cell was introduced
+    /// against.</para>
+    ///
+    /// <para>The cell was found by search — both fixtures over seeds
+    /// 20260710–20260760, 102 parties — where the coincidence existed twice, both
+    /// times on the same creature: <c>baseline/20260716</c> t2350 and
     /// <c>baseline/20260738</c> t2370, Прель (#6), five points of severity against
-    /// grit 4. The first of the two is named here as a single extra party. It is a
+    /// grit 4. One of them is named here as a single extra party. It is a
     /// <b>witness cell</b> and not a widened matrix: every other check in this file
-    /// still reads the three matrix seeds, and this one party exists because
-    /// without it the assertion below has no subject.</para>
+    /// still reads the matrix seeds.</para>
+    ///
+    /// <para><b>The cell moved once, and the search was taken again rather than
+    /// widened</b> (docs/design/TROPHY_WEAPON.md). Work «забрать» changes what
+    /// the crew does between waves, and neither of the two parties above
+    /// produces the coincidence any more. The same space — both fixtures over
+    /// 20260710–20260760 — now holds nine of them, and the one named is
+    /// <c>prepared/20260721</c> t2370: Прель (#6) again, five points of
+    /// severity against grit 4, spare 10 over press 8. The old cell is recorded
+    /// here rather than deleted, so that "the witness moved" stays a fact
+    /// somebody can check.</para>
     /// </summary>
     [Fact]
     public void A_wounded_creature_that_would_have_spared_itself_is_still_turned_away_as_unreachable()
@@ -429,7 +616,8 @@ public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// The six parties of the matrix plus the one named witness cell of the order
+    /// The ten parties of the matrix — two fixtures times the five seeds of
+    /// <see cref="MatrixSeeds"/> — plus the one named witness cell of the order
     /// check. Kept apart from <see cref="EveryParty"/> on purpose: everything
     /// about the contest itself is measured on the matrix and nowhere else, and
     /// this list exists for exactly one assertion.
@@ -444,7 +632,13 @@ public sealed class PrototypeWoundedContestTests(ITestOutputHelper output)
             }
         }
 
-        yield return ("baseline", 20_260_716UL);
+        // The witness moved when the trophy slice landed, and was re-measured
+        // rather than searched for by widening the matrix: same search space as
+        // before — both fixtures over 20260710-20260760 — and nine coincidences
+        // in it now, of which this is the same creature carrying the same shape
+        // of wound as the one that has gone: Прель (#6), five points of
+        // severity against grit 4. `baseline/20260716` no longer produces one.
+        yield return ("prepared", 20_260_721UL);
     }
 
     /// <summary>

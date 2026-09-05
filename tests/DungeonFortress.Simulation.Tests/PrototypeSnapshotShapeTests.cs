@@ -137,7 +137,10 @@ public sealed class PrototypeSnapshotShapeTests
     /// </summary>
     private static readonly string[] RecordedShape =
     [
-        "$ -> beds, buildSites, commandsApplied, creatures, digDesignations, domain, economy, events, jobs, labor, looseItems, map, materialStockpile, momentOfTruth, nextJobId, pendingCommands, priorities, raiders, rooms, rules, schemaVersion, seed, sessionResult, stations, stocks, survivors, threat, tick, waves, zones",
+        // docs/design/TROPHY_WEAPON.md. Additive: a new section beside
+        // `looseItems`, empty and `null` on every creature from tick 0 until a
+        // later slice fills it (Task 1 of the trophy-weapon plan).
+        "$ -> beds, buildSites, commandsApplied, creatures, digDesignations, domain, economy, events, jobs, labor, looseItems, looseWeapons, map, materialStockpile, momentOfTruth, nextJobId, pendingCommands, priorities, raiders, rooms, rules, schemaVersion, seed, sessionResult, stations, stocks, survivors, threat, tick, waves, zones",
         "$.beds[] -> growthProgress, position, ripe",
         "$.buildSites[] -> delivered, incomingReserved, jobId, progressTicks, reachable, required, requiredTicks, reservedBy, statusCode, tile",
         // Issue #409, additive twice over: `stepsLostToLimp` is what a hurt leg
@@ -148,7 +151,10 @@ public sealed class PrototypeSnapshotShapeTests
         // Issue #431. Additive: `woundIntent` is what a wounded creature decided
         // at the roll call, and null — like `raiders[].rememberedPlace` — until a
         // wave asks somebody who is carrying a wound.
-        "$.creatures[] -> actionsLostToStun, affinities, blockedTicks, carryAmount, carrying, currentJobId, fatigue, grit, hp, id, injuries, injury, isMustering, lastDecision, lastMoveTick, lastYieldTick, loyalty, martialForm, maxHp, mealReserved, mealTarget, mealTicksRemaining, might, mode, moveCount, musterNeedsRation, musterTarget, name, position, readiness, readinessAtRaid, recoveryTicks, rememberedPlaces, satiety, stepsLostToLimp, watchTicks, workTicks, woundIntent, yieldCount",
+        // docs/design/TROPHY_WEAPON.md. Additive: `weapon` is the trophy this
+        // creature carries, and null — same shape as `woundIntent` above —
+        // until it walks over to a blade on the floor and takes it.
+        "$.creatures[] -> actionsLostToStun, affinities, blockedTicks, carryAmount, carrying, currentJobId, fatigue, grit, hp, id, injuries, injury, isMustering, lastDecision, lastMoveTick, lastYieldTick, loyalty, martialForm, maxHp, mealReserved, mealTarget, mealTicksRemaining, might, mode, moveCount, musterNeedsRation, musterTarget, name, position, readiness, readinessAtRaid, recoveryTicks, rememberedPlaces, satiety, stepsLostToLimp, watchTicks, weapon, workTicks, woundIntent, yieldCount",
         // Issue #409. Additive: a new array beside `injury`, which stays and is
         // its worst entry.
         "$.creatures[].injuries[] -> part, severity",
@@ -162,6 +168,13 @@ public sealed class PrototypeSnapshotShapeTests
         "$.creatures[].loyalty.fearTerms[] -> amount, code",
         "$.creatures[].loyalty.grudgeTerms[] -> amount, code",
         "$.creatures[].rememberedPlaces[] -> cause, place, tick",
+        // docs/design/TROPHY_WEAPON.md, Task 3: reached from the tick somebody
+        // walks over to a blade on the floor and picks it up. The same six
+        // fields the floor publishes below — a weapon is one object whether it
+        // lies on a tile or is carried. `taken` joined the other five in the
+        // fix round that stopped a circulating blade re-grudging its
+        // original downer on every pickup after the first.
+        "$.creatures[].weapon -> bonus, downedBy, name, raiderId, taken, wave",
         "$.creatures[].woundIntent -> code, part, press, severity, spare, tick, verdictDecided, wave",
         "$.digDesignations[] -> jobId, progressTicks, reachable, requiredTicks, reservedBy, statusCode, tile, workTile",
         "$.domain -> downedCreatures, injuredCreatures, livingCreatures, peakMeals, renown, renownAtPreviousWave, strength, strengthAtPreviousWave, waveCount, wavesArrived, wavesResolved",
@@ -170,6 +183,15 @@ public sealed class PrototypeSnapshotShapeTests
         "$.jobs[] -> jobId, key, kind, origin, personalCreatureId, pickedUp, progressTicks, quantity, remainingTicks, reservedBy, resource, sourceCell, storeCell, storeReserved, target",
         "$.labor -> buildTicks, digTicks, drillTicks, eatTicks, foodWorkPercent, foodWorkTicks, idleTicks, musterTicks, postCapacityTicks, postOccupancyPercent, postOccupiedTicks, restTicks, stoneHaulTicks, totalCreatureTicks, watchTicks",
         "$.looseItems[] -> position, quantity, resource",
+        // docs/design/TROPHY_WEAPON.md, Task 2: the array stopped being always
+        // empty once a downed raider drops its weapon, so a sample walks into an
+        // element of it for the first time. Additive, and the two lines below are
+        // both new here: the walker records only the elements it actually visits,
+        // so while `looseWeapons` was empty in every sample there was nothing to
+        // record about its elements at all. What Task 1 recorded is the key on the
+        // `$` line above — that the section exists — and nothing beneath it.
+        "$.looseWeapons[] -> position, weapon",
+        "$.looseWeapons[].weapon -> bonus, downedBy, name, raiderId, taken, wave",
         "$.map -> buildFloorTiles, builtPostTiles, diggableTiles, excavatedTiles, rockTiles, stockpileFloorTiles",
         "$.materialStockpile[] -> capacity, incomingReserved, position, reachable, statusCode, stored",
         "$.momentOfTruth -> cards, open, openedTick, waitedSteps, waveNumber, windowSteps",

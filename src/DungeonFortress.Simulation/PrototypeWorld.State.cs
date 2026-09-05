@@ -46,7 +46,8 @@ public sealed partial class PrototypeWorld
                 part => new PrototypeInjurySnapshot(part.Part, part.Severity))],
             creature.StepsLostToLimp,
             creature.ActionsLostToStun,
-            creature.WoundIntent);
+            creature.WoundIntent,
+            creature.Weapon?.ToSnapshot());
     }
 
     private PrototypeDigDesignationSnapshot ToSnapshot(GridPoint tile)
@@ -472,6 +473,10 @@ public sealed partial class PrototypeWorld
         /// </summary>
         public PrototypeWoundIntentSnapshot? WoundIntent { get; set; }
 
+        // The trophy this creature carries. Null is "nothing", and a creature
+        // carrying one never claims another (docs/design/TROPHY_WEAPON.md §2.6).
+        public WeaponState? Weapon { get; set; }
+
         public int RecoveryTicks { get; set; }
         public CreatureMode Mode { get; set; }
         public JobState? CurrentJob { get; set; }
@@ -757,6 +762,28 @@ public sealed partial class PrototypeWorld
                 : LowestHp * 100 > StartingHp * PrototypeTuning.LightInjuryShare
                     ? InjuryKind.Light
                     : InjuryKind.Heavy;
+    }
+
+    /// <summary>
+    /// The live form of <see cref="PrototypeWeaponSnapshot"/>. A weapon changes
+    /// hands and tiles, never its name or bonus — those stay immutable. <see
+    /// cref="Taken"/> is the one mutable fact of a weapon: whether its debt has
+    /// been paid (spec §3, trophy slice fix round 3). The same
+    /// <see cref="WeaponState"/> object circulates through every later pickup
+    /// once a raider drops it and a holder drops it again in turn, so without
+    /// this flag every pickup after the first would re-emit the grudge against
+    /// the raider's original downer for the one kill that already paid it.
+    /// </summary>
+    private sealed class WeaponState(string name, int raiderId, int wave, int bonus, int downedBy)
+    {
+        public string Name { get; } = name;
+        public int RaiderId { get; } = raiderId;
+        public int Wave { get; } = wave;
+        public int Bonus { get; } = bonus;
+        public int DownedBy { get; } = downedBy;
+        public bool Taken { get; set; }
+
+        public PrototypeWeaponSnapshot ToSnapshot() => new(Name, RaiderId, Wave, Bonus, DownedBy, Taken);
     }
 
     /// <summary>
